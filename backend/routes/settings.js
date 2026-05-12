@@ -6,14 +6,15 @@
 //   { code: "PLN", name: "Polski złoty", isArchived: false, isBase: true }
 //
 // isBase: true  → always first in dropdown, cannot be archived
-// isBase: false → managed by user, max 10 active at a time
+// isBase: false → user-managed, max 10 active at a time
 // ============================================================
 
 const express = require('express');
 const router  = express.Router();
 const { z }   = require('zod');
-const { settingsContainer } = require('../cosmos');
-const { requireAuth }       = require('../middleware/auth');
+const { settingsContainer }  = require('../cosmos');
+const { requireAuth }        = require('../middleware/auth');
+const { readItem }           = require('../utils/helpers');
 
 router.use(requireAuth);
 
@@ -45,12 +46,12 @@ const SettingsSchema = z.object({
 // ── Defaults ─────────────────────────────────────────────────
 
 const DEFAULT_CURRENCIES = [
-  { code: "PLN", name: "Polski złoty",    isArchived: false, isBase: true  },
-  { code: "EUR", name: "Euro",            isArchived: false, isBase: false },
+  { code: "PLN", name: "Polski złoty",      isArchived: false, isBase: true  },
+  { code: "EUR", name: "Euro",              isArchived: false, isBase: false },
   { code: "USD", name: "Dolar amerykański", isArchived: false, isBase: false },
-  { code: "GBP", name: "Funt szterling",  isArchived: false, isBase: false },
-  { code: "RUB", name: "Rubel rosyjski",  isArchived: false, isBase: false },
-  { code: "CZK", name: "Korona czeska",   isArchived: false, isBase: false },
+  { code: "GBP", name: "Funt szterling",   isArchived: false, isBase: false },
+  { code: "RUB", name: "Rubel rosyjski",   isArchived: false, isBase: false },
+  { code: "CZK", name: "Korona czeska",    isArchived: false, isBase: false },
 ];
 
 const DEFAULT_SETTINGS = {
@@ -71,14 +72,13 @@ const DEFAULT_SETTINGS = {
  * Backfills old documents that predate the currencies feature.
  */
 function backfillCurrencies(doc) {
+  if (!doc) return;
   if (!doc.currencies || doc.currencies.length === 0) {
     doc.currencies = DEFAULT_CURRENCIES;
     return;
   }
-  // Ensure at least one base currency exists
   const hasBase = doc.currencies.some(c => c.isBase);
   if (!hasBase) {
-    // Try to mark existing PLN as base, else prepend default PLN
     const pln = doc.currencies.find(c => c.code === "PLN");
     if (pln) {
       pln.isBase = true;
@@ -94,17 +94,13 @@ router.get('/', async (req, res) => {
     const familyId = req.user.familyId;
     const id       = `settings_${familyId}`;
 
-    try {
-      const { resource } = await settingsContainer.item(id, familyId).read();
-      backfillCurrencies(resource);
-      res.json(resource);
-    } catch (err) {
-      if (err.code === 404) {
-        res.json({ id, userId: familyId, ...DEFAULT_SETTINGS });
-      } else {
-        throw err;
-      }
+    const doc = await readItem(settingsContainer, id, familyId);
+    if (!doc) {
+      return res.json({ id, userId: familyId, ...DEFAULT_SETTINGS });
     }
+
+    backfillCurrencies(doc);
+    res.json(doc);
   } catch (error) {
     console.error("[SETTINGS GET] Failed:", error);
     res.status(500).json({ error: "Failed to fetch settings." });
@@ -122,35 +118,23 @@ router.patch('/', async (req, res) => {
     const familyId = req.user.familyId;
     const id       = `settings_${familyId}`;
 
-    let existing;
-    try {
-      const { resource } = await settingsContainer.item(id, familyId).read();
-      existing = resource ?? { id, userId: familyId, ...DEFAULT_SETTINGS };
-    } catch (err) {
-      if (err.code === 404) {
-        existing = { id, userId: familyId, ...DEFAULT_SETTINGS };
-      } else {
-        throw err;
-      }
-    }
+    const existing = await readItem(settingsContainer, id, familyId)
+      ?? { id, userId: familyId, ...DEFAULT_SETTINGS };
 
     // Validate currencies if provided
     if (parsed.data.currencies) {
       const incoming = parsed.data.currencies;
 
-      // Must have exactly one base currency
       const baseCount = incoming.filter(c => c.isBase).length;
       if (baseCount !== 1) {
         return res.status(400).json({ error: "Musi istnieć dokładnie jedna waluta bazowa." });
       }
 
-      // Base currency cannot be archived
       const archivedBase = incoming.find(c => c.isBase && c.isArchived);
       if (archivedBase) {
         return res.status(400).json({ error: "Waluta bazowa nie może być zarchiwizowana." });
       }
 
-      // Max 10 non-base active currencies
       const activeNonBase = incoming.filter(c => !c.isBase && !c.isArchived).length;
       if (activeNonBase > 10) {
         return res.status(400).json({ error: "Można wybrać maksymalnie 10 aktywnych walut (poza bazową)." });
@@ -167,7 +151,7 @@ router.patch('/', async (req, res) => {
         ...existing.targets,
         ...(parsed.data.targets || {}),
       },
-      currencies: parsed.data.currencies ?? existing.currencies ?? DEFAULT_CURRENCIES,
+      currencies:    parsed.data.currencies ?? existing.currencies ?? DEFAULT_CURRENCIES,
       updatedAt:     new Date().toISOString(),
       updatedBy:     req.user.id,
       updatedByName: req.user.name,

@@ -12,13 +12,13 @@ const router  = express.Router();
 const { z }   = require('zod');
 const { transactionsContainer } = require('../cosmos');
 const { requireAuth }           = require('../middleware/auth');
-const { generateId }            = require('../utils/helpers');
+const { generateId, readItem }  = require('../utils/helpers');
 
 router.use(requireAuth);
 
 // ── Helpers ──────────────────────────────────────────────────
 
-const budgetMonthRegex = /^\d{4}-(0[1-9]|1[0-2])$/; //format yyyy-mm
+const budgetMonthRegex = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 // ── Zod Schemas ──────────────────────────────────────────────
 
@@ -77,14 +77,15 @@ router.get('/', async (req, res) => {
         query: `SELECT * FROM c
                 WHERE c.userId      = @userId
                   AND c.budgetMonth = @budgetMonth
-                  AND (c.isDeleted  = false OR NOT IS_DEFINED(c.isDeleted))
-                ORDER BY c.date DESC`,
+                  AND (c.isDeleted  = false OR NOT IS_DEFINED(c.isDeleted))`,
         parameters: [
-          { name: "@userId",      value: familyId    },
-          { name: "@budgetMonth", value: budgetMonth  },
+          { name: "@userId",      value: familyId   },
+          { name: "@budgetMonth", value: budgetMonth },
         ],
       })
       .fetchAll();
+
+    // Sort by date descending (ORDER BY not supported on emulator cross-partition queries)
     const sorted = resources.sort((a, b) => b.date.localeCompare(a.date));
     res.status(200).json(sorted);
   } catch (error) {
@@ -111,17 +112,16 @@ router.post('/', async (req, res) => {
       id: newId,
       userId: familyId,
       ...data,
-      // computed: actual cash after voucher
       netAmount: data.useVoucher
         ? Math.max(0, data.amount - (data.voucherAmount || 0))
         : data.amount,
-      author:     req.user.name  || req.user.email,
-      authorId:   req.user.id,
-      isDeleted:  false,
-      deletedAt:  null,
-      deletedBy:  null,
+      author:      req.user.name  || req.user.email,
+      authorId:    req.user.id,
+      isDeleted:   false,
+      deletedAt:   null,
+      deletedBy:   null,
       deletedById: null,
-      createdAt:  new Date().toISOString(),
+      createdAt:   new Date().toISOString(),
     };
 
     const { resource } = await transactionsContainer.items.create(newTx);
@@ -145,14 +145,8 @@ router.patch('/:id', async (req, res) => {
     const { id }   = req.params;
     const familyId = req.user.familyId;
 
-    let existing;
-    try {
-      const { resource } = await transactionsContainer.item(id, familyId).read();
-      existing = resource;
-    } catch (err) {
-      if (err.code === 404) return res.status(404).json({ error: "Transakcja nie istnieje." });
-      throw err;
-    }
+    const existing = await readItem(transactionsContainer, id, familyId);
+    if (!existing) return res.status(404).json({ error: "Transakcja nie istnieje." });
 
     if (existing.isDeleted) {
       return res.status(409).json({ error: "Nie można edytować usuniętej transakcji." });
@@ -189,14 +183,8 @@ router.delete('/:id', async (req, res) => {
     const { id }   = req.params;
     const familyId = req.user.familyId;
 
-    let existing;
-    try {
-      const { resource } = await transactionsContainer.item(id, familyId).read();
-      existing = resource;
-    } catch (err) {
-      if (err.code === 404) return res.status(404).json({ error: "Transakcja nie istnieje." });
-      throw err;
-    }
+    const existing = await readItem(transactionsContainer, id, familyId);
+    if (!existing) return res.status(404).json({ error: "Transakcja nie istnieje." });
 
     if (existing.isDeleted) {
       return res.status(409).json({ error: "Transakcja jest już usunięta." });

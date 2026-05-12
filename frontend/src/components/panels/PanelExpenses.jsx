@@ -6,9 +6,7 @@
 // ============================================================
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import DatePicker, { registerLocale } from "react-datepicker";
-import { pl }                         from "date-fns/locale";
-import "react-datepicker/dist/react-datepicker.css";
+import { AppDatePicker, todayLocal, toYMD } from "../ui/AppDatePicker";
 
 import { useAppContext }      from "../../context/AppContext";
 import { useTransactions }    from "../../hooks/useTransactions";
@@ -21,24 +19,8 @@ import { CurrencyRateField }  from "../ui/CurrencyRateField";
 import { CartPanel }          from "./CartPanel";
 import { useMonthStatus }     from "../../hooks/useMonthStatus";
 
-registerLocale("pl", pl);
 
 // ── Helpers ─────────────────────────────────────────────────────
-
-// Returns today as a local Date object (no UTC offset issues)
-const todayLocal = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-};
-
-// Converts a local Date object to YYYY-MM-DD string
-const toYMD = (date) => {
-  if (!date) return "";
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
 
 // Extracts YYYY-MM from a YYYY-MM-DD string
 const budgetMonthOf = (ymd) => ymd.slice(0, 7);
@@ -375,14 +357,9 @@ export default function PanelExpenses() {
             {/* Date */}
             <div style={row}>
               <label style={lbl}>Data</label>
-              <DatePicker
-                selected={form.date}
+              <AppDatePicker
+                value={form.date}
                 onChange={date => set("date", date)}
-                locale="pl" dateFormat="dd.MM.yyyy"
-                maxDate={todayLocal()} calendarStartDay={1}
-                customInput={<input style={inp} readOnly />}
-                wrapperClassName="dp-full-width"
-                popperPlacement="bottom-start"
               />
               {/* Show active budget month from navigator so user can verify */}
               <div style={{ fontSize: 11, color: "#10b98199", marginTop: 4 }}>
@@ -517,22 +494,7 @@ export default function PanelExpenses() {
         </div>
       )}
 
-      {/* DatePicker dark theme */}
-      <style>{`
-        .dp-full-width { width: 100%; }
-        .dp-full-width .react-datepicker-wrapper { width: 100%; }
-        .react-datepicker { background: #0d1424 !important; border: 1px solid #1e293b !important; border-radius: 12px !important; font-family: inherit !important; }
-        .react-datepicker__header { background: #0a0f1e !important; border-bottom: 1px solid #1e293b !important; border-radius: 12px 12px 0 0 !important; }
-        .react-datepicker__current-month, .react-datepicker__day-name { color: #94a3b8 !important; }
-        .react-datepicker__day { color: #e2e8f0 !important; border-radius: 6px !important; }
-        .react-datepicker__day:hover { background: #1e293b !important; }
-        .react-datepicker__day--selected { background: #10b981 !important; color: #fff !important; font-weight: 700 !important; }
-        .react-datepicker__day--today { border: 1px solid #10b98166 !important; background: transparent !important; }
-        .react-datepicker__day--disabled { color: #334155 !important; }
-        .react-datepicker__navigation-icon::before { border-color: #64748b !important; }
-        .react-datepicker__navigation:hover .react-datepicker__navigation-icon::before { border-color: #10b981 !important; }
-        .react-datepicker-popper { z-index: 9999 !important; }
-      `}</style>
+
     </div>
   );
 }

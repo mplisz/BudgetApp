@@ -21,6 +21,7 @@ const router  = express.Router();
 const { z }   = require('zod');
 const { monthsContainer } = require('../cosmos');
 const { requireAuth }     = require('../middleware/auth');
+const { readItem }        = require('../utils/helpers');
 
 router.use(requireAuth);
 
@@ -28,21 +29,15 @@ router.use(requireAuth);
 
 const BUDGET_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-/**
- * Returns "YYYY-MM" for the month immediately before the given one.
- */
 function previousMonth(budgetMonth) {
   const [y, m] = budgetMonth.split("-").map(Number);
   if (m === 1) return `${y - 1}-12`;
   return `${y}-${String(m - 1).padStart(2, "0")}`;
 }
 
-/**
- * Returns "YYYY-MM" for next calendar month relative to now.
- */
 function nextCalendarMonth() {
   const now = new Date();
-  const m   = now.getMonth() + 2; // +1 for 0-index, +1 for next month
+  const m   = now.getMonth() + 2;
   const y   = now.getFullYear();
   if (m > 12) return `${y + 1}-01`;
   return `${y}-${String(m).padStart(2, "0")}`;
@@ -55,7 +50,6 @@ const CloseMonthSchema = z.object({
 });
 
 // ── GET /api/months ───────────────────────────────────────────
-// Returns array of closed budgetMonth strings: ["2026-03", "2026-04"]
 
 router.get('/', async (req, res) => {
   try {
@@ -69,6 +63,8 @@ router.get('/', async (req, res) => {
         parameters: [{ name: "@userId", value: familyId }],
       })
       .fetchAll();
+
+    // Sort in Node.js — ORDER BY not supported on emulator cross-partition queries
     const sorted = resources.sort((a, b) => a.budgetMonth.localeCompare(b.budgetMonth));
     res.json(sorted);
   } catch (error) {
@@ -90,47 +86,36 @@ router.post('/', async (req, res) => {
     const familyId        = req.user.familyId;
 
     // Block closing months too far in the future
-    const nextMonth = nextCalendarMonth();
-    if (budgetMonth > nextMonth) {
+    if (budgetMonth > nextCalendarMonth()) {
       return res.status(400).json({
         error: `Nie można zamknąć miesiąca ${budgetMonth} — zbyt daleka przyszłość.`,
       });
     }
 
-    // Check if already closed
-    const id = `month_${familyId}_${budgetMonth}`;
-    try {
-      await monthsContainer.item(id, familyId).read();
+    // Check if already closed — uses readItem to handle emulator quirk
+    const id       = `month_${familyId}_${budgetMonth}`;
+    const existing = await readItem(monthsContainer, id, familyId);
+    if (existing) {
       return res.status(409).json({ error: `Miesiąc ${budgetMonth} jest już zamknięty.` });
-    } catch (err) {
-      if (err.code !== 404) throw err;
-      // 404 = not closed yet, proceed
     }
 
     // Enforce sequential closing only if there are already closed months.
     // If no months are closed yet, the user is just starting — allow any month.
     const { resources: existingClosed } = await monthsContainer.items
       .query({
-        query: "SELECT TOP 1 c.budgetMonth FROM c WHERE c.userId = @userId",
+        query:      "SELECT TOP 1 c.budgetMonth FROM c WHERE c.userId = @userId",
         parameters: [{ name: "@userId", value: familyId }],
       })
       .fetchAll();
 
-    const hasAnyClosedMonth = existingClosed.length > 0;
-
-    if (hasAnyClosedMonth) {
+    if (existingClosed.length > 0) {
       const prevMonth = previousMonth(budgetMonth);
       const prevId    = `month_${familyId}_${prevMonth}`;
-      try {
-        await monthsContainer.item(prevId, familyId).read();
-        // Previous is closed — OK to proceed
-      } catch (err) {
-        if (err.code === 404) {
-          return res.status(400).json({
-            error: `Nie można zamknąć ${budgetMonth} — poprzedni miesiąc (${prevMonth}) jest jeszcze otwarty.`,
-          });
-        }
-        throw err;
+      const prevDoc   = await readItem(monthsContainer, prevId, familyId);
+      if (!prevDoc) {
+        return res.status(400).json({
+          error: `Nie można zamknąć ${budgetMonth} — poprzedni miesiąc (${prevMonth}) jest jeszcze otwarty.`,
+        });
       }
     }
 
@@ -168,16 +153,15 @@ router.delete('/:budgetMonth', async (req, res) => {
     const familyId = req.user.familyId;
     const id       = `month_${familyId}_${budgetMonth}`;
 
-    try {
-      await monthsContainer.item(id, familyId).delete();
-      console.log(`[MONTHS DELETE] Reopened: ${budgetMonth} for ${familyId}`);
-      res.json({ success: true, budgetMonth });
-    } catch (err) {
-      if (err.code === 404) {
-        return res.status(404).json({ error: `Miesiąc ${budgetMonth} nie jest zamknięty.` });
-      }
-      throw err;
+    // Verify month is actually closed before attempting delete
+    const existing = await readItem(monthsContainer, id, familyId);
+    if (!existing) {
+      return res.status(404).json({ error: `Miesiąc ${budgetMonth} nie jest zamknięty.` });
     }
+
+    await monthsContainer.item(id, familyId).delete();
+    console.log(`[MONTHS DELETE] Reopened: ${budgetMonth} for ${familyId}`);
+    res.json({ success: true, budgetMonth });
 
   } catch (error) {
     console.error("[MONTHS DELETE] Failed:", error);

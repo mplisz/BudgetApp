@@ -85,7 +85,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/transactions', transactionsRoutes)
-app.use('api/months',monthsRoutes)
+app.use('/api/months', monthsRoutes)
 
 app.use((err, req, res, next) => {
   console.error("Uncaught Server Error:", err.stack);
