@@ -85,8 +85,8 @@ router.get('/', async (req, res) => {
         ],
       })
       .fetchAll();
-
-    res.status(200).json(resources);
+    const sorted = resources.sort((a, b) => b.date.localeCompare(a.date));
+    res.status(200).json(sorted);
   } catch (error) {
     console.error("[TRANSACTIONS GET] Failed:", error);
     res.status(500).json({ error: "Nie udało się pobrać transakcji." });

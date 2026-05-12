@@ -65,13 +65,12 @@ router.get('/', async (req, res) => {
       .query({
         query: `SELECT c.budgetMonth, c.closedAt, c.closedBy
                 FROM c
-                WHERE c.userId = @userId
-                ORDER BY c.budgetMonth ASC`,
+                WHERE c.userId = @userId`,
         parameters: [{ name: "@userId", value: familyId }],
       })
       .fetchAll();
-
-    res.json(resources);
+    const sorted = resources.sort((a, b) => a.budgetMonth.localeCompare(b.budgetMonth));
+    res.json(sorted);
   } catch (error) {
     console.error("[MONTHS GET] Failed:", error);
     res.status(500).json({ error: "Failed to fetch month statuses." });
