@@ -13,6 +13,9 @@ import { NotificationBell } from "./components/layout/NotificationBell";
 import { MobileNav } from "./components/layout/MobileNav";
 import { LogoutButton } from "./components/ui/LogoutButton";
 import { ToastContainer } from "./components/ui/ToastContainer";
+import { MonthStatusButton } from "./components/layout/MonthStatusButton";
+
+
 
 const PanelExpenses  = lazy(() => import("./components/panels/PanelExpenses"));
 const PanelPlanned   = lazy(() => import("./components/panels/PanelPlanned"));
@@ -95,6 +98,7 @@ export default function App() {
 
           {/* Right: notifications + logout */}
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <MonthStatusButton />
             <NotificationBell />
             <LogoutButton />
           </div>

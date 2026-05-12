@@ -1,7 +1,8 @@
 // ============================================================
 // File: src/context/AppContext.jsx
 // Central React Context – all shared state and actions.
-// Bootstrap: categories, tags, settings loading on start
+// Bootstrap: categories, tags, settings loaded on startup
+// once accessToken is available (not user — avoids race condition).
 // ============================================================
 
 import { createContext, useContext, useState, useEffect, useRef } from "react";
@@ -34,7 +35,8 @@ export function AppProvider({ children }) {
   const [planned,      setPlanned]      = useState([]);
   const [actualIncome, setActualIncome] = useState([]);
   const [transactions, setTransactions] = useState([]);
-  const [cart,         setCart]         = useState([]);  // Koszyk wydatków (przeżywa zmianę panelu)
+  const [cart,         setCart]         = useState([]);  // Shopping cart (survives panel navigation)
+  const [closedMonths, setClosedMonths] = useState(new Set()); // Set of closed "YYYY-MM" strings
 
   // ── Configuration ────────────────────────────────────────────
   const [categories,    setCategories]    = useState([]);
@@ -47,7 +49,7 @@ export function AppProvider({ children }) {
   const [baseBudget,      setBaseBudget]      = useState({});
   const [budgetOverrides, setBudgetOverrides] = useState({});
 
-  // ── Goals (musi być przed computeMonthBudget!) ───────────────
+  // ── Goals (must be declared before computeMonthBudget!) ────────
   const [goals, setGoals] = useState([]);
 
   // ── Tag filters ──────────────────────────────────────────────
@@ -91,9 +93,9 @@ export function AppProvider({ children }) {
   // ── Bootstrap loading ─────────────────────────────────────────
   const [bootstrapDone, setBootstrapDone] = useState(false);
 
-
-  // Use accessToken (not user) to avoid  race condition
-
+  // ── Bootstrap: load data once accessToken is ready ─────────────
+  // Using accessToken (not user) to avoid race condition
+  // with accessTokenRef inside fetchWithAuth.
 
   const parseCategories = (dbCategories) => {
     const parents = dbCategories.filter(c => !c.parentCategoryId).map(parent => ({
@@ -143,6 +145,29 @@ export function AppProvider({ children }) {
           const data = await settingsRes.json();
           setSettings(data);
         }
+
+        // Load closed months
+        const monthsRes = await fetchWithAuth(`${API_URL}/api/months`);
+        if (monthsRes.ok) {
+          const data = await monthsRes.json();
+          const closedSet = new Set(data.map(m => m.budgetMonth));
+          setClosedMonths(closedSet);
+
+          // Auto-navigate to first open month starting from current calendar month
+          const now      = new Date();
+          let   navMonth = now.getMonth();
+          let   navYear  = now.getFullYear();
+          for (let i = 0; i < 24; i++) {
+            const bm = `${navYear}-${String(navMonth + 1).padStart(2, "0")}`;
+            if (!closedSet.has(bm)) {
+              setMonth(navMonth);
+              setYear(navYear);
+              break;
+            }
+            navMonth++;
+            if (navMonth > 11) { navMonth = 0; navYear++; }
+          }
+        }
       } catch (err) {
         console.error("[AppContext bootstrap] Failed:", err);
       } finally {
@@ -151,7 +176,7 @@ export function AppProvider({ children }) {
     }
 
     bootstrap();
-  // accessToken changes only when login/logout/refresh
+  // accessToken changes only on login / logout / token refresh
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
@@ -195,7 +220,7 @@ export function AppProvider({ children }) {
     ? monthExpenses.filter(e => (e.tags || []).includes(activeTagFilter))
     : monthExpenses;
 
-  // ── Goal helpers (funkcje — mogą być po useState) ─────────────
+  // ── Goal helpers (functions — safe to declare after useState) ───
   function goalSaved(goalId) {
     return expenses
       .filter(e => e.goalId === goalId && e.isEnvelopTransfer)
@@ -239,7 +264,7 @@ export function AppProvider({ children }) {
     })
     .reduce((s, e) => s + e.amount, 0);
 
-  // ── Budget computation (goals musi być zadeklarowane wcześniej) ─
+  // ── Budget computation (requires goals to be declared above) ────
   const currentMonthBudget = computeMonthBudget({
     categories,
     baseBudget,
@@ -315,14 +340,15 @@ export function AppProvider({ children }) {
     month, setMonth,
     year,  setYear,
 
-    // Core data 
+    // Core data (stare panele)
     expenses,     setExpenses,
     planned,      setPlanned,
     actualIncome, setActualIncome,
 
-    // Transactions 
+    // Transactions (nowe — PUNKT 3+)
     transactions, setTransactions,
     cart, setCart,
+    closedMonths, setClosedMonths,
 
     // Derived monthly
     monthExpenses, monthActualIncome,

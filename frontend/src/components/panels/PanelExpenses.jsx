@@ -2,10 +2,10 @@
 // File: src/components/panels/PanelExpenses.jsx
 // Expense entry form + shopping cart (second column).
 // Manual mode + OCR mode (UI stub — POINT 6).
-// Wymaga: npm install react-datepicker date-fns
+// Requires: npm install react-datepicker date-fns
 // ============================================================
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import DatePicker, { registerLocale } from "react-datepicker";
 import { pl }                         from "date-fns/locale";
 import "react-datepicker/dist/react-datepicker.css";
@@ -19,16 +19,19 @@ import { SubcategorySelect }  from "../ui/SubcategorySelect";
 import { PriorityPicker }     from "../ui/PriorityPicker";
 import { CurrencyRateField }  from "../ui/CurrencyRateField";
 import { CartPanel }          from "./CartPanel";
+import { useMonthStatus }     from "../../hooks/useMonthStatus";
 
 registerLocale("pl", pl);
 
 // ── Helpers ─────────────────────────────────────────────────────
 
+// Returns today as a local Date object (no UTC offset issues)
 const todayLocal = () => {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 };
 
+// Converts a local Date object to YYYY-MM-DD string
 const toYMD = (date) => {
   if (!date) return "";
   const y = date.getFullYear();
@@ -37,14 +40,16 @@ const toYMD = (date) => {
   return `${y}-${m}-${d}`;
 };
 
+// Extracts YYYY-MM from a YYYY-MM-DD string
 const budgetMonthOf = (ymd) => ymd.slice(0, 7);
 
+// Generates a unique cart item ID
 let cartIdCounter = 0;
 const newCartId   = () => `cart_${Date.now()}_${++cartIdCounter}`;
 
 function emptyForm() {
   return {
-    date:            todayLocal(),
+    date:            todayLocal(),   // local Date object for DatePicker
     currency:        "PLN",
     customCurrency:  "",
     amountOrig:      "",
@@ -60,27 +65,34 @@ function emptyForm() {
   };
 }
 
-// ── Styles ──────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────
 
 const lbl     = { display: "block", fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 };
 const inp     = { width: "100%", background: "#0a0f1e", border: "1px solid #1e293b", borderRadius: 8, color: "#e2e8f0", padding: "9px 12px", fontSize: 14, outline: "none", boxSizing: "border-box" };
 const row     = { marginBottom: 16 };
 const divider = { borderTop: "1px solid #1e293b", margin: "20px 0" };
 
-// ── Component ───────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────
 
 export default function PanelExpenses() {
-  const { tags, cart, setCart, ocrMode, setOcrMode, ocrLines, setOcrLines, ocrLoading, fileRef } = useAppContext();
+  const { tags, cart, setCart, ocrMode, setOcrMode, ocrLines, setOcrLines, ocrLoading, fileRef, month, year } = useAppContext();
   const { addTransaction, isSaving, errorMsg, successMsg } = useTransactions();
   const { showError } = useToast();
+  const { isActiveMonthClosed, isFutureMonth, activeBudgetMonth, openMonth } = useMonthStatus();
 
   const [form,     setForm]     = useState(emptyForm());
   const [rateInfo, setRateInfo] = useState({ activeRate: 1, resolvedCurrency: "PLN" });
 
-  const dateYMD   = toYMD(form.date);
+  // Derive YYYY-MM-DD from the Date object in form.date (actual transaction date)
+  const dateYMD = toYMD(form.date);
+
+  // budgetMonth comes from MonthNavigator (month/year from AppContext),
+  // NOT from the date picker — a transaction on Apr 29 can belong to May budget
+  const budgetMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
+
   const activeTags = useMemo(() => tags.filter(t => !t.isArchived), [tags]);
 
-  // Kwota w PLN
+  // Amount in base currency (PLN)
   const amountPLN = useMemo(() => {
     const raw = parseDecimal(form.amountOrig);
     if (!raw || raw <= 0 || !rateInfo.activeRate) return 0;
@@ -93,7 +105,7 @@ export default function PanelExpenses() {
     return Math.max(0, amountPLN - (parseDecimal(form.voucherAmount) || 0));
   }, [amountPLN, form.useVoucher, form.voucherAmount]);
 
-  // ── Handlers ───────────────────────────────────────────────────
+  // ── Handlers ────────────────────────────────────────────────
 
   function set(field, value) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -127,18 +139,19 @@ export default function PanelExpenses() {
     }));
   }
 
-  // ── Build transaction payload from form ─────────────────────────
+  // ── Build transaction payload from form ─────────────────────
 
   function buildPayload() {
-    if (!form.subcategoryId) { showError("Wybierz subkategorię."); return null; }
+    if (!form.subcategoryId)                              { showError("Wybierz subkategorię."); return null; }
     const rawAmount = parseDecimal(form.amountOrig);
-    if (!rawAmount || rawAmount <= 0)                 { showError("Podaj kwotę większą od zera."); return null; }
+    if (!rawAmount || rawAmount <= 0)                     { showError("Podaj kwotę większą od zera."); return null; }
     if (!rateInfo.activeRate || rateInfo.activeRate <= 0) { showError("Brak kursu walutowego. Wpisz kurs ręcznie."); return null; }
-    if (rateInfo.resolvedCurrency.length !== 3)       { showError("Wybierz walutę (kod 3-literowy)."); return null; }
+    if (rateInfo.resolvedCurrency.length !== 3)           { showError("Wybierz walutę (kod 3-literowy)."); return null; }
 
+    // budgetMonth derived from the SELECTED date, not today
     return {
       date:             dateYMD,
-      budgetMonth:      budgetMonthOf(dateYMD),
+      budgetMonth,
       subcategoryId:    form.subcategoryId,
       subcategoryName:  form.subcategoryName,
       categoryId:       form.categoryId,
@@ -157,17 +170,16 @@ export default function PanelExpenses() {
     };
   }
 
-  // ── Add to cart ──────────────────────────────────────────────────
+  // ── Add to cart ─────────────────────────────────────────────
 
   function handleAddToCart() {
     const payload = buildPayload();
     if (!payload) return;
-
     setCart(prev => [...prev, { ...payload, _cartId: newCartId() }]);
     resetForm();
   }
 
-  // ── Save directly (bypass cart) ──────────────────────────────────
+  // ── Save directly (bypass cart) ─────────────────────────────
 
   async function handleSubmitDirect() {
     const payload = buildPayload();
@@ -176,7 +188,7 @@ export default function PanelExpenses() {
     if (result) resetForm();
   }
 
-  // ── Load cart item back into form ────────────────────────────────
+  // ── Load cart item back into form ────────────────────────────
 
   function handleLoadFromCart(item) {
     // Restore Date object from YMD string
@@ -198,7 +210,7 @@ export default function PanelExpenses() {
     });
   }
 
-  // ── OCR submit ───────────────────────────────────────────────────
+  // ── OCR submit ───────────────────────────────────────────────
 
   async function handleAddOcrLines() {
     const selected = ocrLines.filter(l => l.selected);
@@ -206,7 +218,7 @@ export default function PanelExpenses() {
 
     for (const line of selected) {
       await addTransaction({
-        date: dateYMD, budgetMonth: budgetMonthOf(dateYMD),
+        date: dateYMD, budgetMonth,
         subcategoryId: line.subcategoryId || "", subcategoryName: line.sub || "",
         categoryId: line.categoryId || "", categoryName: line.category || "",
         amount: line.amount, originalAmount: line.amount,
@@ -220,23 +232,67 @@ export default function PanelExpenses() {
     setOcrMode(false);
   }
 
-  // ── Render ───────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────
 
   const hasCart = cart.length > 0;
 
+  // ── Month block banners ──────────────────────────────────
+  if (isActiveMonthClosed) {
+    return (
+      <div style={{ maxWidth: 560 }}>
+        <div style={{ marginBottom: 20, marginTop: 8 }}>
+          <div style={s.sectionTitle}>➕ Dodaj wydatek</div>
+        </div>
+        <div style={{ padding: "20px 24px", background: "#ef444411", border: "1px solid #ef444444", borderRadius: 12, textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>🔒</div>
+          <div style={{ color: "#f87171", fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
+            Miesiąc {activeBudgetMonth} jest zamknięty
+          </div>
+          <div style={{ color: "#64748b", fontSize: 13, marginBottom: 16 }}>
+            Nie można dodawać ani edytować transakcji w zamkniętym miesiącu.
+          </div>
+          <button
+            onClick={() => openMonth(activeBudgetMonth)}
+            style={{ padding: "9px 20px", borderRadius: 8, border: "1px solid #f87171", background: "transparent", color: "#f87171", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+            🔓 Otwórz miesiąc ponownie
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isFutureMonth) {
+    return (
+      <div style={{ maxWidth: 560 }}>
+        <div style={{ marginBottom: 20, marginTop: 8 }}>
+          <div style={s.sectionTitle}>➕ Dodaj wydatek</div>
+        </div>
+        <div style={{ padding: "20px 24px", background: "#3b82f611", border: "1px solid #3b82f644", borderRadius: 12, textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>📅</div>
+          <div style={{ color: "#93c5fd", fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
+            {activeBudgetMonth} to zbyt odległa przyszłość
+          </div>
+          <div style={{ color: "#64748b", fontSize: 13 }}>
+            Możesz dodawać transakcje do bieżącego i następnego miesiąca.<br />
+            Dla planowanych wydatków użyj panelu <strong style={{ color: "#93c5fd" }}>Planowane wydatki</strong>.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{
-      display:   "flex",
-      gap:       24,
+      display:    "flex",
+      gap:        24,
       alignItems: "flex-start",
-      maxWidth:  hasCart ? 960 : 560,
+      maxWidth:   hasCart ? 960 : 560,
       transition: "max-width 0.3s ease",
     }}>
 
-      {/* ════ FORMULARZ ════ */}
+      {/* ════ FORM ════ */}
       <div style={{ flex: "0 0 520px", minWidth: 0 }}>
 
-        {/* Header */}
         <div style={{ marginBottom: 20, marginTop: 8 }}>
           <div style={s.sectionTitle}>➕ Dodaj wydatek</div>
         </div>
@@ -245,7 +301,7 @@ export default function PanelExpenses() {
         {errorMsg   && <div style={{ padding: "10px 14px", background: "#ef444422", border: "1px solid #ef4444", color: "#f87171", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{errorMsg}</div>}
         {successMsg && <div style={{ padding: "10px 14px", background: "#10b98122", border: "1px solid #10b981", color: "#34d399", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{successMsg}</div>}
 
-        {/* Toggle Ręcznie / OCR */}
+        {/* Toggle manual / OCR */}
         <div style={{ display: "flex", gap: 8, padding: 6, background: "#0d1424", border: "1px solid #1e293b", borderRadius: 10, marginBottom: 24 }}>
           <button onClick={() => setOcrMode(false)}
             style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: !ocrMode ? "#10b981" : "transparent", color: !ocrMode ? "#fff" : "#64748b" }}>
@@ -257,16 +313,16 @@ export default function PanelExpenses() {
           </button>
         </div>
 
-        {/* ════ TRYB OCR ════ */}
+        {/* ════ OCR MODE ════ */}
         {ocrMode && (
           <>
             {ocrLines.length === 0 ? (
               <div style={{ textAlign: "center", padding: "32px 0" }}>
                 <div style={{ fontSize: 56, marginBottom: 16 }}>📷</div>
                 <div style={{ color: "#64748b", marginBottom: 20, fontSize: 14 }}>Zrób zdjęcie paragonu lub wybierz z galerii</div>
-                {/* PUNKT 6: podepnij prawdziwe API OCR */}
+                {/* POINT 6: wire up real OCR API here */}
                 <input ref={fileRef} type="file" accept="image/*" capture="environment"
-                  style={{ display: "none" }} onChange={() => { /* PUNKT 6 */ }} />
+                  style={{ display: "none" }} onChange={() => { /* POINT 6 */ }} />
                 <button onClick={() => fileRef.current?.click()}
                   style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8 }}>
                   📷 Zrób zdjęcie
@@ -313,10 +369,10 @@ export default function PanelExpenses() {
           </>
         )}
 
-        {/* ════ TRYB RĘCZNY ════ */}
+        {/* ════ MANUAL MODE ════ */}
         {!ocrMode && (
           <>
-            {/* Data */}
+            {/* Date */}
             <div style={row}>
               <label style={lbl}>Data</label>
               <DatePicker
@@ -328,9 +384,13 @@ export default function PanelExpenses() {
                 wrapperClassName="dp-full-width"
                 popperPlacement="bottom-start"
               />
+              {/* Show active budget month from navigator so user can verify */}
+              <div style={{ fontSize: 11, color: "#10b98199", marginTop: 4 }}>
+                Miesiąc budżetowy: <strong>{budgetMonth}</strong> (z nawigacji)
+              </div>
             </div>
 
-            {/* Waluta + kurs */}
+            {/* Currency + rate */}
             <div style={row}>
               <CurrencyRateField
                 currency={form.currency} customCurrency={form.customCurrency}
@@ -341,7 +401,7 @@ export default function PanelExpenses() {
               />
             </div>
 
-            {/* Kwota */}
+            {/* Amount */}
             <div style={row}>
               <label style={lbl}>Kwota ({rateInfo.resolvedCurrency || "PLN"})</label>
               <input type="number" step="0.01" min="0"
@@ -377,7 +437,7 @@ export default function PanelExpenses() {
 
             <div style={divider} />
 
-            {/* Subkategoria */}
+            {/* Subcategory */}
             <div style={row}>
               <label style={lbl}>Subkategoria</label>
               <SubcategorySelect value={form.subcategoryId} onChange={handleSubcategoryChange} />
@@ -395,7 +455,7 @@ export default function PanelExpenses() {
 
             <div style={divider} />
 
-            {/* Opis */}
+            {/* Description */}
             <div style={row}>
               <label style={lbl}>Opis (opcjonalny)</label>
               <input value={form.description} onChange={e => set("description", e.target.value)}
@@ -429,16 +489,13 @@ export default function PanelExpenses() {
             {/* ── Action buttons ── */}
             <div style={{ display: "flex", gap: 8 }}>
               {/* Add to cart — primary action */}
-              <button
-                onClick={handleAddToCart}
+              <button onClick={handleAddToCart}
                 style={{ flex: 1, padding: "13px 16px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 🛒 Do koszyka
               </button>
 
               {/* Save directly — quick action */}
-              <button
-                onClick={handleSubmitDirect}
-                disabled={isSaving}
+              <button onClick={handleSubmitDirect} disabled={isSaving}
                 style={{ flex: 1, padding: "13px 16px", borderRadius: 10, border: "none", background: isSaving ? "#064e3b" : "#10b981", color: "#fff", fontSize: 14, fontWeight: 700, cursor: isSaving ? "not-allowed" : "pointer" }}>
                 {isSaving ? "⏳" : "➕ Dodaj teraz"}
               </button>

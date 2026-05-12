@@ -20,9 +20,10 @@ const containers = [
     { id: "RecurringTransactions", partitionKey: "/userId" },
     { id: "Transactions", partitionKey: "/userId" },
     { id: "Goals",partitionKey:"/userId"},
-    { id: "Users",partitionKey:"/userId"},
+   // { id: "Users",partitionKey:"/userId"},
     { id: "RefreshTokens",partitionKey:"/email"},
-    {id: "Settings",partitionKey:"/userId"}
+    {id: "Settings",partitionKey:"/userId"},
+    { id: "Months",partitionKey: "/userId" },
 ];
 async function setup() {
     console.log("🚀 Starting database setup...");

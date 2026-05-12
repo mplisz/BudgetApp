@@ -1,13 +1,14 @@
 // ============================================================
 // File: src/components/panels/CartPanel.jsx
 // Shopping cart — appears dynamically when cart.length > 0.
-// Desktop: 2nd column next to the form 
+// Desktop: second column next to the form.
 // Mobile: sticky bar at the bottom, expandable on tap.
 // ============================================================
 
 import { useState, useCallback } from "react";
 import { useAppContext }    from "../../context/AppContext";
 import { useTransactions }  from "../../hooks/useTransactions";
+import { useToast }         from "../../hooks/useToast";
 import { fmt }              from "../../utils/helpers";
 import { PRIORITY_COLORS }  from "../ui/PriorityPicker";
 
@@ -21,15 +22,33 @@ const STATUS = { PENDING: "pending", SAVING: "saving", DONE: "done", ERROR: "err
 export function CartPanel({ onLoadToForm }) {
   const { cart, setCart }       = useAppContext();
   const { addTransaction }      = useTransactions();
-  const [statuses, setStatuses] = useState({});   // { cartItemId: STATUS }
+  const { showSuccess, showError, showInfo } = useToast();
+  const [statuses, setStatuses] = useState({});
   const [saving,   setSaving]   = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const totalPLN   = cart.reduce((s, i) => s + (i.amount || 0), 0);
-  const doneCount  = Object.values(statuses).filter(s => s === STATUS.DONE).length;
-  const errorCount = Object.values(statuses).filter(s => s === STATUS.ERROR).length;
+  // ── Derived totals ─────────────────────────────────────────
+  // Total PLN (gross — full transaction amount)
+  const totalGross = cart.reduce((s, i) => s + (i.amount || 0), 0);
 
-  // ── Helpers ──────────────────────────────────────────────────
+  // Net cash (after voucher deductions)
+  const totalNet = cart.reduce((s, i) => {
+    if (i.useVoucher && i.voucherAmount > 0) {
+      return s + Math.max(0, (i.amount || 0) - i.voucherAmount);
+    }
+    return s + (i.amount || 0);
+  }, 0);
+
+  // Total voucher value across all items
+  const totalVoucher = cart.reduce((s, i) => {
+    return s + (i.useVoucher ? (i.voucherAmount || 0) : 0);
+  }, 0);
+
+  const hasVouchers  = totalVoucher > 0;
+  const doneCount    = Object.values(statuses).filter(s => s === STATUS.DONE).length;
+  const errorCount   = Object.values(statuses).filter(s => s === STATUS.ERROR).length;
+
+  // ── Helpers ───────────────────────────────────────────────────
 
   function setStatus(id, status) {
     setStatuses(prev => ({ ...prev, [id]: status }));
@@ -53,29 +72,53 @@ export function CartPanel({ onLoadToForm }) {
 
     setSaving(true);
 
+    // Collect saved cart IDs directly — avoids stale closure on statuses state
+    const savedIds  = [];
+    const failedIds = [];
+
     await Promise.all(pending.map(async (item) => {
       setStatus(item._cartId, STATUS.SAVING);
       try {
         const { _cartId, ...payload } = item;
         const result = await addTransaction(payload);
-        setStatus(item._cartId, result ? STATUS.DONE : STATUS.ERROR);
+        if (result) {
+          setStatus(item._cartId, STATUS.DONE);
+          savedIds.push(item._cartId);
+        } else {
+          setStatus(item._cartId, STATUS.ERROR);
+          failedIds.push(item._cartId);
+        }
       } catch {
         setStatus(item._cartId, STATUS.ERROR);
+        failedIds.push(item._cartId);
       }
     }));
 
     setSaving(false);
 
-    // After a short delay, remove successfully saved items from cart
+    const savedCount = savedIds.length;
+    const failCount  = failedIds.length;
+
+    // Toast feedback
+    if (failCount === 0) {
+      showSuccess(`Zapisano ${savedCount} ${savedCount === 1 ? "pozycję" : savedCount < 5 ? "pozycje" : "pozycji"}! ✅`);
+    } else if (savedCount === 0) {
+      showError("Nie udało się zapisać żadnej pozycji. Sprawdź połączenie.");
+    } else {
+      showInfo(`Zapisano ${savedCount} z ${pending.length} pozycji. ${failCount} nie udało się.`);
+    }
+
+    // Remove successfully saved items using the collected IDs (no stale closure)
     setTimeout(() => {
-      setCart(prev => prev.filter(i => statuses[i._cartId] !== STATUS.DONE));
+      setCart(prev => prev.filter(i => !savedIds.includes(i._cartId)));
       setStatuses(prev => {
         const n = { ...prev };
-        Object.keys(n).forEach(k => { if (n[k] === STATUS.DONE) delete n[k]; });
+        savedIds.forEach(id => delete n[id]);
         return n;
       });
     }, 1200);
-  }, [cart, statuses, addTransaction, setCart]);
+
+  }, [cart, statuses, addTransaction, setCart, showSuccess, showError, showInfo]);
 
   if (cart.length === 0) return null;
 
@@ -85,28 +128,39 @@ export function CartPanel({ onLoadToForm }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
         <div>
-          <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 15 }}>
-            🛒 Koszyk
-          </div>
+          <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 15 }}>🛒 Koszyk</div>
           <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>
             {cart.length} {cart.length === 1 ? "pozycja" : cart.length < 5 ? "pozycje" : "pozycji"}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: "#10b981" }}>{fmt(totalPLN)}</div>
+          {hasVouchers ? (
+            <>
+              <div style={{ fontSize: 11, color: "#64748b", textDecoration: "line-through" }}>{fmt(totalGross)}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#10b981" }}>{fmt(totalNet)}</div>
+              <div style={{ fontSize: 11, color: "#a855f7" }}>🎫 bon: {fmt(totalVoucher)}</div>
+            </>
+          ) : (
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#10b981" }}>{fmt(totalGross)}</div>
+          )}
           {errorCount > 0 && (
-            <div style={{ fontSize: 11, color: "#ef4444" }}>{errorCount} błąd{errorCount > 1 ? "y" : ""}</div>
+            <div style={{ fontSize: 11, color: "#ef4444", marginTop: 2 }}>
+              {errorCount} błąd{errorCount > 1 ? "y" : ""}
+            </div>
           )}
         </div>
       </div>
 
       {/* Item list */}
       <div style={{ flex: 1, overflowY: "auto", marginBottom: 12 }}>
-        {cart.map((item, idx) => {
+        {cart.map((item) => {
           const status = statuses[item._cartId] || STATUS.PENDING;
           const pColor = PRIORITY_COLORS[item.priority] || "#64748b";
+          const itemNet = item.useVoucher && item.voucherAmount > 0
+            ? Math.max(0, item.amount - item.voucherAmount)
+            : item.amount;
 
           return (
             <div key={item._cartId} style={{
@@ -120,7 +174,7 @@ export function CartPanel({ onLoadToForm }) {
               marginBottom: 8,
               transition:   "all 0.2s",
             }}>
-              {/* Row 1*/}
+              {/* Row 1: category + amount + status icon */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 2 }}>
@@ -133,7 +187,17 @@ export function CartPanel({ onLoadToForm }) {
                   )}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
-                  <span style={{ fontWeight: 700, color: "#10b981", fontSize: 14 }}>{fmt(item.amount)}</span>
+                  <div style={{ textAlign: "right" }}>
+                    {item.useVoucher && item.voucherAmount > 0 ? (
+                      <>
+                        <div style={{ fontSize: 11, color: "#64748b", textDecoration: "line-through" }}>{fmt(item.amount)}</div>
+                        <div style={{ fontWeight: 700, color: "#10b981", fontSize: 14 }}>{fmt(itemNet)}</div>
+                        <div style={{ fontSize: 10, color: "#a855f7" }}>🎫 {fmt(item.voucherAmount)}</div>
+                      </>
+                    ) : (
+                      <div style={{ fontWeight: 700, color: "#10b981", fontSize: 14 }}>{fmt(item.amount)}</div>
+                    )}
+                  </div>
                   <span style={{ fontSize: 16 }}>
                     {status === STATUS.SAVING ? "⏳" :
                      status === STATUS.DONE   ? "✅" :
@@ -142,14 +206,14 @@ export function CartPanel({ onLoadToForm }) {
                 </div>
               </div>
 
-              {/* Row 2 */}
+              {/* Row 2: meta + action buttons */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <span style={{ fontSize: 10, color: pColor, fontWeight: 700, border: `1px solid ${pColor}`, borderRadius: 4, padding: "1px 5px" }}>
                     P{item.priority}
                   </span>
                   <span style={{ fontSize: 10, color: "#334155" }}>{item.date}</span>
-                  {item.originalCurrency !== (item.baseCurrencyCode || "PLN") && (
+                  {item.originalCurrency !== "PLN" && (
                     <span style={{ fontSize: 10, color: "#475569" }}>
                       {item.originalAmount} {item.originalCurrency}
                     </span>
@@ -158,15 +222,11 @@ export function CartPanel({ onLoadToForm }) {
 
                 {status !== STATUS.DONE && status !== STATUS.SAVING && (
                   <div style={{ display: "flex", gap: 4 }}>
-                    <button
-                      onClick={() => handleLoadToForm(item)}
-                      title="Load into form for editing"
+                    <button onClick={() => handleLoadToForm(item)} title="Load into form for editing"
                       style={{ background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}>
                       ✏️
                     </button>
-                    <button
-                      onClick={() => removeFromCart(item._cartId)}
-                      title="Remove from cart"
+                    <button onClick={() => removeFromCart(item._cartId)} title="Remove from cart"
                       style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}>
                       ✕
                     </button>
@@ -178,22 +238,25 @@ export function CartPanel({ onLoadToForm }) {
         })}
       </div>
 
-      {/* Actions */}
+      {/* Action buttons */}
       <div style={{ borderTop: "1px solid #1e293b", paddingTop: 12 }}>
+        {/* Voucher summary line — only when applicable */}
+        {hasVouchers && (
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 10, padding: "6px 10px", background: "#a855f711", borderRadius: 6 }}>
+            <span style={{ color: "#64748b" }}>Koszyk: {fmt(totalGross)} · Gotówka: {fmt(totalNet)} · Bon: {fmt(totalVoucher)}</span>
+            <span style={{ color: "#a855f7" }}>🎫</span>
+          </div>
+        )}
+
         <button
           onClick={saveAll}
           disabled={saving || cart.every(i => statuses[i._cartId] === STATUS.DONE)}
           style={{
-            display:      "block",
-            width:        "100%",
-            padding:      "12px",
-            borderRadius: 10,
-            border:       "none",
-            background:   saving ? "#064e3b" : "#10b981",
-            color:        "#fff",
-            fontWeight:   700,
-            fontSize:     14,
-            cursor:       saving ? "not-allowed" : "pointer",
+            display: "block", width: "100%", padding: "12px",
+            borderRadius: 10, border: "none",
+            background: saving ? "#064e3b" : "#10b981",
+            color: "#fff", fontWeight: 700, fontSize: 14,
+            cursor: saving ? "not-allowed" : "pointer",
             marginBottom: 8,
           }}>
           {saving
@@ -213,29 +276,28 @@ export function CartPanel({ onLoadToForm }) {
   // ── Mobile sticky bar ────────────────────────────────────────
 
   const mobileBar = (
-    <div style={{
-      position:   "fixed",
-      bottom:     0,
-      left:       0,
-      right:      0,
-      zIndex:     200,
-      background: "#0d1424",
-      borderTop:  "1px solid #1e293b",
-    }}>
-      {/* Collapsed bar */}
+    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: "#0d1424", borderTop: "1px solid #1e293b" }}>
       {!mobileOpen && (
-        <div
-          onClick={() => setMobileOpen(true)}
+        <div onClick={() => setMobileOpen(true)}
           style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", cursor: "pointer" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 18 }}>🛒</span>
-            <span style={{ color: "#e2e8f0", fontWeight: 700 }}>{cart.length} pozycj{cart.length === 1 ? "a" : cart.length < 5 ? "e" : "i"}</span>
+            <span style={{ color: "#e2e8f0", fontWeight: 700 }}>
+              {cart.length} pozycj{cart.length === 1 ? "a" : cart.length < 5 ? "e" : "i"}
+            </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ color: "#10b981", fontWeight: 800, fontSize: 16 }}>{fmt(totalPLN)}</span>
-            <button
-              onClick={e => { e.stopPropagation(); saveAll(); }}
-              disabled={saving}
+            <div style={{ textAlign: "right" }}>
+              {hasVouchers ? (
+                <>
+                  <span style={{ color: "#10b981", fontWeight: 800, fontSize: 16 }}>{fmt(totalNet)}</span>
+                  <span style={{ color: "#a855f7", fontSize: 11, marginLeft: 4 }}>🎫</span>
+                </>
+              ) : (
+                <span style={{ color: "#10b981", fontWeight: 800, fontSize: 16 }}>{fmt(totalGross)}</span>
+              )}
+            </div>
+            <button onClick={e => { e.stopPropagation(); saveAll(); }} disabled={saving}
               style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
               {saving ? "⏳" : "💾 Zapisz"}
             </button>
@@ -243,7 +305,6 @@ export function CartPanel({ onLoadToForm }) {
         </div>
       )}
 
-      {/* Expanded drawer */}
       {mobileOpen && (
         <div style={{ padding: "16px", maxHeight: "70vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -270,7 +331,6 @@ export function CartPanel({ onLoadToForm }) {
         {mobileBar}
       </div>
 
-      {/* Responsive CSS */}
       <style>{`
         .cart-desktop { display: block; }
         .cart-mobile  { display: none;  }

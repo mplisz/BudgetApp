@@ -70,7 +70,6 @@ export function recurringActiveForMonth(e, m, y) {
 }
 
 // Compute the full budget breakdown for a given month.
-// Works with new array structure for categories.
 export function computeMonthBudget({ categories, baseBudget, budgetOverrides, planned, expenses, month, year, goals = [], goalInstallment = null }) {
   const subLookup = buildSubLookup(categories);
 
@@ -122,6 +121,32 @@ export function computeMonthBudget({ categories, baseBudget, budgetOverrides, pl
     };
     grandTotal += total;
   });
+  
 
   return { byCat, grandTotal, plannedM, recurringM, goalsForMonth };
 }
+// Returns "YYYY-MM" for the given month (0-indexed) and year
+export function formatBudgetMonth(month, year) {
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
+ 
+// Returns "YYYY-MM" for next calendar month relative to today
+export function nextCalendarMonth() {
+  const now = new Date();
+  const m   = now.getMonth() + 2; // 0-indexed + 1 for next month
+  const y   = now.getFullYear();
+  if (m > 12) return `${y + 1}-01`;
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+ 
+// Returns "YYYY-MM" for current calendar month
+export function currentCalendarMonth() {
+  const now = new Date();
+  return formatBudgetMonth(now.getMonth(), now.getFullYear());
+}
+ 
+// Returns true if budgetMonth a is strictly after b ("YYYY-MM" strings)
+export function budgetMonthAfter(a, b) {
+  return a > b;
+}
+ 
