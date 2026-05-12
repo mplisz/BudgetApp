@@ -14,7 +14,7 @@
 import { useCallback } from "react";
 import { useAppContext } from "../context/AppContext";
 import { useAuth }       from "../context/AuthContext";
-import { useToast }      from "../hooks/useToast";
+import { useToast }      from "./useToast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
