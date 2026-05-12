@@ -1,59 +1,37 @@
 // ============================================================
 // File: src/hooks/useSettings.js
-// Custom hook to manage family settings
 // ============================================================
 
-import { useState, useEffect, useRef } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useState, useEffect } from "react";
+import { useAuth }      from "../context/AuthContext";
 import { useAppContext } from "../context/AppContext";
+import { useToast } from "../hooks/useToast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const DEFAULT_SETTINGS = {
-  thresholds: {
-    warningPercent: 80,
-    criticalPercent: 95,
-  },
+  thresholds: { warningPercent: 80, criticalPercent: 95 },
   targets: {
     maxInsurancePercent:   10,
     maxObligationsPercent: 35,
     minRetirementPercent:  15,
     minSavingsPercent:     20,
-  }
+  },
 };
 
 export function useSettings() {
-  const { fetchWithAuth } = useAuth();
-  const { settings, setSettings } = useAppContext();
+  const { fetchWithAuth }          = useAuth();
+  const { settings, setSettings }  = useAppContext();
+  const { showError, showSuccess } = useToast();
 
-  const [isLoading, setIsLoading]   = useState(true);
-  const [isSaving, setIsSaving]     = useState(false);
-  const [errorMsg, setErrorMsg]     = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-  const errorTimerRef   = useRef(null);
-  const successTimerRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving,  setIsSaving]  = useState(false);
 
-  function showError(msg) {
-    setErrorMsg(msg);
-    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-    errorTimerRef.current = setTimeout(() => setErrorMsg(""), 4000);
-  }
-
-  function showSuccess(msg) {
-    setSuccessMsg(msg);
-    if (successTimerRef.current) clearTimeout(successTimerRef.current);
-    successTimerRef.current = setTimeout(() => setSuccessMsg(""), 3000);
-  }
-
-  useEffect(() => {
-    return () => {
-      if (errorTimerRef.current)   clearTimeout(errorTimerRef.current);
-      if (successTimerRef.current) clearTimeout(successTimerRef.current);
-    };
-  }, []);
-
+  // ── Load ────────────────────────────────────────────────────
   useEffect(() => {
     async function loadSettings() {
+      // Skip if already loaded by AppContext bootstrap
+      if (settings !== null) { setIsLoading(false); return; }
       setIsLoading(true);
       try {
         const res = await fetchWithAuth(`${API_URL}/api/settings`);
@@ -70,12 +48,13 @@ export function useSettings() {
     loadSettings();
   }, [fetchWithAuth, setSettings]);
 
+  // ── Update ──────────────────────────────────────────────────
   async function updateSettings(patch) {
     setIsSaving(true);
     try {
       const res = await fetchWithAuth(`${API_URL}/api/settings`, {
         method: "PATCH",
-        body: JSON.stringify(patch)
+        body:   JSON.stringify(patch),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -91,12 +70,5 @@ export function useSettings() {
     }
   }
 
-  return {
-    settings,
-    isLoading,
-    isSaving,
-    errorMsg,
-    successMsg,
-    updateSettings,
-  };
+  return { settings, isLoading, isSaving, updateSettings };
 }

@@ -173,3 +173,8 @@ export function CollapsibleSection({ title, children, defaultOpen = true, style:
     </div>
   );
 }
+
+export { SubcategorySelect } from "./SubcategorySelect";
+export { PriorityPicker, computeSuggestedPriority, PRIORITY_COLORS } from "./PriorityPicker";
+export { TagMultiSelect } from "./TagMultiSelect";
+export { CurrencyRateField } from "./CurrencyRateField";

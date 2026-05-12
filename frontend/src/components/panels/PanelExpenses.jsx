@@ -1,294 +1,481 @@
 // ============================================================
-// File: src/components/panels/ExpensesPanel.jsx
-// Add-expense form (manual + OCR). Defined outside App for focus stability.
+// File: src/components/panels/PanelExpenses.jsx
+// Expense entry form + shopping cart (second column).
+// Manual mode + OCR mode (UI stub — POINT 6).
+// Wymaga: npm install react-datepicker date-fns
 // ============================================================
 
-import { useRef, useState } from "react";
-import { useAppContext } from "../../context/AppContext";
-import { theme as s } from "../../styles/theme";
-import { fmt } from "../../utils/helpers";
-import { MONTHS, PRIORITY_LABELS } from "../../data/constants";
-import { BudgetInput } from "../ui/BudgetInput";
-import { Toggle } from "../ui";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import DatePicker, { registerLocale } from "react-datepicker";
+import { pl }                         from "date-fns/locale";
+import "react-datepicker/dist/react-datepicker.css";
 
-function ExpensesPanel() {
-  const { form, setForm, ocrMode, setOcrMode, ocrLines, setOcrLines, ocrLoading, fileRef, categories, subLookup, tags, addExpense, simulateOCR, addOcrLines, archivedSubs, fxRate, setFxRate } = useAppContext();
-  const [fxLoading, setFxLoading] = useState(false);
-  // Only show validation errors after user clicks "Dodaj wydatek" at least once
-  const [submitAttempted, setSubmitAttempted] = useState(false);
+import { useAppContext }      from "../../context/AppContext";
+import { useTransactions }    from "../../hooks/useTransactions";
+import { useToast }           from "../../hooks/useToast";
+import { theme as s }         from "../../styles/theme";
+import { fmt, parseDecimal }  from "../../utils/helpers";
+import { SubcategorySelect }  from "../ui/SubcategorySelect";
+import { PriorityPicker }     from "../ui/PriorityPicker";
+import { CurrencyRateField }  from "../ui/CurrencyRateField";
+import { CartPanel }          from "./CartPanel";
 
-  // Local style aliases – destructured from imported theme for brevity
-  const s_input   = s.input;
-  const s_select  = s.select;
-  const s_label   = s.label;
-  const s_card    = s.card;
-  const s_btn     = s.btn;
-  const s_row     = s.row;
-  const s_col     = s.col;
-  const s_amount  = s.amount;
-  const s_ocrLine = { background: "#1e293b", borderRadius: 10, padding: "10px 14px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" };
+registerLocale("pl", pl);
 
-  async function fetchRate(currency) {
-    if (currency === "PLN") { setFxRate(null); return; }
-    setFxLoading(true);
-    try {
-      const res = await fetch(`https://api.frankfurter.app/latest?from=${currency}&to=PLN`);
-      const data = await res.json();
-      setFxRate(data.rates?.PLN || null);
-    } catch { setFxRate(null); }
-    setFxLoading(false);
+// ── Helpers ─────────────────────────────────────────────────────
+
+const todayLocal = () => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+};
+
+const toYMD = (date) => {
+  if (!date) return "";
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const budgetMonthOf = (ymd) => ymd.slice(0, 7);
+
+let cartIdCounter = 0;
+const newCartId   = () => `cart_${Date.now()}_${++cartIdCounter}`;
+
+function emptyForm() {
+  return {
+    date:            todayLocal(),
+    currency:        "PLN",
+    customCurrency:  "",
+    amountOrig:      "",
+    subcategoryId:   "",
+    subcategoryName: "",
+    categoryId:      "",
+    categoryName:    "",
+    priority:        2,
+    description:     "",
+    tags:            [],
+    useVoucher:      false,
+    voucherAmount:   "",
+  };
+}
+
+// ── Styles ──────────────────────────────────────────────────────
+
+const lbl     = { display: "block", fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 };
+const inp     = { width: "100%", background: "#0a0f1e", border: "1px solid #1e293b", borderRadius: 8, color: "#e2e8f0", padding: "9px 12px", fontSize: 14, outline: "none", boxSizing: "border-box" };
+const row     = { marginBottom: 16 };
+const divider = { borderTop: "1px solid #1e293b", margin: "20px 0" };
+
+// ── Component ───────────────────────────────────────────────────
+
+export default function PanelExpenses() {
+  const { tags, cart, setCart, ocrMode, setOcrMode, ocrLines, setOcrLines, ocrLoading, fileRef } = useAppContext();
+  const { addTransaction, isSaving, errorMsg, successMsg } = useTransactions();
+  const { showError } = useToast();
+
+  const [form,     setForm]     = useState(emptyForm());
+  const [rateInfo, setRateInfo] = useState({ activeRate: 1, resolvedCurrency: "PLN" });
+
+  const dateYMD   = toYMD(form.date);
+  const activeTags = useMemo(() => tags.filter(t => !t.isArchived), [tags]);
+
+  // Kwota w PLN
+  const amountPLN = useMemo(() => {
+    const raw = parseDecimal(form.amountOrig);
+    if (!raw || raw <= 0 || !rateInfo.activeRate) return 0;
+    return Math.round(raw * rateInfo.activeRate * 100) / 100;
+  }, [form.amountOrig, rateInfo.activeRate]);
+
+  // Net cash after voucher deduction
+  const netCash = useMemo(() => {
+    if (!form.useVoucher) return amountPLN;
+    return Math.max(0, amountPLN - (parseDecimal(form.voucherAmount) || 0));
+  }, [amountPLN, form.useVoucher, form.voucherAmount]);
+
+  // ── Handlers ───────────────────────────────────────────────────
+
+  function set(field, value) {
+    setForm(prev => ({ ...prev, [field]: value }));
   }
 
-  const visibleCategories = Object.fromEntries(
-    Object.entries(categories).map(([cat, v]) => [cat, {
-      ...v,
-      sub: Object.fromEntries(Object.entries(v.sub).filter(([subName]) => !archivedSubs?.has(`${cat}::${subName}`)))
-    }])
-  );
+  function resetForm() {
+    setForm(emptyForm());
+    setRateInfo({ activeRate: 1, resolvedCurrency: "PLN" });
+  }
+
+  const handleRateReady = useCallback(({ activeRate, resolvedCurrency }) => {
+    setRateInfo({ activeRate, resolvedCurrency });
+  }, []);
+
+  const handleSubcategoryChange = useCallback(({ subcategoryId, subcategoryName, categoryId, categoryName }) => {
+    setForm(prev => ({ ...prev, subcategoryId, subcategoryName, categoryId, categoryName }));
+  }, []);
+
+  function toggleTag(id) {
+    setForm(prev => ({
+      ...prev,
+      tags: prev.tags.includes(id) ? prev.tags.filter(t => t !== id) : [...prev.tags, id],
+    }));
+  }
+
+  function toggleVoucher() {
+    setForm(prev => ({
+      ...prev,
+      useVoucher:    !prev.useVoucher,
+      voucherAmount: !prev.useVoucher ? prev.voucherAmount : "",
+    }));
+  }
+
+  // ── Build transaction payload from form ─────────────────────────
+
+  function buildPayload() {
+    if (!form.subcategoryId) { showError("Wybierz subkategorię."); return null; }
+    const rawAmount = parseDecimal(form.amountOrig);
+    if (!rawAmount || rawAmount <= 0)                 { showError("Podaj kwotę większą od zera."); return null; }
+    if (!rateInfo.activeRate || rateInfo.activeRate <= 0) { showError("Brak kursu walutowego. Wpisz kurs ręcznie."); return null; }
+    if (rateInfo.resolvedCurrency.length !== 3)       { showError("Wybierz walutę (kod 3-literowy)."); return null; }
+
+    return {
+      date:             dateYMD,
+      budgetMonth:      budgetMonthOf(dateYMD),
+      subcategoryId:    form.subcategoryId,
+      subcategoryName:  form.subcategoryName,
+      categoryId:       form.categoryId,
+      categoryName:     form.categoryName,
+      amount:           amountPLN,
+      originalAmount:   rawAmount,
+      originalCurrency: rateInfo.resolvedCurrency,
+      fxRate:           rateInfo.activeRate,
+      description:      form.description.trim(),
+      tags:             form.tags,
+      priority:         form.priority,
+      useVoucher:       form.useVoucher,
+      voucherAmount:    form.useVoucher ? (parseDecimal(form.voucherAmount) || 0) : 0,
+      isRecurring:      false,
+      recurringId:      null,
+    };
+  }
+
+  // ── Add to cart ──────────────────────────────────────────────────
+
+  function handleAddToCart() {
+    const payload = buildPayload();
+    if (!payload) return;
+
+    setCart(prev => [...prev, { ...payload, _cartId: newCartId() }]);
+    resetForm();
+  }
+
+  // ── Save directly (bypass cart) ──────────────────────────────────
+
+  async function handleSubmitDirect() {
+    const payload = buildPayload();
+    if (!payload) return;
+    const result = await addTransaction(payload);
+    if (result) resetForm();
+  }
+
+  // ── Load cart item back into form ────────────────────────────────
+
+  function handleLoadFromCart(item) {
+    // Restore Date object from YMD string
+    const [y, m, d] = item.date.split("-").map(Number);
+    setForm({
+      date:            new Date(y, m - 1, d),
+      currency:        item.originalCurrency,
+      customCurrency:  "",
+      amountOrig:      String(item.originalAmount),
+      subcategoryId:   item.subcategoryId,
+      subcategoryName: item.subcategoryName,
+      categoryId:      item.categoryId,
+      categoryName:    item.categoryName,
+      priority:        item.priority,
+      description:     item.description,
+      tags:            item.tags || [],
+      useVoucher:      item.useVoucher || false,
+      voucherAmount:   item.voucherAmount ? String(item.voucherAmount) : "",
+    });
+  }
+
+  // ── OCR submit ───────────────────────────────────────────────────
+
+  async function handleAddOcrLines() {
+    const selected = ocrLines.filter(l => l.selected);
+    if (!selected.length) { showError("Zaznacz przynajmniej jedną pozycję."); return; }
+
+    for (const line of selected) {
+      await addTransaction({
+        date: dateYMD, budgetMonth: budgetMonthOf(dateYMD),
+        subcategoryId: line.subcategoryId || "", subcategoryName: line.sub || "",
+        categoryId: line.categoryId || "", categoryName: line.category || "",
+        amount: line.amount, originalAmount: line.amount,
+        originalCurrency: "PLN", fxRate: 1,
+        description: line.desc || "", tags: [], priority: 2,
+        useVoucher: false, voucherAmount: 0,
+        isRecurring: false, recurringId: null,
+      });
+    }
+    setOcrLines([]);
+    setOcrMode(false);
+  }
+
+  // ── Render ───────────────────────────────────────────────────────
+
+  const hasCart = cart.length > 0;
 
   return (
-    <div style={{ padding: "20px 16px", maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 4, marginTop: 20 }}>Dodaj wydatek</div>
+    <div style={{
+      display:   "flex",
+      gap:       24,
+      alignItems: "flex-start",
+      maxWidth:  hasCart ? 960 : 560,
+      transition: "max-width 0.3s ease",
+    }}>
 
-      {/* Mode toggle */}
-      <div style={{ ...s_card, display: "flex", gap: 8, padding: 8 }}>
-        <button onClick={() => setOcrMode(false)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: !ocrMode ? "#10b981" : "transparent", color: !ocrMode ? "#fff" : "#64748b", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>✏️ Ręcznie</button>
-        <button onClick={() => { setOcrMode(true); setOcrLines([]); }} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: ocrMode ? "#10b981" : "transparent", color: ocrMode ? "#fff" : "#64748b", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>📷 Skan paragonu</button>
-      </div>
+      {/* ════ FORMULARZ ════ */}
+      <div style={{ flex: "0 0 520px", minWidth: 0 }}>
 
-      {ocrMode ? (
-        <div style={s_card}>
-          {ocrLines.length === 0 ? (
-            <>
-              <div style={{ textAlign: "center", padding: "20px 0" }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>📷</div>
-                <div style={{ color: "#64748b", marginBottom: 16, fontSize: 14 }}>Zrób zdjęcie paragonu lub wybierz z galerii</div>
-                <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={simulateOCR} />
-                <button onClick={() => { fileRef.current?.click(); simulateOCR(); }} style={s.btn()}>📷 Zrób zdjęcie</button>
-                <button onClick={simulateOCR} style={{ ...s.btn("#3b82f6"), marginTop: 8 }}>🖼️ Wybierz z galerii</button>
-              </div>
-              {ocrLoading && (
-                <div style={{ textAlign: "center", padding: 20 }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>🤖</div>
-                  <div style={{ color: "#10b981", fontWeight: 700 }}>AI analizuje paragon...</div>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div style={{ color: "#10b981", fontWeight: 700, marginBottom: 12 }}>✅ Znalezione pozycje:</div>
-              {ocrLines.map((line, i) => (
-                <div key={i} style={s_ocrLine}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <input type="checkbox" checked={line.selected} onChange={e => {
-                      const next = [...ocrLines]; next[i].selected = e.target.checked; setOcrLines(next);
-                    }} style={{ width: 18, height: 18, accentColor: "#10b981" }} />
-                    <div>
-                      <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 14 }}>{line.desc}</div>
-                      <div style={{ color: "#64748b", fontSize: 11 }}>{line.category} › {line.sub}</div>
-                    </div>
-                  </div>
-                  <div style={s.amount()}>{fmt(line.amount)}</div>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", marginTop: 4, borderTop: "1px solid #1e293b" }}>
-                <span style={{ color: "#64748b" }}>Suma:</span>
-                <span style={{ ...s.amount(), fontSize: 18 }}>{fmt(ocrLines.filter(l=>l.selected).reduce((s,l)=>s+l.amount,0))}</span>
-              </div>
-              {/* Save receipt toggle in OCR mode */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: form.saveReceipt ? "#10b981" : "#475569", fontSize: 13, fontWeight: 600, padding: "8px 0", borderTop: "1px solid #1e293b", marginTop: 4 }}
-                onClick={() => setForm(f=>({...f, saveReceipt: !f.saveReceipt}))}>
-                <div style={{ width: 36, height: 20, background: form.saveReceipt ? "#10b981" : "#1e293b", border: `2px solid ${form.saveReceipt ? "#10b981" : "#334155"}`, borderRadius: 99, position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
-                  <div style={{ position: "absolute", top: 2, left: form.saveReceipt ? 16 : 2, width: 12, height: 12, background: "#fff", borderRadius: "50%", transition: "left 0.2s" }} />
-                </div>
-                📎 Zachowaj skan paragonu w chmurze
-              </div>
-              <button onClick={addOcrLines} style={s.btn()}>✅ Dodaj zaznaczone</button>
-              <button onClick={() => setOcrLines([])} style={{ ...s.btn("#475569"), marginTop: 8 }}>🔄 Skanuj ponownie</button>
-            </>
-          )}
+        {/* Header */}
+        <div style={{ marginBottom: 20, marginTop: 8 }}>
+          <div style={s.sectionTitle}>➕ Dodaj wydatek</div>
         </div>
-      ) : (
-        <div style={s_card}>
-          <div style={s.row}>
-            <div style={s.col}>
-              <label style={s.label}>Data *</label>
-              <input style={s.input} type="date" value={form.date} onChange={e => setForm(f=>({...f, date: e.target.value}))} />
-            </div>
-            <div style={s.col}>
-              <label style={s.label}>Waluta</label>
-              <select style={s.select} value={form.currency} onChange={e => {
-                const currency = e.target.value;
-                setForm(f => ({...f, currency, foreignAmount: "", amount: ""}));
-                fetchRate(currency);
-              }}>
-                {["PLN","USD","EUR","GBP","CHF","NOK","SEK","CZK"].map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
 
-          <div style={{ marginTop: 10 }}>
-            {form.currency !== "PLN" ? (
-              <div style={s.row}>
-                <div style={s.col}>
-                  <label style={s.label}>Kwota ({form.currency}) *</label>
-                  <BudgetInput style={s.input} placeholder="0,00"
-                    value={parseFloat(String(form.foreignAmount||"").replace(",","."))||0}
-                    onChange={v => setForm(f => ({...f, foreignAmount: String(v), amount: fxRate ? (v*fxRate).toFixed(2) : f.amount}))} />
-                </div>
-                <div style={s.col}>
-                  <label style={s.label}>PLN {fxLoading ? "⏳" : fxRate ? `@ ${fxRate.toFixed(4)}` : ""}</label>
-                  <BudgetInput style={{ ...s.input, color: "#10b981", fontWeight: 700 }} placeholder="0,00"
-                    value={parseFloat(String(form.amount||"").replace(",","."))||0}
-                    onChange={v => setForm(f=>({...f, amount: v > 0 ? String(v) : ""}))} />
-                </div>
-              </div>
-            ) : (
-              <div>
-                {/* Label changes to "Całkowita wartość paragonu" when voucher is active */}
-                <label style={{ ...s.label, color: form.useVoucher ? "#f59e0b" : undefined }}>
-                  {form.useVoucher ? "🎟️ Całkowita wartość paragonu (PLN) *" : "Kwota (PLN) *"}
-                </label>
-                <BudgetInput style={{ ...s.input, borderColor: form.useVoucher ? "#f59e0b44" : "#334155" }}
-                  placeholder="0,00"
-                  value={parseFloat(String(form.amount||"").replace(",","."))||0}
-                  onChange={v => {
-                    if (form.useVoucher) {
-                      // totalAmount = this field; recalculate cash = total - voucher
-                      const vAmt = parseFloat(String(form.voucherAmount||"").replace(",",".")) || 0;
-                      setForm(f => ({ ...f, totalAmount: String(v), amount: v > 0 ? String(v) : "" }));
-                    } else {
-                      setForm(f => ({...f, amount: v > 0 ? String(v) : ""}));
-                    }
-                  }} />
-                {form.useVoucher && form.amount && (
-                  <div style={{ color: "#64748b", fontSize: 10, marginTop: 3 }}>
-                    Wartość paragonu – od niej odejmujemy bon
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        {/* API feedback */}
+        {errorMsg   && <div style={{ padding: "10px 14px", background: "#ef444422", border: "1px solid #ef4444", color: "#f87171", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{errorMsg}</div>}
+        {successMsg && <div style={{ padding: "10px 14px", background: "#10b98122", border: "1px solid #10b981", color: "#34d399", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{successMsg}</div>}
 
-          <div style={{ marginTop: 12 }}>
-            <label style={s.label}>Typ wydatku *</label>
-            <select style={{ ...s.select, borderColor: form.sub ? "#334155" : "#ef444466" }}
-              value={form.sub} onChange={e => {
-                const sub = e.target.value;
-                const mapped = subLookup[sub];
-                setForm(f=>({...f, sub, category: mapped?.category || "", priority: mapped?.priority || 2}));
-            }}>
-              <option value="">Wybierz typ wydatku...</option>
-              {Object.entries(visibleCategories).map(([cat, { icon, sub }]) => (
-                <optgroup key={cat} label={`${icon} ${cat}`}>
-                  {Object.keys(sub).map(subName => <option key={subName} value={subName}>{subName}</option>)}
-                </optgroup>
-              ))}
-            </select>
-            {form.category && (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "#475569" }}>{categories[form.category]?.icon} {form.category}</span>
-                  <span style={{ fontSize: 11, color: "#475569" }}>Priorytet:</span>
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {[1,2,3,4].map(p => (
-                    <button key={p} onClick={() => setForm(f=>({...f, priority: p}))}
-                      style={{ flex: 1, padding: "6px 4px", borderRadius: 8,
-                        border: `1px solid ${form.priority === p ? PRIORITY_LABELS[p].color : "#334155"}`,
-                        background: form.priority === p ? PRIORITY_LABELS[p].color + "33" : "transparent",
-                        color: form.priority === p ? PRIORITY_LABELS[p].color : "#475569",
-                        fontSize: 11, fontWeight: form.priority === p ? 700 : 500, cursor: "pointer" }}>
-                      P{p}<br/><span style={{ fontSize: 9 }}>{PRIORITY_LABELS[p].label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <label style={s.label}>Opis (opcjonalnie)</label>
-            <input style={s.input} type="text" placeholder="np. Biedronka, zakupy tygodniowe..."
-              value={form.desc} onChange={e => setForm(f=>({...f, desc: e.target.value}))} />
-          </div>
-
-          <div style={{ marginTop: 14 }}>
-            <label style={s.label}>Tagi (opcjonalnie)</label>
-            <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-              {tags.map(tag => {
-                const active = form.tags.includes(tag.id);
-                return (
-                  <button key={tag.id} onClick={() => setForm(f => ({
-                    ...f, tags: active ? f.tags.filter(t=>t!==tag.id) : [...f.tags, tag.id]
-                  }))} style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${active ? "#10b981" : "#334155"}`,
-                    background: active ? "#10b98122" : "transparent", color: active ? "#10b981" : "#64748b",
-                    fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer" }}>
-                    {tag.icon} {tag.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-            {/* Voucher / gift card toggle */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: form.useVoucher ? "#f59e0b" : "#475569", fontSize: 13, fontWeight: 600 }}
-                onClick={() => setForm(f => ({ ...f, useVoucher: !f.useVoucher, voucherAmount: "", totalAmount: f.amount }))}>
-                <div style={{ width: 36, height: 20, background: form.useVoucher ? "#f59e0b" : "#1e293b", border: `2px solid ${form.useVoucher ? "#f59e0b" : "#334155"}`, borderRadius: 99, position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
-                  <div style={{ position: "absolute", top: 2, left: form.useVoucher ? 16 : 2, width: 12, height: 12, background: "#fff", borderRadius: "50%", transition: "left 0.2s" }} />
-                </div>
-                🎟️ Częściowo opłacono bonem / voucherem
-              </div>
-              {form.useVoucher && (
-                <div style={{ marginTop: 10, background: "#f59e0b11", border: "1px solid #f59e0b33", borderRadius: 10, padding: "12px 14px" }}>
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={{ ...s.label, color: "#f59e0b" }}>Wartość bonu / vouchera (PLN)</label>
-                    <BudgetInput style={s.input} placeholder="0,00"
-                      value={parseFloat(String(form.voucherAmount||"").replace(",","."))||0}
-                      onChange={v => {
-                        // Cap voucher at total (which is stored in form.amount when voucher active)
-                        const tAmt = parseFloat(String(form.amount||"").replace(",",".")) || 0;
-                        const capped = Math.min(v, tAmt);
-                        setForm(f => ({ ...f, voucherAmount: String(capped), totalAmount: f.amount }));
-                      }} />
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ color: "#64748b", fontSize: 12 }}>💳 Realna gotówka z portfela:</span>
-                    <span style={{ color: "#10b981", fontWeight: 800, fontSize: 16 }}>
-                      {fmt(Math.max(
-                        (parseFloat(String(form.amount||"").replace(",",".")) || 0) -
-                        (parseFloat(String(form.voucherAmount||"").replace(",",".")) || 0),
-                        0
-                      ))}
-                    </span>
-                  </div>
-                  <div style={{ color: "#64748b", fontSize: 10, marginTop: 4 }}>
-                    Do obliczeń budżetowych używana jest tylko realna gotówka.
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {submitAttempted && (!form.sub || !form.amount) && (
-            <div style={{ background: "#ef444411", border: "1px solid #ef444433", borderRadius: 8, padding: "8px 12px", marginTop: 10, fontSize: 12, color: "#ef4444" }}>
-              {!form.sub && <div>⚠️ Wybierz typ wydatku</div>}
-              {!form.amount && <div>⚠️ Podaj kwotę</div>}
-            </div>
-          )}
-          <button onClick={() => {
-              setSubmitAttempted(true);
-              if (form.sub && form.amount) { addExpense(); setSubmitAttempted(false); }
-            }}
-            style={{ background: "#10b981", color: "#fff", border: "none", borderRadius: 10, padding: "12px 20px", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%", marginTop: 4 }}>
-            ✅ Dodaj wydatek
+        {/* Toggle Ręcznie / OCR */}
+        <div style={{ display: "flex", gap: 8, padding: 6, background: "#0d1424", border: "1px solid #1e293b", borderRadius: 10, marginBottom: 24 }}>
+          <button onClick={() => setOcrMode(false)}
+            style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: !ocrMode ? "#10b981" : "transparent", color: !ocrMode ? "#fff" : "#64748b" }}>
+            ✏️ Ręcznie
+          </button>
+          <button onClick={() => { setOcrMode(true); setOcrLines([]); }}
+            style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: ocrMode ? "#10b981" : "transparent", color: ocrMode ? "#fff" : "#64748b" }}>
+            📷 Skan paragonu
           </button>
         </div>
+
+        {/* ════ TRYB OCR ════ */}
+        {ocrMode && (
+          <>
+            {ocrLines.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "32px 0" }}>
+                <div style={{ fontSize: 56, marginBottom: 16 }}>📷</div>
+                <div style={{ color: "#64748b", marginBottom: 20, fontSize: 14 }}>Zrób zdjęcie paragonu lub wybierz z galerii</div>
+                {/* PUNKT 6: podepnij prawdziwe API OCR */}
+                <input ref={fileRef} type="file" accept="image/*" capture="environment"
+                  style={{ display: "none" }} onChange={() => { /* PUNKT 6 */ }} />
+                <button onClick={() => fileRef.current?.click()}
+                  style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8 }}>
+                  📷 Zrób zdjęcie
+                </button>
+                <button onClick={() => fileRef.current?.click()}
+                  style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  🖼️ Wybierz z galerii
+                </button>
+                {ocrLoading && <div style={{ marginTop: 24, color: "#10b981", fontWeight: 700 }}>🤖 AI analizuje paragon…</div>}
+              </div>
+            ) : (
+              <>
+                <div style={{ color: "#10b981", fontWeight: 700, marginBottom: 12 }}>✅ Znalezione pozycje:</div>
+                {ocrLines.map((line, i) => (
+                  <div key={i} style={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8, padding: "10px 14px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input type="checkbox" checked={line.selected}
+                        onChange={e => { const next = [...ocrLines]; next[i] = { ...next[i], selected: e.target.checked }; setOcrLines(next); }}
+                        style={{ width: 18, height: 18, accentColor: "#10b981" }} />
+                      <div>
+                        <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 14 }}>{line.desc}</div>
+                        <div style={{ color: "#64748b", fontSize: 11 }}>{line.category} › {line.sub}</div>
+                      </div>
+                    </div>
+                    <div style={{ color: "#10b981", fontWeight: 700 }}>{fmt(line.amount)}</div>
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid #1e293b", marginBottom: 12 }}>
+                  <span style={{ color: "#64748b" }}>Suma:</span>
+                  <span style={{ color: "#10b981", fontWeight: 800, fontSize: 18 }}>
+                    {fmt(ocrLines.filter(l => l.selected).reduce((sum, l) => sum + l.amount, 0))}
+                  </span>
+                </div>
+                <button onClick={handleAddOcrLines} disabled={isSaving}
+                  style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8 }}>
+                  {isSaving ? "⏳ Zapisywanie…" : "✅ Dodaj zaznaczone"}
+                </button>
+                <button onClick={() => setOcrLines([])}
+                  style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#334155", color: "#94a3b8", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  🔄 Skanuj ponownie
+                </button>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ════ TRYB RĘCZNY ════ */}
+        {!ocrMode && (
+          <>
+            {/* Data */}
+            <div style={row}>
+              <label style={lbl}>Data</label>
+              <DatePicker
+                selected={form.date}
+                onChange={date => set("date", date)}
+                locale="pl" dateFormat="dd.MM.yyyy"
+                maxDate={todayLocal()} calendarStartDay={1}
+                customInput={<input style={inp} readOnly />}
+                wrapperClassName="dp-full-width"
+                popperPlacement="bottom-start"
+              />
+            </div>
+
+            {/* Waluta + kurs */}
+            <div style={row}>
+              <CurrencyRateField
+                currency={form.currency} customCurrency={form.customCurrency}
+                date={dateYMD}
+                onCurrencyChange={v => set("currency", v)}
+                onCustomChange={v => set("customCurrency", v)}
+                onRateReady={handleRateReady}
+              />
+            </div>
+
+            {/* Kwota */}
+            <div style={row}>
+              <label style={lbl}>Kwota ({rateInfo.resolvedCurrency || "PLN"})</label>
+              <input type="number" step="0.01" min="0"
+                value={form.amountOrig}
+                onChange={e => set("amountOrig", e.target.value)}
+                placeholder="0,00" style={inp}
+              />
+              {amountPLN > 0 && rateInfo.resolvedCurrency !== "PLN" && (
+                <div style={{ fontSize: 12, color: "#10b981", marginTop: 5 }}>= <strong>{fmt(amountPLN)}</strong></div>
+              )}
+            </div>
+
+            {/* Voucher */}
+            <div style={row}>
+              <button onClick={toggleVoucher}
+                style={{ padding: "5px 14px", borderRadius: 20, border: "1px solid #1e293b", background: form.useVoucher ? "#a855f722" : "transparent", color: form.useVoucher ? "#a855f7" : "#475569", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                🎫 {form.useVoucher ? "Voucher aktywny" : "Użyj vouchera / bonu"}
+              </button>
+              {form.useVoucher && (
+                <div style={{ marginTop: 10 }}>
+                  <label style={lbl}>Kwota bonu (PLN)</label>
+                  <input type="number" step="0.01" min="0"
+                    value={form.voucherAmount} onChange={e => set("voucherAmount", e.target.value)}
+                    placeholder="0,00" style={{ ...inp, maxWidth: 180 }} />
+                  {amountPLN > 0 && (
+                    <div style={{ fontSize: 12, color: "#a855f7", marginTop: 5 }}>
+                      Realna gotówka: <strong>{fmt(netCash)}</strong>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div style={divider} />
+
+            {/* Subkategoria */}
+            <div style={row}>
+              <label style={lbl}>Subkategoria</label>
+              <SubcategorySelect value={form.subcategoryId} onChange={handleSubcategoryChange} />
+              {form.categoryName && <div style={{ fontSize: 11, color: "#475569", marginTop: 5 }}>{form.categoryName}</div>}
+            </div>
+
+            {/* Priority */}
+            <div style={row}>
+              <PriorityPicker
+                value={form.priority}
+                onChange={v => set("priority", v)}
+                subcategoryId={form.subcategoryId}
+              />
+            </div>
+
+            <div style={divider} />
+
+            {/* Opis */}
+            <div style={row}>
+              <label style={lbl}>Opis (opcjonalny)</label>
+              <input value={form.description} onChange={e => set("description", e.target.value)}
+                placeholder="np. Żabka – zakupy weekendowe" maxLength={500} style={inp} />
+            </div>
+
+            {/* Tags */}
+            {activeTags.length > 0 && (
+              <div style={row}>
+                <label style={lbl}>Tagi</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {activeTags.map(tag => {
+                    const selected = form.tags.includes(tag.id);
+                    return (
+                      <button key={tag.id} onClick={() => toggleTag(tag.id)}
+                        style={{ padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12,
+                          border:     `1px solid ${selected ? "#10b981" : "#1e293b"}`,
+                          background: selected ? "#10b98122" : "transparent",
+                          color:      selected ? "#10b981"   : "#64748b",
+                          fontWeight: selected ? 700 : 400, transition: "all 0.15s" }}>
+                        {tag.icon} {tag.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div style={divider} />
+
+            {/* ── Action buttons ── */}
+            <div style={{ display: "flex", gap: 8 }}>
+              {/* Add to cart — primary action */}
+              <button
+                onClick={handleAddToCart}
+                style={{ flex: 1, padding: "13px 16px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                🛒 Do koszyka
+              </button>
+
+              {/* Save directly — quick action */}
+              <button
+                onClick={handleSubmitDirect}
+                disabled={isSaving}
+                style={{ flex: 1, padding: "13px 16px", borderRadius: 10, border: "none", background: isSaving ? "#064e3b" : "#10b981", color: "#fff", fontSize: 14, fontWeight: 700, cursor: isSaving ? "not-allowed" : "pointer" }}>
+                {isSaving ? "⏳" : "➕ Dodaj teraz"}
+              </button>
+
+              {/* Clear form */}
+              <button onClick={resetForm}
+                style={{ padding: "13px 14px", borderRadius: 10, border: "1px solid #1e293b", background: "transparent", color: "#475569", cursor: "pointer", fontSize: 13 }}>
+                ✕
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ════ CART — appears when cart.length > 0 ════ */}
+      {hasCart && (
+        <div style={{ flex: 1, minWidth: 0, position: "sticky", top: 20 }}>
+          <CartPanel onLoadToForm={handleLoadFromCart} />
+        </div>
       )}
+
+      {/* DatePicker dark theme */}
+      <style>{`
+        .dp-full-width { width: 100%; }
+        .dp-full-width .react-datepicker-wrapper { width: 100%; }
+        .react-datepicker { background: #0d1424 !important; border: 1px solid #1e293b !important; border-radius: 12px !important; font-family: inherit !important; }
+        .react-datepicker__header { background: #0a0f1e !important; border-bottom: 1px solid #1e293b !important; border-radius: 12px 12px 0 0 !important; }
+        .react-datepicker__current-month, .react-datepicker__day-name { color: #94a3b8 !important; }
+        .react-datepicker__day { color: #e2e8f0 !important; border-radius: 6px !important; }
+        .react-datepicker__day:hover { background: #1e293b !important; }
+        .react-datepicker__day--selected { background: #10b981 !important; color: #fff !important; font-weight: 700 !important; }
+        .react-datepicker__day--today { border: 1px solid #10b98166 !important; background: transparent !important; }
+        .react-datepicker__day--disabled { color: #334155 !important; }
+        .react-datepicker__navigation-icon::before { border-color: #64748b !important; }
+        .react-datepicker__navigation:hover .react-datepicker__navigation-icon::before { border-color: #10b981 !important; }
+        .react-datepicker-popper { z-index: 9999 !important; }
+      `}</style>
     </div>
   );
 }
-
-export default ExpensesPanel;

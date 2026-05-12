@@ -121,7 +121,7 @@ router.patch('/update/:id', async (req, res) => {
   // Validate ID
   const idParsed = IdParamSchema.safeParse(req.params.id);
   if (!idParsed.success) {
-    return res.status(400).json({ error: parsed.error.issues[0].message });
+    return res.status(400).json({ error: idParsed.error.issues[0].message });
   }
 
   // Validate body

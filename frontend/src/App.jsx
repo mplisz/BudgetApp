@@ -12,7 +12,7 @@ import { MonthNavigator } from "./components/layout/MonthNavigator";
 import { NotificationBell } from "./components/layout/NotificationBell";
 import { MobileNav } from "./components/layout/MobileNav";
 import { LogoutButton } from "./components/ui/LogoutButton";
-
+import { ToastContainer } from "./components/ui/ToastContainer";
 
 const PanelExpenses  = lazy(() => import("./components/panels/PanelExpenses"));
 const PanelPlanned   = lazy(() => import("./components/panels/PanelPlanned"));
@@ -74,6 +74,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0f1e", color: "#e2e8f0", fontFamily: "'DM Sans', sans-serif", display: "flex" }}>
+      <ToastContainer />  
       <Sidebar />
 
       <main style={{ marginLeft: 220, flex: 1, minHeight: "100vh" }}>

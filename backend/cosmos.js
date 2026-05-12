@@ -21,5 +21,6 @@ const categoriesContainer = database.container("Categories");
 const refreshTokensContainer = database.container("RefreshTokens");
 const tagsContainer = database.container("Tags");
 const settingsContainer = database.container("Settings");
-module.exports = { categoriesContainer, refreshTokensContainer, tagsContainer, settingsContainer };
+const transactionsContainer = database.container("Transactions");
+module.exports = { categoriesContainer, refreshTokensContainer, tagsContainer, settingsContainer,transactionsContainer };
 

@@ -1,6 +1,7 @@
 import { CategoriesSection } from "./settings/CategoriesSection";
 import { TagsSection } from "./settings/TagsSection";
 import { SettingsSection } from "./settings/SettingsSection";
+import { CurrenciesSection }  from "./settings/CurrenciesSection";
 import { theme as s } from "./../../styles/theme";
 
 function PanelSettings() {
@@ -11,6 +12,7 @@ function PanelSettings() {
       </div>
       <CategoriesSection />
       <TagsSection />
+      <CurrenciesSection/>
       <SettingsSection />
     </div>
   );
