@@ -1,0 +1,127 @@
+// ============================================================
+// File: src/utils/helpers.js
+// Pure utility functions: formatting, date helpers, budget math
+// ============================================================
+
+// Format a number as PLN currency string
+export const fmt = (n) =>
+  new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN" }).format(n || 0);
+
+// Parse a decimal string that may use comma or dot as separator
+export const parseDecimal = (v) => {
+  if (v === "" || v === null || v === undefined) return "";
+  return parseFloat(String(v).replace(",", ".")) || 0;
+};
+
+// Display number with Polish decimal separator (comma)
+export const fmtNum = (v) => (v === "" ? "" : String(v).replace(".", ","));
+
+// Build a flat sub-category lookup: subName → { categoryId, categoryName, priority }
+// Works with new array structure
+export function buildSubLookup(categories) {
+  const lookup = {};
+  if (!Array.isArray(categories)) return lookup;
+  categories.forEach(cat => {
+    (cat.sub || []).forEach(sub => {
+      lookup[sub.name] = { 
+        categoryId:   cat.id,
+        categoryName: cat.name,
+        category:     cat.name, // backwards compat
+        priority:     sub.priority 
+      };
+    });
+  });
+  return lookup;
+}
+
+// Build sorted flat expense-type list from categories
+export function buildExpenseTypes(categories) {
+  if (!Array.isArray(categories)) return [];
+  return categories
+    .flatMap(cat =>
+      (cat.sub || []).map(sub => ({ 
+        label:    sub.name, 
+        category: cat.name, 
+        categoryId: cat.id,
+        icon:     cat.icon, 
+        priority: sub.priority 
+      }))
+    )
+    .sort((a, b) => a.label.localeCompare(b.label, "pl"));
+}
+
+// Round a number up to the nearest multiple
+export function roundToNearest(val, nearest) {
+  return Math.ceil(val / nearest) * nearest;
+}
+
+// Check if a recurring expense is active for the given month/year.
+export function recurringActiveForMonth(e, m, y) {
+  const currentKey = `${y}-${String(m + 1).padStart(2, "0")}`;
+  if (e.startMonth && e.startMonth > currentKey) return false;
+  if (e.endMonth   && e.endMonth   < currentKey) return false;
+
+  const freq = e.frequency || "monthly";
+  if (freq === "monthly")   return true;
+  if (freq === "quarterly") return m % 3 === 0;
+  if (freq === "yearly")    return e.scheduledMonth ? e.scheduledMonth === m + 1 : m === 0;
+  if (freq === "custom")    return (e.activeMonths || []).includes(m);
+  return false;
+}
+
+// Compute the full budget breakdown for a given month.
+// Works with new array structure for categories.
+export function computeMonthBudget({ categories, baseBudget, budgetOverrides, planned, expenses, month, year, goals = [], goalInstallment = null }) {
+  const subLookup = buildSubLookup(categories);
+
+  const getStaticLimit = (catName, m, y) => {
+    const key = `${y}-${m}`;
+    if (budgetOverrides[key]?.[catName] !== undefined) return budgetOverrides[key][catName];
+    return baseBudget[catName] || 0;
+  };
+
+  const mStart = new Date(year, month, 1);
+  const mEnd   = new Date(year, month + 1, 1);
+  const plannedM = planned.filter(p => {
+    if (!p.date || p.done) return false;
+    if (p.linkedToGoal) return false;
+    const d = new Date(p.date);
+    return d >= mStart && d < mEnd;
+  });
+  const plannedByCatM = {};
+  plannedM.forEach(p => { plannedByCatM[p.category] = (plannedByCatM[p.category] || 0) + p.amount; });
+
+  const recurringM = expenses.filter(e => e.recurring && recurringActiveForMonth(e, month, year));
+  const recurringByCatM = {};
+  recurringM.forEach(e => { recurringByCatM[e.category] = (recurringByCatM[e.category] || 0) + e.amount; });
+
+  const goalsForMonth = goalInstallment
+    ? goals.filter(g => !g.archived).map(g => ({ ...g, installment: goalInstallment(g, month, year) }))
+    : [];
+  const goalsByCatM = {};
+  goalsForMonth.forEach(g => {
+    goalsByCatM[g.category] = (goalsByCatM[g.category] || 0) + g.installment;
+  });
+
+  const byCat = {};
+  let grandTotal = 0;
+
+  // Iterate over array instead of object keys
+  (Array.isArray(categories) ? categories : []).forEach(cat => {
+    const catName = cat.name;
+    const staticLimit = getStaticLimit(catName, month, year);
+    const pVal = plannedByCatM[catName] || 0;
+    const rVal = recurringByCatM[catName] || 0;
+    const gVal = goalsByCatM[catName] || 0;
+    const total = staticLimit + pVal + rVal + gVal;
+    byCat[catName] = {
+      staticLimit, planned: pVal, recurring: rVal, goals: gVal, total,
+      plannedItems:   plannedM.filter(p => p.category === catName),
+      recurringItems: recurringM.filter(e => e.category === catName),
+      goalsItems:     goalsForMonth.filter(g => g.category === catName),
+    };
+    grandTotal += total;
+  });
+
+  return { byCat, grandTotal, plannedM, recurringM, goalsForMonth };
+}
