@@ -114,11 +114,16 @@ export function CurrencyRateField({
           {!isLoading && rate && !error && (
             <div style={{ ...hint, color: "#10b981" }}>
               1 {resolvedCurrency} = <strong>{rate.toFixed(4)}</strong> {baseCurrency.code}
-              {effectiveDate !== date && (
-                <span style={{ color: "#f59e0b" }}> (kurs z {effectiveDate} — weekend/święto)</span>
+              {effectiveDate !== date && table !== "B" && (
+                <span style={{ color: "#f59e0b" }}>
+                  {` (kurs z ${effectiveDate} — brak publikacji NBP w dniu ${date})`}
+                </span>
               )}
               {table === "B" && (
-                <span style={{ color: "#a855f7", marginLeft: 6 }}> · dane aktualizowane przez NBP raz w tygodniu</span>
+                <span style={{ color: "#a855f7" }}>
+                  {" · dane aktualizowane przez NBP raz w tygodniu"}
+                  {effectiveDate !== date && ` (ostatni kurs z ${effectiveDate})`}
+                </span>
               )}
             </div>
           )}
