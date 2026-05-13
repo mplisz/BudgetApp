@@ -1,0 +1,56 @@
+feat: transactions panel, vouchers module, and core refactors
+
+## Transactions (PUNKT 4)
+
+- Add PanelTransactions with filters (category, subcategory, date range,
+  priority multiselect, tag multiselect), collapsible category grouping
+  and flat list toggle
+- Add EditTransactionModal (full form — category, subcategory, all tags)
+  replacing inline row edit
+- Add ReturnModal with partial return support, same-month effective amount
+  deduction, and validation (amount ≤ remaining, month ≥ tx.budgetMonth)
+- Add POST /api/transactions/:id/returns backend endpoint
+- Fix group and total sums to use netAmount and deduct same-month returns
+- Add isRecurring 🔄 badge, ✅/🔄 return status badges
+
+## Vouchers (PUNKT 4b)
+
+- Add Vouchers container to Cosmos DB (setup-db.js, cosmos.js)
+- Add full CRUD backend: GET/POST/PATCH/DELETE /api/vouchers
+  with 409 on double-archive and required code validation
+- Add syncVoucherUsage helper (add/update/remove entries in
+  usedInTransactions) with rollback on unknown voucherId
+- Add sequential cart save (replaces Promise.all) to prevent
+  race conditions on voucher documents
+- Add useVoucherManager hook with remainingValue computed dynamically
+- Add PanelVouchers: filters, collapsible usage history with description,
+  edit modal showing remainingValue, archive via ConfirmModal
+- Replace voucher checkbox in TransactionForm with live dropdown:
+  fresh fetch on mount, cartReserved adjustment, auto-fill and auto-cap
+  voucherAmount, expiry warning per selected voucher
+- Add ExpiringVouchersBanner reusable component (used in TransactionForm
+  and PanelVouchers)
+- Add ! badge on Vouchery sidebar item for expiring vouchers
+- Add voucherExpiryWarningDays setting (backend + SettingsSection UI)
+- Wire voucher sync on TX POST (with rollback), PATCH, and soft DELETE
+
+## Architecture & refactors
+
+- Extract transactionComponents/: TransactionRow, ReturnModal,
+  EditTransactionModal, TransactionForm (shared add+edit), txStyles.jsx
+- Move PANEL_META to constants.js as single source of truth;
+  Sidebar derives items from it (fixes circular import App ↔ Sidebar)
+- AppContext: add setPanel wrapper that auto-navigates to first open
+  month on every panel change; add vouchers/setVouchers with bootstrap
+  fetch; add formatBudgetMonth import
+- AppDatePicker: add monthPicker prop (showMonthYearPicker),
+  export toYM/fromYM helpers, fix null vs undefined for maxDate
+- MonthNavigator: respect settings.appStartMonth as minimum month
+- SettingsSection: add appStartMonth picker and voucherExpiryWarningDays
+- PanelExpenses: responsive layout (CSS media query 700px),
+  isFutureMonth banner, onSaveComplete callback to CartPanel for
+  voucher dropdown refresh after cart save
+- CartPanel: add onSaveComplete prop, voucherId in aggregation key
+- CurrencyRateField: always show effectiveDate for NBP table B rates
+- NotificationBell: updated with voucher expiry section
+- Add PanelVouchers and PanelTransactions to App.jsx, Sidebar, PANEL_META
