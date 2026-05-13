@@ -8,7 +8,8 @@ const router = express.Router();
 const { z } = require('zod');
 const { tagsContainer } = require('../cosmos');
 const { requireAuth } = require('../middleware/auth');
-const { generateId } = require('../utils/helpers');
+const { generateId, IdParamSchema } = require('../utils/helpers');
+
 
 router.use(requireAuth);
 
@@ -82,7 +83,7 @@ router.post('/', async (req, res) => {
 
 // PATCH
 router.patch('/update/:id', async (req, res) => {
-  const idParsed = z.string().regex(/^[a-zA-Z0-9_-]+$/).safeParse(req.params.id);
+  const idParsed = IdParamSchema.safeParse(req.params.id);
   if (!idParsed.success) {
     return res.status(400).json({ error: "Invalid ID format" });
   }

@@ -95,6 +95,26 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Internal Server Error" });
 });
 
+// Catch unhandled promise rejections — prevent silent crashes
+let aiClient = null;
+
+if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
+  const appInsights = require('applicationinsights');
+  appInsights.setup(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING).start();
+  aiClient = appInsights.defaultClient;
+}
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]', reason);
+  aiClient?.trackException({ exception: reason });
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err);
+  aiClient?.trackException({ exception: err });
+  aiClient?.flush();
+  process.exit(1);// Force restart via process manager (PM2, Azure App Service)
+});
 app.listen(PORT, () => {
   console.log(`🚀 Server is listening on port ${PORT}`);
   console.log(`🔒 Security active: Helmet, Rate Limiter, Strict CORS`);

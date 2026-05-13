@@ -2,6 +2,13 @@
 // File: backend/utils/helpers.js
 // ============================================================
 
+// ── Shared validators ─────────────────────────────────────────
+const { z } = require('zod');
+const IdParamSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, "Invalid ID format");
+const BudgetMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Invalid budgetMonth format (YYYY-MM)");
+const BUDGET_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+
 const slugify = (text) => {
   if (!text || typeof text !== "string") return `${Date.now()}`;
   return text
@@ -68,4 +75,4 @@ const syncVoucherUsage = async (vouchersContainer, voucherId, familyId, op) => {
   return resource;
 };
 
-module.exports = { generateId, readItem, syncVoucherUsage };
+module.exports = { generateId, readItem, syncVoucherUsage, IdParamSchema, BudgetMonthSchema, BUDGET_MONTH_REGEX };

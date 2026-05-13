@@ -3,8 +3,10 @@
 // ============================================================
 require('dotenv').config();
 
-//Needed for emulator, to be deleted in PROD!
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+//Needed for emulator to run locally
+if (process.env.NODE_ENV !== 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
 
 const { CosmosClient } = require("@azure/cosmos");
 

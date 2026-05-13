@@ -12,17 +12,15 @@ const router  = express.Router();
 const { z }   = require("zod");
 const { transactionsContainer, vouchersContainer } = require("../cosmos");
 const { requireAuth }                               = require("../middleware/auth");
-const { generateId, readItem, syncVoucherUsage }    = require("../utils/helpers");
+const { generateId, readItem, syncVoucherUsage, IdParamSchema, BUDGET_MONTH_REGEX } = require('../utils/helpers');
 
 router.use(requireAuth);
-
-const budgetMonthRegex = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 // ── Schemas ───────────────────────────────────────────────────
 
 const TransactionPostSchema = z.object({
   date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  budgetMonth:      z.string().regex(budgetMonthRegex),
+  budgetMonth:      z.string().regex(BUDGET_MONTH_REGEX),
   subcategoryId:    z.string().min(1),
   subcategoryName:  z.string().min(1),
   categoryId:       z.string().min(1),
@@ -31,7 +29,7 @@ const TransactionPostSchema = z.object({
   originalAmount:   z.number().positive(),
   originalCurrency: z.string().length(3),
   fxRate:           z.number().positive(),
-  description:      z.string().max(500).optional().default(""),
+  description:      z.string().max(500).optional().default("").transform(v => v.trim()),
   tags:             z.array(z.string()).optional().default([]),
   priority:         z.number().int().min(1).max(4).optional().default(2),
   useVoucher:       z.boolean().optional().default(false),
@@ -43,7 +41,7 @@ const TransactionPostSchema = z.object({
 
 const TransactionPatchSchema = z.object({
   date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  budgetMonth:      z.string().regex(budgetMonthRegex).optional(),
+  budgetMonth:      z.string().regex(BUDGET_MONTH_REGEX).optional(),
   subcategoryId:    z.string().min(1).optional(),
   subcategoryName:  z.string().min(1).optional(),
   categoryId:       z.string().min(1).optional(),
@@ -52,7 +50,7 @@ const TransactionPatchSchema = z.object({
   originalAmount:   z.number().positive().optional(),
   originalCurrency: z.string().length(3).optional(),
   fxRate:           z.number().positive().optional(),
-  description:      z.string().max(500).optional(),
+  description:      z.string().max(500).optional().transform(v => v.trim()),
   tags:             z.array(z.string()).optional(),
   priority:         z.number().int().min(1).max(4).optional(),
   useVoucher:       z.boolean().optional(),
@@ -63,9 +61,9 @@ const TransactionPatchSchema = z.object({
     currency:             z.string().length(3).default("PLN"),
     voucherAmount:        z.number().min(0).default(0),
     cashAmount:           z.number().min(0),
-    moneyReturnedInMonth: z.string().regex(budgetMonthRegex),
+    moneyReturnedInMonth: z.string().regex(BUDGET_MONTH_REGEX),
     returnedAt:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    reason:               z.string().max(500).optional().default(""),
+    reason:               z.string().max(500).optional().default("").transform(v => v.trim()),
     returnedBy:           z.string().optional().default(""),
     returnedById:         z.string().optional().default(""),
   })).optional(),
@@ -81,7 +79,7 @@ const ReturnSchema = z.object({
   amount:               z.number().positive(),
   voucherAmount:        z.number().min(0).default(0),
   cashAmount:           z.number().min(0),
-  moneyReturnedInMonth: z.string().regex(budgetMonthRegex),
+  moneyReturnedInMonth: z.string().regex(BUDGET_MONTH_REGEX),
   returnedAt:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   reason:               z.string().max(500).optional().default(""),
 });
@@ -93,7 +91,7 @@ router.get("/", async (req, res) => {
     const { budgetMonth } = req.query;
     const familyId = req.user.familyId;
 
-    if (!budgetMonth || !budgetMonthRegex.test(budgetMonth)) {
+    if (!budgetMonth || !BUDGET_MONTH_REGEX.test(budgetMonth)) {
       return res.status(400).json({ error: "budgetMonth parameter is required (format: YYYY-MM)." });
     }
 
@@ -173,15 +171,19 @@ router.post("/", async (req, res) => {
 // ── PATCH ─────────────────────────────────────────────────────
 
 router.patch("/:id", async (req, res) => {
+  // Validate URL param
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
   const parsed = TransactionPatchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
   try {
-    const { id }   = req.params;
+    const id       = idParsed.data;
     const familyId = req.user.familyId;
 
     const existing = await readItem(transactionsContainer, id, familyId);
-    if (!existing)         return res.status(404).json({ error: "Transaction not found." });
+    if (!existing)          return res.status(404).json({ error: "Transaction not found." });
     if (existing.isDeleted) return res.status(409).json({ error: "Cannot edit a deleted transaction." });
 
     const updates = parsed.data;
@@ -242,8 +244,12 @@ router.patch("/:id", async (req, res) => {
 // ── DELETE (soft) ─────────────────────────────────────────────
 
 router.delete("/:id", async (req, res) => {
+  // Validate URL param
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
   try {
-    const { id }   = req.params;
+    const id       = idParsed.data;
     const familyId = req.user.familyId;
 
     const existing = await readItem(transactionsContainer, id, familyId);
@@ -279,11 +285,15 @@ router.delete("/:id", async (req, res) => {
 // Return does NOT touch the voucher — user manages it manually.
 
 router.post("/:id/returns", async (req, res) => {
+  // Validate URL param
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
   const parsed = ReturnSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
   try {
-    const { id }   = req.params;
+    const id       = idParsed.data;
     const familyId = req.user.familyId;
 
     const existing = await readItem(transactionsContainer, id, familyId);

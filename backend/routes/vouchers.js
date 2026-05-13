@@ -11,29 +11,27 @@ const router  = express.Router();
 const { z }   = require("zod");
 const { vouchersContainer } = require("../cosmos");
 const { requireAuth }       = require("../middleware/auth");
-const { readItem }          = require("../utils/helpers");
+const { readItem, IdParamSchema, BUDGET_MONTH_REGEX } = require('../utils/helpers');
 
 router.use(requireAuth);
-
-const BUDGET_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 // ── Schemas ───────────────────────────────────────────────────
 
 const VoucherPostSchema = z.object({
-  name:         z.string().min(1).max(200),
-  code:         z.string().min(1, "Kod vouchera jest wymagany.").max(100),
+  name:         z.string().min(1).max(200).transform(v => v.trim()),
+  code:         z.string().min(1, "Kod vouchera jest wymagany.").max(100).transform(v => v.trim()),
   initialValue: z.number().positive("Wartość początkowa musi być > 0"),
   currency:     z.string().length(3).default("PLN"),
   expiresAt:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().default(null),
-  store:        z.string().max(100).optional().default(""),
+  store:        z.string().max(100).optional().default("").transform(v => v.trim()),
   notes:        z.string().max(500).optional().default(""),
 });
 
 const VoucherPatchSchema = z.object({
-  name:      z.string().min(1).max(200).optional(),
-  code:      z.string().max(100).optional(),
+  name:      z.string().min(1).max(200).optional().transform(v => v.trim()),
+  code:      z.string().max(100).optional().transform(v => v.trim()),
   expiresAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  store:     z.string().max(100).optional(),
+  store:     z.string().max(100).optional().transform(v => v.trim()),
   notes:     z.string().max(500).optional(),
 }).refine(d => Object.keys(d).length > 0, { message: "Brak pól do aktualizacji." });
 
@@ -41,7 +39,7 @@ const VoucherPatchSchema = z.object({
 
 router.get("/", async (req, res) => {
   try {
-    const familyId       = req.user.familyId;
+    const familyId        = req.user.familyId;
     const includeArchived = req.query.includeArchived === "true";
 
     const query = includeArchived
@@ -80,19 +78,19 @@ router.post("/", async (req, res) => {
 
     const doc = {
       id,
-      userId:           familyId,
-      name:             d.name,
-      code:             d.code,
-      initialValue:     d.initialValue,
-      currency:         d.currency,
-      expiresAt:        d.expiresAt,
-      store:            d.store,
-      notes:            d.notes,
-      isArchived:       false,
+      userId:             familyId,
+      name:               d.name,
+      code:               d.code,
+      initialValue:       d.initialValue,
+      currency:           d.currency,
+      expiresAt:          d.expiresAt,
+      store:              d.store,
+      notes:              d.notes,
+      isArchived:         false,
       usedInTransactions: [],
-      createdAt:        new Date().toISOString(),
-      createdBy:        req.user.name || req.user.email,
-      createdById:      req.user.id,
+      createdAt:          new Date().toISOString(),
+      createdBy:          req.user.name || req.user.email,
+      createdById:        req.user.id,
     };
 
     const { resource } = await vouchersContainer.items.create(doc);
@@ -107,15 +105,19 @@ router.post("/", async (req, res) => {
 // ── PATCH /api/vouchers/:id ───────────────────────────────────
 
 router.patch("/:id", async (req, res) => {
+  // Validate URL param
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
   const parsed = VoucherPatchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
   try {
-    const { id }   = req.params;
+    const id       = idParsed.data;
     const familyId = req.user.familyId;
 
     const existing = await readItem(vouchersContainer, id, familyId);
-    if (!existing) return res.status(404).json({ error: "Voucher nie istnieje." });
+    if (!existing)           return res.status(404).json({ error: "Voucher nie istnieje." });
     if (existing.isArchived) return res.status(409).json({ error: "Voucher jest zarchiwizowany." });
 
     const updated = {
@@ -138,20 +140,24 @@ router.patch("/:id", async (req, res) => {
 // ── DELETE /api/vouchers/:id  (soft archive) ──────────────────
 
 router.delete("/:id", async (req, res) => {
+  // Validate URL param
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
   try {
-    const { id }   = req.params;
+    const id       = idParsed.data;
     const familyId = req.user.familyId;
 
     const existing = await readItem(vouchersContainer, id, familyId);
-    if (!existing)          return res.status(404).json({ error: "Voucher nie istnieje." });
+    if (!existing)           return res.status(404).json({ error: "Voucher nie istnieje." });
     if (existing.isArchived) return res.status(409).json({ error: "Voucher jest już zarchiwizowany." });
 
     const archived = {
       ...existing,
-      isArchived:  true,
-      archivedAt:  new Date().toISOString(),
-      archivedBy:  req.user.name || req.user.email,
-      archivedById:req.user.id,
+      isArchived:   true,
+      archivedAt:   new Date().toISOString(),
+      archivedBy:   req.user.name || req.user.email,
+      archivedById: req.user.id,
     };
 
     const { resource } = await vouchersContainer.items.upsert(archived);

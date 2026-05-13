@@ -7,13 +7,12 @@ const router  = express.Router();
 const { z }   = require('zod');
 const { settingsContainer }  = require('../cosmos');
 const { requireAuth }        = require('../middleware/auth');
-const { readItem }           = require('../utils/helpers');
+const { readItem, BUDGET_MONTH_REGEX } = require('../utils/helpers');
+
 
 router.use(requireAuth);
 
 // ── Zod Schemas ──────────────────────────────────────────────
-
-const BUDGET_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const CurrencySchema = z.object({
   code:       z.string().length(3, "Kod waluty musi mieć dokładnie 3 znaki.").toUpperCase(),

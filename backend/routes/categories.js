@@ -8,7 +8,7 @@ const router = express.Router();
 const { z } = require('zod');
 const { categoriesContainer } = require('../cosmos');
 const { requireAuth } = require('../middleware/auth');
-const { generateId } = require('../utils/helpers');
+const { generateId, IdParamSchema } = require('../utils/helpers'); 
 
 router.use(requireAuth);
 
@@ -30,7 +30,7 @@ const CategoryPatchSchema = z.object({
   message: "No valid fields provided for update."
 });
 
-const IdParamSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, "Invalid ID format");
+
 
 // GET
 router.get('/', async (req, res) => {

@@ -21,14 +21,12 @@ const router  = express.Router();
 const { z }   = require('zod');
 const { monthsContainer } = require('../cosmos');
 const { requireAuth }     = require('../middleware/auth');
-const { readItem }        = require('../utils/helpers');
+const { readItem, BudgetMonthSchema, BUDGET_MONTH_REGEX } = require('../utils/helpers');
+
 
 router.use(requireAuth);
 
 // ── Helpers ───────────────────────────────────────────────────
-
-const BUDGET_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
-
 function previousMonth(budgetMonth) {
   const [y, m] = budgetMonth.split("-").map(Number);
   if (m === 1) return `${y - 1}-12`;
