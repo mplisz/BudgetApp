@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { useAppContext }  from "../context/AppContext";
 import { useAuth }        from "../context/AuthContext";
-import { useToast } from "./useToast";
+import { useToast }       from "../hooks/useToast";
 import { translateError } from "../data/constants/errorMessages";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -91,7 +91,7 @@ export function useTagManager() {
   // ── Archive ─────────────────────────────────────────────────
   async function handleArchiveTag(id) {
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/tags/${id}`, {
+      const res = await fetchWithAuth(`${API_URL}/api/tags/update/${id}`, {
         method: "PATCH",
         body:   JSON.stringify({ isArchived: true }),
       });
@@ -110,7 +110,7 @@ export function useTagManager() {
   // ── Restore ─────────────────────────────────────────────────
   async function handleRestoreTag(id) {
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/tags/${id}`, {
+      const res = await fetchWithAuth(`${API_URL}/api/tags/update/${id}`, {
         method: "PATCH",
         body:   JSON.stringify({ isArchived: false }),
       });
@@ -130,7 +130,7 @@ export function useTagManager() {
   // ── Update ──────────────────────────────────────────────────
   async function handleUpdateTag(id, updates) {
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/tags/${id}`, {
+      const res = await fetchWithAuth(`${API_URL}/api/tags/update/${id}`, {
         method: "PATCH",
         body:   JSON.stringify(updates),
       });

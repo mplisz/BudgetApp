@@ -1,13 +1,24 @@
 // ============================================================
 // File: src/components/ui/CurrencyRateField.jsx
-// Currency Dropdown (from settings/Cosmos DB) + NBP rate (14-day window)
+// Dropdown waluty (z settings/Cosmos DB) + kurs NBP (14-day window)
+// + opcjonalne pole ręczne.
+// Waluta bazowa (isBase: true) jest zawsze pierwsza i nie potrzebuje kursu.
 // ============================================================
 
 import { useEffect }            from "react";
 import { useCurrencyConverter } from "../../hooks/useCurrencyConverter";
 import { useCurrencyManager }   from "../../hooks/useCurrencyManager";
 
-
+/**
+ * Props:
+ *   currency          – aktualny kod waluty (np. "PLN", "EUR", "INNE")
+ *   customCurrency    – wartość pola "inna waluta" (3 litery)
+ *   date              – data transakcji YYYY-MM-DD
+ *   onCurrencyChange  – fn(currency: string)
+ *   onCustomChange    – fn(customCurrency: string)
+ *   onRateReady       – fn({ activeRate, resolvedCurrency })
+ *   disabled          – boolean
+ */
 export function CurrencyRateField({
   currency,
   customCurrency = "",
@@ -19,26 +30,26 @@ export function CurrencyRateField({
 }) {
   const { dropdownCurrencies, baseCurrency } = useCurrencyManager();
   const {
-    rate, effectiveDate, isLoading, error,
+    rate, effectiveDate, table, isLoading, error,
     manualRate, setManualRate, activeRate, loadRate,
   } = useCurrencyConverter();
 
-
+  // Waluta efektywna
   const resolvedCurrency = currency === "INNE"
     ? (customCurrency.toUpperCase() || "")
     : currency;
 
-  // check if base currency
+  // Czy to waluta bazowa (nie potrzebuje kursu NBP)
   const isBaseCurrency = resolvedCurrency === baseCurrency.code;
 
-  // Get rate
+  // Pobierz kurs po zmianie waluty lub daty
   useEffect(() => {
     if (!isBaseCurrency && resolvedCurrency.length === 3 && date) {
       loadRate(resolvedCurrency, date);
     }
   }, [resolvedCurrency, date, loadRate, isBaseCurrency]);
 
-  // Base currency = rate always 1
+  // Informuj rodzica — waluta bazowa ma zawsze kurs 1
   useEffect(() => {
     if (!onRateReady) return;
     onRateReady({
@@ -59,7 +70,7 @@ export function CurrencyRateField({
 
   return (
     <div>
-      {/* Dropdown */}
+      {/* Dropdown waluty */}
       <div style={{ marginBottom: 12 }}>
         <label style={lbl}>Waluta</label>
         <select
@@ -76,7 +87,7 @@ export function CurrencyRateField({
         </select>
       </div>
 
-      {/* Field for other currency*/}
+      {/* Pole kodu własnej waluty */}
       {currency === "INNE" && (
         <div style={{ marginBottom: 12 }}>
           <label style={lbl}>Kod waluty (3 litery, np. JPY)</label>
@@ -91,7 +102,7 @@ export function CurrencyRateField({
         </div>
       )}
 
-      {/* Rate */}
+      {/* Sekcja kursu — tylko dla walut obcych (nie bazowych) */}
       {!isBaseCurrency && resolvedCurrency.length === 3 && (
         <div>
           <label style={lbl}>Kurs NBP z dnia transakcji</label>
@@ -105,6 +116,9 @@ export function CurrencyRateField({
               1 {resolvedCurrency} = <strong>{rate.toFixed(4)}</strong> {baseCurrency.code}
               {effectiveDate !== date && (
                 <span style={{ color: "#f59e0b" }}> (kurs z {effectiveDate} — weekend/święto)</span>
+              )}
+              {table === "B" && (
+                <span style={{ color: "#a855f7", marginLeft: 6 }}> · dane aktualizowane przez NBP raz w tygodniu</span>
               )}
             </div>
           )}

@@ -52,7 +52,10 @@ export function TagsSection() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
               {tags.map(tag => (
                 <div key={tag.id} style={{ display: "flex", alignItems: "center", gap: 6, background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "6px 12px" }}>
-                  <span style={{ fontSize: 16 }}>{tag.icon}</span>
+                  <EmojiSelector
+                    currentEmoji={tag.icon}
+                    onSelect={emoji => handleUpdateTag(tag.id, { icon: emoji })}
+                  />
                   <EditableLabel value={tag.name} onSave={(newName) => handleUpdateTag(tag.id, { name: newName })} />
                   <button onClick={() => confirmArchive(tag)}
                     style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 14 }}>

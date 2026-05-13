@@ -15,6 +15,57 @@ import { PRIORITY_COLORS }  from "../ui/PriorityPicker";
 // Per-item save status
 const STATUS = { PENDING: "pending", SAVING: "saving", DONE: "done", ERROR: "error" };
 
+// ── Cart aggregation ──────────────────────────────────────────
+// Two items are mergeable when they share: subcategoryId, priority,
+// tags (sorted), originalCurrency, fxRate, useVoucher.
+// Amounts are summed; descriptions are concatenated.
+
+function aggregationKey(item) {
+  const tags = [...(item.tags || [])].sort().join(",");
+  return [
+    item.subcategoryId,
+    item.priority,
+    tags,
+    item.originalCurrency,
+    String(item.fxRate),
+    String(item.useVoucher),
+  ].join("|");
+}
+
+export function aggregateCart(items) {
+  const groups = new Map();
+
+  for (const item of items) {
+    const key = aggregationKey(item);
+    if (groups.has(key)) {
+      const existing = groups.get(key);
+      // Sum amounts
+      existing.amount         = Math.round((existing.amount + item.amount) * 100) / 100;
+      existing.originalAmount = Math.round((existing.originalAmount + item.originalAmount) * 100) / 100;
+      existing.netAmount      = Math.round(((existing.netAmount || existing.amount) + (item.netAmount || item.amount)) * 100) / 100;
+      // Voucher amounts
+      if (item.useVoucher) {
+        existing.voucherAmount = Math.round(((existing.voucherAmount || 0) + (item.voucherAmount || 0)) * 100) / 100;
+      }
+      // Concatenate descriptions (skip empty/duplicate)
+      if (item.description && item.description !== existing.description) {
+        existing.description = existing.description
+          ? `${existing.description}, ${item.description}`
+          : item.description;
+      }
+      // Keep earliest date
+      if (item.date < existing.date) existing.date = item.date;
+      // Track ALL original cart IDs that were merged into this item
+      existing._allCartIds = [...(existing._allCartIds || [existing._cartId]), item._cartId];
+      existing._mergedCount = (existing._mergedCount || 1) + 1;
+    } else {
+      groups.set(key, { ...item, _mergedCount: 1, _allCartIds: [item._cartId] });
+    }
+  }
+
+  return Array.from(groups.values());
+}
+
 /**
  * Props:
  *   onLoadToForm – fn(item) — loads a cart item back into the form for editing
@@ -67,7 +118,8 @@ export function CartPanel({ onLoadToForm }) {
   // ── Save all ─────────────────────────────────────────────────
 
   const saveAll = useCallback(async () => {
-    const pending = cart.filter(i => statuses[i._cartId] !== STATUS.DONE);
+    // Save aggregated items — merged rows are saved as single transactions
+    const pending = aggregateCart(cart.filter(i => statuses[i._cartId] !== STATUS.DONE));
     if (!pending.length) return;
 
     setSaving(true);
@@ -82,11 +134,14 @@ export function CartPanel({ onLoadToForm }) {
         const { _cartId, ...payload } = item;
         const result = await addTransaction(payload);
         if (result) {
-          setStatus(item._cartId, STATUS.DONE);
-          savedIds.push(item._cartId);
+          // Mark all original cart IDs that were merged into this item
+          const ids = item._allCartIds || [item._cartId];
+          ids.forEach(id => setStatus(id, STATUS.DONE));
+          savedIds.push(...ids);
         } else {
-          setStatus(item._cartId, STATUS.ERROR);
-          failedIds.push(item._cartId);
+          const ids = item._allCartIds || [item._cartId];
+          ids.forEach(id => setStatus(id, STATUS.ERROR));
+          failedIds.push(...ids);
         }
       } catch {
         setStatus(item._cartId, STATUS.ERROR);
@@ -122,6 +177,12 @@ export function CartPanel({ onLoadToForm }) {
 
   if (cart.length === 0) return null;
 
+  // ── Aggregated display list ─────────────────────────────────
+  // Items are aggregated for display and saving — user sees merged rows
+  const displayItems = aggregateCart(cart.filter(i => statuses[i._cartId] !== STATUS.DONE));
+  const doneItems    = cart.filter(i => statuses[i._cartId] === STATUS.DONE);
+  const allDisplay   = [...displayItems, ...doneItems];
+
   // ── Shared content ───────────────────────────────────────────
 
   const cartContent = (
@@ -155,7 +216,7 @@ export function CartPanel({ onLoadToForm }) {
 
       {/* Item list */}
       <div style={{ flex: 1, overflowY: "auto", marginBottom: 12 }}>
-        {cart.map((item) => {
+        {allDisplay.map((item) => {
           const status = statuses[item._cartId] || STATUS.PENDING;
           const pColor = PRIORITY_COLORS[item.priority] || "#64748b";
           const itemNet = item.useVoucher && item.voucherAmount > 0
@@ -188,6 +249,11 @@ export function CartPanel({ onLoadToForm }) {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
                   <div style={{ textAlign: "right" }}>
+                    {item._mergedCount > 1 && (
+                      <div style={{ fontSize: 10, color: "#3b82f6", fontWeight: 700, marginBottom: 2 }}>
+                        ×{item._mergedCount} zsumowane
+                      </div>
+                    )}
                     {item.useVoucher && item.voucherAmount > 0 ? (
                       <>
                         <div style={{ fontSize: 11, color: "#64748b", textDecoration: "line-through" }}>{fmt(item.amount)}</div>
