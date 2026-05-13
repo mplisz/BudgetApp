@@ -1,9 +1,7 @@
 // ============================================================
 // File: src/components/ui/AppDatePicker.jsx
 // Reusable date picker with dark theme.
-// Used in: PanelExpenses, PanelPlanned, PanelRecurring.
-//
-// Requires: npm install react-datepicker date-fns
+// Supports day picker (default) and month picker (monthPicker prop).
 // ============================================================
 
 import DatePicker, { registerLocale } from "react-datepicker";
@@ -14,13 +12,11 @@ registerLocale("pl", pl);
 
 // ── Helpers (exported for reuse) ─────────────────────────────
 
-// Returns today as a local Date object (no UTC offset issues)
 export const todayLocal = () => {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 };
 
-// Converts a local Date object to YYYY-MM-DD string
 export const toYMD = (date) => {
   if (!date) return "";
   const y = date.getFullYear();
@@ -29,35 +25,49 @@ export const toYMD = (date) => {
   return `${y}-${m}-${d}`;
 };
 
-// Restores a Date object from a YYYY-MM-DD string
 export const fromYMD = (ymd) => {
   if (!ymd) return null;
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(y, m - 1, d);
 };
 
+// Convert Date → "YYYY-MM"
+export const toYM = (date) => {
+  if (!date) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+};
+
+// Convert "YYYY-MM" → Date (first day of month)
+export const fromYM = (ym) => {
+  if (!ym) return null;
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1);
+};
+
 // ── Component ─────────────────────────────────────────────────
 
 /**
  * Props:
- *   value          – Date object (selected date)
- *   onChange       – fn(date: Date)
- *   maxDate        – Date object (default: todayLocal())
- *   minDate        – Date object (optional)
- *   placeholder    – string (default: "dd.MM.yyyy")
- *   disabled       – boolean
+ *   value           – Date object
+ *   onChange        – fn(date: Date)
+ *   maxDate         – Date object (default: todayLocal())
+ *   minDate         – Date object (optional)
+ *   placeholder     – string
+ *   disabled        – boolean
  *   popperPlacement – string (default: "bottom-start")
- *   style          – optional style override for the input
+ *   style           – optional style override for the input
+ *   monthPicker     – boolean — show month/year picker only (YYYY-MM)
  */
 export function AppDatePicker({
   value,
   onChange,
   maxDate,
   minDate,
-  placeholder = "dd.MM.yyyy",
+  placeholder,
   disabled = false,
   popperPlacement = "bottom-start",
   style = {},
+  monthPicker = false,
 }) {
   const inputStyle = {
     width:        "100%",
@@ -74,24 +84,27 @@ export function AppDatePicker({
     ...style,
   };
 
+  const defaultPlaceholder = monthPicker ? "MM.YYYY" : "dd.MM.yyyy";
+
   return (
     <>
       <DatePicker
         selected={value}
         onChange={onChange}
         locale="pl"
-        dateFormat="dd.MM.yyyy"
-        placeholderText={placeholder}
-        maxDate={maxDate ?? todayLocal()}
+        dateFormat={monthPicker ? "MM.yyyy" : "dd.MM.yyyy"}
+        placeholderText={placeholder ?? defaultPlaceholder}
+        maxDate={maxDate !== undefined ? maxDate : (monthPicker ? null : todayLocal())}
         minDate={minDate}
         calendarStartDay={1}
         disabled={disabled}
+        showMonthYearPicker={monthPicker}
+        showFullMonthYearPicker={monthPicker}
         customInput={<input style={inputStyle} readOnly />}
         wrapperClassName="dp-full-width"
         popperPlacement={popperPlacement}
       />
 
-      {/* Dark theme — injected once, deduplicated by browser */}
       <style>{`
         .dp-full-width { width: 100%; }
         .dp-full-width .react-datepicker-wrapper { width: 100%; }
@@ -113,11 +126,18 @@ export function AppDatePicker({
           border-radius: 6px !important;
         }
         .react-datepicker__day:hover { background: #1e293b !important; }
-        .react-datepicker__day--selected {
+        .react-datepicker__day--selected,
+        .react-datepicker__month--selected {
           background: #10b981 !important;
           color: #fff !important;
           font-weight: 700 !important;
         }
+        .react-datepicker__month-text {
+          color: #e2e8f0 !important;
+          border-radius: 6px !important;
+          padding: 4px 8px !important;
+        }
+        .react-datepicker__month-text:hover { background: #1e293b !important; }
         .react-datepicker__day--today {
           border: 1px solid #10b98166 !important;
           background: transparent !important;

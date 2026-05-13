@@ -121,8 +121,8 @@ export function CurrencyRateField({
               )}
               {table === "B" && (
                 <span style={{ color: "#a855f7" }}>
-                  {" · dane aktualizowane przez NBP raz w tygodniu"}
-                  {effectiveDate !== date && ` (ostatni kurs z ${effectiveDate})`}
+                  {" · dane aktualizowane przez NBP raz w tygodniu "}
+                  {`(ostatni kurs z ${effectiveDate})`}
                 </span>
               )}
             </div>

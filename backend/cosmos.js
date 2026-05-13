@@ -23,5 +23,7 @@ const tagsContainer = database.container("Tags");
 const settingsContainer = database.container("Settings");
 const transactionsContainer = database.container("Transactions");
 const monthsContainer        = database.container("Months");
-module.exports = { categoriesContainer, refreshTokensContainer, tagsContainer, settingsContainer,transactionsContainer,monthsContainer };
+const vouchersContainer      = database.container("Vouchers");
+
+module.exports = { categoriesContainer, refreshTokensContainer, tagsContainer, settingsContainer,transactionsContainer,monthsContainer,vouchersContainer};
 

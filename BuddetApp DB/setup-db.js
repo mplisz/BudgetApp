@@ -14,9 +14,9 @@ const databaseDefinition = { id: "BudgetDB" };
 // Containers configuration based on our refined schema
 const containers = [
     { id: "Categories", partitionKey: "/userId" },
-    { id: "Subcategories", partitionKey: "/categoryId" },
+    //{ id: "Subcategories", partitionKey: "/categoryId" },
     { id: "Tags", partitionKey: "/userId" },
-    { id: "Limits", partitionKey: "/targetId" }, // Unified for Categories and Tags
+    { id: "Limits", partitionKey: "/targetId" },
     { id: "RecurringTransactions", partitionKey: "/userId" },
     { id: "Transactions", partitionKey: "/userId" },
     { id: "Goals",partitionKey:"/userId"},
@@ -24,6 +24,7 @@ const containers = [
     { id: "RefreshTokens",partitionKey:"/email"},
     {id: "Settings",partitionKey:"/userId"},
     { id: "Months",partitionKey: "/userId" },
+    { id: "Vouchers",partitionKey: "/userId" },
 ];
 async function setup() {
     console.log("🚀 Starting database setup...");

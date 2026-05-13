@@ -1,12 +1,5 @@
 // ============================================================
 // File: backend/routes/settings.js
-// Handles family settings: thresholds, targets, currencies.
-//
-// Currency model:
-//   { code: "PLN", name: "Polski złoty", isArchived: false, isBase: true }
-//
-// isBase: true  → always first in dropdown, cannot be archived
-// isBase: false → user-managed, max 10 active at a time
 // ============================================================
 
 const express = require('express');
@@ -19,6 +12,8 @@ const { readItem }           = require('../utils/helpers');
 router.use(requireAuth);
 
 // ── Zod Schemas ──────────────────────────────────────────────
+
+const BUDGET_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const CurrencySchema = z.object({
   code:       z.string().length(3, "Kod waluty musi mieć dokładnie 3 znaki.").toUpperCase(),
@@ -38,10 +33,17 @@ const SettingsSchema = z.object({
     minRetirementPercent:  z.number().min(0).max(100).optional(),
     minSavingsPercent:     z.number().min(0).max(100).optional(),
   }).optional(),
-  currencies: z.array(CurrencySchema).max(30).optional(),
-}).refine(data => data.thresholds || data.targets || data.currencies, {
-  message: "No valid fields provided for update.",
-});
+  currencies:    z.array(CurrencySchema).max(30).optional(),
+  voucherExpiryWarningDays: z.number().int().min(1).max(90).optional(),
+  // First month visible in MonthNavigator — blocks navigating before this month
+  appStartMonth: z.string()
+    .regex(BUDGET_MONTH_REGEX, "Nieprawidłowy format appStartMonth (YYYY-MM)")
+    .nullable()
+    .optional(),
+}).refine(
+  data => data.thresholds || data.targets || data.currencies || data.appStartMonth !== undefined || data.voucherExpiryWarningDays !== undefined,
+  { message: "No valid fields provided for update." }
+);
 
 // ── Defaults ─────────────────────────────────────────────────
 
@@ -62,15 +64,13 @@ const DEFAULT_SETTINGS = {
     minRetirementPercent:  15,
     minSavingsPercent:     20,
   },
-  currencies: DEFAULT_CURRENCIES,
+  currencies:    DEFAULT_CURRENCIES,
+  voucherExpiryWarningDays: 14,
+  appStartMonth: null,  // null = no restriction
 };
 
 // ── Helpers ───────────────────────────────────────────────────
 
-/**
- * Ensure every settings document has currencies with a base currency.
- * Backfills old documents that predate the currencies feature.
- */
 function backfillCurrencies(doc) {
   if (!doc) return;
   if (!doc.currencies || doc.currencies.length === 0) {
@@ -80,15 +80,13 @@ function backfillCurrencies(doc) {
   const hasBase = doc.currencies.some(c => c.isBase);
   if (!hasBase) {
     const pln = doc.currencies.find(c => c.code === "PLN");
-    if (pln) {
-      pln.isBase = true;
-    } else {
-      doc.currencies.unshift(DEFAULT_CURRENCIES[0]);
-    }
+    if (pln) pln.isBase = true;
+    else doc.currencies.unshift(DEFAULT_CURRENCIES[0]);
   }
 }
 
 // ── GET ──────────────────────────────────────────────────────
+
 router.get('/', async (req, res) => {
   try {
     const familyId = req.user.familyId;
@@ -100,6 +98,11 @@ router.get('/', async (req, res) => {
     }
 
     backfillCurrencies(doc);
+
+    // Backfill appStartMonth for old documents
+    if (!("appStartMonth" in doc)) doc.appStartMonth = null;
+    if (!("voucherExpiryWarningDays" in doc)) doc.voucherExpiryWarningDays = 14;
+
     res.json(doc);
   } catch (error) {
     console.error("[SETTINGS GET] Failed:", error);
@@ -108,6 +111,7 @@ router.get('/', async (req, res) => {
 });
 
 // ── PATCH ────────────────────────────────────────────────────
+
 router.patch('/', async (req, res) => {
   const parsed = SettingsSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -129,12 +133,10 @@ router.patch('/', async (req, res) => {
       if (baseCount !== 1) {
         return res.status(400).json({ error: "Musi istnieć dokładnie jedna waluta bazowa." });
       }
-
       const archivedBase = incoming.find(c => c.isBase && c.isArchived);
       if (archivedBase) {
         return res.status(400).json({ error: "Waluta bazowa nie może być zarchiwizowana." });
       }
-
       const activeNonBase = incoming.filter(c => !c.isBase && !c.isArchived).length;
       if (activeNonBase > 10) {
         return res.status(400).json({ error: "Można wybrać maksymalnie 10 aktywnych walut (poza bazową)." });
@@ -151,7 +153,12 @@ router.patch('/', async (req, res) => {
         ...existing.targets,
         ...(parsed.data.targets || {}),
       },
-      currencies:    parsed.data.currencies ?? existing.currencies ?? DEFAULT_CURRENCIES,
+      currencies:    parsed.data.currencies    ?? existing.currencies    ?? DEFAULT_CURRENCIES,
+      // null explicitly clears the restriction; undefined means "not sent — keep existing"
+      voucherExpiryWarningDays: parsed.data.voucherExpiryWarningDays ?? existing.voucherExpiryWarningDays ?? 14,
+      appStartMonth: parsed.data.appStartMonth !== undefined
+        ? parsed.data.appStartMonth
+        : (existing.appStartMonth ?? null),
       updatedAt:     new Date().toISOString(),
       updatedBy:     req.user.id,
       updatedByName: req.user.name,

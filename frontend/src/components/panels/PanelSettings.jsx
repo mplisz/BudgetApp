@@ -1,8 +1,12 @@
-import { CategoriesSection } from "./settings/CategoriesSection";
-import { TagsSection } from "./settings/TagsSection";
-import { SettingsSection } from "./settings/SettingsSection";
-import { CurrenciesSection }  from "./settings/CurrenciesSection";
-import { theme as s } from "./../../styles/theme";
+// ============================================================
+// File: frontend/src/components/panels/PanelSettings.jsx
+// ============================================================
+
+import { CategoriesSection }     from "./settings/CategoriesSection";
+import { TagsSection }           from "./settings/TagsSection";
+import { SettingsSection }       from "./settings/SettingsSection";
+import { CurrenciesSection }     from "./settings/CurrenciesSection";
+import { theme as s }            from "./../../styles/theme";
 
 function PanelSettings() {
   return (
@@ -11,8 +15,8 @@ function PanelSettings() {
         <div style={s.sectionTitle}>Ustawienia</div>
       </div>
       <CategoriesSection />
+      <CurrenciesSection />
       <TagsSection />
-      <CurrenciesSection/>
       <SettingsSection />
     </div>
   );

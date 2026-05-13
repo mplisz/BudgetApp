@@ -1,14 +1,14 @@
 // ============================================================
 // File: src/context/AppContext.jsx
-// Central React Context – all shared state and actions.
-// Bootstrap: categories, tags, settings loaded on startup
-// once accessToken is available (not user — avoids race condition).
+// Central React Context — all shared state and actions.
+// Bootstrap: categories, tags, settings, closedMonths, vouchers
+// loaded on startup once accessToken is available.
 // ============================================================
 
-import { createContext, useContext, useState, useEffect, useRef } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useAuth }  from "./AuthContext";
 import { MONTHS }   from "../data/constants";
-import { buildSubLookup, recurringActiveForMonth, computeMonthBudget } from "../utils/helpers";
+import { buildSubLookup, recurringActiveForMonth, computeMonthBudget, formatBudgetMonth } from "../utils/helpers";
 import { fmt }      from "../utils/helpers";
 
 const AppContext = createContext(null);
@@ -24,33 +24,45 @@ export function AppProvider({ children }) {
   const { fetchWithAuth, user, accessToken } = useAuth();
 
   // ── Navigation ───────────────────────────────────────────────
-  const [panel, setPanel] = useState("expenses");
+  const [panel,         _setPanel]      = useState("expenses");
 
   // ── Active month / year ──────────────────────────────────────
   const [month, setMonth] = useState(new Date().getMonth());
   const [year,  setYear]  = useState(new Date().getFullYear());
 
   // ── Core data ────────────────────────────────────────────────
-  const [expenses,     setExpenses]     = useState([]);
-  const [planned,      setPlanned]      = useState([]);
-  const [actualIncome, setActualIncome] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [cart,         setCart]         = useState([]);  // Shopping cart (survives panel navigation)
-  const [closedMonths, setClosedMonths] = useState(new Set()); // Set of closed "YYYY-MM" strings
+  const [expenses,      setExpenses]     = useState([]);
+  const [planned,       setPlanned]      = useState([]);
+  const [actualIncome,  setActualIncome] = useState([]);
+  const [transactions,  setTransactions] = useState([]);
+  const [cart,          setCart]         = useState([]);
+  const [closedMonths,  setClosedMonths] = useState(new Set());
+  const [vouchers,      setVouchers]     = useState([]);
 
   // ── Configuration ────────────────────────────────────────────
-  const [categories,    setCategories]    = useState([]);
-  const [tags,          setTags]          = useState([]);
-  const [incomeSources, setIncomeSources] = useState([]);
-  const [settings,      setSettings]      = useState(null);
-  const [archivedSubs,  setArchivedSubs]  = useState(new Set());
+  const [categories,    setCategories]   = useState([]);
+  const [tags,          setTags]         = useState([]);
+  const [incomeSources, setIncomeSources]= useState([]);
+  const [settings,      setSettings]     = useState(null);
+  const [archivedSubs,  setArchivedSubs] = useState(new Set());
 
   // ── Budget ───────────────────────────────────────────────────
   const [baseBudget,      setBaseBudget]      = useState({});
   const [budgetOverrides, setBudgetOverrides] = useState({});
 
-  // ── Goals (must be declared before computeMonthBudget!) ────────
-  const [goals, setGoals] = useState([]);
+  // ── Goals ────────────────────────────────────────────────────
+  const [goals,         setGoals]        = useState([]);
+
+  // ── Bootstrap flag ───────────────────────────────────────────
+  const [bootstrapDone, setBootstrapDone] = useState(false);
+
+  // ── OCR ──────────────────────────────────────────────────────
+  const [form,       setForm]       = useState({});
+  const [fxRate,     setFxRate]     = useState(null);
+  const [ocrMode,    setOcrMode]    = useState(false);
+  const [ocrLines,   setOcrLines]   = useState([]);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const fileRef = useRef(null);
 
   // ── Tag filters ──────────────────────────────────────────────
   const [activeTagFilter, setActiveTagFilter] = useState(null);
@@ -59,44 +71,49 @@ export function AppProvider({ children }) {
   // ── Cushion ──────────────────────────────────────────────────
   const [cushionMonths,      setCushionMonths]      = useState(3);
   const [cushionCoverMonths, setCushionCoverMonths] = useState(6);
-  const [cushionLevel,       setCushionLevel]       = useState(2);
+  const [cushionLevel,       setCushionLevel]       = useState(3);
   const [cushionLossSource,  setCushionLossSource]  = useState("all");
 
   // ── Notifications ────────────────────────────────────────────
-  const [notifOpen,    setNotifOpen]    = useState(false);
-  const [paidNotifIds, setPaidNotifIds] = useState(new Set());
+  const [notifOpen,     setNotifOpen]     = useState(false);
+  const [paidNotifIds,  setPaidNotifIds]  = useState(new Set());
 
-  // ── Schowek ──────────────────────────────────────────────────
+  // ── Stash ────────────────────────────────────────────────────
   const [stash,             setStash]             = useState([]);
   const [savedFromImpulses, setSavedFromImpulses] = useState(0);
-  const [stashMoveModal,    setStashMoveModal]    = useState(null);
-  const [stashMoveDate,     setStashMoveDate]     = useState(
-    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`
-  );
+  const [stashMoveModal,    setStashMoveModal]    = useState(false);
+  const [stashMoveDate,     setStashMoveDate]     = useState("");
 
-  // ── OCR ──────────────────────────────────────────────────────
-  const [ocrMode,    setOcrMode]    = useState(false);
-  const [ocrLines,   setOcrLines]   = useState([]);
-  const [ocrLoading, setOcrLoading] = useState(false);
-  const fileRef = useRef();
+  // ── Legacy settings fields ───────────────────────────────────
+  const [retirementMin, setRetirementMin] = useState(15);
+  const [insuranceMax,  setInsuranceMax]  = useState(10);
+  const [warnThreshold, setWarnThreshold] = useState(80);
 
-  // ── Stary form (potrzebny przez stare panele) ─────────────────
-  const EMPTY_FORM = {
-    category: "", sub: "", priority: null, amount: "", desc: "",
-    date: new Date().toISOString().slice(0, 10),
-    saveReceipt: false, tags: [], currency: "PLN", foreignAmount: "",
-    useVoucher: false, voucherAmount: "", totalAmount: "",
-  };
-  const [form,   setForm]   = useState(EMPTY_FORM);
-  const [fxRate, setFxRate] = useState(null);
+  // ── Navigate to first open month from now() ──────────────────
+  // Called at bootstrap and on every panel change.
+  const navigateToFirstOpenMonth = useCallback((closed = closedMonths) => {
+    const now = new Date();
+    let m = now.getMonth();
+    let y = now.getFullYear();
+    for (let i = 0; i < 24; i++) {
+      const bm = formatBudgetMonth(m, y);
+      if (!closed.has(bm)) {
+        setMonth(m);
+        setYear(y);
+        return;
+      }
+      m++;
+      if (m > 11) { m = 0; y++; }
+    }
+  }, [closedMonths, setMonth, setYear]);
 
-  // ── Bootstrap loading ─────────────────────────────────────────
-  const [bootstrapDone, setBootstrapDone] = useState(false);
+  // Wrapped setPanel — navigates to first open month on every panel change
+  const setPanel = useCallback((id) => {
+    navigateToFirstOpenMonth();
+    _setPanel(id);
+  }, [navigateToFirstOpenMonth]);
 
-  // ── Bootstrap: load data once accessToken is ready ─────────────
-  // Using accessToken (not user) to avoid race condition
-  // with accessTokenRef inside fetchWithAuth.
-
+  // ── Bootstrap ─────────────────────────────────────────────────
   const parseCategories = (dbCategories) => {
     const parents = dbCategories.filter(c => !c.parentCategoryId).map(parent => ({
       id:         parent.id,
@@ -119,6 +136,11 @@ export function AppProvider({ children }) {
     });
     return parents;
   };
+
+  function computeVoucherRemaining(v) {
+    const used = (v.usedInTransactions || []).reduce((s, u) => s + u.amount, 0);
+    return Math.max(0, v.initialValue - used);
+  }
 
   useEffect(() => {
     if (!accessToken) return;
@@ -146,28 +168,22 @@ export function AppProvider({ children }) {
           setSettings(data);
         }
 
-        // Load closed months
+        // Load closed months + auto-navigate
         const monthsRes = await fetchWithAuth(`${API_URL}/api/months`);
         if (monthsRes.ok) {
           const data = await monthsRes.json();
           const closedSet = new Set(data.map(m => m.budgetMonth));
           setClosedMonths(closedSet);
-
-          // Auto-navigate to first open month starting from current calendar month
-          const now      = new Date();
-          let   navMonth = now.getMonth();
-          let   navYear  = now.getFullYear();
-          for (let i = 0; i < 24; i++) {
-            const bm = `${navYear}-${String(navMonth + 1).padStart(2, "0")}`;
-            if (!closedSet.has(bm)) {
-              setMonth(navMonth);
-              setYear(navYear);
-              break;
-            }
-            navMonth++;
-            if (navMonth > 11) { navMonth = 0; navYear++; }
-          }
+          navigateToFirstOpenMonth(closedSet);
         }
+
+        // Load vouchers
+        const vouchersRes = await fetchWithAuth(`${API_URL}/api/vouchers`);
+        if (vouchersRes.ok) {
+          const data = await vouchersRes.json();
+          setVouchers(data.map(v => ({ ...v, remainingValue: computeVoucherRemaining(v) })));
+        }
+
       } catch (err) {
         console.error("[AppContext bootstrap] Failed:", err);
       } finally {
@@ -176,7 +192,6 @@ export function AppProvider({ children }) {
     }
 
     bootstrap();
-  // accessToken changes only on login / logout / token refresh
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
@@ -220,7 +235,7 @@ export function AppProvider({ children }) {
     ? monthExpenses.filter(e => (e.tags || []).includes(activeTagFilter))
     : monthExpenses;
 
-  // ── Goal helpers (functions — safe to declare after useState) ───
+  // ── Goal helpers ─────────────────────────────────────────────
   function goalSaved(goalId) {
     return expenses
       .filter(e => e.goalId === goalId && e.isEnvelopTransfer)
@@ -264,7 +279,7 @@ export function AppProvider({ children }) {
     })
     .reduce((s, e) => s + e.amount, 0);
 
-  // ── Budget computation (requires goals to be declared above) ────
+  // ── Budget computation ────────────────────────────────────────
   const currentMonthBudget = computeMonthBudget({
     categories,
     baseBudget,
@@ -291,10 +306,10 @@ export function AppProvider({ children }) {
       recentMonths.push({ m, y });
     }
     const filtered = expenses.filter(e => {
-      const d = new Date(e.date);
-      const inPeriod     = recentMonths.some(rm => rm.m === d.getMonth() && rm.y === d.getFullYear());
+      const d          = new Date(e.date);
+      const inPeriod   = recentMonths.some(rm => rm.m === d.getMonth() && rm.y === d.getFullYear());
       if (!inPeriod) return false;
-      const expTags      = (e.tags || []).map(tid => tags.find(t => t.id === tid)).filter(Boolean);
+      const expTags    = (e.tags || []).map(tid => tags.find(t => t.id === tid)).filter(Boolean);
       const effectivePrio = expTags.length > 0
         ? Math.min(...expTags.map(t => t.priority))
         : (subLookup[e.sub]?.priority ?? 4);
@@ -316,7 +331,7 @@ export function AppProvider({ children }) {
 
   // ── Notifications ─────────────────────────────────────────────
   const upcomingPayments = recurringThisMonth.filter(e => !paidNotifIds.has(e.id));
-  const markNotifPaid    = (id) => setPaidNotifIds(prev => new Set([...prev, id]));
+  const markNotifPaid    = (notif) => setPaidNotifIds(prev => new Set([...prev, notif.id ?? notif]));
 
   // ── OCR simulate ─────────────────────────────────────────────
   function simulateOCR() {
@@ -333,22 +348,25 @@ export function AppProvider({ children }) {
     }, 1500);
   }
 
-  // ── Expose everything ─────────────────────────────────────────
+  // ── Context value ─────────────────────────────────────────────
   const value = {
     // Navigation
     panel, setPanel,
     month, setMonth,
     year,  setYear,
 
-    // Core data (stare panele)
+    // Core data (legacy panels)
     expenses,     setExpenses,
     planned,      setPlanned,
     actualIncome, setActualIncome,
 
-    // Transactions (nowe — PUNKT 3+)
-    transactions, setTransactions,
-    cart, setCart,
-    closedMonths, setClosedMonths,
+    // Transactions + cart + months
+    transactions,  setTransactions,
+    cart,          setCart,
+    closedMonths,  setClosedMonths,
+
+    // Vouchers
+    vouchers, setVouchers,
 
     // Derived monthly
     monthExpenses, monthActualIncome,
@@ -368,6 +386,7 @@ export function AppProvider({ children }) {
     incomeSources, setIncomeSources,
     settings,   setSettings,
     archivedSubs, setArchivedSubs,
+
     subLookup,
 
     // Bootstrap
@@ -397,7 +416,7 @@ export function AppProvider({ children }) {
     notifOpen, setNotifOpen,
     upcomingPayments, markNotifPaid,
 
-    // Schowek
+    // Stash
     stash,             setStash,
     savedFromImpulses, setSavedFromImpulses,
     stashMoveModal,    setStashMoveModal,
@@ -409,6 +428,11 @@ export function AppProvider({ children }) {
     goalSaved, goalSuggestedInstallment,
     isGoalTargetMonth, isGoalConfirmedThisMonth,
     isGoalSkippedThisMonth, monthsUntilGoal,
+
+    // Legacy settings
+    retirementMin, setRetirementMin,
+    insuranceMax,  setInsuranceMax,
+    warnThreshold, setWarnThreshold,
 
     // Utils
     fmt, MONTHS,

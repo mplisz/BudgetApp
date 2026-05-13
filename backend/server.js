@@ -16,6 +16,8 @@ const tagsRoutes = require('./routes/tags');
 const settingsRoutes = require('./routes/settings');
 const transactionsRoutes = require ('./routes/transactions')
 const monthsRoutes       = require('./routes/months');
+const vouchersRoutes = require('./routes/vouchers');
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -86,6 +88,7 @@ app.use('/api/tags', tagsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/transactions', transactionsRoutes)
 app.use('/api/months', monthsRoutes)
+app.use('/api/vouchers', vouchersRoutes);
 
 app.use((err, req, res, next) => {
   console.error("Uncaught Server Error:", err.stack);

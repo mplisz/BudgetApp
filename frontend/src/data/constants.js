@@ -41,3 +41,22 @@ export const PIE_COLORS_TREND = PIE_COLORS;
 export const PRIO_COLORS = {
   1: "#ef4444", 2: "#f97316", 3: "#eab308", 4: "#6b7280",
 };
+
+export const PANEL_META = {
+  expenses:     { icon: "➕", label: "Dodaj wydatek",     section: "Główne" },
+  planned:      { icon: "📋", label: "Planowane wydatki", section: "Główne" },
+  income:       { icon: "📅", label: "Planowanie",        section: "Analiza" },
+  results:      { icon: "📊", label: "Podsumowanie",      section: "Analiza" },
+  transactions: { icon: "🧾", label: "Transakcje",        section: "Analiza" },
+  vouchers:     { icon: "🎫", label: "Vouchery",          section: "Analiza" },
+  trends:       { icon: "📈", label: "Historia",          section: "Analiza" },
+  cushion:      { icon: "🛡️", label: "Poduszka",          section: "Narzędzia i Cele" },
+  recurring:    { icon: "🔄", label: "Cykliczne",         section: "Narzędzia i Cele" },
+  basebudget:   { icon: "🏦", label: "Baza budżetu",      section: "Narzędzia i Cele" },
+  goals:        { icon: "🎯", label: "Koperty / Cele",    section: "Narzędzia i Cele" },
+  stash:        { icon: "🗄️", label: "Schowek",           section: "Narzędzia i Cele" },
+  documents:    { icon: "🧾", label: "Dokumenty",         section: "Narzędzia i Cele" },
+  settings:     { icon: "⚙️", label: "Ustawienia",        section: "Administracja" },
+  admin:        { icon: "🔐", label: "Admin",             section: "Administracja" },
+};
+ 

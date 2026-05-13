@@ -1,11 +1,12 @@
 // ============================================================
-// File: src/components/panels/settings/SettingsSection.jsx
+// File: frontend/src/components/panels/settings/SettingsSection.jsx
 // ============================================================
 
 import { useState, useEffect } from "react";
 import { theme as s }          from "../../../styles/theme";
-import { CollapsibleSection }  from "../../ui/index";
+import { CollapsibleSection }  from "../../ui";
 import { useSettings }         from "../../../hooks/useSettings";
+import { AppDatePicker, fromYM, toYM } from "../../ui/AppDatePicker";
 
 export function SettingsSection() {
   const { settings, isLoading, isSaving, updateSettings } = useSettings();
@@ -17,6 +18,13 @@ export function SettingsSection() {
   const [minRetirement,   setMinRetirement]   = useState(15);
   const [minSavings,      setMinSavings]      = useState(20);
 
+  const [voucherExpiryDays, setVoucherExpiryDays] = useState(14);
+
+  // appStartMonth — null means no restriction
+  const [startMonthEnabled, setStartMonthEnabled] = useState(false);
+  // Date object for AppDatePicker; defaults to first day of current month
+  const [startMonthValue,   setStartMonthValue]   = useState(fromYM(null) ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+
   useEffect(() => {
     if (!settings) return;
     setWarningPercent(settings.thresholds?.warningPercent   ?? 80);
@@ -25,12 +33,19 @@ export function SettingsSection() {
     setMaxObligations(settings.targets?.maxObligationsPercent ?? 35);
     setMinRetirement(settings.targets?.minRetirementPercent  ?? 15);
     setMinSavings(settings.targets?.minSavingsPercent        ?? 20);
+
+    setVoucherExpiryDays(settings.voucherExpiryWarningDays ?? 14);
+
+    const sm = settings.appStartMonth ?? null;
+    setStartMonthEnabled(sm !== null);
+    if (sm) setStartMonthValue(fromYM(sm) ?? new Date());
   }, [settings]);
 
   const isThresholdsValid = Number(warningPercent) < Number(criticalPercent);
   const isSavingsValid    = Number(minRetirement) <= Number(minSavings);
   const isSumValid        = Number(minSavings) + Number(maxObligations) + Number(maxInsurance) <= 100;
   const isRangesValid     = [warningPercent, criticalPercent, maxInsurance, maxObligations, minRetirement, minSavings].every(v => Number(v) >= 0);
+  const isStartMonthValid = !startMonthEnabled || startMonthValue instanceof Date;
 
   const validationError = !isThresholdsValid
     ? "Próg ostrzeżenia musi być niższy niż próg krytyczny."
@@ -40,6 +55,8 @@ export function SettingsSection() {
     ? "Całkowita wartość progów nie może być większa niż 100%."
     : !isRangesValid
     ? "Wartości nie mogą być ujemne."
+    : !isStartMonthValid
+    ? "Nieprawidłowy format miesiąca (YYYY-MM)."
     : "";
 
   function handleSave() {
@@ -55,6 +72,8 @@ export function SettingsSection() {
         minRetirementPercent:  Number(minRetirement),
         minSavingsPercent:     Number(minSavings),
       },
+      appStartMonth: startMonthEnabled ? toYM(startMonthValue) : null,
+      voucherExpiryWarningDays: Number(voucherExpiryDays),
     });
   }
 
@@ -65,7 +84,6 @@ export function SettingsSection() {
 
   return (
     <CollapsibleSection title="⚙️ Progi i limity" defaultOpen={false}>
-      {/* Validation error stays inline — it's tied to specific fields */}
       {validationError && (
         <div style={{ padding: "10px 14px", background: "#ef444422", borderLeft: "4px solid #ef4444", color: "#f87171", marginBottom: 12, borderRadius: 4, fontSize: 13 }}>
           {validationError}
@@ -155,6 +173,67 @@ export function SettingsSection() {
               <input type="number" min={0} max={100} value={minSavings}
                 onChange={e => setMinSavings(e.target.value)} style={inputStyle} />
               <span style={{ color: "#64748b", fontSize: 13 }}>%</span>
+            </div>
+          </div>
+
+          {/* Nawigacja miesięcy */}
+          <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase", marginBottom: 8, marginTop: 20 }}>
+            📅 Nawigacja miesięcy
+          </div>
+
+          <div style={{ ...rowStyle, alignItems: "flex-start", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+              <div>
+                <div style={labelStyle}>Najwcześniejszy dostępny miesiąc</div>
+                <div style={descStyle}>Blokuje cofanie nawigacji przed tą datą</div>
+              </div>
+              {/* Toggle */}
+              <div
+                onClick={() => setStartMonthEnabled(e => !e)}
+                style={{
+                  width: 40, height: 22, borderRadius: 99, cursor: "pointer", position: "relative", flexShrink: 0,
+                  background:  startMonthEnabled ? "#10b981" : "#1e293b",
+                  border:      `1px solid ${startMonthEnabled ? "#10b981" : "#334155"}`,
+                  transition:  "background 0.2s",
+                }}>
+                <div style={{
+                  position: "absolute", top: 3,
+                  left:       startMonthEnabled ? 20 : 3,
+                  width: 14, height: 14, borderRadius: "50%",
+                  background: "#fff", transition: "left 0.2s",
+                }} />
+              </div>
+            </div>
+            {startMonthEnabled && (
+              <AppDatePicker
+                value={startMonthValue}
+                onChange={d => setStartMonthValue(d)}
+                monthPicker
+                maxDate={null}
+                style={{ width: "auto", minWidth: 160 }}
+              />
+            )}
+            {!startMonthEnabled && settings?.appStartMonth && (
+              <div style={{ fontSize: 11, color: "#475569" }}>
+                Aktualnie: <strong style={{ color: "#94a3b8" }}>{settings.appStartMonth}</strong> — wyłącz toggle i zapisz żeby usunąć
+              </div>
+            )}
+          </div>
+
+          {/* Voucher expiry warning window */}
+          <div style={{ ...rowStyle, marginTop: 8 }}>
+            <div>
+              <div style={labelStyle}>🎫 Ostrzeżenie o voucherach</div>
+              <div style={descStyle}>Ile dni przed wygaśnięciem pokazywać ostrzeżenie</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="number" min={1} max={90}
+                value={voucherExpiryDays}
+                onChange={e => setVoucherExpiryDays(e.target.value)}
+                style={inputStyle}
+              />
+              <span style={{ color: "#64748b", fontSize: 13 }}>dni</span>
             </div>
           </div>
 
