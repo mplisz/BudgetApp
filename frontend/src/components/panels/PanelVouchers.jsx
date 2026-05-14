@@ -166,14 +166,14 @@ function UsageHistory({ entries }) {
 }
 
 // ── VoucherCard ───────────────────────────────────────────────
-function VoucherCard({ v, onEdit, onArchive }) {
+function VoucherCard({ v, onEdit, onArchive, warnDays = 14 }) {
   const days   = daysUntil(v.expiresAt);
   const pct    = v.initialValue > 0 ? Math.round((v.remainingValue / v.initialValue) * 100) : 0;
   const isUsed = v.remainingValue <= 0;
 
   const statusColor = isUsed ? "#6b7280"
-    : days !== null && days <= 0 ? "#ef4444"
-    : days !== null && days <= 30 ? "#f97316"
+    : days !== null && days <= 0          ? "#ef4444"
+    : days !== null && days <= warnDays   ? "#f97316"
     : "#10b981";
 
   function copyCode() {
@@ -192,7 +192,7 @@ function VoucherCard({ v, onEdit, onArchive }) {
             {isUsed              && <span style={s.badge("#6b7280")}>✅ wykorzystany</span>}
             {v.isArchived        && <span style={s.badge("#475569")}>📦 zarchiwizowany</span>}
             {!isUsed && days !== null && days <= 0  && <span style={s.badge("#ef4444")}>❌ wygasł</span>}
-            {!isUsed && days !== null && days > 0 && days <= 30 && <span style={s.badge("#f97316")}>⚠️ wygasa za {days} dni</span>}
+            {!isUsed && days !== null && days > 0 && <span style={s.badge(days <= warnDays ? "#f97316" : "#64748b")}>⏳ wygasa za {days} dni</span>}
           </div>
 
           {/* Progress bar */}
@@ -211,7 +211,7 @@ function VoucherCard({ v, onEdit, onArchive }) {
             </span>
             {v.expiresAt && (
               <span style={{ color: "#475569" }}>
-                Ważny do: <strong style={{ color: days !== null && days <= 30 ? "#f97316" : "#64748b" }}>{v.expiresAt}</strong>
+                Ważny do: <strong style={{ color: days !== null && days <= warnDays ? "#f97316" : "#64748b" }}>{v.expiresAt}</strong>
               </span>
             )}
           </div>
@@ -261,12 +261,12 @@ function VoucherCard({ v, onEdit, onArchive }) {
 export default function PanelVouchers() {
   const { settings } = useAppContext();
   const {
-    vouchers, activeVouchers, expiringVouchers,
+    vouchers, activeVouchers,
     isLoading, isSaving,
     loadVouchers, addVoucher, updateVoucher, archiveVoucher,
   } = useVoucherManager();
 
-  // Re-compute expiringVouchers using configured warning window
+  // Re-compute localExpiringVouchers using configured warning window
   const warnDays = settings?.voucherExpiryWarningDays ?? 14;
   const today    = new Date().toISOString().slice(0, 10);
   const soonDate = (() => {
@@ -311,9 +311,9 @@ export default function PanelVouchers() {
       {localExpiringVouchers.length > 0 && (
         <div style={{ background: "#f9731611", border: "1px solid #f9731633", borderRadius: 10, padding: "12px 16px", marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: "#f97316", fontWeight: 700, marginBottom: 6 }}>
-            ⚠️ {expiringVouchers.length} {expiringVouchers.length === 1 ? "voucher wygasa" : "vouchery wygasają"} wkrótce
+            ⚠️ {localExpiringVouchers.length} {localExpiringVouchers.length === 1 ? "voucher wygasa" : "vouchery wygasają"} wkrótce
           </div>
-          {expiringVouchers.map(v => {
+          {localExpiringVouchers.map(v => {
             const days = Math.ceil((new Date(v.expiresAt) - new Date()) / 86400000);
             return (
               <div key={v.id} style={{ fontSize: 12, color: "#94a3b8", display: "flex", justifyContent: "space-between", marginTop: 4 }}>
@@ -331,9 +331,9 @@ export default function PanelVouchers() {
           <div style={s.title}>🎫 Vouchery i bony</div>
           <div style={s.sub}>
             {activeVouchers.length} aktywnych
-            {expiringVouchers.length > 0 && (
+            {localExpiringVouchers.length > 0 && (
               <span style={{ color: "#f97316", marginLeft: 10 }}>
-                ⚠️ {expiringVouchers.length} wygasa wkrótce
+                ⚠️ {localExpiringVouchers.length} wygasa wkrótce
               </span>
             )}
           </div>
@@ -380,6 +380,7 @@ export default function PanelVouchers() {
         <VoucherCard
           key={v.id}
           v={v}
+          warnDays={warnDays}
           onEdit={setEditTarget}
           onArchive={setArchiveTarget}
         />

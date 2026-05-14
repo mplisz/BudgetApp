@@ -88,7 +88,7 @@ export function CategoriesSection() {
                     onKeyDown={e => e.key === "Enter" && handleAddCategory()} />
                 </div>
                 <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "#0d1424", padding: 3, borderRadius: 10 }}>
-                  {[{ id: "EXPENSE", label: "Wyd", icon: "💸" }, { id: "INCOME", label: "Prz", icon: "💰" }, { id: "SAVING", label: "Osz", icon: "🏦" }].map(t => (
+                  {[{ id: "EXPENSE", label: "Wydatki", icon: "💸" }, { id: "INCOME", label: "Wpływy", icon: "💰" }, { id: "SAVING", label: "Oszczędności", icon: "🏦" },{ id: "TRANSFER",  label: "Transfer", icon: "🔄" }].map(t => (
                     <button key={t.id} onClick={() => setNewCatType(t.id)} style={{
                       flex: 1, padding: "6px 2px", borderRadius: 8, border: "none", fontSize: 10, fontWeight: 700, cursor: "pointer",
                       background: newCatType === t.id ? "#10b981" : "transparent",
@@ -111,6 +111,7 @@ export function CategoriesSection() {
                     { id: "EXPENSE", label: "Wydatki",      color: "#ef4444" },
                     { id: "INCOME",  label: "Przychody",    color: "#10b981" },
                     { id: "SAVING",  label: "Oszczędności", color: "#3b82f6" },
+                     { id: "TRANSFER", label: "Środki własne", color: "#a855f7" }
                   ].map(section => {
                     const catsInSection = visibleCats.filter(cat => (cat.type || "EXPENSE") === section.id);
                     if (catsInSection.length === 0) return null;

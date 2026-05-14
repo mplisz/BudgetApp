@@ -16,8 +16,7 @@ import { SubcategorySelect } from "../../ui/SubcategorySelect";
 import { PriorityPicker }    from "../../ui/PriorityPicker";
 import { CurrencyRateField } from "../../ui/CurrencyRateField";
 import { fmt, parseDecimal } from "../../../utils/helpers";
-import { s }                        from "./txStyles.jsx";
-import { ExpiringVouchersBanner } from "../../ui/ExpiringVouchersBanner";
+import { s }                 from "./txStyles.jsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -33,6 +32,7 @@ export function emptyFormValues() {
     subcategoryName: "",
     categoryId:      "",
     categoryName:    "",
+    categoryType:    null,
     priority:        2,
     description:     "",
     tags:            [],
@@ -54,6 +54,7 @@ export function txToFormValues(tx) {
     subcategoryName: tx.subcategoryName || "",
     categoryId:      tx.categoryId      || "",
     categoryName:    tx.categoryName    || "",
+    categoryType:    null,
     priority:        tx.priority        || 2,
     description:     tx.description     || "",
     tags:            tx.tags            || [],
@@ -93,7 +94,7 @@ export function TransactionForm({
   isSaving = false,
   mode = "add",
 }) {
-  const { tags, cart, settings } = useAppContext();
+  const { tags, cart } = useAppContext();
   const { fetchWithAuth } = useAuth();
   const { showError }   = useToast();
 
@@ -126,7 +127,6 @@ export function TransactionForm({
   }, [fetchWithAuth]);
 
   // Sum voucherAmount already reserved in cart per voucherId
-  // If editing a cart item, exclude its own reservation to avoid double-counting
   const cartReserved = useMemo(() => {
     const reserved = {};
     for (const item of cart) {
@@ -158,7 +158,6 @@ export function TransactionForm({
   }, [form.amountOrig, rateInfo.activeRate]);
 
   // Auto-cap voucherAmount when amountPLN drops below current voucherAmount
-  // e.g. user had voucherAmount=180, then changes amount to 18 → cap to 18
   useEffect(() => {
     if (!form.useVoucher || !form.voucherAmount) return;
     const vAmt = parseDecimal(form.voucherAmount) || 0;
@@ -176,16 +175,9 @@ export function TransactionForm({
   // Net cash after voucher
   const voucherAmt = parseDecimal(form.voucherAmount) || 0;
   const netCash    = form.useVoucher ? Math.max(0, amountPLN - voucherAmt) : amountPLN;
-  const voucherExceedsAmount = form.useVoucher && voucherAmt > amountPLN;
 
-  // Expiry warning for selected voucher
-  const expiryWarning = useMemo(() => {
-    if (!selectedVoucher?.expiresAt) return null;
-    const days = Math.ceil((new Date(selectedVoucher.expiresAt) - new Date()) / 86400000);
-    if (days <= 0)  return `Voucher wygasł (${selectedVoucher.expiresAt})`;
-    if (days <= 30) return `Voucher wygasa za ${days} dni (${selectedVoucher.expiresAt})`;
-    return null;
-  }, [selectedVoucher]);
+  // Show voucher only for EXPENSE categories
+  const showVoucher = form.categoryType === "EXPENSE";
 
   function set(field, value) { setForm(prev => ({ ...prev, [field]: value })); }
 
@@ -193,8 +185,21 @@ export function TransactionForm({
     setRateInfo({ activeRate, resolvedCurrency });
   }, []);
 
-  const handleSubcategoryChange = useCallback(({ subcategoryId, subcategoryName, categoryId, categoryName }) => {
-    setForm(prev => ({ ...prev, subcategoryId, subcategoryName, categoryId, categoryName }));
+  const handleSubcategoryChange = useCallback(({ subcategoryId, subcategoryName, categoryId, categoryName, categoryType }) => {
+    setForm(prev => ({
+      ...prev,
+      subcategoryId,
+      subcategoryName,
+      categoryId,
+      categoryName,
+      categoryType: categoryType ?? null,
+      // Reset voucher if switching away from EXPENSE
+      ...(categoryType !== "EXPENSE" && {
+        useVoucher:    false,
+        voucherId:     "",
+        voucherAmount: "",
+      }),
+    }));
   }, []);
 
   function toggleTag(id) {
@@ -206,7 +211,6 @@ export function TransactionForm({
 
   function handleVoucherSelect(id) {
     if (!id) {
-      // Deselect
       set("useVoucher", false);
       set("voucherId", "");
       set("voucherAmount", "");
@@ -216,7 +220,6 @@ export function TransactionForm({
     if (!v) return;
     set("useVoucher", true);
     set("voucherId", id);
-    // Auto-fill: min(remainingValue, amountPLN) — user can edit down
     const autoAmt = amountPLN > 0
       ? Math.min(v.remainingValue, amountPLN)
       : v.remainingValue;
@@ -313,72 +316,6 @@ export function TransactionForm({
         )}
       </div>
 
-      {/* Expiring vouchers banner */}
-      {(() => {
-        const warnDays = settings?.voucherExpiryWarningDays ?? 14;
-        const todayYMD = new Date().toISOString().slice(0, 10);
-        const soon = new Date(); soon.setDate(soon.getDate() + warnDays);
-        const soonYMD = soon.toISOString().slice(0, 10);
-        const expiring = activeVouchers.filter(v => v.expiresAt && v.expiresAt >= todayYMD && v.expiresAt <= soonYMD);
-        return <ExpiringVouchersBanner vouchers={expiring} style={{ marginBottom: 12 }} />;
-      })()}
-
-      {/* Voucher dropdown */}
-      <div style={frow}>
-        <label style={lbl}>
-          🎫 Voucher / bon
-          {vouchersLoading && <span style={{ color: "#475569", fontWeight: 400, textTransform: "none", marginLeft: 6 }}>ładowanie…</span>}
-        </label>
-
-        <select
-          style={{ ...inp, color: form.voucherId ? "#e2e8f0" : "#475569" }}
-          value={form.voucherId}
-          onChange={e => handleVoucherSelect(e.target.value)}
-          disabled={vouchersLoading}
-        >
-          <option value="">— bez vouchera —</option>
-          {adjustedVouchers.map(v => (
-            <option key={v.id} value={v.id}>
-              {v.name}  ({fmt(v.remainingValue)} PLN pozostało)
-              {v.expiresAt ? `  · ważny do ${v.expiresAt}` : ""}
-            </option>
-          ))}
-          {!vouchersLoading && adjustedVouchers.length === 0 && (
-            <option disabled value="">Brak aktywnych voucherów</option>
-          )}
-        </select>
-
-        {/* Voucher amount + feedback */}
-        {form.useVoucher && selectedVoucher && (
-          <div style={{ marginTop: 10 }}>
-            <label style={lbl}>Kwota vouchera (PLN)</label>
-            <input
-              type="number" step="0.01" min="0"
-              max={selectedVoucher.remainingValue}
-              value={form.voucherAmount}
-              onChange={e => set("voucherAmount", e.target.value)}
-              style={{ ...inp, maxWidth: 180, borderColor: "#a855f744" }}
-            />
-            <div style={{ fontSize: 12, marginTop: 6 }}>
-              {voucherExceedsAmount ? (
-                <span style={{ color: "#f97316" }}>
-                  ⚠️ Voucher ({fmt(voucherAmt)} PLN) przekracza kwotę transakcji — realna gotówka: 0 PLN
-                </span>
-              ) : (
-                <span style={{ color: "#64748b" }}>
-                  Gotówka: <strong style={{ color: "#10b981" }}>{fmt(netCash)} PLN</strong>
-                  {" · "}Voucher: <strong style={{ color: "#a855f7" }}>{fmt(voucherAmt)} PLN</strong>
-                  {" · "}Na voucherze zostanie: <strong style={{ color: "#94a3b8" }}>{fmt(selectedVoucher.remainingValue - voucherAmt)} PLN</strong>
-                </span>
-              )}
-            </div>
-            {expiryWarning && (
-              <div style={{ fontSize: 11, color: "#f97316", marginTop: 4 }}>⚠️ {expiryWarning}</div>
-            )}
-          </div>
-        )}
-      </div>
-
       <div style={divider} />
 
       {/* Subcategory */}
@@ -398,6 +335,63 @@ export function TransactionForm({
           subcategoryId={form.subcategoryId}
         />
       </div>
+
+      {/* Voucher — tylko dla EXPENSE */}
+      {showVoucher && (
+        <>
+          <div style={divider} />
+
+          <div style={frow}>
+            <label style={lbl}>
+              🎫 Voucher / bon
+              {vouchersLoading && <span style={{ color: "#475569", fontWeight: 400, textTransform: "none", marginLeft: 6 }}>ładowanie…</span>}
+            </label>
+
+            <select
+              style={{ ...inp, color: form.voucherId ? "#e2e8f0" : "#475569" }}
+              value={form.voucherId}
+              onChange={e => handleVoucherSelect(e.target.value)}
+              disabled={vouchersLoading}
+            >
+              <option value="">— bez vouchera —</option>
+              {adjustedVouchers.map(v => (
+                <option key={v.id} value={v.id}>
+                  {v.name}  ({fmt(v.remainingValue)} PLN pozostało)
+                  {v.expiresAt ? `  · ważny do ${v.expiresAt}` : ""}
+                </option>
+              ))}
+              {!vouchersLoading && adjustedVouchers.length === 0 && (
+                <option disabled value="">Brak aktywnych voucherów</option>
+              )}
+            </select>
+
+            {/* Voucher amount + feedback */}
+            {form.useVoucher && selectedVoucher && (
+              <div style={{ marginTop: 10 }}>
+                <label style={lbl}>Kwota vouchera (PLN)</label>
+                <input
+                  type="number" step="0.01" min="0"
+                  max={selectedVoucher.remainingValue}
+                  value={form.voucherAmount}
+                  onChange={e => {
+                    const val = parseDecimal(e.target.value) || 0;
+                    const max = Math.min(selectedVoucher?.remainingValue ?? Infinity, amountPLN || Infinity);
+                    set("voucherAmount", String(Math.min(val, max)));
+                  }}
+                  style={{ ...inp, maxWidth: 180, borderColor: "#a855f744" }}
+                />
+                <div style={{ fontSize: 12, marginTop: 6 }}>
+                  <span style={{ color: "#64748b" }}>
+                    Gotówka: <strong style={{ color: "#10b981" }}>{fmt(netCash)} PLN</strong>
+                    {" · "}Voucher: <strong style={{ color: "#a855f7" }}>{fmt(voucherAmt)} PLN</strong>
+                    {" · "}Na voucherze zostanie: <strong style={{ color: "#94a3b8" }}>{fmt(selectedVoucher.remainingValue - voucherAmt)} PLN</strong>
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       <div style={divider} />
 

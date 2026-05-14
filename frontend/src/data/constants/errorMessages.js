@@ -10,7 +10,7 @@ export const API_ERRORS = {
   "Invalid name. Must be between 2 and 50 characters.": "Nieprawidłowa nazwa. Musi mieć od 2 do 50 znaków.",
   "Parent category not found.": "Nie znaleziono kategorii nadrzędnej.",
   "Parent category not found in your family scope.": "Nie znaleziono kategorii nadrzędnej.",
-  "Main category must have a valid type (EXPENSE, INCOME, SAVING).": "Kategoria główna musi mieć określony typ (EXPENSE, INCOME, SAVING).",
+  "Main category must have a valid type (EXPENSE, INCOME, SAVING, TRANSFER).": "Kategoria główna musi mieć określony typ  (EXPENSE, INCOME, SAVING, TRANSFER).",
   "Category not found or unauthorized.": "Nie znaleziono kategorii lub brak uprawnień.",
 
   // Tags

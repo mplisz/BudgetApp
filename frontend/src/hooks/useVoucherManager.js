@@ -59,13 +59,6 @@ export function useVoucherManager() {
     [vouchers, today]
   );
 
-  const expiringVouchers = useMemo(() => {
-    const soon = new Date();
-    soon.setDate(soon.getDate() + 30);
-    const soonYMD = `${soon.getFullYear()}-${String(soon.getMonth()+1).padStart(2,"0")}-${String(soon.getDate()).padStart(2,"0")}`;
-    return activeVouchers.filter(v => v.expiresAt && v.expiresAt <= soonYMD);
-  }, [activeVouchers]);
-
   function getVoucherById(id) {
     return vouchers.find(v => v.id === id) ?? null;
   }
@@ -127,7 +120,7 @@ export function useVoucherManager() {
   }, [fetchWithAuth, setVouchers, showSuccess, showError]);
 
   return {
-    vouchers, activeVouchers, expiringVouchers,
+    vouchers, activeVouchers,
     isLoading, isSaving,
     loadVouchers, getVoucherById,
     addVoucher, updateVoucher, archiveVoucher,

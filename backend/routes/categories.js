@@ -17,7 +17,7 @@ const CategoryPostSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(50, "Name must be at most 50 characters"),
   icon: z.string().max(10).optional(),
   parentCategoryId: z.string().nullable().optional(),
-  type: z.enum(['EXPENSE', 'INCOME', 'SAVING']).nullable().optional(),
+  type: z.enum(['EXPENSE', 'INCOME', 'SAVING', 'TRANSFER']).nullable().optional(),
   priority: z.number().int().min(1).max(4).optional(),
 });
 
@@ -72,7 +72,7 @@ router.post('/', async (req, res) => {
       }
     } else {
       if (!finalType) {
-        return res.status(400).json({ error: "Main category must have a valid type (EXPENSE, INCOME, SAVING)." });
+        return res.status(400).json({ error: "Main category must have a valid type (EXPENSE, INCOME, SAVING, TRANSFER)." });
       }
     }
 
