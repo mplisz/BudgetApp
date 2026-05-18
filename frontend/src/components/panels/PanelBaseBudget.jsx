@@ -1,254 +1,268 @@
 // ============================================================
 // File: src/components/panels/PanelBaseBudget.jsx
-// Base budget configuration panel.
-// UI: Polish | Comments: English
+// Budget limits panel.
+// Left: base limits (validFrom semantics, applies forward)
+// Right: monthly overrides (exact month only)
+// Uses useLimits with new limits[] schema.
 // ============================================================
 
-import React, { useState } from "react";
-import { useAppContext } from "../../context/AppContext";
-import { theme as s } from "../../styles/theme";
-import { fmt, recurringActiveForMonth } from "../../utils/helpers";
-import { MONTHS, PRIORITY_LABELS } from "../../data/constants";
-import { BudgetInput } from "../ui/BudgetInput";
-import { IncomeEntryForm } from "./IncomeEntryForm";
+import { useState, useEffect, useMemo } from "react";
+import { useAppContext }  from "../../context/AppContext";
+import { useMonthStatus } from "../../hooks/useMonthStatus";
+import { usePanelLock }   from "../../hooks/usePanelLock";
+import { useLimits, getActiveLimit } from "../../hooks/useLimits";
+import { LockBanner }     from "../ui/LockBanner";
+import { BudgetInput }    from "../ui/BudgetInput";
+import { fmt }            from "../../utils/helpers";
+import { theme as s }     from "../../styles/theme";
 
-// CHANGED: Added export default for React.lazy compatibility
 export default function PanelBaseBudget() {
-  const ctx = useAppContext();
-  
-  // CLEANUP: Destructure ONLY what is actually used in this component
+  const { categories }          = useAppContext();
+  const { activeBudgetMonth }   = useMonthStatus();
+  const { isPastMonth, isMonthClosed, isHistoricalLock } = usePanelLock(activeBudgetMonth);
+
   const {
-    categories,
-    baseBudget,
-    setBaseBudget,
-    budgetOverrides,
-    setMonthOverride,
-    clearMonthOverride,
-    actualIncome,
-    setActualIncome,
-    incomeSources,
-    tags,
-    tagBudgets,
-    setTagBudgets,
-    monthExpenses,
-    warnThreshold,
-    month,
-    year
-  } = ctx;
+    limits, isLoading, isSaving,
+    loadLimits, saveLimit, removeLimit, getLimitDoc,
+  } = useLimits();
 
-  // Local state for the override month selector (right column)
-  const [ovMonth, setOvMonth] = useState(month);
-  const [ovYear, setOvYear] = useState(year);
+  const [baseEdits,     setBaseEdits]     = useState({});
+  const [overrideEdits, setOverrideEdits] = useState({});
+  const [isDirty,       setIsDirty]       = useState(false);
 
-  const ovKey = `${ovYear}-${ovMonth}`;
-  const hasOverride = !!budgetOverrides[ovKey] && Object.keys(budgetOverrides[ovKey]).length > 0;
+  useEffect(() => { loadLimits(); }, []);
 
-  // Helper: Get value for category (override or base)
-  function getCatValue(cat) {
-    if (budgetOverrides[ovKey]?.[cat] !== undefined) return budgetOverrides[ovKey][cat];
-    return baseBudget[cat] || 0;
+  const expenseCategories = useMemo(() => {
+    const active = categories.filter(c => c.type === "EXPENSE" && !c.isArchived);
+
+    // Archived categories that had a limit this month — shown read-only for historical accuracy
+    const archivedWithLimits = categories.filter(c =>
+      c.type === "EXPENSE" && c.isArchived &&
+      limits.some(l => l.categoryId === c.id && getActiveLimit(l, activeBudgetMonth))
+    );
+
+    return [
+      ...active,
+      ...archivedWithLimits.map(c => ({ ...c, _readOnly: true })),
+    ];
+  }, [categories, limits, activeBudgetMonth]);
+
+  // Init local edit state when limits or month changes
+  useEffect(() => {
+    const bases = {};
+    const overrides = {};
+    for (const cat of expenseCategories) {
+      const doc = getLimitDoc(cat.id);
+      const currentBase = (doc?.limits || [])
+        .filter(l => l.type === "base")
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
+      const active = getActiveLimit(doc, activeBudgetMonth);
+      bases[cat.id]     = currentBase?.amount ?? "";
+      overrides[cat.id] = active?.type === "override" ? active.amount : "";
+    }
+    setBaseEdits(bases);
+    setOverrideEdits(overrides);
+    setIsDirty(false);
+  }, [limits, expenseCategories, activeBudgetMonth]);
+
+  function setBase(catId, val)     { setBaseEdits(p => ({ ...p, [catId]: val }));     setIsDirty(true); }
+  function setOverride(catId, val) { setOverrideEdits(p => ({ ...p, [catId]: val })); setIsDirty(true); }
+
+  async function handleSave() {
+    const promises = [];
+    for (const cat of expenseCategories) {
+      if (cat._readOnly) continue; // skip archived categories
+      const doc     = getLimitDoc(cat.id);
+      const baseVal = parseFloat(baseEdits[cat.id]);
+      const ovrVal  = parseFloat(overrideEdits[cat.id]);
+
+      const currentBase = (doc?.limits || [])
+        .filter(l => l.type === "base")
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
+      const active = getActiveLimit(doc, activeBudgetMonth);
+
+      // Save base if value changed
+      if (!isNaN(baseVal) && baseVal !== currentBase?.amount) {
+        promises.push(saveLimit(cat.id, activeBudgetMonth, baseVal, "base"));
+      }
+
+      // Override
+      const hasOverride = overrideEdits[cat.id] !== "" && !isNaN(ovrVal);
+      const hadOverride = active?.type === "override";
+
+      if (hasOverride && ovrVal !== active?.amount) {
+        promises.push(saveLimit(cat.id, activeBudgetMonth, ovrVal, "override"));
+      } else if (!hasOverride && hadOverride) {
+        promises.push(removeLimit(cat.id, activeBudgetMonth, "override"));
+      }
+    }
+    await Promise.all(promises);
+    setIsDirty(false);
   }
 
-  // Helper: Check if category is overridden in selected month
-  function isOverridden(cat) {
-    return budgetOverrides[ovKey]?.[cat] !== undefined;
+  // ── Single row ────────────────────────────────────────────
+
+  function LimitRow({ cat }) {
+    const doc    = getLimitDoc(cat.id);
+    const active = getActiveLimit(doc, activeBudgetMonth);
+
+    const baseHistory = (doc?.limits || [])
+      .filter(l => l.type === "base")
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    const hasOverride    = active?.type === "override";
+    const effectiveLimit = active?.amount ?? null;
+    const isReadOnly     = isHistoricalLock || cat._readOnly;
+
+    return (
+      <div style={{
+        display: "grid", gridTemplateColumns: "1fr 160px 160px 80px",
+        gap: 8, alignItems: "center",
+        padding: "10px 0", borderBottom: "1px solid #1e293b",
+        opacity: cat._readOnly ? 0.5 : 1,
+      }}>
+        {/* Category name */}
+        <div>
+          <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13 }}>
+            {cat.icon} {cat.name}
+            {cat._readOnly && (
+              <span style={{ fontSize: 10, color: "#475569", marginLeft: 6, fontWeight: 400 }}>
+                (zarchiwizowana)
+              </span>
+            )}
+          </div>
+          {baseHistory.length > 1 && (
+            <div style={{ fontSize: 10, color: "#334155", marginTop: 2 }}>
+              📝 {baseHistory.length} wersji bazy
+            </div>
+          )}
+        </div>
+
+        {/* Base */}
+        <div>
+          {isReadOnly ? (
+            <div style={{ ...s.input, fontSize: 13, color: "#64748b", cursor: "not-allowed", opacity: 0.6 }}>
+              {baseHistory[0] ? fmt(baseHistory[0].amount) : "—"}
+            </div>
+          ) : (
+            <BudgetInput
+              value={baseEdits[cat.id] ?? ""}
+              onChange={v => setBase(cat.id, v)}
+              style={{ ...s.input, fontSize: 13 }}
+              placeholder={baseHistory[0] ? fmt(baseHistory[0].amount) : "brak"}
+            />
+          )}
+          {baseHistory[0] && (
+            <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>
+              od {baseHistory[0].date}
+            </div>
+          )}
+        </div>
+
+        {/* Override */}
+        <div>
+          {isReadOnly ? (
+            <div style={{ ...s.input, fontSize: 13, color: hasOverride ? "#f59e0b" : "#334155", cursor: "not-allowed", opacity: 0.6 }}>
+              {hasOverride ? fmt(active.amount) : "—"}
+            </div>
+          ) : (
+            <BudgetInput
+              value={overrideEdits[cat.id] ?? ""}
+              onChange={v => setOverride(cat.id, v)}
+              style={{
+                ...s.input, fontSize: 13,
+                borderColor: hasOverride ? "#f59e0b66" : "#1e293b",
+              }}
+              placeholder="—"
+            />
+          )}
+          {hasOverride && (
+            <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 3 }}>
+              ⚡ nadpisanie {activeBudgetMonth}
+            </div>
+          )}
+        </div>
+
+        {/* Effective */}
+        <div style={{ textAlign: "right" }}>
+          {effectiveLimit !== null ? (
+            <span style={{ fontWeight: 700, fontSize: 13, color: hasOverride ? "#f59e0b" : "#10b981" }}>
+              {fmt(effectiveLimit)}
+            </span>
+          ) : (
+            <span style={{ color: "#334155", fontSize: 12 }}>—</span>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div style={{ ...s.panel, maxWidth: 900 }}>
-      <div style={{ marginBottom: 16, marginTop: 8 }}>
-        <div style={s.sectionTitle}>🏦 Baza budżetu</div>
-        <div style={s.sectionSub}>Stałe limity kategorii – podstawa planowania miesięcznego</div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-
-        {/* ── LEFT COLUMN: Permanent Base Limits ────────────────── */}
-        <div style={s.card}>
-          <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 14 }}>
-            📋 Stałe limity domyślne
-          </div>
-          <div style={{ color: "#475569", fontSize: 11, marginBottom: 14, lineHeight: 1.5 }}>
-            Wartości obowiązują każdego miesiąca, chyba że ustawisz nadpisanie po prawej stronie.
-          </div>
-          
-          {Object.entries(categories).map(([cat, { icon }]) => (
-            <div key={cat} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #1e293b" }}>
-              <span style={{ flex: 0, fontSize: 16 }}>{icon}</span>
-              <span style={{ flex: 1, color: "#94a3b8", fontSize: 13 }}>{cat}</span>
-              <BudgetInput
-                style={{ ...s.input, width: 110, textAlign: "right", padding: "5px 10px", fontSize: 13 }}
-                value={baseBudget[cat] || 0}
-                onChange={v => setBaseBudget(prev => ({ ...prev, [cat]: v }))}
-              />
-            </div>
-          ))}
-
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0 0", borderTop: "2px solid #334155", marginTop: 6 }}>
-            <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 13 }}>Suma bazy</span>
-            <span style={{ color: "#10b981", fontWeight: 800, fontSize: 14 }}>
-              {fmt(Object.values(baseBudget).reduce((sum, v) => sum + (v || 0), 0))}
-            </span>
-          </div>
+    <div style={{ padding: "0 0 40px 0", maxWidth: 900 }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>
+          🏦 Baza budżetu
         </div>
-
-        {/* ── RIGHT COLUMN: Monthly Overrides ───────────────────── */}
-        <div style={s.card}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              🗓️ Nadpisania miesięczne
-            </div>
-            {/* Month selector for overrides */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#1e293b", borderRadius: 8, padding: "3px 6px" }}>
-              <button style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 16 }} onClick={() => { if(ovMonth===0){setOvMonth(11);setOvYear(y=>y-1)}else setOvMonth(m=>m-1) }}>‹</button>
-              <span style={{ color: "#10b981", fontWeight: 700, fontSize: 13, minWidth: 80, textAlign: "center" }}>{MONTHS[ovMonth]} {ovYear}</span>
-              <button style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 16 }} onClick={() => { if(ovMonth===11){setOvMonth(0);setOvYear(y=>y+1)}else setOvMonth(m=>m+1) }}>›</button>
-            </div>
-          </div>
-
-          <div style={{ color: "#475569", fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>
-            Zmiana limitu tylko dla wybranego miesiąca.
-            {hasOverride && <span style={{ color: "#eab308", marginLeft: 6 }}>⚡ Ten miesiąc ma nadpisania</span>}
-          </div>
-
-          {Object.entries(categories).map(([cat, { icon }]) => {
-            const base = baseBudget[cat] || 0;
-            const overridden = isOverridden(cat);
-            const val = getCatValue(cat);
-            return (
-              <div key={cat} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid #1e293b" }}>
-                <span style={{ fontSize: 14 }}>{icon}</span>
-                <span style={{ flex: 1, color: overridden ? "#eab308" : "#64748b", fontSize: 12 }}>{cat}</span>
-                <BudgetInput
-                  style={{ 
-                    ...s.input, width: 100, textAlign: "right", padding: "5px 8px", fontSize: 13,
-                    borderColor: overridden ? "#eab30844" : "#334155",
-                    background: overridden ? "#eab30811" : "#1e293b" 
-                  }}
-                  value={val || 0}
-                  placeholder={String(base || 0)}
-                  onChange={v => setMonthOverride(cat, v, ovMonth, ovYear)}
-                />
-                {overridden && (
-                  <button title="Przywróć domyślny" onClick={() => clearMonthOverride(cat, ovMonth, ovYear)}
-                    style={{ background: "none", border: "none", color: "#eab308", cursor: "pointer", fontSize: 14, padding: 0 }}>↩</button>
-                )}
-              </div>
-            );
-          })}
-
-          <div style={{ marginTop: 10, padding: "8px 0 0", borderTop: "2px solid #334155" }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 13 }}>Suma {MONTHS[ovMonth]}</span>
-              <span style={{ color: "#eab308", fontWeight: 800, fontSize: 14 }}>
-                {fmt(Object.keys(categories).reduce((sum, cat) => sum + (getCatValue(cat) || 0), 0))}
-              </span>
-            </div>
-          </div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>
+          {activeBudgetMonth} · limity wydatkowe
         </div>
       </div>
 
-      {/* ── ACTUAL INCOME ENTRY ────────────────────────────────── */}
-      <div style={{ ...s.card, marginTop: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-            💵 Rzeczywiste wpływy – {MONTHS[ovMonth]} {ovYear}
-          </div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <IncomeEntryForm
-            incomeSources={incomeSources}
-            onAdd={entry => setActualIncome(p => [...p, entry])}
-            defaultDate={`${ovYear}-${String(ovMonth + 1).padStart(2, "0")}-01`}
-            s_input={s.input} s_select={s.select}
-            s_btn={{ color: "#fff", background: "#10b981", border: "none", borderRadius: 10, padding: "12px 20px", fontSize: 15, fontWeight: 700, width: "100%", marginTop: 4, cursor: "pointer" }}
-            s_label={s.label}
-          />
-          <div>
-            {(() => {
-              const ovIncome = actualIncome.filter(i => {
-                const d = new Date(i.date);
-                return d.getMonth() === ovMonth && d.getFullYear() === ovYear;
-              });
-              
-              if (ovIncome.length === 0) return (
-                <div style={{ color: "#475569", fontSize: 13, textAlign: "center", padding: "16px 0" }}>
-                  Brak wpływów w {MONTHS[ovMonth]} {ovYear}
-                </div>
-              );
+      <LockBanner isPastMonth={isPastMonth} isMonthClosed={isMonthClosed} selectedMonth={activeBudgetMonth} />
 
-              return (
-                <>
-                  {ovIncome.map((inc, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: "1px solid #1e293b" }}>
-                      <div>
-                        <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 13 }}>{inc.source}</div>
-                        <div style={{ color: "#475569", fontSize: 11 }}>{inc.date}</div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ color: "#10b981", fontWeight: 700, fontSize: 14 }}>{fmt(inc.amount)}</span>
-                        <button onClick={() => setActualIncome(prev => prev.filter(x => x !== inc))}
-                          style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 14 }}>✕</button>
-                      </div>
-                    </div>
-                  ))}
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 0", borderTop: "2px solid #334155", marginTop: 4 }}>
-                    <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 13 }}>Suma wpływów</span>
-                    <span style={{ color: "#10b981", fontWeight: 800, fontSize: 14 }}>
-                      {fmt(ovIncome.reduce((sum, i) => sum + i.amount, 0))}
-                    </span>
-                  </div>
-                </>
-              );
-            })()}
+      {/* Column headers */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "1fr 160px 160px 80px",
+        gap: 8, padding: "6px 0 10px", borderBottom: "2px solid #1e293b", marginBottom: 4,
+      }}>
+        <div style={s.label}>Kategoria</div>
+        <div style={s.label}>
+          Baza
+          <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+            od daty wzwyż
           </div>
         </div>
+        <div style={s.label}>
+          Nadpisanie
+          <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+            tylko {activeBudgetMonth}
+          </div>
+        </div>
+        <div style={{ ...s.label, textAlign: "right" }}>Aktywny</div>
       </div>
 
-      {/* ── TAG BUDGET LIMITS ─────────────────────────────────── */}
-      <div style={{ ...s.card, marginTop: 12 }}>
-        <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
-          🏷️ Budżety dla tagów
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12, marginTop: 14 }}>
-          {tags.map(tag => {
-            const spent = (monthExpenses || [])
-              .filter(e => (e.tags || []).includes(tag.id))
-              .reduce((sum, e) => sum + e.amount, 0);
-            
-            const tagBudgetVal = tagBudgets[tag.id] || 0;
-            const pct = tagBudgetVal > 0 ? (spent / tagBudgetVal) * 100 : 0;
-            const over = spent > tagBudgetVal && tagBudgetVal > 0;
-            const color = over ? "#ef4444" : "#10b981";
+      {isLoading && (
+        <div style={{ color: "#475569", textAlign: "center", padding: 40 }}>Ładowanie…</div>
+      )}
 
-            return (
-              <div key={tag.id} style={{ background: "#1e293b", borderRadius: 12, padding: "14px 16px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 13 }}>{tag.icon} {tag.label}</span>
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-                  <span style={{ color: "#64748b", fontSize: 12 }}>Limit:</span>
-                  <BudgetInput
-                    style={{ ...s.input, width: 110, padding: "5px 8px", fontSize: 13, textAlign: "right" }}
-                    value={tagBudgetVal || 0}
-                    onChange={v => setTagBudgets(b => ({ ...b, [tag.id]: v }))}
-                  />
-                </div>
-                {tagBudgetVal > 0 && (
-                  <div style={{ height: 6, background: "#0d1424", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.min(pct, 100)}%`, background: color, transition: "width 0.4s" }} />
-                  </div>
-                )}
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                   <span style={{ color: "#475569", fontSize: 10 }}>{fmt(spent)} wydane</span>
-                   <span style={{ color: over ? "#ef4444" : "#64748b", fontSize: 10 }}>
-                     {over ? `Nadwyżka: ${fmt(spent - tagBudgetVal)}` : `Zostało: ${fmt(tagBudgetVal - spent)}`}
-                   </span>
-                </div>
-              </div>
-            );
-          })}
+      {!isLoading && expenseCategories.map(cat => (
+        <LimitRow key={cat.id} cat={cat} />
+      ))}
+
+      {/* Save */}
+      {!isHistoricalLock && isDirty && (
+        <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button
+            onClick={() => { loadLimits(); setIsDirty(false); }}
+            style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", cursor: "pointer", fontWeight: 600 }}
+          >
+            Anuluj
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            style={{ ...s.btn("#10b981"), opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}
+          >
+            {isSaving ? "Zapisuję…" : "💾 Zapisz limity"}
+          </button>
         </div>
+      )}
+
+      {/* Legend */}
+      <div style={{ marginTop: 32, fontSize: 11, color: "#334155", lineHeight: 1.8 }}>
+        <div>🟢 <strong>Baza</strong> — obowiązuje od podanego miesiąca wzwyż aż do kolejnej zmiany.</div>
+        <div>🟡 <strong>Nadpisanie</strong> — jednorazowe tylko dla {activeBudgetMonth}. Nadpisuje bazę.</div>
+        <div>⚡ <strong>Aktywny</strong> — faktyczna wartość w {activeBudgetMonth} (nadpisanie ma priorytet nad bazą).</div>
       </div>
     </div>
   );

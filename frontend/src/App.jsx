@@ -14,31 +14,21 @@ import { MobileNav } from "./components/layout/MobileNav";
 import { LogoutButton } from "./components/ui/LogoutButton";
 import { ToastContainer } from "./components/ui/ToastContainer";
 import { MonthStatusButton } from "./components/layout/MonthStatusButton";
-import { PANEL_META }        from "./data/constants";
+import { PANEL_META, MONTH_SELECTOR_PANELS, MONTH_TITLE_PANELS }        from "./data/constants";
 
 const PanelExpenses      = lazy(() => import("./components/panels/PanelExpenses"));
-const PanelPlanned       = lazy(() => import("./components/panels/PanelPlanned"));
-const PanelIncome        = lazy(() => import("./components/panels/PanelIncome"));
-const PanelResults       = lazy(() => import("./components/panels/PanelResults"));
 const PanelTransactions  = lazy(() => import("./components/panels/PanelTransactions"));
-const PanelTrends        = lazy(() => import("./components/panels/PanelTrends"));
-const PanelCushion       = lazy(() => import("./components/panels/PanelCushion"));
 const PanelRecurring     = lazy(() => import("./components/panels/PanelRecurring"));
 const PanelBaseBudget    = lazy(() => import("./components/panels/PanelBaseBudget"));
-const PanelGoals         = lazy(() => import("./components/panels/PanelGoals"));
-const PanelStash         = lazy(() => import("./components/panels/PanelStash"));
-const PanelDocuments     = lazy(() => import("./components/panels/PanelDocuments"));
 const PanelSettings      = lazy(() => import("./components/panels/PanelSettings"));
 const PanelAdmin         = lazy(() => import("./components/panels/PanelAdmin"));
 const PanelVouchers      = lazy(() => import("./components/panels/PanelVouchers"));
+const PanelAddIncome          = lazy(() => import("./components/panels/PanelAddIncome"));
+const PanelIncomeTransactions = lazy(() => import("./components/panels/PanelIncomeTransactions"))
+const PanelPlanned = lazy(() => import("./components/panels/PanelPlanned"));
 
-// PANEL_META imported from ./data/constants.js
 
-// Panels that show the month navigator in the header
-const MONTH_SELECTOR_PANELS = ["expenses", "results", "income", "planned", "transactions"];
-
-// Panels that show "Month Year" title text in the header
-const MONTH_TITLE_PANELS = ["expenses", "results", "income", "planned", "transactions"];
+// PANEL_META,MONTH_SELECTOR_PANELS,MONTH_TITLE_PANELS imported from ./data/constants.js
 
 export default function App() {
   const { panel, month, year } = useAppContext();
@@ -89,17 +79,12 @@ export default function App() {
         <div style={{ padding: "20px" }}>
           <Suspense fallback={<div style={{ color: "#64748b" }}>Ładowanie panelu...</div>}>
             {panel === "expenses"     && <PanelExpenses />}
+            {panel === "addincome"          && <PanelAddIncome />}
             {panel === "planned"      && <PanelPlanned />}
-            {panel === "income"       && <PanelIncome />}
-            {panel === "results"      && <PanelResults />}
             {panel === "transactions" && <PanelTransactions />}
-            {panel === "trends"       && <PanelTrends />}
-            {panel === "cushion"      && <PanelCushion />}
+            {panel === "incometransactions" && <PanelIncomeTransactions />}
             {panel === "recurring"    && <PanelRecurring />}
             {panel === "basebudget"   && <PanelBaseBudget />}
-            {panel === "goals"        && <PanelGoals />}
-            {panel === "stash"        && <PanelStash />}
-            {panel === "documents"    && <PanelDocuments />}
             {panel === "settings"     && <PanelSettings />}
             {panel === "admin"        && <PanelAdmin />}
             {panel === "vouchers"     && <PanelVouchers />}

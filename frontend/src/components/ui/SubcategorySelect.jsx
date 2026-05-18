@@ -1,8 +1,10 @@
 // ============================================================
 // File: src/components/ui/SubcategorySelect.jsx
 // Reusable <select> of subcategory with category grouping.
-// By default shows only EXPENSE and SAVING categories.
-// Pass allowedTypes prop to override.
+// Props:
+//   allowedTypes  – filter by category type (default: ["EXPENSE", "SAVING"])
+//   filter        – optional (sub) => boolean predicate for extra filtering
+//                   e.g. filter={sub => sub.canBeRecurring} for recurring panel
 // ============================================================
 
 import { useMemo } from "react";
@@ -15,6 +17,7 @@ export function SubcategorySelect({
   placeholder = "— wybierz subkategorię —",
   disabled = false,
   allowedTypes = ["EXPENSE", "SAVING"],
+  filter = null,   // optional (sub) => boolean
 }) {
   const { categories } = useAppContext();
 
@@ -25,21 +28,27 @@ export function SubcategorySelect({
         id:   cat.id,
         name: cat.name,
         icon: cat.icon,
-        subs: (cat.sub || []).filter(s => !s.isArchived),
+        subs: (cat.sub || []).filter(s => {
+          if (s.isArchived) return false;
+          if (filter) return filter(s);
+          return true;
+        }),
         type: cat.type,
       }))
       .filter(cat => cat.subs.length > 0),
-    [categories, allowedTypes]
+    [categories, allowedTypes] // filter omitted — assumed stable, wrap in useCallback at call site if needed
   );
 
   function handleChange(e) {
     const id = e.target.value;
-    if (!id) { onChange({ subcategoryId: "", subcategoryName: "", categoryId: "", categoryName: "", categoryType: null }); return; }
-
+    if (!id) {
+      onChange({ subcategoryId: "", subcategoryName: "", categoryId: "", categoryName: "", categoryType: null });
+      return;
+    }
     for (const cat of groups) {
       const sub = cat.subs.find(s => s.id === id);
       if (sub) {
-      onChange({ subcategoryId: sub.id, subcategoryName: sub.name, categoryId: cat.id, categoryName: cat.name, categoryType: cat.type });
+        onChange({ subcategoryId: sub.id, subcategoryName: sub.name, categoryId: cat.id, categoryName: cat.name, categoryType: cat.type });
         return;
       }
     }

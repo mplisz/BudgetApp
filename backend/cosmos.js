@@ -26,6 +26,10 @@ const settingsContainer = database.container("Settings");
 const transactionsContainer = database.container("Transactions");
 const monthsContainer        = database.container("Months");
 const vouchersContainer      = database.container("Vouchers");
+const limitsContainer = database.container("Limits");
+const recurringContainer = database.container("RecurringTransactions");
+const plannedContainer = database.container("PlannedExpenses");
 
-module.exports = { categoriesContainer, refreshTokensContainer, tagsContainer, settingsContainer,transactionsContainer,monthsContainer,vouchersContainer};
+
+module.exports = { categoriesContainer, refreshTokensContainer, tagsContainer, settingsContainer,transactionsContainer,monthsContainer,vouchersContainer,limitsContainer,recurringContainer,plannedContainer};
 

@@ -16,6 +16,12 @@ export const parseDecimal = (v) => {
 // Display number with Polish decimal separator (comma)
 export const fmtNum = (v) => (v === "" ? "" : String(v).replace(".", ","));
 
+
+export const fmtAmount = (n, currency = "PLN") =>
+  currency === "PLN"
+    ? new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN" }).format(n || 0)
+    : new Intl.NumberFormat("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+    
 // Build a flat sub-category lookup: subName → { categoryId, categoryName, priority }
 // Works with new array structure
 export function buildSubLookup(categories) {
@@ -149,4 +155,25 @@ export function currentCalendarMonth() {
 export function budgetMonthAfter(a, b) {
   return a > b;
 }
- 
+
+/**
+ * Returns the active limit for a given month from a limit document.
+ * override → exact month match only
+ * base     → highest date <= month
+ */
+export function getActiveLimit(doc, month) {
+  if (!doc?.limits?.length) return null;
+
+  // Override has priority — exact month only
+  const override = doc.limits.find(l => l.type === "override" && l.date === month);
+  if (override) return { amount: override.amount, type: "override", date: override.date };
+
+  // Base — highest date <= month
+  const bases = doc.limits
+    .filter(l => l.type === "base" && l.date <= month)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  return bases.length
+    ? { amount: bases[0].amount, type: "base", date: bases[0].date }
+    : null;
+}

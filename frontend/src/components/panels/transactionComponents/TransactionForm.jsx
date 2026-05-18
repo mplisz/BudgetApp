@@ -5,6 +5,7 @@
 //   - EditTransactionModal (mode="edit", PATCH via onSubmit)
 //
 // Vouchers: fresh fetch on mount — not relying on bootstrap context.
+// cart: passed as prop (default []) — used for voucher reservation calc.
 // ============================================================
 
 import { useState, useMemo, useCallback, useEffect } from "react";
@@ -93,8 +94,9 @@ export function TransactionForm({
   onAddToCart,
   isSaving = false,
   mode = "add",
+  cart = [],          // passed from PanelExpenses — used for voucher reservation calc
 }) {
-  const { tags, cart } = useAppContext();
+  const { tags } = useAppContext();
   const { fetchWithAuth } = useAuth();
   const { showError }   = useToast();
 
@@ -237,6 +239,7 @@ export function TransactionForm({
 
     return {
       date:             dateYMD,
+      type:             form.categoryType ?? "EXPENSE",
       budgetMonth,
       subcategoryId:    form.subcategoryId,
       subcategoryName:  form.subcategoryName,
@@ -356,7 +359,7 @@ export function TransactionForm({
               <option value="">— bez vouchera —</option>
               {adjustedVouchers.map(v => (
                 <option key={v.id} value={v.id}>
-                  {v.name}  ({fmt(v.remainingValue)} PLN pozostało)
+                  {v.code}  ({fmt(v.remainingValue)} PLN pozostało)
                   {v.expiresAt ? `  · ważny do ${v.expiresAt}` : ""}
                 </option>
               ))}

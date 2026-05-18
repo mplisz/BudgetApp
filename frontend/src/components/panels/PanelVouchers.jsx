@@ -40,11 +40,10 @@ function daysUntil(dateStr) {
 
 function emptyForm() {
   return {
-    name: "", code: "", initialValue: "", currency: "PLN",
+    description: "", code: "", initialValue: "", currency: "PLN",
     expiresAt: null, store: "", notes: "",
   };
 }
-
 // ── VoucherForm (add / edit) ──────────────────────────────────
 function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
   const [form, setForm] = useState(initial ?? emptyForm());
@@ -53,7 +52,7 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
   function set(k, v) { setForm(p => ({ ...p, [k]: v })); }
 
   function handleSubmit() {
-    if (!form.name.trim())                         { showError("Podaj nazwę vouchera.");          return; }
+    if (!form.description?.trim()) { showError("Podaj opis vouchera."); return; }
     const val = parseFloat(form.initialValue);
     if (!val || val <= 0)                          { showError("Podaj wartość > 0.");              return; }
     if (!form.code.trim())                         { showError("Podaj kod vouchera.");             return; }
@@ -67,8 +66,10 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
   return (
     <div>
       <div style={s.formRow}>
-        <label style={s.lbl}>Nazwa *</label>
-        <input style={s.inp} value={form.name} onChange={e => set("name", e.target.value)} placeholder="np. Karta Medicover Sport" />
+        <label style={s.lbl}>Opis *</label>
+        <input style={s.inp} value={form.description}
+          onChange={e => set("description", e.target.value)}
+          placeholder="np. Karta Medicover Sport, bon Allegro..." />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div style={s.formRow}>
@@ -187,7 +188,14 @@ function VoucherCard({ v, onEdit, onArchive, warnDays = 14 }) {
         {/* Left */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
-            <span style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 15 }}>🎫 {v.name}</span>
+            <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>
+              {v.description || v.code}
+              {v.sourceTransactionId && (
+                <span style={{ fontSize: 10, color: "#f59e0b", marginLeft: 8, fontWeight: 400 }}>
+                  🔙 Zwrot z {v.createdAt?.slice(0, 10)}
+                </span>
+              )}
+            </div>
             {v.store && <span style={{ fontSize: 11, color: "#64748b" }}>{v.store}</span>}
             {isUsed              && <span style={s.badge("#6b7280")}>✅ wykorzystany</span>}
             {v.isArchived        && <span style={s.badge("#475569")}>📦 zarchiwizowany</span>}
@@ -409,7 +417,15 @@ export default function PanelVouchers() {
       <ConfirmModal
         isOpen={!!archiveTarget}
         title="Zarchiwizować voucher?"
-        message={`Voucher "${archiveTarget?.name}" zostanie przeniesiony do archiwum.`}
+        message={
+                  archiveTarget
+                    ? `Voucher "${archiveTarget.code}"${
+                        archiveTarget.sourceTransactionId
+                          ? ` (Zwrot z ${archiveTarget.createdAt?.slice(0, 10) ?? "—"})`
+                          : archiveTarget.description ? ` — ${archiveTarget.description}` : ""
+                      } zostanie przeniesiony do archiwum.`
+                    : "Voucher zostanie przeniesiony do archiwum."
+                }
         onConfirm={handleArchive}
         onCancel={() => setArchiveTarget(null)}
       />

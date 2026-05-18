@@ -12,7 +12,7 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
   return (
     <div style={{
       display:             "grid",
-      gridTemplateColumns: isExpense ? "1fr 140px 40px" : "1fr 40px",
+      gridTemplateColumns: isExpense ? "1fr 140px 100px 40px" : "1fr 40px",
       gap:                 8,
       alignItems:          "center",
       padding:             "8px 0",
@@ -40,6 +40,29 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
           onChange={(p) => onUpdate(subData.id, subName, parentId, { priority: p })}
           disabled={isDisabled}
         />
+      )}
+
+      {/* canBeRecurring toggle — only EXPENSE */}
+      {isExpense && (
+        <button
+          onClick={() => !isDisabled && onUpdate(subData.id, subName, parentId, { canBeRecurring: !subData.canBeRecurring })}
+          disabled={isDisabled}
+          title={subData.canBeRecurring ? "Wyłącz z cyklicznych" : "Włącz do cyklicznych"}
+          style={{
+            background:    subData.canBeRecurring ? "#10b98122" : "transparent",
+            border:        `1px solid ${subData.canBeRecurring ? "#10b98166" : "#1e293b"}`,
+            color:         subData.canBeRecurring ? "#10b981" : "#334155",
+            borderRadius:  6,
+            padding:       "4px 8px",
+            cursor:        isDisabled ? "not-allowed" : "pointer",
+            fontSize:      11,
+            fontWeight:    700,
+            whiteSpace:    "nowrap",
+            opacity:       isDisabled ? 0.4 : 1,
+          }}
+        >
+          🔄 {subData.canBeRecurring ? "Cykliczne" : "—"}
+        </button>
       )}
 
       {/* Archive/Restore */}

@@ -1,5 +1,5 @@
 // ============================================================
-// File: frontend/src/components/panels/PanelExpenses.jsx
+// File: src/components/panels/PanelExpenses.jsx
 // ============================================================
 
 import { useState, useRef } from "react";
@@ -15,13 +15,17 @@ let cartIdCounter = 0;
 const newCartId = () => `cart_${Date.now()}_${++cartIdCounter}`;
 
 export default function PanelExpenses() {
-  const { cart, setCart, ocrLines, setOcrLines, ocrLoading, setOcrLoading, month, year } = useAppContext();
+  const { month, year } = useAppContext();
   const { addTransaction, isSaving, errorMsg, successMsg } = useTransactions();
   const { isActiveMonthClosed, activeBudgetMonth, isFutureMonth } = useMonthStatus();
 
   const budgetMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
   const fileRef = useRef();
 
+  // All state is local — not shared via AppContext
+  const [cart,            setCart]            = useState([]);
+  const [ocrLines,        setOcrLines]        = useState([]);
+  const [ocrLoading,      setOcrLoading]      = useState(false);
   const [ocrMode,         setOcrMode]         = useState(false);
   const [formKey,         setFormKey]         = useState(0);
   const [editingCartItem, setEditingCartItem] = useState(null);
@@ -33,7 +37,6 @@ export default function PanelExpenses() {
     setEditingCartItem(null);
   }
 
-  // Refresh voucher dropdown after cart save completes
   function handleCartSaveComplete() {
     setFormKey(k => k + 1);
   }
@@ -119,7 +122,7 @@ export default function PanelExpenses() {
       })()
     : emptyFormValues();
 
-  // ── Closed month guard ────────────────────────────────────
+  // ── Guards ────────────────────────────────────────────────
 
   if (isActiveMonthClosed) {
     return (
@@ -164,7 +167,7 @@ export default function PanelExpenses() {
           {errorMsg   && <div style={{ padding: "10px 14px", background: "#ef444422", border: "1px solid #ef4444",  color: "#f87171", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{errorMsg}</div>}
           {successMsg && <div style={{ padding: "10px 14px", background: "#10b98122", border: "1px solid #10b981", color: "#34d399", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{successMsg}</div>}
 
-          {/* Toggle ręcznie / OCR — hidden when editing a cart item */}
+          {/* Toggle ręcznie / OCR */}
           {!editingCartItem && (
             <div style={{ display: "flex", gap: 8, padding: 6, background: "#0d1424", border: "1px solid #1e293b", borderRadius: 10, marginBottom: 24 }}>
               <button onClick={() => setOcrMode(false)}
@@ -269,6 +272,8 @@ export default function PanelExpenses() {
         {hasCart && (
           <div className="expenses-cart-col">
             <CartPanel
+              cart={cart}
+              setCart={setCart}
               onLoadToForm={handleLoadFromCart}
               onSaveComplete={handleCartSaveComplete}
             />

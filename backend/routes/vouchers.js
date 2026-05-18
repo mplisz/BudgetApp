@@ -4,6 +4,10 @@
 // POST   /api/vouchers
 // PATCH  /api/vouchers/:id
 // DELETE /api/vouchers/:id   (soft archive)
+//
+// Changes vs previous version:
+//   - readItemWithEtag + If-Match for PATCH and DELETE
+//   - All error messages in English (translateError on frontend)
 // ============================================================
 
 const express = require("express");
@@ -11,16 +15,16 @@ const router  = express.Router();
 const { z }   = require("zod");
 const { vouchersContainer } = require("../cosmos");
 const { requireAuth }       = require("../middleware/auth");
-const { readItem, IdParamSchema, BUDGET_MONTH_REGEX } = require('../utils/helpers');
+const { readItem, readItemWithEtag, IdParamSchema } = require('../utils/helpers');
 
 router.use(requireAuth);
 
 // ── Schemas ───────────────────────────────────────────────────
 
 const VoucherPostSchema = z.object({
-  name:         z.string().min(1).max(200).transform(v => v.trim()),
-  code:         z.string().min(1, "Kod vouchera jest wymagany.").max(100).transform(v => v.trim()),
-  initialValue: z.number().positive("Wartość początkowa musi być > 0"),
+  code:         z.string().min(1, "Voucher code is required.").max(100).transform(v => v.trim()),
+  description:  z.string().min(1).max(200).transform(v => v.trim()),
+  initialValue: z.number().positive("Initial value must be > 0."),
   currency:     z.string().length(3).default("PLN"),
   expiresAt:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().default(null),
   store:        z.string().max(100).optional().default("").transform(v => v.trim()),
@@ -28,12 +32,12 @@ const VoucherPostSchema = z.object({
 });
 
 const VoucherPatchSchema = z.object({
-  name:      z.string().min(1).max(200).optional().transform(v => v.trim()),
-  code:      z.string().max(100).optional().transform(v => v.trim()),
-  expiresAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  store:     z.string().max(100).optional().transform(v => v.trim()),
-  notes:     z.string().max(500).optional(),
-}).refine(d => Object.keys(d).length > 0, { message: "Brak pól do aktualizacji." });
+  code:         z.string().max(100).optional().transform(v => v?.trim()),
+  description:  z.string().min(1).max(200).optional().transform(v => v?.trim()),
+  expiresAt:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  store:        z.string().max(100).optional().transform(v => v?.trim()),
+  notes:        z.string().max(500).optional(),
+}).refine(d => Object.keys(d).length > 0, { message: "No fields to update." });
 
 // ── GET /api/vouchers ─────────────────────────────────────────
 
@@ -50,7 +54,6 @@ router.get("/", async (req, res) => {
       .query({ query, parameters: [{ name: "@userId", value: familyId }] })
       .fetchAll();
 
-    // Sort: active first, then by expiresAt asc
     const sorted = resources.sort((a, b) => {
       if (a.isArchived !== b.isArchived) return a.isArchived ? 1 : -1;
       if (!a.expiresAt) return 1;
@@ -61,7 +64,7 @@ router.get("/", async (req, res) => {
     res.json(sorted);
   } catch (err) {
     console.error("[VOUCHERS GET] Failed:", err);
-    res.status(500).json({ error: "Nie udało się pobrać voucherów." });
+    res.status(500).json({ error: "Failed to fetch vouchers." });
   }
 });
 
@@ -79,13 +82,14 @@ router.post("/", async (req, res) => {
     const doc = {
       id,
       userId:             familyId,
-      name:               d.name,
       code:               d.code,
+      description:        d.description,
       initialValue:       d.initialValue,
       currency:           d.currency,
       expiresAt:          d.expiresAt,
       store:              d.store,
       notes:              d.notes,
+      sourceTransactionId: null,
       isArchived:         false,
       usedInTransactions: [],
       createdAt:          new Date().toISOString(),
@@ -98,14 +102,13 @@ router.post("/", async (req, res) => {
     res.status(201).json(resource);
   } catch (err) {
     console.error("[VOUCHERS POST] Failed:", err);
-    res.status(500).json({ error: "Nie udało się dodać vouchera." });
+    res.status(500).json({ error: "Failed to create voucher." });
   }
 });
 
 // ── PATCH /api/vouchers/:id ───────────────────────────────────
 
 router.patch("/:id", async (req, res) => {
-  // Validate URL param
   const idParsed = IdParamSchema.safeParse(req.params.id);
   if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
 
@@ -116,31 +119,43 @@ router.patch("/:id", async (req, res) => {
     const id       = idParsed.data;
     const familyId = req.user.familyId;
 
-    const existing = await readItem(vouchersContainer, id, familyId);
-    if (!existing)           return res.status(404).json({ error: "Voucher nie istnieje." });
-    if (existing.isArchived) return res.status(409).json({ error: "Voucher jest zarchiwizowany." });
+    const { resource: existing, etag } = await readItemWithEtag(vouchersContainer, id, familyId);
+    if (!existing)           return res.status(404).json({ error: "Voucher not found." });
+    if (existing.isArchived) return res.status(409).json({ error: "Voucher is archived." });
+
+    // Strip undefined to avoid overwriting existing fields
+    const patchFields = Object.fromEntries(
+      Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
+    );
 
     const updated = {
       ...existing,
-      ...parsed.data,
+      ...patchFields,
       updatedAt:   new Date().toISOString(),
       updatedBy:   req.user.name || req.user.email,
       updatedById: req.user.id,
     };
 
-    const { resource } = await vouchersContainer.items.upsert(updated);
+    const { resource } = await vouchersContainer.items.upsert(updated, {
+      accessCondition: { type: "IfMatch", condition: etag },
+    });
+
     console.log(`[VOUCHERS PATCH] Updated: ${resource.id}`);
     res.json(resource);
   } catch (err) {
+    if (err.code === 412) {
+      return res.status(409).json({
+        error: "Data was modified by another user. Please refresh and try again.",
+      });
+    }
     console.error("[VOUCHERS PATCH] Failed:", err);
-    res.status(500).json({ error: "Nie udało się zaktualizować vouchera." });
+    res.status(500).json({ error: "Failed to update voucher." });
   }
 });
 
 // ── DELETE /api/vouchers/:id  (soft archive) ──────────────────
 
 router.delete("/:id", async (req, res) => {
-  // Validate URL param
   const idParsed = IdParamSchema.safeParse(req.params.id);
   if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
 
@@ -148,9 +163,9 @@ router.delete("/:id", async (req, res) => {
     const id       = idParsed.data;
     const familyId = req.user.familyId;
 
-    const existing = await readItem(vouchersContainer, id, familyId);
-    if (!existing)           return res.status(404).json({ error: "Voucher nie istnieje." });
-    if (existing.isArchived) return res.status(409).json({ error: "Voucher jest już zarchiwizowany." });
+    const { resource: existing, etag } = await readItemWithEtag(vouchersContainer, id, familyId);
+    if (!existing)           return res.status(404).json({ error: "Voucher not found." });
+    if (existing.isArchived) return res.status(409).json({ error: "Voucher is already archived." });
 
     const archived = {
       ...existing,
@@ -160,12 +175,20 @@ router.delete("/:id", async (req, res) => {
       archivedById: req.user.id,
     };
 
-    const { resource } = await vouchersContainer.items.upsert(archived);
+    const { resource } = await vouchersContainer.items.upsert(archived, {
+      accessCondition: { type: "IfMatch", condition: etag },
+    });
+
     console.log(`[VOUCHERS DELETE] Archived: ${resource.id}`);
     res.json({ success: true, id: resource.id });
   } catch (err) {
+    if (err.code === 412) {
+      return res.status(409).json({
+        error: "Data was modified by another user. Please refresh and try again.",
+      });
+    }
     console.error("[VOUCHERS DELETE] Failed:", err);
-    res.status(500).json({ error: "Nie udało się zarchiwizować vouchera." });
+    res.status(500).json({ error: "Failed to archive voucher." });
   }
 });
 

@@ -83,52 +83,76 @@ export function useTransactions() {
 
   // ── Update existing transaction ──────────────────────────────────────────────
   const updateTransaction = useCallback(async (id, patch) => {
-    setIsSaving(true);
-    setErrorMsg("");
-    try {
-      const res = await fetchWithAuth(`${API_URL}/api/transactions/${id}`, {
-        method: "PATCH",
-        body:   JSON.stringify(patch),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(translateError(err.error, "Nie udało się zaktualizować transakcji."));
+  setIsSaving(true);
+  setErrorMsg("");
+  try {
+    const res = await fetchWithAuth(`${API_URL}/api/transactions/${id}`, {
+      method: "PATCH",
+      body:   JSON.stringify(patch),
+    });
+ 
+    // Special case: backend requires confirmation before archiving linked items
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({}));
+      if (body.requiresConfirmation) {
+        // Return sentinel object — EditTransactionModal detects this
+        return { _requiresConfirmation: true, ...body };
       }
-      const updated = await res.json();
-      setTransactions(prev => prev.map(t => t.id === id ? updated : t));
-      showSuccess("Transakcja zaktualizowana! ✅");
-      return updated;
-    } catch (err) {
-      showError(err.message);
-      return null;
-    } finally {
-      setIsSaving(false);
+      throw new Error(translateError(body.error, "Nie udało się zaktualizować transakcji."));
     }
-  }, [fetchWithAuth, setTransactions]);
+ 
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(translateError(err.error, "Nie udało się zaktualizować transakcji."));
+    }
+ 
+    const updated = await res.json();
+    setTransactions(prev => prev.map(t => t.id === id ? updated : t));
+    showSuccess("Transakcja zaktualizowana! ✅");
+    return updated;
+  } catch (err) {
+    showError(err.message);
+    return null;
+  } finally {
+    setIsSaving(false);
+  }
+}, [fetchWithAuth, setTransactions]);
 
   // ── Soft-delete transaction ──────────────────────────────────────────────────
-  const deleteTransaction = useCallback(async (id) => {
-    setIsSaving(true);
-    setErrorMsg("");
-    try {
-      const res = await fetchWithAuth(`${API_URL}/api/transactions/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(translateError(err.error, "Nie udało się usunąć transakcji."));
+const deleteTransaction = useCallback(async (id, options = {}) => {
+  setIsSaving(true);
+  setErrorMsg("");
+  try {
+    const res = await fetchWithAuth(`${API_URL}/api/transactions/${id}`, {
+      method: "DELETE",
+      body:   Object.keys(options).length ? JSON.stringify(options) : undefined,
+    });
+ 
+    // Special case: backend requires confirmation
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({}));
+      if (body.requiresConfirmation) {
+        return { _requiresConfirmation: true, ...body };
       }
-      // Remove from local state (soft-deleted items are excluded from GET)
-      setTransactions(prev => prev.filter(t => t.id !== id));
-      showSuccess("Transakcja usunięta.");
-      return true;
-    } catch (err) {
-      showError(err.message);
-      return false;
-    } finally {
-      setIsSaving(false);
+      throw new Error(translateError(body.error, "Nie udało się zarchiwizować transakcji."));
     }
-  }, [fetchWithAuth, setTransactions]);
+ 
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(translateError(err.error, "Nie udało się zarchiwizować transakcji."));
+    }
+ 
+    const body = await res.json();
+    setTransactions(prev => prev.filter(t => t.id !== id));
+    showSuccess("Transakcja zarchiwizowana.");
+    return body;
+  } catch (err) {
+    showError(err.message);
+    return null;
+  } finally {
+    setIsSaving(false);
+  }
+}, [fetchWithAuth, setTransactions]);
 
   return {
     transactions,

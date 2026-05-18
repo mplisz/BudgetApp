@@ -19,6 +19,7 @@ const CategoryPostSchema = z.object({
   parentCategoryId: z.string().nullable().optional(),
   type: z.enum(['EXPENSE', 'INCOME', 'SAVING', 'TRANSFER']).nullable().optional(),
   priority: z.number().int().min(1).max(4).optional(),
+  canBeRecurring:   z.boolean().optional().default(false), 
 });
 
 const CategoryPatchSchema = z.object({
@@ -26,6 +27,7 @@ const CategoryPatchSchema = z.object({
   icon: z.string().max(10).optional(),
   isArchived: z.boolean().optional(),
   priority: z.number().int().min(1).max(4).optional(),
+  canBeRecurring:   z.boolean().optional().default(false), 
 }).refine(data => Object.keys(data).length > 0, {
   message: "No valid fields provided for update."
 });
@@ -98,6 +100,7 @@ router.post('/', async (req, res) => {
       createdAt: new Date().toISOString(),
       createdBy: req.user.id,
       createdByName: req.user.name,
+      canBeRecurring:   parsed.data.canBeRecurring ?? false
     };
 
     const { resource } = await categoriesContainer.items.create(newCategory);
@@ -133,7 +136,7 @@ router.patch('/update/:id', async (req, res) => {
   try {
     const id = idParsed.data;
     const familyId = req.user.familyId;
-    const { name, icon, isArchived, priority } = parsed.data;
+    const { name, icon, isArchived, priority,canBeRecurring } = parsed.data;
 
     const safeUpdates = {};
     if (name !== undefined)       safeUpdates.name       = name.trim();

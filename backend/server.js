@@ -17,7 +17,9 @@ const settingsRoutes = require('./routes/settings');
 const transactionsRoutes = require ('./routes/transactions')
 const monthsRoutes       = require('./routes/months');
 const vouchersRoutes = require('./routes/vouchers');
-
+const limitsRoutes = require('./routes/limits');
+const recurringRoutes = require("./routes/recurring");
+const plannedRoutes = require("./routes/planned");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -66,6 +68,15 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
+//for limits container - there is a batch type upsert which means number of requests may be higher 
+const limitsLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS_LIMITS_CONTAINER) || 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_LIMITS_CONTAINER) || 600,
+  message: { error: "Too many limit requests, please slow down." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/limits', limitsLimiter);
 // ==========================================
 // STANDARD MIDDLEWARE
 // ==========================================
@@ -89,6 +100,12 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/transactions', transactionsRoutes)
 app.use('/api/months', monthsRoutes)
 app.use('/api/vouchers', vouchersRoutes);
+app.use('/api/limits', limitsRoutes);
+app.use("/api/recurring", recurringRoutes);
+app.use("/api/planned", plannedRoutes);
+
+
+
 
 app.use((err, req, res, next) => {
   console.error("Uncaught Server Error:", err.stack);

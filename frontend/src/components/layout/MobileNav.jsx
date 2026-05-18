@@ -5,8 +5,10 @@
 import { useAppContext } from "../../context/AppContext";
 
 const MOBILE_ITEMS = [
-  { id: "expenses", icon: "➕", label: "Wydatki" },
-  { id: "planned",  icon: "📋", label: "Planowane" },
+  { id: "expenses",   icon: "➕", label: "Wydatki"   },
+  { id: "addincome",  icon: "💵", label: "Wpływy"    },
+  { id: "recurring",  icon: "🔄", label: "Cykliczne" },
+  { id: "planned",    icon: "📅", label: "Planowane" },
 ];
 
 export function MobileNav() {

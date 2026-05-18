@@ -49,6 +49,7 @@ export function useCategoryManager() {
               name:       child.name,
               priority:   child.priority || 2,
               isArchived: child.isArchived || false,
+              canBeRecurring: child.canBeRecurring ?? false,
             });
           }
         });
@@ -95,12 +96,12 @@ export function useCategoryManager() {
   }
 
   // ── Add ─────────────────────────────────────────────────────
-  async function addCategoryToDb(cleanName, cleanIcon, type, parentId = null, parentName = null, priority = 2) {
+  async function addCategoryToDb(cleanName, cleanIcon, type, parentId = null, parentName = null, priority = 2,canBeRecurring = false) {
     setIsSavingCat(true);
     try {
       const response = await fetchWithAuth(`${API_URL}/api/categories`, {
         method: "POST",
-        body:   JSON.stringify({ name: cleanName, icon: cleanIcon, type, parentCategoryId: parentId, priority }),
+        body:   JSON.stringify({ name: cleanName, icon: cleanIcon, type, parentCategoryId: parentId, priority,canBeRecurring: canBeRecurring ?? false,}),
       });
 
       if (!response.ok) {
@@ -112,11 +113,11 @@ export function useCategoryManager() {
 
       setCategories(prev => {
         if (!parentId) {
-          return [...prev, { id: saved.id, name: saved.name, icon: saved.icon, type: saved.type, isArchived: false, sub: [] }];
+          return [...prev, { id: saved.id, name: saved.name, icon: saved.icon, type: saved.type, isArchived: false, canBeRecurring: saved.canBeRecurring ?? false ,sub: [] }];
         }
         return prev.map(cat => {
           if (cat.id === parentId) {
-            return { ...cat, sub: [...cat.sub, { id: saved.id, name: saved.name, priority: saved.priority || priority, isArchived: false }] };
+            return { ...cat, sub: [...cat.sub, { id: saved.id, name: saved.name, priority: saved.priority || priority, isArchived: false, canBeRecurring: saved.canBeRecurring ?? false }] };
           }
           return cat;
         });

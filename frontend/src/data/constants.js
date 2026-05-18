@@ -43,20 +43,32 @@ export const PRIO_COLORS = {
 };
 
 export const PANEL_META = {
-  expenses:     { icon: "➕", label: "Dodaj wydatek",     section: "Główne" },
-  planned:      { icon: "📋", label: "Planowane wydatki", section: "Główne" },
-  income:       { icon: "📅", label: "Planowanie",        section: "Analiza" },
-  results:      { icon: "📊", label: "Podsumowanie",      section: "Analiza" },
-  transactions: { icon: "🧾", label: "Transakcje",        section: "Analiza" },
-  vouchers:     { icon: "🎫", label: "Vouchery",          section: "Analiza" },
-  trends:       { icon: "📈", label: "Historia",          section: "Analiza" },
-  cushion:      { icon: "🛡️", label: "Poduszka",          section: "Narzędzia i Cele" },
-  recurring:    { icon: "🔄", label: "Cykliczne",         section: "Narzędzia i Cele" },
-  basebudget:   { icon: "🏦", label: "Baza budżetu",      section: "Narzędzia i Cele" },
-  goals:        { icon: "🎯", label: "Koperty / Cele",    section: "Narzędzia i Cele" },
-  stash:        { icon: "🗄️", label: "Schowek",           section: "Narzędzia i Cele" },
-  documents:    { icon: "🧾", label: "Dokumenty",         section: "Narzędzia i Cele" },
-  settings:     { icon: "⚙️", label: "Ustawienia",        section: "Administracja" },
-  admin:        { icon: "🔐", label: "Admin",             section: "Administracja" },
+  expenses:          { icon: "➕", label: "Dodaj wydatek",  section: "Główne" },
+  addincome:         { icon: "💵", label: "Dodaj wpływ",    section: "Główne" },
+  planned:           {icon: "📅", label: "Planowane", section: "Analiza"},
+ // planned:           { icon: "📋", label: "Planowane wydatki", section: "Główne" },
+//  income:            { icon: "📅", label: "Planowanie",     section: "Analiza" },
+//  results:           { icon: "📊", label: "Podsumowanie",   section: "Analiza" },
+  transactions:      { icon: "🧾", label: "Wydatki",        section: "Analiza" },  
+  incometransactions:{ icon: "💵", label: "Wpływy",         section: "Analiza" },  
+  vouchers:          { icon: "🎫", label: "Vouchery",       section: "Analiza" },
+ // trends:            { icon: "📈", label: "Historia",       section: "Analiza" },
+//  cushion:           { icon: "🛡️", label: "Poduszka",       section: "Narzędzia i Cele" },
+  recurring:         { icon: "🔄", label: "Cykliczne",      section: "Narzędzia i Cele" },
+  basebudget:        { icon: "🏦", label: "Baza budżetu",   section: "Narzędzia i Cele" },
+//  goals:             { icon: "🎯", label: "Koperty / Cele", section: "Narzędzia i Cele" },
+//  stash:             { icon: "🗄️", label: "Schowek",        section: "Narzędzia i Cele" },
+//  documents:         { icon: "🧾", label: "Dokumenty",      section: "Narzędzia i Cele" },
+  settings:          { icon: "⚙️", label: "Ustawienia",     section: "Administracja" },
+  admin:             { icon: "🔐", label: "Admin",          section: "Administracja" },
 };
- 
+
+
+export const MONTH_SELECTOR_PANELS = [
+  "expenses", "results", "income", "planned", "transactions",
+  "addincome", "incometransactions", "basebudget","recurring"
+];
+export const MONTH_TITLE_PANELS = [
+  "expenses", "results", "income", "planned", "transactions",
+  "addincome", "incometransactions", "basebudget", "recurring"
+];

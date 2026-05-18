@@ -12,6 +12,7 @@ import { CategoryRow }       from "./CategoryRow";
 import { SubcategoryRow }    from "./SubcategoryRow";
 import { ArchiveToggleButton } from "./ArchiveToggleButton";
 import { useCategoryManager } from "../../../hooks/useCategoryManager";
+import { getCategoryTypeSections } from "../../../data/constants/categoryTypes";
 
 const MODAL_CLOSED = { isOpen: false, title: "", message: "", onConfirm: () => {} };
 
@@ -27,6 +28,7 @@ export function CategoriesSection() {
   const [newCatType,       setNewCatType]       = useState("EXPENSE");
   const [newSubName,       setNewSubName]       = useState("");
   const [newSubPriority,   setNewSubPriority]   = useState(2);
+  const [newSubCanBeRecurring, setNewSubCanBeRecurring] = useState(false);
   const [modalConfig,      setModalConfig]      = useState(MODAL_CLOSED);
 
   const expandedCat = useMemo(() =>
@@ -38,6 +40,9 @@ export function CategoriesSection() {
     (categories || []).filter(cat => showArchived ? true : !cat.isArchived),
     [categories, showArchived]
   );
+
+  // All type sections — derived from categoryTypes.js (single source of truth)
+  const typeSections = getCategoryTypeSections();
 
   function handleUpdateCategory(id, name, parentId, updates) {
     if (updates.isArchived === true) {
@@ -57,8 +62,8 @@ export function CategoriesSection() {
     if (!cleanName || cleanName.length < 2)  { showError("Nazwa subkategorii jest za krótka."); return; }
     if (cleanName.length > 50)               { showError("Nazwa subkategorii nie może przekraczać 50 znaków."); return; }
     if (!expandedCat) return;
-    const success = await addCategoryToDb(cleanName, "📁", null, expandedCat.id, expandedCat.name, newSubPriority);
-    if (success) { setNewSubName(""); setNewSubPriority(2); }
+    const success = await addCategoryToDb(cleanName, "📁", null, expandedCat.id, expandedCat.name, newSubPriority,newSubCanBeRecurring);
+    if (success) { setNewSubName(""); setNewSubPriority(2); setNewSubCanBeRecurring(false);}
   }
 
   async function handleAddCategory() {
@@ -77,54 +82,82 @@ export function CategoriesSection() {
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 12, alignItems: "stretch" }}>
 
-            {/* LEFT COLUMN */}
+            {/* ── LEFT COLUMN ───────────────────────────────── */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+              {/* Add new root category */}
               <div style={s.card}>
-                <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase", marginBottom: 12 }}>➕ Nowa główna</div>
+                <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase", marginBottom: 12 }}>
+                  ➕ Nowa główna
+                </div>
+
                 <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                   <EmojiSelector currentEmoji={newCatIcon} onSelect={setNewCatIcon} />
-                  <input style={{ ...s.input, flex: 1 }} placeholder="Nazwa..." value={newCatName}
+                  <input
+                    style={{ ...s.input, flex: 1 }}
+                    placeholder="Nazwa..."
+                    value={newCatName}
                     onChange={e => setNewCatName(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleAddCategory()} />
+                    onKeyDown={e => e.key === "Enter" && handleAddCategory()}
+                  />
                 </div>
+
+                {/* Type selector — from categoryTypes.js */}
                 <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "#0d1424", padding: 3, borderRadius: 10 }}>
-                  {[{ id: "EXPENSE", label: "Wydatki", icon: "💸" }, { id: "INCOME", label: "Wpływy", icon: "💰" }, { id: "SAVING", label: "Oszczędności", icon: "🏦" },{ id: "TRANSFER",  label: "Transfer", icon: "🔄" }].map(t => (
-                    <button key={t.id} onClick={() => setNewCatType(t.id)} style={{
-                      flex: 1, padding: "6px 2px", borderRadius: 8, border: "none", fontSize: 10, fontWeight: 700, cursor: "pointer",
-                      background: newCatType === t.id ? "#10b981" : "transparent",
-                      color:      newCatType === t.id ? "#fff"    : "#64748b",
-                    }}>{t.icon} {t.label}</button>
+                  {typeSections.map(({ type, label, icon }) => (
+                    <button
+                      key={type}
+                      onClick={() => setNewCatType(type)}
+                      style={{
+                        flex: 1, padding: "6px 2px", borderRadius: 8, border: "none",
+                        fontSize: 10, fontWeight: 700, cursor: "pointer",
+                        background: newCatType === type ? "#10b981" : "transparent",
+                        color:      newCatType === type ? "#fff"    : "#64748b",
+                      }}
+                    >
+                      {icon} {label}
+                    </button>
                   ))}
                 </div>
-                <button onClick={handleAddCategory} disabled={isSavingCat} style={{ ...s.btn(), opacity: isSavingCat ? 0.5 : 1 }}>
+
+                <button
+                  onClick={handleAddCategory}
+                  disabled={isSavingCat}
+                  style={{ ...s.btn(), opacity: isSavingCat ? 0.5 : 1 }}
+                >
                   {isSavingCat ? "..." : "Dodaj kategorię"}
                 </button>
               </div>
 
+              {/* Category list grouped by type */}
               <div style={{ ...s.card, flex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase" }}>📂 Lista</div>
                   <ArchiveToggleButton isShowingArchived={showArchived} onToggle={() => setShowArchived(!showArchived)} />
                 </div>
+
                 <div style={{ maxHeight: 400, overflowY: "auto", overflowX: "clip", paddingRight: 16 }}>
-                  {[
-                    { id: "EXPENSE", label: "Wydatki",      color: "#ef4444" },
-                    { id: "INCOME",  label: "Przychody",    color: "#10b981" },
-                    { id: "SAVING",  label: "Oszczędności", color: "#3b82f6" },
-                     { id: "TRANSFER", label: "Środki własne", color: "#a855f7" }
-                  ].map(section => {
-                    const catsInSection = visibleCats.filter(cat => (cat.type || "EXPENSE") === section.id);
+                  {typeSections.map(({ type, label, color }) => {
+                    const catsInSection = visibleCats.filter(cat => (cat.type || "EXPENSE") === type);
                     if (catsInSection.length === 0) return null;
                     return (
-                      <div key={section.id} style={{ marginBottom: 18 }}>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: section.color, textTransform: "uppercase", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: section.color }} />
-                          {section.label}
+                      <div key={type} style={{ marginBottom: 18 }}>
+                        <div style={{
+                          fontSize: 10, fontWeight: 800, color,
+                          textTransform: "uppercase", marginBottom: 8,
+                          display: "flex", alignItems: "center", gap: 6,
+                        }}>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: color }} />
+                          {label}
                         </div>
                         {catsInSection.map(cat => (
-                          <CategoryRow key={cat.id} cat={cat}
-                            expandedCatId={expandedCatId} setExpandedCatId={setExpandedCatId}
-                            onUpdate={handleUpdateCategory} />
+                          <CategoryRow
+                            key={cat.id}
+                            cat={cat}
+                            expandedCatId={expandedCatId}
+                            setExpandedCatId={setExpandedCatId}
+                            onUpdate={handleUpdateCategory}
+                          />
                         ))}
                       </div>
                     );
@@ -133,7 +166,7 @@ export function CategoriesSection() {
               </div>
             </div>
 
-            {/* RIGHT COLUMN */}
+            {/* ── RIGHT COLUMN ──────────────────────────────── */}
             <div style={{ display: "flex", flexDirection: "column" }}>
               {expandedCat ? (
                 <div style={s.card}>
@@ -141,66 +174,120 @@ export function CategoriesSection() {
                     <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase" }}>
                       {expandedCat.icon} {expandedCat.name} — subkategorie
                     </div>
-                    <ArchiveToggleButton isShowingArchived={showArchivedSubs} onToggle={() => setShowArchivedSubs(!showArchivedSubs)} />
+                    <ArchiveToggleButton
+                      isShowingArchived={showArchivedSubs}
+                      onToggle={() => setShowArchivedSubs(!showArchivedSubs)}
+                    />
                   </div>
 
                   {/* Add subcategory */}
                   <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                    <input style={{ ...s.input, flex: 1 }} placeholder="Nazwa subkategorii..."
-                      value={newSubName} onChange={e => setNewSubName(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && handleAddSubCategory()} />
+                    <input
+                      style={{ ...s.input, flex: 1 }}
+                      placeholder="Nazwa subkategorii..."
+                      value={newSubName}
+                      onChange={e => setNewSubName(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleAddSubCategory()}
+                    />
                     {expandedCat.type === "EXPENSE" && (
                       <div style={{ display: "flex", gap: 4 }}>
                         {[1, 2, 3, 4].map(p => (
-                          <button key={p} onClick={() => setNewSubPriority(p)} style={{
-                            width: 28, height: 36, borderRadius: 6, border: `1px solid ${newSubPriority === p ? "#10b981" : "#334155"}`,
-                            background: newSubPriority === p ? "#10b98122" : "transparent",
-                            color:      newSubPriority === p ? "#10b981"   : "#475569",
-                            cursor: "pointer", fontSize: 11, fontWeight: 700,
-                          }}>P{p}</button>
+                          <button
+                            key={p}
+                            onClick={() => setNewSubPriority(p)}
+                            style={{
+                              width: 28, height: 36, borderRadius: 6,
+                              border: `1px solid ${newSubPriority === p ? "#10b981" : "#334155"}`,
+                              background: newSubPriority === p ? "#10b98122" : "transparent",
+                              color:      newSubPriority === p ? "#10b981"   : "#475569",
+                              cursor: "pointer", fontSize: 11, fontWeight: 700,
+                            }}
+                          >
+                            P{p}
+                          </button>
+                          
                         ))}
                       </div>
                     )}
-                    <button onClick={handleAddSubCategory} disabled={isSavingCat}
-                      style={{ ...s.btn(), width: "auto", padding: "8px 14px", marginTop: 0, opacity: isSavingCat ? 0.5 : 1 }}>
+
+                    {expandedCat.type === "EXPENSE" && (
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "0 4px", whiteSpace: "nowrap" }}>
+                        <input
+                          type="checkbox"
+                          checked={newSubCanBeRecurring}
+                          onChange={e => setNewSubCanBeRecurring(e.target.checked)}
+                        />
+                        <span style={{ fontSize: 11, color: "#64748b" }}>🔄</span>
+                      </label>
+                    )}
+
+                    <button
+                      onClick={handleAddSubCategory}
+                      disabled={isSavingCat}
+                      style={{ ...s.btn(), width: "auto", padding: "8px 14px", marginTop: 0, opacity: isSavingCat ? 0.5 : 1 }}
+                    >
                       {isSavingCat ? "..." : "Dodaj"}
                     </button>
                   </div>
 
-                  {/* Subcategory list */}
-                  <div style={{ display: "grid", gridTemplateColumns: expandedCat.type === "EXPENSE" ? "1fr 140px 40px" : "1fr 40px", gap: 8, marginBottom: 8 }}>
+                  {/* Subcategory list header */}
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: expandedCat.type === "EXPENSE" ? "1fr 140px 40px" : "1fr 40px",
+                    gap: 8, marginBottom: 8,
+                  }}>
                     <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>NAZWA</span>
-                    {expandedCat.type === "EXPENSE" && <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>PRIORYTET</span>}
+                    {expandedCat.type === "EXPENSE" && (
+                      <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>PRIORYTET</span>
+                    )}
+                  {expandedCat.type === "EXPENSE" && <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>CYKLICZNE</span>}
                   </div>
+
+                  {/* Subcategory rows */}
                   <div style={{ maxHeight: 400, overflowY: "auto" }}>
                     {(expandedCat.sub || [])
                       .filter(sub => showArchivedSubs ? true : !sub.isArchived)
                       .sort((a, b) => (a.priority || 0) - (b.priority || 0))
                       .map((sub, index) => (
-                        <div key={sub.id} style={{ background: index % 2 === 0 ? "transparent" : "#ffffff08", borderRadius: 4 }}>
+                        <div
+                          key={sub.id}
+                          style={{ background: index % 2 === 0 ? "transparent" : "#ffffff08", borderRadius: 4 }}
+                        >
                           <SubcategoryRow
-                            subName={sub.name} subData={sub}
-                            parentName={expandedCat.name} parentId={expandedCat.id}
-                            parentType={expandedCat.type} parentIsArchived={expandedCat.isArchived}
-                            onUpdate={handleUpdateCategory} onError={showError}
+                            subName={sub.name}
+                            subData={sub}
+                            parentName={expandedCat.name}
+                            parentId={expandedCat.id}
+                            parentType={expandedCat.type}
+                            parentIsArchived={expandedCat.isArchived}
+                            onUpdate={handleUpdateCategory}
+                            onError={showError}
                           />
                         </div>
                       ))}
                   </div>
                 </div>
               ) : (
-                <div style={{ ...s.card, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#475569", border: "2px dashed #1e293b", background: "transparent", minHeight: 200 }}>
+                <div style={{
+                  ...s.card, flex: 1,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#475569", border: "2px dashed #1e293b",
+                  background: "transparent", minHeight: 200,
+                }}>
                   Wybierz kategorię główną po lewej.
                 </div>
               )}
             </div>
+
           </div>
         )}
       </CollapsibleSection>
 
       <ConfirmModal
-        isOpen={modalConfig.isOpen} title={modalConfig.title}
-        message={modalConfig.message} onConfirm={modalConfig.onConfirm}
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
         onCancel={() => setModalConfig(MODAL_CLOSED)}
       />
     </>

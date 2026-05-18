@@ -1,11 +1,15 @@
 // ============================================================
-// File: frontend/src/components/panels/transactionComponents/TransactionRow.jsx
+// File: src/components/panels/transactionComponents/TransactionRow.jsx
 // Single transaction table row (read-only).
-// Edit button opens EditTransactionModal (full form, all tags).
+// Edit button opens EditTransactionModal via createPortal.
+// Rules:
+//   - isRecurring: hide edit AND return buttons
+//   - hasReturns:  edit shows ⚠ indicator; confirmation handled by EditTransactionModal
+//   - isFullyReturned: hide return button
 // ============================================================
 
 import { useState }           from "react";
-import { AppDatePicker }      from "../../ui/AppDatePicker";
+import { createPortal }       from "react-dom";
 import { fmt }                from "../../../utils/helpers";
 import { s, PrioBadge, calcReturns } from "./txStyles.jsx";
 import { EditTransactionModal }      from "./EditTransactionModal";
@@ -14,6 +18,9 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
   const [editOpen, setEditOpen] = useState(false);
 
   const { isFullyReturned, isPartiallyReturned, totalReturnedAmount } = calcReturns(tx);
+
+  const hasReturns  = (tx.returns || []).length > 0;
+  const isRecurring = !!tx.isRecurring;
 
   return (
     <>
@@ -33,12 +40,12 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
           <div style={{ color: "#64748b", fontSize: 11 }}>› {tx.subcategoryName}</div>
         </td>
 
-        {/* Description — wraps instead of stretching the column */}
+        {/* Description */}
         <td style={{ ...s.td, maxWidth: 200, wordBreak: "break-word", whiteSpace: "normal" }}>
           <span style={{ color: "#94a3b8" }}>
             {tx.description || <span style={{ color: "#334155" }}>—</span>}
           </span>
-          {tx.isRecurring && <span style={{ marginLeft: 6 }} title="Cykliczne">🔄</span>}
+          {isRecurring && <span style={{ marginLeft: 6 }} title="Cykliczne">🔄</span>}
         </td>
 
         {/* Tags */}
@@ -77,21 +84,49 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
         <td style={{ ...s.td, whiteSpace: "nowrap" }}>
           {!isMonthClosed && (
             <>
-              <button style={{ ...s.actionBtn("#3b82f6"), marginRight: 4 }} onClick={() => setEditOpen(true)} title="Edytuj">✏️</button>
-              <button style={{ ...s.actionBtn("#f97316"), marginRight: 4 }} onClick={onReturn} title="Zwróć">🔙</button>
-              <button style={s.actionBtn("#ef4444")} onClick={onDelete} title="Usuń">🗑️</button>
+              {/* Edit — hidden for recurring; ⚠ indicator if has returns */}
+              {!isRecurring && (
+                <button
+                  style={{ ...s.actionBtn("#3b82f6"), marginRight: 4, position: "relative" }}
+                  onClick={() => setEditOpen(true)}
+                  title={hasReturns ? "Edytuj — powiązane transfery i vouchery zostaną zarchiwizowane" : "Edytuj"}
+                >
+                  ✏️
+                  {hasReturns && (
+                    <span style={{
+                      position: "absolute", top: -4, right: -4,
+                      fontSize: 9, color: "#f59e0b", fontWeight: 800,
+                    }}>⚠</span>
+                  )}
+                </button>
+              )}
+
+              {/* Return — hidden for recurring and fully returned */}
+              {!isRecurring && !isFullyReturned && (
+                <button
+                  style={{ ...s.actionBtn("#f97316"), marginRight: 4 }}
+                  onClick={onReturn}
+                  title="Zwróć"
+                >
+                  🔙
+                </button>
+              )}
+
+              {/* Archive */}
+              <button style={s.actionBtn("#ef4444")} onClick={onDelete} title="Archiwizuj">🗑️</button>
             </>
           )}
         </td>
       </tr>
 
-      {/* Edit modal — rendered outside the table row to avoid DOM nesting issues */}
-      {editOpen && (
+      {/* Modal via portal — avoids <div> inside <tbody> DOM nesting */}
+      {editOpen && createPortal(
         <EditTransactionModal
           tx={tx}
           onClose={() => setEditOpen(false)}
           onUpdated={updated => { onUpdated(updated); setEditOpen(false); }}
-        />
+        />,
+        document.body
       )}
     </>
   );

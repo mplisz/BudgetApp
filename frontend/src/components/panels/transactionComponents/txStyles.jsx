@@ -3,6 +3,14 @@
 // Shared style constants and helpers for the transactions panel.
 // Imported by: PanelTransactions, EditableRow, ReturnModal.
 // ============================================================
+import {
+  calculateTotalReturned,
+  calculateTotalCashReturned,
+  calculateTotalVoucherReturned,
+  isFullyReturned,
+  isPartiallyReturned,
+} from "../../../utils/returnUtils";
+
 
 export const PRIO_COLORS = { 1: "#ef4444", 2: "#f97316", 3: "#eab308", 4: "#6b7280" };
 
@@ -37,17 +45,20 @@ export const s = {
   }),
 };
 
-// Derives return totals and status flags from a transaction document
-export function calcReturns(tx) {
-  const returns = tx.returns || [];
-  const totalReturnedAmount  = returns.reduce((sum, r) => sum + r.amount, 0);
-  const totalReturnedCash    = returns.reduce((sum, r) => sum + (r.cashAmount    || 0), 0);
-  const totalReturnedVoucher = returns.reduce((sum, r) => sum + (r.voucherAmount || 0), 0);
-  const isFullyReturned     = totalReturnedAmount >= tx.amount;
-  const isPartiallyReturned = totalReturnedAmount > 0 && !isFullyReturned;
-  return { totalReturnedAmount, totalReturnedCash, totalReturnedVoucher, isFullyReturned, isPartiallyReturned };
-}
 
+ 
+export function calcReturns(tx) {
+  const totalReturnedAmount  = calculateTotalReturned(tx);
+  const totalReturnedCash    = calculateTotalCashReturned(tx);
+  const totalReturnedVoucher = calculateTotalVoucherReturned(tx);
+  return {
+    totalReturnedAmount,
+    totalReturnedCash,
+    totalReturnedVoucher,
+    isFullyReturned:     isFullyReturned(tx),
+    isPartiallyReturned: isPartiallyReturned(tx),
+  };
+}
 export function PrioBadge({ value }) {
   return <span style={s.badge(PRIO_COLORS[value] || "#6b7280")}>P{value}</span>;
 }
