@@ -26,12 +26,12 @@ function plannedDateYMD(doc) {
 }
 
 // ── Single bell item ──────────────────────────────────────────
-function RecurringBellItem({ doc, onConfirm, onDismiss }) {
-  const currentMonth = todayYMD().slice(0, 7);
+function RecurringBellItem({ doc, onConfirm, onDismiss }) {  const currentMonth = todayYMD().slice(0, 7);
   const activeCost   = getActiveCost(doc, currentMonth);
   const isForeign    = activeCost?.originalCurrency && activeCost.originalCurrency !== "PLN";
 
-  const [showModal, setShowModal] = useState(false);
+  const [showModal,  setShowModal]  = useState(false);
+  const [modalDate,  setModalDate]  = useState(plannedDateYMD(doc));
 
   const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter();
 
@@ -84,7 +84,7 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }) {
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => { setModalDate(plannedDateYMD(doc)); setShowModal(true); }}
             style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
           >
             ✅ Potwierdź wydatek
@@ -102,21 +102,35 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }) {
       <PaymentConfirmModal
         isOpen={showModal}
         title="✅ Potwierdź wydatek cykliczny"
-        description={doc.description || doc.subcategoryName}
+        description={doc.description}
         categoryName={doc.categoryName}
         suggestedAmount={amountPLN}
         amountLabel="PLN"
+        showRecomputeWarning={false}
         onConfirm={amount => {
           setShowModal(false);
-          onConfirm(doc, amount, liveRate);
+          onConfirm(doc, modalDate, amount, liveRate);
         }}
         onCancel={() => setShowModal(false)}
-        extraInfo={isForeign && activeCost && (
-          <div style={{ fontSize: 11, color: "#64748b" }}>
-            Kurs NBP: <strong style={{ color: "#10b981" }}>{liveRate.toFixed(4)}</strong>
-            {" · "}{fmtAmount(activeCost.amount, activeCost.originalCurrency)} {activeCost.originalCurrency}
+        extraInfo={
+          <div>
+            {isForeign && activeCost && (
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>
+                Kurs NBP: <strong style={{ color: "#10b981" }}>{liveRate.toFixed(4)}</strong>
+                {" · "}{fmtAmount(activeCost.amount, activeCost.originalCurrency)} {activeCost.originalCurrency}
+              </div>
+            )}
+            <label style={{ display: "block", fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 }}>
+              Data transakcji
+            </label>
+            <input
+              type="date"
+              value={modalDate}
+              onChange={e => setModalDate(e.target.value)}
+              style={{ width: "100%", background: "#0a0f1e", border: "1px solid #1e293b", borderRadius: 8, color: "#e2e8f0", padding: "8px 12px", fontSize: 13, outline: "none", colorScheme: "dark", boxSizing: "border-box" }}
+            />
           </div>
-        )}
+        }
       />
     </>
   );
@@ -241,18 +255,14 @@ export function NotificationBell() {
   const { pendingNotifications: plannedPending,   loadAll: loadPlanned,   paySavingMonth, purchasePlanned } = usePlanned();
   const { setPanel } = useAppContext();
 
-  const [open,          setOpen]          = useState(false);
-  const [confirmItem,   setConfirmItem]   = useState(null);
-  const [liveAmountPLN, setLiveAmountPLN] = useState(null);
-  const [liveRate,      setLiveRate]      = useState(null);
-  const [purchaseDoc,   setPurchaseDoc]   = useState(null);
+  const [open,        setOpen]       = useState(false);
+  const [purchaseDoc, setPurchaseDoc] = useState(null);
   const dropRef = useRef(null);
 
   useEffect(() => { loadRecurring(); loadPlanned(); }, []);
 
   useEffect(() => {
     function handleClick(e) {
-      // Don't close bell when clicking inside a portal modal
       if (e.target.closest('[data-modal="true"]')) return;
       if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false);
     }
@@ -262,18 +272,10 @@ export function NotificationBell() {
 
   const count = recurringPending.length + plannedPending.length;
 
-  function handleConfirmClick(doc, amountPLN, rate) {
-    setConfirmItem(doc);
-    setLiveAmountPLN(amountPLN);
-    setLiveRate(rate);
-  }
-
-  async function handleConfirm() {
-    if (!confirmItem) return;
-    const planned     = plannedDateYMD(confirmItem);
-    const budgetMonth = todayYMD().slice(0, 7);
-    await confirmRecurring(confirmItem.id, planned, budgetMonth, liveRate);
-    setConfirmItem(null);
+  // Recurring confirm — called directly from RecurringBellItem with user-entered values
+  async function handleConfirmRecurring(doc, date, amountPLN, liveRate) {
+    const budgetMonth = date.slice(0, 7);
+    await confirmRecurring(doc.id, date, budgetMonth, liveRate, amountPLN);
     setOpen(false);
   }
 
@@ -301,15 +303,6 @@ export function NotificationBell() {
     setPurchaseDoc(null);
     setOpen(false);
   }
-
-  const currentMonth  = todayYMD().slice(0, 7);
-  const confirmCost   = confirmItem ? getActiveCost(confirmItem, currentMonth) : null;
-  const isForeign     = confirmCost?.originalCurrency && confirmCost.originalCurrency !== "PLN";
-  const confirmAmountStr = confirmItem
-    ? isForeign
-      ? `${fmt(confirmCost.amount)} ${confirmCost.originalCurrency} ≈ ${fmt(liveAmountPLN)} PLN (kurs NBP: ${liveRate?.toFixed(4)})`
-      : `${fmt(confirmCost?.amount)} PLN`
-    : "";
 
   return (
     <>
@@ -348,7 +341,7 @@ export function NotificationBell() {
               <RecurringBellItem
                 key={doc.id}
                 doc={doc}
-                onConfirm={handleConfirmClick}
+                onConfirm={handleConfirmRecurring}
                 onDismiss={handleDismiss}
               />
             ))}
@@ -381,20 +374,6 @@ export function NotificationBell() {
         )}
       </div>
 
-      {confirmItem && createPortal(
-        <ConfirmModal
-          isOpen={!!confirmItem}
-          title="Potwierdź wydatek cykliczny"
-          message={
-            `Czy potwierdzasz wydatek:\n` +
-            `${confirmItem.description} — ${confirmAmountStr}?\n\n` +
-            `Data transakcji: ${plannedDateYMD(confirmItem)}.`
-          }
-          onConfirm={handleConfirm}
-          onCancel={() => setConfirmItem(null)}
-        />,
-        document.body
-      )}
       {purchaseDoc && createPortal(
         <ConfirmModal
           isOpen={!!purchaseDoc}

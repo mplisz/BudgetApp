@@ -26,7 +26,8 @@ const PanelVouchers      = lazy(() => import("./components/panels/PanelVouchers"
 const PanelAddIncome          = lazy(() => import("./components/panels/PanelAddIncome"));
 const PanelIncomeTransactions = lazy(() => import("./components/panels/PanelIncomeTransactions"))
 const PanelPlanned = lazy(() => import("./components/panels/PanelPlanned"));
-
+const PanelAddRecurring = lazy(() => import("./components/panels/PanelAddRecurring"));
+const PanelAddPlanned   = lazy(() => import("./components/panels/PanelAddPlanned"));
 
 // PANEL_META,MONTH_SELECTOR_PANELS,MONTH_TITLE_PANELS imported from ./data/constants.js
 
@@ -51,8 +52,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: "#0a0f1e", color: "#e2e8f0", fontFamily: "'DM Sans', sans-serif", display: "flex" }}>
       <ToastContainer />
       <Sidebar />
-
-      <main style={{ marginLeft: 220, flex: 1, minHeight: "100vh" }}>
+      <main style={{ marginLeft: 220, flex: 1, minHeight: "100vh", paddingBottom: 80 }}>
         <header style={{ background: "#0d1424", borderBottom: "1px solid #1e293b", padding: "10px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 }}>
 
           {/* Left: panel title */}
@@ -80,6 +80,8 @@ export default function App() {
           <Suspense fallback={<div style={{ color: "#64748b" }}>Ładowanie panelu...</div>}>
             {panel === "expenses"     && <PanelExpenses />}
             {panel === "addincome"          && <PanelAddIncome />}
+            {panel === "addrecurring" && <PanelAddRecurring />}
+            {panel === "addplanned"   && <PanelAddPlanned />}
             {panel === "planned"      && <PanelPlanned />}
             {panel === "transactions" && <PanelTransactions />}
             {panel === "incometransactions" && <PanelIncomeTransactions />}

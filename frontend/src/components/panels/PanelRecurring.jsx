@@ -24,7 +24,7 @@ export default function PanelRecurring() {
 
   const {
     recurring, isLoading, isSaving,
-    loadAll, addRecurring, updateRecurring, archiveRecurring,
+    loadAll, updateRecurring, archiveRecurring,
   } = useRecurring();
 
   const [showModal,    setShowModal]    = useState(false);
@@ -58,39 +58,25 @@ export default function PanelRecurring() {
     [activeThisMonth, activeBudgetMonth]
   );
 
-  function openAdd()     { setEditTarget(null); setShowModal(true); }
-  function openEdit(doc) { setEditTarget(doc);  setShowModal(true); }
+  function openEdit(doc) { setEditTarget(doc); setShowModal(true); }
   function closeModal()  { setShowModal(false); setEditTarget(null); }
 
   async function handleSubmit(payload) {
     const { newCostEntry, ...meta } = payload;
-
-    if (editTarget) {
-      // Edit — add new cost entry if amount changed, otherwise update meta only
-      const activeCost = getActiveCost(editTarget, activeBudgetMonth);
-      const amountChanged = parseFloat(newCostEntry.amount) !== parseFloat(activeCost?.amount)
-        || newCostEntry.originalCurrency !== (activeCost?.originalCurrency || "PLN");
-
-      let updatedCosts = [...(editTarget.costs || [])];
-
-      if (amountChanged) {
-        // Remove any existing entry with same validFrom (upsert semantics)
-        updatedCosts = updatedCosts.filter(c => c.validFrom !== newCostEntry.validFrom);
-        updatedCosts.push(newCostEntry);
-        updatedCosts.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
-      }
-
-      await updateRecurring(editTarget.id, {
-        ...meta,
-        ...(amountChanged ? { costs: updatedCosts } : {}),
-      });
-    } else {
-      // Add — first cost entry from form
-      await addRecurring({
-        ...meta,
-        costs: [newCostEntry],
-      });
+    if (!editTarget) return;
+    const activeCost    = getActiveCost(editTarget, activeBudgetMonth);
+    const amountChanged = parseFloat(newCostEntry.amount) !== parseFloat(activeCost?.amount)
+      || newCostEntry.originalCurrency !== (activeCost?.originalCurrency || "PLN");
+    let updatedCosts = [...(editTarget.costs || [])];
+    if (amountChanged) {
+      updatedCosts = updatedCosts.filter(c => c.validFrom !== newCostEntry.validFrom);
+      updatedCosts.push(newCostEntry);
+      updatedCosts.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
     }
+    await updateRecurring(editTarget.id, {
+      ...meta,
+      ...(amountChanged ? { costs: updatedCosts } : {}),
+    });
     closeModal();
   }
 
@@ -111,7 +97,7 @@ export default function PanelRecurring() {
         onClick={e => e.stopPropagation()}
       >
         <div style={{ fontWeight: 800, color: "#e2e8f0", fontSize: 16, marginBottom: 20 }}>
-          {editTarget ? "✏️ Edytuj wydatek cykliczny" : "➕ Nowy wydatek cykliczny"}
+          {editTarget ? "✏️ Edytuj wydatek cykliczny" : ""}
         </div>
         <RecurringForm
           key={editTarget ? editTarget.id : "add"}
@@ -144,11 +130,14 @@ export default function PanelRecurring() {
 
       <LockBanner isPastMonth={isPastMonth} isMonthClosed={isMonthClosed} selectedMonth={activeBudgetMonth} />
 
+      {isPastMonth && (
+        <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#64748b" }}>
+          📅 Miesiąc {activeBudgetMonth} jest w przeszłości — dane są tylko do odczytu. Edycja dostępna wyłącznie dla bieżącego i przyszłych miesięcy.
+        </div>
+      )}
+
       {/* Toolbar */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        {!isHistoricalLock && (
-          <button onClick={openAdd} style={s.btn("#10b981")}>➕ Nowy cykliczny</button>
-        )}
         <select
           value={filterFreq}
           onChange={e => { setFilterFreq(e.target.value); setPage(1); }}
@@ -187,7 +176,7 @@ export default function PanelRecurring() {
               key={r.id}
               doc={r}
               activeBudgetMonth={activeBudgetMonth}
-              isLocked={isHistoricalLock}
+              isLocked={isHistoricalLock || isPastMonth}
               onEdit={openEdit}
               onArchive={doc => setArchiveModal({ isOpen: true, id: doc.id, name: doc.description })}
             />

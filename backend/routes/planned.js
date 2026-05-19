@@ -453,7 +453,9 @@ router.post("/:id/purchase", async (req, res) => {
     if (existing.isArchived)  return res.status(409).json({ error: "Planned expense is archived." });
     if (existing.isPurchased) return res.status(409).json({ error: "Already purchased." });
 
-    const collected = sumPaid(existing.virtualSavings);
+    const collected = existing.mode === "oneoff"
+      ? existing.totalAmountPLN
+      : sumPaid(existing.virtualSavings);
     const ts        = Date.now();
 
     // EXPENSE — target category

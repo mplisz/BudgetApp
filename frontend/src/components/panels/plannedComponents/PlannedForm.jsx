@@ -29,7 +29,7 @@ function monthsBetween(from, to) {
   return Math.max(1, (ty - fy) * 12 + (tm - fm) + 1);
 }
 
-export function PlannedForm({ initialValues, onSubmit, onCancel, isSaving, mode = "add" }) {
+export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isSaving, mode = "add" }) {
   const { showError }          = useToast();
   const { dropdownCurrencies } = useCurrencyManager();
 
@@ -42,7 +42,16 @@ export function PlannedForm({ initialValues, onSubmit, onCancel, isSaving, mode 
   }
 
   const initCurrency = resolveInitialCurrency(initialValues?.originalCurrency);
-  const cur          = currentMonthStr();
+
+  function addOneMonth(m) {
+    const [y, mo] = m.split("-").map(Number);
+    const nm = mo === 12 ? 1 : mo + 1;
+    const ny = mo === 12 ? y + 1 : y;
+    return `${ny}-${String(nm).padStart(2, "0")}`;
+  }
+
+  const cur     = startMonth || currentMonthStr();
+  const minPlan = addOneMonth(cur);
 
   const [form, setForm] = useState(() => ({
     description:          initialValues?.description          ?? "",
@@ -57,7 +66,7 @@ export function PlannedForm({ initialValues, onSubmit, onCancel, isSaving, mode 
     tags:                 initialValues?.tags                 ?? [],
     priority:             initialValues?.priority             ?? 2,
     mode:                 initialValues?.mode                 ?? "oneoff",
-    plannedMonth:         initialValues?.plannedMonth         ?? "",
+    plannedMonth:         initialValues?.plannedMonth         ?? minPlan,
     monthlySavingDay:     initialValues?.monthlySavingDay     ?? 1,
   }));
 
@@ -88,8 +97,8 @@ export function PlannedForm({ initialValues, onSubmit, onCancel, isSaving, mode 
     if (!form.description?.trim())   { showError("Podaj opis wydatku."); return; }
     if (!form.targetSubcategoryId)   { showError("Wybierz subkategorię."); return; }
     if (!form.totalAmount || parseFloat(form.totalAmount) <= 0) { showError("Podaj kwotę > 0."); return; }
-    if (!form.plannedMonth)          { showError("Podaj planowany miesiąc zakupu."); return; }
-    if (form.plannedMonth < cur)     { showError("Miesiąc zakupu nie może być w przeszłości."); return; }
+    if (!form.plannedMonth)              { showError("Podaj planowany miesiąc zakupu."); return; }
+    if (form.plannedMonth < minPlan)     { showError(`Miesiąc zakupu musi być po ${cur}.`); return; }
     if (form.mode === "envelope" && parseInt(form.monthlySavingDay) < 1) {
       showError("Podaj dzień miesiąca."); return;
     }
@@ -99,13 +108,13 @@ export function PlannedForm({ initialValues, onSubmit, onCancel, isSaving, mode 
       ? Math.round(parseFloat(form.totalAmount) * (form.fxRate || 1) * 100) / 100
       : parseFloat(form.totalAmount);
 
-    // Generate virtualSavings for envelope
+    // Generate virtualSavings for envelope — from current month to plannedMonth
     let virtualSavings = [];
     if (form.mode === "envelope") {
-      const months     = monthsBetween(cur, form.plannedMonth);
-      const sugg       = Math.round(totalAmountPLN / months * 100) / 100;
+      const startMonth = cur; // always start from current calendar month
+      const months     = monthsBetween(startMonth, form.plannedMonth);
       const suggOrig   = Math.round(parseFloat(form.totalAmount) / months * 100) / 100;
-      virtualSavings   = generateSavingsMonths(cur, form.plannedMonth, suggOrig, form.fxRate || 1);
+      virtualSavings   = generateSavingsMonths(startMonth, form.plannedMonth, suggOrig, form.fxRate || 1);
     }
 
     onSubmit({
@@ -220,11 +229,20 @@ export function PlannedForm({ initialValues, onSubmit, onCancel, isSaving, mode 
         <input
           type="month"
           value={form.plannedMonth}
-          min={cur}
-          onChange={e => set("plannedMonth", e.target.value)}
+          min={minPlan}
+          onChange={e => {
+            const val = e.target.value;
+            if (val && val < minPlan) return; // block past
+            set("plannedMonth", val);
+          }}
           onClick={e => e.target.showPicker?.()}
           style={{ ...s.input, colorScheme: "dark", cursor: "pointer" }}
         />
+        {form.plannedMonth && form.plannedMonth < minPlan && (
+          <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>
+            ⚠️ Miesiąc zakupu musi być po {cur}
+          </div>
+        )}
       </div>
 
       {/* Envelope extras */}

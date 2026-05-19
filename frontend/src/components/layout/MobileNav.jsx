@@ -1,19 +1,19 @@
 // ============================================================
 // File: src/components/layout/MobileNav.jsx
 // ============================================================
-
+ 
 import { useAppContext } from "../../context/AppContext";
-
+ 
 const MOBILE_ITEMS = [
-  { id: "expenses",   icon: "➕", label: "Wydatki"   },
-  { id: "addincome",  icon: "💵", label: "Wpływy"    },
-  { id: "recurring",  icon: "🔄", label: "Cykliczne" },
-  { id: "planned",    icon: "📅", label: "Planowane" },
+  { id: "expenses",    icon: "➕", label: "Wydatki"    },
+  { id: "addincome",   icon: "💵", label: "Wpływy"     },
+  { id: "addrecurring",icon: "🔄", label: "Cykliczne"  },
+  { id: "addplanned",  icon: "📅", label: "Planowane"  },
 ];
-
+ 
 export function MobileNav() {
   const { panel, setPanel } = useAppContext();
-
+ 
   return (
     <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#0d1424", borderTop: "1px solid #1e293b", display: "flex", zIndex: 300 }}>
       {MOBILE_ITEMS.map(item => (

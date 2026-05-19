@@ -25,7 +25,7 @@ export function AppProvider({ children }) {
   const { fetchWithAuth, accessToken } = useAuth();
 
   // ── Navigation ───────────────────────────────────────────────
-  const [panel, _setPanel] = useState("expenses");
+  const [panel, _setPanel] = useState(import.meta.env.VITE_DEFAULT_PANEL || "expenses");
   const [month, setMonth]  = useState(new Date().getMonth());
   const [year,  setYear]   = useState(new Date().getFullYear());
 

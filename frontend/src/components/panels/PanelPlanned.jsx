@@ -14,7 +14,7 @@ import { PlannedCard }     from "./plannedComponents/PlannedCard";
 import { PlannedForm }     from "./plannedComponents/PlannedForm";
 import { fmt }             from "../../utils/helpers";
 import { theme as s }      from "../../styles/theme";
-
+import {DATE_PILLS}        from "../../data/constants";
 function currentMonthStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
@@ -26,22 +26,17 @@ function addMonths(monthStr, n) {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
-const DATE_PILLS = [
-  { label: "1 msc",  months: 1  },
-  { label: "3 msc",  months: 3  },
-  { label: "6 msc",  months: 6  },
-  { label: "12 msc", months: 12 },
-  { label: "Wszystkie", months: null },
-];
+
 
 export default function PanelPlanned() {
   const {
     planned, isLoading, isSaving,
-    loadAll, addPlanned, updatePlanned, archivePlanned, purchasePlanned,
+    loadAll, updatePlanned, archivePlanned, purchasePlanned,
   } = usePlanned();
 
   const [activePill,   setActivePill]   = useState(3);
   const [filterMode,   setFilterMode]   = useState("all"); // all | envelope | oneoff
+  const [filterMonth,  setFilterMonth]  = useState(""); // YYYY-MM or empty
   const [showModal,    setShowModal]    = useState(false);
   const [editTarget,   setEditTarget]   = useState(null);
   const [archiveModal, setArchiveModal] = useState({ isOpen: false, id: null, name: "", doc: null, paidSoFar: 0 });
@@ -59,9 +54,10 @@ export default function PanelPlanned() {
       if (maxMonth && doc.plannedMonth > maxMonth) return false;
       if (filterMode === "envelope" && doc.mode !== "envelope") return false;
       if (filterMode === "oneoff"   && doc.mode !== "oneoff")   return false;
+      if (filterMonth && doc.plannedMonth !== filterMonth) return false;
       return true;
     });
-  }, [planned, activePill, filterMode, cur]);
+  }, [planned, activePill, filterMode, filterMonth, cur]);
 
   // Summary — total PLN needed in filtered view
   const totalNeeded = useMemo(() =>
@@ -77,16 +73,12 @@ export default function PanelPlanned() {
     [filtered]
   );
 
-  function openAdd()     { setEditTarget(null); setShowModal(true); }
-  function openEdit(doc) { setEditTarget(doc);  setShowModal(true); }
+  function openEdit(doc) { setEditTarget(doc); setShowModal(true); }
   function closeModal()  { setShowModal(false); setEditTarget(null); }
 
   async function handleSubmit(payload) {
-    if (editTarget) {
-      await updatePlanned(editTarget.id, payload);
-    } else {
-      await addPlanned(payload);
-    }
+    if (!editTarget) return;
+    await updatePlanned(editTarget.id, payload);
     closeModal();
   }
 
@@ -115,7 +107,7 @@ export default function PanelPlanned() {
         onClick={e => e.stopPropagation()}
       >
         <div style={{ fontWeight: 800, color: "#e2e8f0", fontSize: 16, marginBottom: 20 }}>
-          {editTarget ? "✏️ Edytuj planowany wydatek" : "📅 Nowy planowany wydatek"}
+          ✏️ Edytuj planowany wydatek
         </div>
         <PlannedForm
           key={editTarget ? editTarget.id : "add"}
@@ -147,8 +139,6 @@ export default function PanelPlanned() {
 
       {/* Toolbar */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <button onClick={openAdd} style={s.btn("#3b82f6")}>📅 Nowy planowany</button>
-
         {/* Datepills */}
         <div style={{ display: "flex", gap: 4 }}>
           {DATE_PILLS.map(pill => (
@@ -177,6 +167,24 @@ export default function PanelPlanned() {
           <option value="envelope">🪙 Koperty</option>
           <option value="oneoff">💳 Jednorazowe</option>
         </select>
+
+        {/* Month filter */}
+        <input
+          type="month"
+          value={filterMonth}
+          onChange={e => { setFilterMonth(e.target.value); setActivePill(null); }}
+          onClick={e => e.target.showPicker?.()}
+          style={{ background: "#0a0f1e", border: `1px solid ${filterMonth ? "#3b82f6" : "#1e293b"}`, borderRadius: 8, color: filterMonth ? "#3b82f6" : "#94a3b8", padding: "6px 10px", fontSize: 12, cursor: "pointer", colorScheme: "dark" }}
+          title="Filtruj po miesiącu zakupu"
+        />
+        {filterMonth && (
+          <button
+            onClick={() => setFilterMonth("")}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "transparent", color: "#64748b", fontSize: 12, cursor: "pointer" }}
+          >
+            ✕ {filterMonth}
+          </button>
+        )}
       </div>
 
       {isLoading && (

@@ -36,8 +36,10 @@ export function getActiveCost(doc, month) {
 
 // Check if recurring doc is active in given month (frequency + validFrom/To)
 export function isActiveInMonth(doc, month) {
-  if (!doc || doc.isArchived) return false;
-  if (doc.archivedFrom && doc.archivedFrom <= month) return false;
+  if (!doc) return false;
+  // Archived — only hide from archivedFrom onwards, still show in past months
+  if (doc.isArchived && doc.archivedFrom && doc.archivedFrom <= month) return false;
+  if (doc.isArchived && !doc.archivedFrom) return false; // archived without date — hide everywhere
   if (!doc.costs?.length) return false;
 
   const firstValidFrom = doc.costs[0].validFrom;
@@ -188,12 +190,12 @@ export function useRecurring() {
     }
   }, [fetchWithAuth, showSuccess, showError, setRecurring]);
 
-  const confirmRecurring = useCallback(async (id, date, budgetMonth, liveRate) => {
+  const confirmRecurring = useCallback(async (id, date, budgetMonth, liveRate, amountPLN) => {
     setIsSaving(true);
     try {
       const res  = await fetchWithAuth(`${API_URL}/api/recurring/${id}/confirm`, {
         method: "POST",
-        body:   JSON.stringify({ date, budgetMonth, fxRate: liveRate }),
+        body:   JSON.stringify({ date, budgetMonth, fxRate: liveRate, amountPLN }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to confirm.");

@@ -297,7 +297,7 @@ router.post("/:id/confirm", async (req, res) => {
   try {
     const id       = idParsed.data;
     const familyId = req.user.familyId;
-    const { date, budgetMonth, fxRate: clientFxRate } = req.body;
+    const { date, budgetMonth, fxRate: clientFxRate, amountPLN: clientAmountPLN } = req.body;
 
     if (!date || !budgetMonth) {
       return res.status(400).json({ error: "date and budgetMonth are required." });
@@ -307,15 +307,17 @@ router.post("/:id/confirm", async (req, res) => {
     if (!rec)           return res.status(404).json({ error: "Recurring transaction not found." });
     if (rec.isArchived) return res.status(409).json({ error: "Recurring transaction is archived." });
 
-    // Get cost active for this budgetMonth
     const activeCost = getActiveCost(rec, budgetMonth);
     if (!activeCost) return res.status(400).json({ error: "No cost entry found for this month." });
 
-    const isForeign  = activeCost.originalCurrency && activeCost.originalCurrency !== "PLN";
-    const fxRate     = clientFxRate || activeCost.fxRate || 1;
-    const amountPLN  = isForeign
-      ? Math.round(activeCost.amount * fxRate * 100) / 100
-      : activeCost.amount;
+    const isForeign = activeCost.originalCurrency && activeCost.originalCurrency !== "PLN";
+    const fxRate    = clientFxRate || activeCost.fxRate || 1;
+    // Use amount explicitly confirmed by user — fallback to computed value
+    const amountPLN = clientAmountPLN != null
+      ? clientAmountPLN
+      : isForeign
+        ? Math.round(activeCost.amount * fxRate * 100) / 100
+        : activeCost.amount;
 
     const txId = `tx_${familyId}_${date.replace(/-/g, "")}_rec_${Date.now()}`;
     const tx = {

@@ -16,6 +16,7 @@ export function PaymentConfirmModal({
   suggestedAmount,    // number — pre-filled, editable
   amountLabel = "PLN",
   maxAmount = null,   // optional cap
+  showRecomputeWarning = true,  // false for recurring — no recompute logic
   onConfirm,          // (amount: number) => void
   onCancel,
   extraInfo = null,   // optional JSX below the input
@@ -108,7 +109,7 @@ export function PaymentConfirmModal({
               Maksymalna kwota: {fmt(maxAmount)} {amountLabel}
             </div>
           )}
-          {suggestedAmount != null && parsed > 0 && parsed !== suggestedAmount && (
+          {showRecomputeWarning && suggestedAmount != null && parsed > 0 && parsed !== suggestedAmount && (
             <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 4 }}>
               ⚠️ Inna kwota niż sugerowana — sugestia dla kolejnych miesięcy zostanie przeliczona
             </div>

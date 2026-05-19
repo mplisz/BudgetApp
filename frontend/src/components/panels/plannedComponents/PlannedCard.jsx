@@ -66,6 +66,7 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }) {
             }}>
               {doc.mode === "envelope" ? "🪙 Koperta" : "💳 Jednorazowy"}
             </span>
+            <span style={{ fontSize: 11, color: "#475569" }}>📅 {doc.plannedMonth}</span>
             {ready && <span style={{ fontSize: 10, color: "#10b981", fontWeight: 700 }}>✅ Gotowy do zakupu!</span>}
             {doc.isPurchased && <span style={{ fontSize: 10, color: "#475569", fontWeight: 700 }}>✅ Kupiony</span>}
           </div>
@@ -98,11 +99,12 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }) {
       </div>
 
       {/* Amount + planned month */}
-      <div style={{ display: "flex", gap: 20, fontSize: 12, color: "#475569", marginBottom: doc.mode === "envelope" ? 10 : 0, flexWrap: "wrap" }}>
-        <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14 }}>{amountStr}</span>
-        <span>📅 Cel: {doc.plannedMonth}</span>
+      <div style={{ display: "flex", gap: 16, alignItems: "baseline", marginBottom: doc.mode === "envelope" ? 10 : 0, flexWrap: "wrap" }}>
+        <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 13 }}>{amountStr}</span>
         {doc.mode === "envelope" && suggestion !== null && !ready && (
-          <span style={{ color: "#10b981" }}>💡 Sugestia: {fmt(suggestion)} PLN/miesiąc</span>
+          <span style={{ fontSize: 12, color: "#10b981" }}>
+            💡 {fmt(suggestion)} PLN/miesiąc
+          </span>
         )}
       </div>
 
