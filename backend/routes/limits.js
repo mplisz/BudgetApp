@@ -36,6 +36,17 @@ const LimitEntrySchema = z.object({
   type:       z.enum(["base", "override"]),
 });
 
+const BatchLimitEntrySchema = z.object({
+  categoryId: z.string().min(1),
+  date:       z.string().regex(BUDGET_MONTH_REGEX),
+  amount:     z.number().nonnegative(),
+  type:       z.enum(["base", "override"]),
+  action:     z.enum(["upsert", "delete"]).default("upsert"),
+});
+ 
+const BatchLimitSchema = z.object({
+  changes: z.array(BatchLimitEntrySchema).min(1).max(100),
+});
 // ── Pure helper — shared with frontend via copy ───────────────
 
 function getActiveLimit(doc, month) {
@@ -189,5 +200,114 @@ router.delete("/:categoryId", async (req, res) => {
     res.status(500).json({ error: "Failed to remove limit entry." });
   }
 });
-
+// ── POST /api/limits/batch ────────────────────────────────────
+ 
+router.post("/batch", async (req, res) => {
+  const parsed = BatchLimitSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+ 
+  const familyId = req.user.familyId;
+  const { changes } = parsed.data;
+ 
+  // Group changes by categoryId — one Cosmos read+write per category doc
+  const byCategory = new Map();
+  for (const change of changes) {
+    if (!byCategory.has(change.categoryId)) {
+      byCategory.set(change.categoryId, []);
+    }
+    byCategory.get(change.categoryId).push(change);
+  }
+ 
+  const results = [];
+  const errors  = [];
+ 
+  for (const [categoryId, categoryChanges] of byCategory) {
+    try {
+      // Fetch existing doc (one read per category)
+      const { resources } = await limitsContainer.items
+        .query({
+          query: "SELECT * FROM c WHERE c.userId = @userId AND c.categoryId = @categoryId",
+          parameters: [
+            { name: "@userId",     value: familyId   },
+            { name: "@categoryId", value: categoryId },
+          ],
+        })
+        .fetchAll();
+ 
+      let existingDoc = resources[0] ?? null;
+      let currentLimits = existingDoc ? [...(existingDoc.limits || [])] : [];
+ 
+      // Apply all changes for this category in memory
+      for (const change of categoryChanges) {
+        if (change.action === "delete") {
+          currentLimits = currentLimits.filter(
+            l => !(l.date === change.date && l.type === change.type)
+          );
+        } else {
+          // Upsert: remove existing entry with same date+type, add new
+          currentLimits = currentLimits.filter(
+            l => !(l.date === change.date && l.type === change.type)
+          );
+          currentLimits.push({ date: change.date, amount: change.amount, type: change.type });
+        }
+      }
+ 
+      // Sort for readability
+      currentLimits.sort(
+        (a, b) => a.date.localeCompare(b.date) || a.type.localeCompare(b.type)
+      );
+ 
+      let savedDoc;
+ 
+      if (existingDoc) {
+        // Update existing doc (one write per category)
+        const { etag } = await readItemWithEtag(limitsContainer, existingDoc.id, familyId);
+        const { resource } = await limitsContainer.items.upsert(
+          {
+            ...existingDoc,
+            limits:    currentLimits,
+            updatedAt: new Date().toISOString(),
+            updatedBy:   req.user.name || req.user.email,
+            updatedById: req.user.id,
+          },
+          { accessCondition: { type: "IfMatch", condition: etag } }
+        );
+        savedDoc = resource;
+      } else {
+        // Create new doc if none exists and we have entries to save
+        if (currentLimits.length === 0) continue;
+        const { resource } = await limitsContainer.items.create({
+          id:          `lim_${familyId}_${categoryId}`,
+          userId:      familyId,
+          categoryId,
+          limits:      currentLimits,
+          createdAt:   new Date().toISOString(),
+          createdBy:   req.user.name || req.user.email,
+          createdById: req.user.id,
+        });
+        savedDoc = resource;
+      }
+ 
+      console.log(`[LIMITS BATCH] ${categoryChanges.length} change(s) → ${categoryId}`);
+      results.push(savedDoc);
+ 
+    } catch (err) {
+      if (err.code === 412) {
+        errors.push({ categoryId, error: "Concurrent modification — please refresh." });
+      } else {
+        console.error(`[LIMITS BATCH] Error for ${categoryId}:`, err);
+        errors.push({ categoryId, error: "Failed to save." });
+      }
+    }
+  }
+ 
+  if (errors.length > 0 && results.length === 0) {
+    return res.status(500).json({ error: "All batch saves failed.", details: errors });
+  }
+ 
+  // Partial success — return saved docs and errors
+  return res.status(errors.length > 0 ? 207 : 200).json({ saved: results, errors });
+});
 module.exports = router;

@@ -1,23 +1,38 @@
 // ============================================================
-// File: src/components/layout/NotificationBell.jsx
+// File: src/components/layout/NotificationBell.tsx
+// Bell dropdown with reminders for recurring and planned expenses.
 // ============================================================
 
 import { useState, useEffect, useRef } from "react";
-import { createPortal }         from "react-dom";
+import { createPortal }          from "react-dom";
 import { useRecurring, getActiveCost } from "../../hooks/useRecurring";
 import { usePlanned, sumPaid, computeSuggestion, isReadyToPurchase } from "../../hooks/usePlanned";
-import { useCurrencyConverter } from "../../hooks/useCurrencyConverter";
-import { useAppContext }        from "../../context/AppContext";
-import { ConfirmModal }         from "../ui/ConfirmModal";
-import { PaymentConfirmModal }  from "../ui/PaymentConfirmModal";
-import { fmt, fmtAmount }       from "../../utils/helpers";
+import { useCurrencyConverter }  from "../../hooks/useCurrencyConverter";
+import { useAppContext }         from "../../context/AppContext";
+import { ConfirmModal }          from "../ui/ConfirmModal";
+import { PaymentConfirmModal }   from "../ui/PaymentConfirmModal";
+import { fmt, fmtAmount }        from "../../utils/helpers";
+import type { PlannedDoc }       from "../../hooks/usePlanned";
 
-function todayYMD() {
+// ── Types ─────────────────────────────────────────────────────
+
+interface RecurringDoc {
+  id:           string;
+  description:  string;
+  categoryName: string;
+  plannedDay?:  number;
+  costs?:       Array<{ validFrom: string; amount: number; originalCurrency?: string; fxRate?: number; amountPLN?: number }>;
+  [key: string]: unknown;
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+
+function todayYMD(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
-function plannedDateYMD(doc) {
+function plannedDateYMD(doc: RecurringDoc): string {
   const today = new Date();
   const y   = today.getFullYear();
   const m   = today.getMonth() + 1;
@@ -25,15 +40,27 @@ function plannedDateYMD(doc) {
   return `${y}-${String(m).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
 }
 
-// ── Single bell item ──────────────────────────────────────────
-function RecurringBellItem({ doc, onConfirm, onDismiss }) {  const currentMonth = todayYMD().slice(0, 7);
+// ── RecurringBellItem ─────────────────────────────────────────
+
+interface RecurringBellItemProps {
+  doc:       RecurringDoc;
+  onConfirm: (doc: RecurringDoc, date: string, amountPLN: number, liveRate: number) => void;
+  onDismiss: (doc: RecurringDoc) => void;
+}
+
+function RecurringBellItem({ doc, onConfirm, onDismiss }: RecurringBellItemProps) {
+  const currentMonth = todayYMD().slice(0, 7);
   const activeCost   = getActiveCost(doc, currentMonth);
-  const isForeign    = activeCost?.originalCurrency && activeCost.originalCurrency !== "PLN";
+  const isForeign    = !!(activeCost?.originalCurrency && activeCost.originalCurrency !== "PLN");
 
-  const [showModal,  setShowModal]  = useState(false);
-  const [modalDate,  setModalDate]  = useState(plannedDateYMD(doc));
+  const [showModal, setShowModal] = useState(false);
+  const [modalDate, setModalDate] = useState(plannedDateYMD(doc));
 
-  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter();
+  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter() as {
+    loadRate:   (currency: string, date: string) => void;
+    activeRate: number | null;
+    isLoading:  boolean;
+  };
 
   useEffect(() => {
     if (isForeign && activeCost?.originalCurrency) {
@@ -48,7 +75,7 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }) {  const currentMonth 
 
   const amountStr = activeCost
     ? isForeign
-      ? `${fmtAmount(activeCost.amount, activeCost.originalCurrency)} ${activeCost.originalCurrency} ≈ ${rateLoading ? "…" : fmt(amountPLN)} PLN`
+      ? `${fmtAmount(activeCost.amount, activeCost.originalCurrency!)} ${activeCost.originalCurrency} ≈ ${rateLoading ? "…" : fmt(amountPLN)} PLN`
       : fmt(activeCost.amount)
     : "—";
 
@@ -62,37 +89,31 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }) {  const currentMonth 
     ? `⚠️ Termin minął ${plannedDay}. tego miesiąca`
     : isToday
       ? `🔴 Dziś (${plannedDay}.)`
-      : `📅 Planowany: ${plannedDay}. tego miesiąca`;
+      : `📅 Planowany: ${plannedDay}.`;
 
   return (
     <>
-      <div style={{ background: "#090e1b", border: "1px solid #f59e0b33", borderRadius: 10, padding: "10px 12px", marginBottom: 6 }}>
+      <div style={{ background: "#090e1b", border: `1px solid ${isPastDue ? "#ef444433" : "#1e293b"}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6 }}>
         <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13, marginBottom: 2 }}>
           {doc.description}
         </div>
-        <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>
+        <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>
           {doc.categoryName} · {amountStr}
-          {isForeign && !rateLoading && activeRate && (
-            <span style={{ color: "#10b98188", marginLeft: 6 }}>(kurs NBP: {liveRate.toFixed(4)})</span>
-          )}
-        </div>
-        <div style={{
-          fontSize: 11, marginBottom: 8, fontWeight: isPastDue || isToday ? 700 : 400,
-          color: isPastDue ? "#ef4444" : isToday ? "#f97316" : "#64748b",
-        }}>
-          {dateLabel}
+          <span style={{ marginLeft: 8, color: isPastDue ? "#ef4444" : isToday ? "#f59e0b" : "#475569" }}>
+            {dateLabel}
+          </span>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           <button
-            onClick={() => { setModalDate(plannedDateYMD(doc)); setShowModal(true); }}
+            onClick={() => setShowModal(true)}
             style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
           >
-            ✅ Potwierdź wydatek
+            ✅ Potwierdzam
           </button>
           <button
             onClick={() => onDismiss(doc)}
             style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #1e293b", background: "transparent", color: "#475569", fontSize: 12, cursor: "pointer" }}
-            title="Przypomnij później"
+            title="Pomiń"
           >
             ✕
           </button>
@@ -101,13 +122,14 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }) {  const currentMonth 
 
       <PaymentConfirmModal
         isOpen={showModal}
-        title="✅ Potwierdź wydatek cykliczny"
+        title="✅ Potwierdź płatność"
         description={doc.description}
-        categoryName={doc.categoryName}
+        categoryName={doc.categoryName as string}
         suggestedAmount={amountPLN}
+        maxAmount={undefined}
         amountLabel="PLN"
         showRecomputeWarning={false}
-        onConfirm={amount => {
+        onConfirm={(amount: number) => {
           setShowModal(false);
           onConfirm(doc, modalDate, amount, liveRate);
         }}
@@ -117,7 +139,7 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }) {  const currentMonth 
             {isForeign && activeCost && (
               <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>
                 Kurs NBP: <strong style={{ color: "#10b981" }}>{liveRate.toFixed(4)}</strong>
-                {" · "}{fmtAmount(activeCost.amount, activeCost.originalCurrency)} {activeCost.originalCurrency}
+                {" · "}{fmtAmount(activeCost.amount, activeCost.originalCurrency!)} {activeCost.originalCurrency}
               </div>
             )}
             <label style={{ display: "block", fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 }}>
@@ -136,28 +158,39 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }) {  const currentMonth 
   );
 }
 
-// ── Planned bell item ─────────────────────────────────────────
-function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }) {
+// ── PlannedBellItem ───────────────────────────────────────────
+
+interface PlannedBellItemProps {
+  doc:         PlannedDoc;
+  onPaySaving: (doc: PlannedDoc, month: string, amount: number, dismissed: boolean) => void;
+  onPurchase:  (doc: PlannedDoc) => void;
+  onDismiss:   (doc: PlannedDoc, month: string) => void;
+}
+
+function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }: PlannedBellItemProps) {
   const currentMonth = todayYMD().slice(0, 7);
   const ready        = isReadyToPurchase(doc);
   const paid         = sumPaid(doc.virtualSavings);
   const suggestion   = computeSuggestion(doc, currentMonth);
-  const isForeign    = doc.originalCurrency && doc.originalCurrency !== "PLN";
+  const isForeign    = !!(doc.originalCurrency && doc.originalCurrency !== "PLN");
 
   const [showPayModal, setShowPayModal] = useState(false);
 
-  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter();
+  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter() as {
+    loadRate:   (currency: string, date: string) => void;
+    activeRate: number | null;
+    isLoading:  boolean;
+  };
+
   useEffect(() => {
     if (isForeign) loadRate(doc.originalCurrency, todayYMD());
   }, [doc.originalCurrency, isForeign]);
 
-  const liveRate = activeRate || doc.fxRate || 1;
-  const totalPLN = isForeign
+  const liveRate    = activeRate || doc.fxRate || 1;
+  const totalPLN    = isForeign
     ? Math.round(doc.totalAmount * liveRate * 100) / 100
     : doc.totalAmountPLN;
-
   const progressPct = totalPLN > 0 ? Math.min(100, Math.round(paid / totalPLN * 100)) : 0;
-  const todayEntry  = (doc.virtualSavings || []).find(v => v.month === currentMonth);
   const remaining   = Math.max(0, totalPLN - paid);
 
   return (
@@ -166,29 +199,19 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }) {
         <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13, marginBottom: 2 }}>
           {doc.description}
           <span style={{ fontSize: 10, marginLeft: 8, color: doc.mode === "envelope" ? "#3b82f6" : "#f59e0b", fontWeight: 400 }}>
-            {doc.mode === "envelope" ? "🪙 Koperta" : "💳 Jednorazowy"}
+            {doc.mode === "envelope" ? "Koperta" : "Jednorazowy"}
           </span>
-        </div>
-        <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>
-          {doc.targetCategoryName} ·{" "}
-          {isForeign
-            ? `${fmtAmount(doc.totalAmount, doc.originalCurrency)} ${doc.originalCurrency} ≈ ${rateLoading ? "…" : fmt(totalPLN)} PLN`
-            : fmt(doc.totalAmountPLN)
-          }
         </div>
 
         {doc.mode === "envelope" && (
-          <div style={{ marginBottom: 8 }}>
-            <div style={{ background: "#1e293b", borderRadius: 3, height: 4, marginBottom: 4 }}>
-              <div style={{ width: `${progressPct}%`, height: "100%", background: ready ? "#10b981" : "#3b82f6", borderRadius: 3 }} />
+          <>
+            <div style={{ height: 4, background: "#1e293b", borderRadius: 99, overflow: "hidden", margin: "6px 0" }}>
+              <div style={{ height: "100%", width: `${progressPct}%`, background: ready ? "#10b981" : "#3b82f6", borderRadius: 99 }} />
             </div>
-            <div style={{ fontSize: 10, color: "#475569" }}>
-              {fmt(paid)} / {fmt(totalPLN)} PLN ({progressPct}%)
-              {!ready && suggestion !== null && (
-                <span style={{ color: "#10b981", marginLeft: 8 }}>sugestia: {fmt(suggestion)} PLN</span>
-              )}
+            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>
+              {fmt(paid)} / {fmt(totalPLN)} PLN · {progressPct}%
             </div>
-          </div>
+          </>
         )}
 
         <div style={{ display: "flex", gap: 6 }}>
@@ -197,9 +220,9 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }) {
               onClick={() => onPurchase(doc)}
               style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
             >
-              🛍️ Potwierdź zakup
+              🛍️ Kup teraz
             </button>
-          ) : doc.mode === "envelope" && todayEntry ? (
+          ) : doc.mode === "envelope" ? (
             <>
               <button
                 onClick={() => setShowPayModal(true)}
@@ -215,7 +238,7 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }) {
                 ✕
               </button>
             </>
-          ) : doc.mode === "oneoff" && (
+          ) : (
             <button
               onClick={() => onPurchase(doc)}
               style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: "#f59e0b", color: "#000", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
@@ -231,17 +254,17 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }) {
         title="💰 Potwierdź odkładanie"
         description={doc.description}
         categoryName={doc.targetCategoryName}
-        suggestedAmount={suggestion}
+        suggestedAmount={suggestion ?? 0}
         maxAmount={remaining}
         amountLabel="PLN"
-        onConfirm={amount => {
+        onConfirm={(amount: number) => {
           setShowPayModal(false);
           onPaySaving(doc, currentMonth, amount, false);
         }}
         onCancel={() => setShowPayModal(false)}
         extraInfo={
           <div style={{ fontSize: 11, color: "#475569" }}>
-            Pozostało do zebrania: <strong style={{ color: "#e2e8f0" }}>{fmt(remaining)} PLN</strong>
+            Pozostało: <strong style={{ color: "#e2e8f0" }}>{fmt(remaining)} PLN</strong>
           </div>
         }
       />
@@ -249,60 +272,83 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }) {
   );
 }
 
-// ── Main bell ─────────────────────────────────────────────────
-export function NotificationBell() {
-  const { pendingNotifications: recurringPending, loadAll: loadRecurring, confirmRecurring, markNotified } = useRecurring();
-  const { pendingNotifications: plannedPending,   loadAll: loadPlanned,   paySavingMonth, purchasePlanned } = usePlanned();
-  const { setPanel } = useAppContext();
+// ── Main NotificationBell ─────────────────────────────────────
 
-  const [open,        setOpen]       = useState(false);
-  const [purchaseDoc, setPurchaseDoc] = useState(null);
-  const dropRef = useRef(null);
+export function NotificationBell() {
+  const {
+    pendingNotifications: recurringPending,
+    loadAll: loadRecurring,
+    confirmRecurring,
+    markNotified,
+  } = useRecurring() as {
+    pendingNotifications: RecurringDoc[];
+    loadAll:          () => void;
+    confirmRecurring: (id: string, date: string, budgetMonth: string, fxRate: number, amountPLN: number) => Promise<unknown>;
+    markNotified:     (id: string) => Promise<unknown>;
+  };
+
+  const {
+    pendingNotifications: plannedPending,
+    loadAll: loadPlanned,
+    payMonth,
+    dismissMonth,
+    purchasePlanned,
+  } = usePlanned();
+
+  const { setPanel } = useAppContext() as { setPanel: (p: string) => void };
+
+  const [open,        setOpen]        = useState(false);
+  const [purchaseDoc, setPurchaseDoc] = useState<PlannedDoc | null>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadRecurring(); loadPlanned(); }, []);
 
   useEffect(() => {
-    function handleClick(e) {
-      if (e.target.closest('[data-modal="true"]')) return;
-      if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false);
+    function handleClick(e: MouseEvent) {
+      if ((e.target as HTMLElement).closest('[data-modal="true"]')) return;
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setOpen(false);
     }
     if (open) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
-  const count = recurringPending.length + plannedPending.length;
+  // Guard: ensure arrays are defined (may be undefined before AppContext hydrates)
+  const safeRecurring = recurringPending || [];
+  const safePlanned   = plannedPending   || [];
+  const count         = safeRecurring.length + safePlanned.length;
 
-  // Recurring confirm — called directly from RecurringBellItem with user-entered values
-  async function handleConfirmRecurring(doc, date, amountPLN, liveRate) {
-    const budgetMonth = date.slice(0, 7);
-    await confirmRecurring(doc.id, date, budgetMonth, liveRate, amountPLN);
+  // ── Handlers ────────────────────────────────────────────────
+
+  async function handleConfirmRecurring(doc: RecurringDoc, date: string, amountPLN: number, liveRate: number) {
+    await confirmRecurring(doc.id, date, date.slice(0, 7), liveRate, amountPLN);
     setOpen(false);
   }
 
-  async function handleDismiss(doc) {
+  async function handleDismiss(doc: RecurringDoc) {
     await markNotified(doc.id);
   }
 
-  async function handleDismissPlanned(doc, month) {
-    await paySavingMonth(doc.id, month, { dismissed: true });
+  async function handlePaySaving(doc: PlannedDoc, month: string, amount: number, dismissed: boolean) {
+    if (dismissed) {
+      await dismissMonth(doc.id, month);
+    } else {
+      await payMonth(doc.id, month, amount, amount, 1);
+    }
   }
 
-  async function handlePaySaving(doc, month, amount, dismissed) {
-    if (dismissed) {
-      await paySavingMonth(doc.id, month, { dismissed: true });
-    } else {
-      await paySavingMonth(doc.id, month, { amount, amountPLN: amount, fxRate: 1, dismissed: false });
-    }
+  async function handleDismissPlanned(doc: PlannedDoc, month: string) {
+    await dismissMonth(doc.id, month);
   }
 
   async function handlePurchasePlanned() {
     if (!purchaseDoc) return;
-    const today       = todayYMD();
-    const budgetMonth = today.slice(0, 7);
-    await purchasePlanned(purchaseDoc.id, today, budgetMonth);
+    const today = todayYMD();
+    await purchasePlanned(purchaseDoc.id, today, today.slice(0, 7));
     setPurchaseDoc(null);
     setOpen(false);
   }
+
+  // ── Render ───────────────────────────────────────────────────
 
   return (
     <>
@@ -337,7 +383,7 @@ export function NotificationBell() {
               </div>
             )}
 
-            {recurringPending.map(doc => (
+            {safeRecurring.map(doc => (
               <RecurringBellItem
                 key={doc.id}
                 doc={doc}
@@ -346,13 +392,13 @@ export function NotificationBell() {
               />
             ))}
 
-            {plannedPending.length > 0 && (
+            {safePlanned.length > 0 && (
               <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", padding: "6px 4px 4px" }}>
                 📅 Planowane
               </div>
             )}
 
-            {plannedPending.map(doc => (
+            {safePlanned.map(doc => (
               <PlannedBellItem
                 key={doc.id}
                 doc={doc}
@@ -379,9 +425,9 @@ export function NotificationBell() {
           isOpen={!!purchaseDoc}
           title="🛍️ Potwierdź zakup"
           message={
-            `Czy potwierdzasz zakup:\n${purchaseDoc.description} — ${fmt(purchaseDoc.totalAmountPLN)} PLN?\n\n` +
-            `Zebrano: ${fmt(sumPaid(purchaseDoc.virtualSavings))} PLN\n\n` +
-            `Zostaną utworzone:\n• Wydatek → ${purchaseDoc.targetCategoryName}\n• Transfer → Środki własne`
+            `Czy potwierdzasz zakup:\n` +
+            `${purchaseDoc.description} — ${fmt(purchaseDoc.totalAmountPLN)} PLN?\n\n` +
+            `Zebrano: ${fmt(sumPaid(purchaseDoc.virtualSavings))} PLN`
           }
           onConfirm={handlePurchasePlanned}
           onCancel={() => setPurchaseDoc(null)}

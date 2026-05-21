@@ -7,16 +7,14 @@
 import { useState, useCallback, useRef, useMemo } from "react";
 import { SubcategorySelect }  from "../../ui/SubcategorySelect";
 import { PriorityPicker }     from "../../ui/PriorityPicker";
-import { TagMultiSelect }     from "../../ui/TagMultiSelect";
+import { TagMultiSelect }     from "../../ui/Tagmultiselect";
 import { CurrencyRateField }  from "../../ui/CurrencyRateField";
 import { useToast }           from "../../../hooks/useToast";
 import { useCurrencyManager } from "../../../hooks/useCurrencyManager";
 import { useAppContext }      from "../../../context/AppContext";
 import { theme as s }         from "../../../styles/theme";
-import {
-  FREQUENCY_OPTIONS, MONTH_NAMES, computeValidTo, getActiveCost,
-} from "../../../hooks/useRecurring";
-
+import {MONTH_NAMES, computeValidTo, getActiveCost,} from "../../../hooks/useRecurring";
+import {FREQUENCY_OPTIONS} from  "../../../data/constants";
 const frow = { marginBottom: 16 };
 
 function emptyForm(validFrom) {
@@ -130,52 +128,102 @@ export function RecurringForm({ initialValues, validFrom, activeBudgetMonth, onS
       return `${y}-${m}`;
     }
     if (form.validToMode === "count" && form.monthsCount && form.validFrom) {
-      return computeValidTo(form.validFrom, parseInt(form.monthsCount));
+      return computeValidTo(form.validFrom, parseInt(form.monthsCount), form.frequency, form.activeMonths);
+
+    }
+    if (form.validToMode === "yearend") {
+      if (!form.validFrom) return null;
+      const year = form.validFrom.split("-")[0];
+      return `${year}-12`;
     }
     return null;
   }
 
-  function handleSubmit() {
-    if (!form.description?.trim())        { showError("Podaj opis wydatku."); return; }
-    if (!form.subcategoryId)              { showError("Wybierz subkategorię."); return; }
-    if (!form.amount || parseFloat(form.amount) <= 0) { showError("Podaj kwotę > 0."); return; }
-    if (!form.validFrom)                  { showError("Brak miesiąca startowego."); return; }
-    if (parseInt(form.plannedDay) < 1 || parseInt(form.plannedDay) > 31) {
-      showError("Dzień miesiąca musi być między 1 a 31."); return;
-    }
-    if (form.frequency === "custom" && form.activeMonths.length === 0) {
-      showError("Wybierz co najmniej jeden miesiąc."); return;
-    }
-
-    const resolvedCurrency = rateInfo.resolvedCurrency !== "PLN" ? rateInfo.resolvedCurrency : (form.currency === "PLN" ? "PLN" : rateInfo.resolvedCurrency);
-    const isForeign = resolvedCurrency !== "PLN";
-    const amountPLN = isForeign
-      ? Math.round(parseFloat(form.amount) * (form.fxRate || 1) * 100) / 100
-      : parseFloat(form.amount);
-
-    const newCostEntry = {
-      validFrom:        form.validFrom,
-      amount:           parseFloat(form.amount),
-      originalCurrency: resolvedCurrency,
-      fxRate:           form.fxRate || 1,
-      amountPLN,
-    };
-
-    onSubmit({
-      description:     form.description.trim(),
-      subcategoryId:   form.subcategoryId,
-      subcategoryName: form.subcategoryName,
-      categoryId:      form.categoryId,
-      categoryName:    form.categoryName,
-      frequency:       form.frequency,
-      activeMonths:    form.frequency === "custom" ? form.activeMonths : null,
-      plannedDay:      parseInt(form.plannedDay),
-      tags:            form.tags,
-      priority:        form.priority,
-      validTo:         resolveValidTo(),
-      newCostEntry,    // caller decides how to merge into costs[]
-    });
+function handleSubmit() {
+  // ── Podstawowa walidacja ──────────────────────────────────
+  if (!form.description?.trim())   { showError("Podaj opis wydatku."); return; }
+  if (!form.subcategoryId)         { showError("Wybierz subkategorię."); return; }
+  if (!form.amount || parseFloat(form.amount) <= 0) { showError("Podaj kwotę > 0."); return; }
+  if (!form.validFrom)             { showError("Brak miesiąca startowego."); return; }
+  if (parseInt(form.plannedDay) < 1 || parseInt(form.plannedDay) > 31) {
+    showError("Dzień miesiąca musi być między 1 a 31."); return;
   }
+  if (form.frequency === "custom" && form.activeMonths.length === 0) {
+    showError("Wybierz co najmniej jeden miesiąc."); return;
+  }
+ 
+  // ── Walidacja "Do końca roku" ─────────────────────────────
+  if (form.validToMode === "yearend" && form.validFrom) {
+    const startM = Number(form.validFrom.split("-")[1]);
+    const monthsLeft = 12 - startM + 1; // np. start w maju → 8 miesięcy do końca roku
+ 
+    if (form.frequency === "custom") {
+      const hitsThisYear = (form.activeMonths || []).filter(m => m >= startM);
+      if (hitsThisYear.length === 0) {
+        showError(
+          `⚠️ Żaden z wybranych miesięcy (${form.activeMonths.map(m => MONTH_NAMES[m-1]).join(", ")}) ` +
+          `nie wypada między ${MONTH_NAMES[startM-1]} a Grudniem. ` +
+          `Zmień aktywne miesiące lub wybierz inny zakres.`
+        );
+        return;
+      }
+      const outsideYear = (form.activeMonths || []).filter(m => m < startM);
+      if (outsideYear.length > 0) {
+        showInfo(
+          `ℹ️ Miesiące ${outsideYear.map(m => MONTH_NAMES[m-1]).join(", ")} ` +
+          `nie wystąpią w tym roku (zaczynasz od ${MONTH_NAMES[startM-1]}).`
+        );
+      }
+    }
+ 
+    if (form.frequency === "quarterly" && monthsLeft < 3) {
+      showError(
+        `⚠️ Do końca roku zostało tylko ${monthsLeft} mies. — ` +
+        `wydatek kwartalny nie wystąpi ani razu. Wybierz "Bezterminowo" lub "Wybierz miesiąc".`
+      );
+      return;
+    }
+    if (form.frequency === "biannual" && monthsLeft < 6) {
+      showError(
+        `⚠️ Do końca roku zostało tylko ${monthsLeft} mies. — ` +
+        `wydatek półroczny nie wystąpi ani razu. Wybierz "Bezterminowo" lub "Wybierz miesiąc".`
+      );
+      return;
+    }
+  }
+  // ── payload ─────────────────────────────────────────
+  const resolvedCurrency = rateInfo.resolvedCurrency !== "PLN"
+    ? rateInfo.resolvedCurrency
+    : (form.currency === "PLN" ? "PLN" : rateInfo.resolvedCurrency);
+ 
+  const isForeign = resolvedCurrency !== "PLN";
+  const amountPLN = isForeign
+    ? Math.round(parseFloat(form.amount) * (form.fxRate || 1) * 100) / 100
+    : parseFloat(form.amount);
+ 
+  const newCostEntry = {
+    validFrom:        form.validFrom,
+    amount:           parseFloat(form.amount),
+    originalCurrency: resolvedCurrency,
+    fxRate:           form.fxRate || 1,
+    amountPLN,
+  };
+ 
+  onSubmit({
+    description:     form.description.trim(),
+    subcategoryId:   form.subcategoryId,
+    subcategoryName: form.subcategoryName,
+    categoryId:      form.categoryId,
+    categoryName:    form.categoryName,
+    frequency:       form.frequency,
+    activeMonths:    form.frequency === "custom" ? form.activeMonths : null,
+    plannedDay:      parseInt(form.plannedDay),
+    tags:            form.tags,
+    priority:        form.priority,
+    validTo:         resolveValidTo(),
+    newCostEntry,
+  });
+}
 
   return (
     <div>
@@ -204,8 +252,8 @@ export function RecurringForm({ initialValues, validFrom, activeBudgetMonth, onS
           onChange={({ subcategoryId, subcategoryName, categoryId, categoryName, categoryType }) =>
             setForm(f => ({ ...f, subcategoryId, subcategoryName, categoryId, categoryName, categoryType }))
           }
-          allowedTypes={["EXPENSE"]}
-          filter={sub => sub.canBeRecurring === true}
+          allowedTypes={["EXPENSE", "SAVING"]}
+          filter={sub => sub.categoryType === "SAVING" ? true : sub.canBeRecurring === true}
           placeholder="— wybierz subkategorię —"
         />
         {!hasRecurringSubcategories && (
@@ -319,6 +367,7 @@ export function RecurringForm({ initialValues, validFrom, activeBudgetMonth, onS
             { key: "none",  label: "Bezterminowo" },
             { key: "month", label: "Wybierz miesiąc" },
             { key: "count", label: "Liczba miesięcy" },
+            { key: "yearend", label: "Do końca roku"    },
           ].map(opt => (
             <button key={opt.key} onClick={() => set("validToMode", opt.key)}
               style={{
@@ -353,9 +402,30 @@ export function RecurringForm({ initialValues, validFrom, activeBudgetMonth, onS
             <span style={{ color: "#64748b", fontSize: 13 }}>miesięcy</span>
             {form.monthsCount && form.validFrom && (
               <span style={{ color: "#94a3b8", fontSize: 12 }}>
-                → do {computeValidTo(form.validFrom, parseInt(form.monthsCount)) || "—"}
+                → do {computeValidTo(form.validFrom, parseInt(form.monthsCount), form.frequency, form.activeMonths)|| "—"}
               </span>
             )}
+          </div>
+        )}
+        {form.validToMode === "yearend" && form.validFrom && (
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+            Zakres: {form.validFrom} → {form.validFrom.split("-")[0]}-12
+            {form.frequency === "custom" && form.activeMonths.length > 0 && (() => {
+              const vm = Number(form.validFrom.split("-")[1]);
+              const hitsThisYear = form.activeMonths.filter(m => m >= vm);
+              const outsideYear  = form.activeMonths.filter(m => m < vm);
+              return (
+                <>
+                  {" · "}{hitsThisYear.length} wystąpień
+                  {outsideYear.length > 0 && (
+                    <span style={{ color: "#f59e0b", marginLeft: 6 }}>
+                      ⚠️ Miesiące {outsideYear.map(m => MONTH_NAMES[m-1]).join(", ")} 
+                      {" "}poza zakresem (zaczynasz od {MONTH_NAMES[vm-1]})
+                    </span>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>

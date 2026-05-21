@@ -69,7 +69,7 @@ const data = [
   // ── Dom i ogród ───────────────────────────────────────────
 
   { id: "cat_root_dom_ubezpieczenie_MMs",      userId: FAMILY_ID, type: "EXPENSE", icon: "🛡️", name: "Ubezpieczenie",         parentCategoryId: "cat_dom", priority: 1,  isArchived: false , canBeRecurring:false },
-
+  { id: "cat_root_dom_czynsz_MMs",             userId: FAMILY_ID, type: "EXPENSE", icon: "🏡", name: "Czynsz",                parentCategoryId: "cat_dom", priority: 1,  isArchived: false , canBeRecurring:false },
   { id: "cat_root_dom_remont_MMs",             userId: FAMILY_ID, type: "EXPENSE", icon: "🔨", name: "Remont",                parentCategoryId: "cat_dom", priority: 3,  isArchived: false , canBeRecurring:false },
   { id: "cat_root_dom_agd_MMs",                userId: FAMILY_ID, type: "EXPENSE", icon: "🍳", name: "AGD",                   parentCategoryId: "cat_dom", priority: 3,  isArchived: false , canBeRecurring:false },
   { id: "cat_root_dom_benzyna_MMs",            userId: FAMILY_ID, type: "EXPENSE", icon: "⛽", name: "Benzyna",               parentCategoryId: "cat_dom", priority: 2,  isArchived: false , canBeRecurring:false },

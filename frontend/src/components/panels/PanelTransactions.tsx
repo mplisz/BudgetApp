@@ -1,7 +1,7 @@
 // ============================================================
-// File: src/components/panels/PanelTransactions.jsx
-// Transaction display panel for the active budget month.
-// Shows only EXPENSE and SAVING transactions (INCOME/TRANSFER → PanelIncomeTransactions).
+// File: src/components/panels/PanelTransactions.tsx
+// Transaction display panel — EXPENSE and SAVING only.
+// INCOME/TRANSFER → PanelIncomeTransactions.
 // UI: Polish | Comments: English
 // ============================================================
 
@@ -20,34 +20,89 @@ import { Pagination }      from "../ui/Pagination";
 
 const PAGE_SIZE = 25;
 
+// ── Types ─────────────────────────────────────────────────────
+
+interface Return {
+  moneyReturnedInMonth: string;
+  cashAmount?:          number;
+  voucherAmount?:       number;
+}
+
+interface Transaction {
+  id:              string;
+  type:            string;
+  date:            string;
+  budgetMonth:     string;
+  categoryId:      string;
+  categoryName:    string;
+  subcategoryId:   string;
+  subcategoryName: string;
+  amount:          number;
+  netAmount?:      number;
+  voucherAmount?:  number;
+  priority?:       number;
+  description?:    string;
+  tags?:           string[];
+  isRecurring?:    boolean;
+  returns?:        Return[];
+  // Enriched fields added in useMemo
+  tagNames?:        string[];
+  effectiveAmount?: number;
+  sameMonthReturned?: number;
+}
+
+interface Tag {
+  id:   string;
+  name: string;
+}
+
+interface DeleteModal   { isOpen: boolean; txId: string | null; }
+interface LinkedModal   { isOpen: boolean; txId: string | null; }
+
+// ── Component ─────────────────────────────────────────────────
+
 export default function PanelTransactions() {
-  const { transactions, setTransactions, tags } = useAppContext();
-  const { deleteTransaction, loadTransactions }  = useTransactions();
-  const { isActiveMonthClosed, activeBudgetMonth } = useMonthStatus();
+  const { transactions, setTransactions, tags } = useAppContext() as {
+    transactions:    Transaction[];
+    setTransactions: (v: Transaction[] | ((p: Transaction[]) => Transaction[])) => void;
+    tags:            Tag[];
+  };
+  const { deleteTransaction, loadTransactions } = useTransactions() as {
+    deleteTransaction: (id: string, opts?: Record<string, unknown>) => Promise<unknown>;
+    loadTransactions:  (month: string) => Promise<void>;
+  };
+  const { isActiveMonthClosed, activeBudgetMonth } = useMonthStatus() as {
+    isActiveMonthClosed: boolean;
+    activeBudgetMonth:   string;
+  };
+  const { showError: showToastError } = useToast() as {
+    showError: (m: string) => void;
+  };
 
   // ── Filter state ──────────────────────────────────────────
+
   const [filterCat,      setFilterCat]      = useState("");
   const [filterSub,      setFilterSub]      = useState("");
-  const [filterDateFrom, setFilterDateFrom] = useState(null);
-  const [filterDateTo,   setFilterDateTo]   = useState(null);
-  const [filterPrio,     setFilterPrio]     = useState([]);
-  const [filterTags,     setFilterTags]     = useState([]);
-
-  const [collapsed,           setCollapsed]           = useState({});
-  const [deleteModal,         setDeleteModal]         = useState({ isOpen: false, txId: null });
-  const [confirmLinkedModal,  setConfirmLinkedModal]  = useState({ isOpen: false, txId: null });
-  const [returnTarget,        setReturnTarget]        = useState(null);
-  const [grouped,             setGrouped]             = useState(true);
+  const [filterDateFrom, setFilterDateFrom] = useState<Date | null>(null);
+  const [filterDateTo,   setFilterDateTo]   = useState<Date | null>(null);
+  const [filterPrio,     setFilterPrio]     = useState<number[]>([]);
+  const [filterTags,     setFilterTags]     = useState<string[]>([]);
+  const [collapsed,      setCollapsed]      = useState<Record<string, boolean>>({});
+  const [deleteModal,    setDeleteModal]    = useState<DeleteModal>({ isOpen: false, txId: null });
+  const [confirmLinkedModal, setConfirmLinkedModal] = useState<LinkedModal>({ isOpen: false, txId: null });
+  const [returnTarget,   setReturnTarget]   = useState<Transaction | null>(null);
+  const [grouped,        setGrouped]        = useState(true);
 
   useEffect(() => {
     loadTransactions(activeBudgetMonth);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBudgetMonth]);
 
-  // Enrich: resolve tag names + compute effective amount after same-month returns.
-  // Filter: exclude INCOME and TRANSFER — those go to PanelIncomeTransactions.
-  // effectiveAmount uses CASH returns only (voucher returns are separate assets).
-  const enriched = useMemo(() =>
+  // ── Enrich transactions ───────────────────────────────────
+  // - Resolve tag names
+  // - Compute effectiveAmount (deducts same-month cash returns)
+  // - Filter out INCOME and TRANSFER
+
+  const enriched = useMemo<Transaction[]>(() =>
     transactions
       .filter(tx => tx.type !== "INCOME" && tx.type !== "TRANSFER")
       .map(tx => {
@@ -58,7 +113,7 @@ export default function PanelTransactions() {
           ...tx,
           tagNames: (tx.tags || [])
             .map(id => tags.find(t => t.id === id)?.name)
-            .filter(Boolean),
+            .filter(Boolean) as string[],
           effectiveAmount:   calculateEffectiveAmount(tx, activeBudgetMonth),
           sameMonthReturned: cashReturnedThisMonth,
         };
@@ -67,14 +122,14 @@ export default function PanelTransactions() {
   );
 
   const uniqueCats = useMemo(() => {
-    const map = {};
+    const map: Record<string, string> = {};
     enriched.forEach(tx => { if (tx.categoryId) map[tx.categoryId] = tx.categoryName; });
     return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
   }, [enriched]);
 
   const uniqueSubs = useMemo(() => {
     if (!filterCat) return [];
-    const map = {};
+    const map: Record<string, string> = {};
     enriched
       .filter(tx => tx.categoryId === filterCat)
       .forEach(tx => { if (tx.subcategoryId) map[tx.subcategoryId] = tx.subcategoryName; });
@@ -87,10 +142,11 @@ export default function PanelTransactions() {
   }, [enriched, tags]);
 
   // ── Filtering ─────────────────────────────────────────────
-  const filtered = useMemo(() =>
+
+  const filtered = useMemo<Transaction[]>(() =>
     enriched.filter(tx => {
-      if (filterCat      && tx.categoryId    !== filterCat)             return false;
-      if (filterSub      && tx.subcategoryId !== filterSub)             return false;
+      if (filterCat      && tx.categoryId    !== filterCat)            return false;
+      if (filterSub      && tx.subcategoryId !== filterSub)            return false;
       if (filterDateFrom && tx.date < toYMD(filterDateFrom))           return false;
       if (filterDateTo   && tx.date > toYMD(filterDateTo))             return false;
       if (filterPrio.length && !filterPrio.includes(tx.priority || 2)) return false;
@@ -101,8 +157,9 @@ export default function PanelTransactions() {
   );
 
   // ── Grouping by category ──────────────────────────────────
+
   const groups = useMemo(() => {
-    const map = {};
+    const map: Record<string, { name: string; items: Transaction[] }> = {};
     filtered.forEach(tx => {
       const key = tx.categoryId || "uncategorised";
       if (!map[key]) map[key] = { name: tx.categoryName || "Bez kategorii", items: [] };
@@ -112,38 +169,29 @@ export default function PanelTransactions() {
       .sort((a, b) => a[1].name.localeCompare(b[1].name))
       .map(([key, val]) => ({
         key, ...val,
-        sum:         val.items.reduce((acc, t) => acc + (t.netAmount ?? t.amount), 0),
+        sum:         val.items.reduce((acc, t) => acc + (t.effectiveAmount ?? t.netAmount ?? t.amount), 0),
         voucherSum:  val.items.reduce((acc, t) => acc + (t.voucherAmount || 0), 0),
         returnedSum: val.items.reduce((acc, t) => acc + (t.sameMonthReturned || 0), 0),
       }));
   }, [filtered]);
 
-  const totalSum         = filtered.reduce((acc, t) => acc + t.effectiveAmount, 0);
+  const totalSum         = filtered.reduce((acc, t) => acc + (t.effectiveAmount ?? t.amount), 0);
   const totalVoucherSum  = filtered.reduce((acc, t) => acc + (t.voucherAmount || 0), 0);
   const totalReturnedSum = filtered.reduce((acc, t) => acc + (t.sameMonthReturned || 0), 0);
 
   // ── Pagination ────────────────────────────────────────────
-  // Flat list: paginate individual transactions
-  const {
-    page: flatPage,
-    totalPages: flatTotalPages,
-    paginated: paginatedFlat,
-    setPage: setFlatPage,
-  } = usePagination(filtered, PAGE_SIZE);
 
-  // Grouped: paginate the groups themselves (not individual rows)
-  // Each group can have many rows — paging groups keeps the DOM manageable
-  const {
-    page: groupPage,
-    totalPages: groupTotalPages,
-    paginated: paginatedGroups,
-    setPage: setGroupPage,
-  } = usePagination(groups, PAGE_SIZE);
+  const { page: flatPage, totalPages: flatTotalPages, paginated: paginatedFlat, setPage: setFlatPage }
+    = usePagination(filtered, PAGE_SIZE) as { page: number; totalPages: number; paginated: Transaction[]; setPage: (p: number) => void };
 
-  // ── Handlers ──────────────────────────────────────────────
-  function toggleGroup(key) { setCollapsed(p => ({ ...p, [key]: !p[key] })); }
+  const { page: groupPage, totalPages: groupTotalPages, paginated: paginatedGroups, setPage: setGroupPage }
+    = usePagination(groups, PAGE_SIZE) as { page: number; totalPages: number; paginated: typeof groups; setPage: (p: number) => void };
 
-  function togglePrio(p) {
+  // ── Handlers ─────────────────────────────────────────────
+
+  function toggleGroup(key: string) { setCollapsed(p => ({ ...p, [key]: !p[key] })); }
+
+  function togglePrio(p: number) {
     setFilterPrio(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
   }
 
@@ -156,15 +204,11 @@ export default function PanelTransactions() {
   const hasActiveFilters = !!(filterCat || filterSub || filterDateFrom || filterDateTo
     || filterPrio.length || filterTags.length);
 
-  const { showError: showToastError } = useToast();
-
   async function handleConfirmDelete() {
     if (!deleteModal.txId) return;
-    const result = await deleteTransaction(deleteModal.txId);
+    const result = await deleteTransaction(deleteModal.txId) as { _requiresConfirmation?: boolean; txId?: string } | null;
     setDeleteModal({ isOpen: false, txId: null });
-
     if (result?._requiresConfirmation) {
-      // Backend requires confirmation — show second modal
       setConfirmLinkedModal({ isOpen: true, txId: result.txId ?? deleteModal.txId });
     }
   }
@@ -175,25 +219,23 @@ export default function PanelTransactions() {
     setConfirmLinkedModal({ isOpen: false, txId: null });
   }
 
-  function handleUpdated(updated) {
+  function handleUpdated(updated: Transaction) {
     setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
   }
 
-  function handleReturnSaved(updated) {
-    // Update the original transaction in local state
+  function handleReturnSaved(updated: Transaction) {
     setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
   }
 
-  async function handleReturnSavedWithRefresh(updated, sideEffects) {
+  async function handleReturnSavedWithRefresh(updated: Transaction, sideEffects?: { transferCreated?: boolean; transferBudgetMonth?: string }) {
     handleReturnSaved(updated);
-    // If a cross-month TRANSFER was created, reload transactions so
-    // PanelIncomeTransactions shows the new TRANSFER immediately
     if (sideEffects?.transferCreated) {
       await loadTransactions(sideEffects.transferBudgetMonth ?? activeBudgetMonth);
     }
   }
 
   // ── Render ────────────────────────────────────────────────
+
   return (
     <div style={{ padding: "0 0 40px 0" }}>
 
@@ -210,7 +252,7 @@ export default function PanelTransactions() {
             <span style={{ marginLeft: 8, color: "#34d399" }}>zwroty: -{fmt(totalReturnedSum)}</span>
           )}
           {isActiveMonthClosed && (
-            <span style={{ marginLeft: 10, ...s.badge("#ef4444") }}>🔒 zamknięty</span>
+            <span style={{ marginLeft: 10, ...(s as any).badge("#ef4444") }}>🔒 zamknięty</span>
           )}
         </div>
       </div>
@@ -219,104 +261,100 @@ export default function PanelTransactions() {
       <div style={{ background: "#090e1b", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
-          <button onClick={() => setGrouped(g => !g)} style={{ ...s.actionBtn("#475569"), fontSize: 11 }}>
-            {grouped ? "📋 Lista płaska" : "🗂️ Grupuj"}
+          <button onClick={() => setGrouped(g => !g)} style={{ ...(s as any).actionBtn("#475569"), fontSize: 11 }}>
+            {grouped ? "📋 Lista" : "📁 Grupy"}
           </button>
         </div>
-
-        <div style={s.filterRow}>
-          <div style={s.filterBox}>
-            <span style={s.filterLabel}>Kategoria</span>
-            <select style={s.select} value={filterCat} onChange={e => { setFilterCat(e.target.value); setFilterSub(""); }}>
+        <div style={(s as any).filterRow}>
+          {/* Category */}
+          <div style={(s as any).filterBox}>
+            <div style={(s as any).filterLabel}>Kategoria</div>
+            <select style={(s as any).select} value={filterCat} onChange={e => { setFilterCat(e.target.value); setFilterSub(""); }}>
               <option value="">Wszystkie</option>
               {uniqueCats.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </select>
           </div>
-
+          {/* Subcategory */}
           {filterCat && (
-            <div style={s.filterBox}>
-              <span style={s.filterLabel}>Subkategoria</span>
-              <select style={s.select} value={filterSub} onChange={e => setFilterSub(e.target.value)}>
+            <div style={(s as any).filterBox}>
+              <div style={(s as any).filterLabel}>Subkategoria</div>
+              <select style={(s as any).select} value={filterSub} onChange={e => setFilterSub(e.target.value)}>
                 <option value="">Wszystkie</option>
                 {uniqueSubs.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
               </select>
             </div>
           )}
-
-          <div style={s.filterBox}>
-            <span style={s.filterLabel}>Data od</span>
+          {/* Date from */}
+          <div style={(s as any).filterBox}>
+            <div style={(s as any).filterLabel}>Data od</div>
             <AppDatePicker
               value={filterDateFrom}
-              onChange={setFilterDateFrom}
-              maxDate={filterDateTo || undefined}
-              placeholder="od"
-              style={{ fontSize: 13, padding: "7px 10px" }}
+              onChange={(d: Date) => setFilterDateFrom(d)}
+              maxDate={filterDateTo ?? null}
             />
           </div>
-
-          <div style={s.filterBox}>
-            <span style={s.filterLabel}>Data do</span>
+          {/* Date to */}
+          <div style={(s as any).filterBox}>
+            <div style={(s as any).filterLabel}>Data do</div>
             <AppDatePicker
               value={filterDateTo}
-              onChange={setFilterDateTo}
-              minDate={filterDateFrom || undefined}
-              placeholder="do"
-              style={{ fontSize: 13, padding: "7px 10px" }}
+              onChange={(d: Date) => setFilterDateTo(d)}
+              minDate={filterDateFrom ?? undefined}
             />
           </div>
-        </div>
-
-        {/* Priority toggles */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-          <span style={{ ...s.filterLabel, alignSelf: "center", marginBottom: 0, marginRight: 6 }}>Priorytet:</span>
-          {[1, 2, 3, 4].map(p => {
-            const col    = PRIO_COLORS[p];
-            const active = filterPrio.includes(p);
-            return (
-              <button key={p} onClick={() => togglePrio(p)} style={{
-                padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                border:     `1px solid ${active ? col : col + "44"}`,
-                background: active ? col + "22" : "transparent",
-                color:      active ? col        : col + "88",
-              }}>P{p}</button>
-            );
-          })}
-        </div>
-
-        {/* Tag toggles */}
-        {monthTagIds.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ ...s.filterLabel, marginBottom: 0, marginRight: 6 }}>Tagi:</span>
-            {monthTagIds.map(t => {
-              const active = filterTags.includes(t.id);
-              return (
-                <button key={t.id}
-                  onClick={() => setFilterTags(prev => active ? prev.filter(x => x !== t.id) : [...prev, t.id])}
+          {/* Priority */}
+          <div style={(s as any).filterBox}>
+            <div style={(s as any).filterLabel}>Priorytet</div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {[1, 2, 3, 4].map(p => (
+                <button
+                  key={p}
+                  onClick={() => togglePrio(p)}
                   style={{
-                    padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                    border:     `1px solid ${active ? "#3b82f6" : "#1e293b"}`,
-                    background: active ? "#3b82f622" : "transparent",
-                    color:      active ? "#3b82f6"   : "#475569",
+                    width: 28, height: 28, borderRadius: 6, border: "none",
+                    cursor: "pointer", fontWeight: 700, fontSize: 11,
+                    background: filterPrio.includes(p) ? (PRIO_COLORS as Record<number, string>)[p] : "#1e293b",
+                    color:      filterPrio.includes(p) ? "#fff" : "#64748b",
                   }}
                 >
-                  {t.icon || ""} {t.name}
+                  P{p}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        )}
-
-        {hasActiveFilters && (
-          <button onClick={clearFilters} style={{ marginTop: 10, ...s.actionBtn("#64748b"), fontSize: 11 }}>
-            ✕ Wyczyść filtry
-          </button>
-        )}
+          {/* Tags */}
+          {monthTagIds.length > 0 && (
+            <div style={(s as any).filterBox}>
+              <div style={(s as any).filterLabel}>Tagi</div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {monthTagIds.map(tag => (
+                  <button
+                    key={tag.id}
+                    onClick={() => setFilterTags(prev => prev.includes(tag.id) ? prev.filter(x => x !== tag.id) : [...prev, tag.id])}
+                    style={{
+                      padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
+                      background: filterTags.includes(tag.id) ? "#3b82f6" : "#1e293b",
+                      color:      filterTags.includes(tag.id) ? "#fff"    : "#64748b",
+                    }}
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Clear */}
+          {hasActiveFilters && (
+            <button onClick={clearFilters} style={{ ...(s as any).actionBtn("#ef4444"), alignSelf: "flex-end", marginBottom: 4 }}>
+              ✕ Wyczyść
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Empty state */}
       {filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
-          Brak transakcji dla wybranych filtrów.
+          Brak transakcji{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
         </div>
       )}
 
@@ -326,18 +364,18 @@ export default function PanelTransactions() {
           <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {flatPage} z {flatTotalPages}
           </div>
-          <div style={s.card}>
-            <table style={s.table}>
+          <div style={(s as any).card}>
+            <table style={(s as any).table}>
               <thead>
                 <tr>
-                  <th style={s.th}>Data</th>
-                  <th style={s.th}>Kategoria</th>
-                  <th style={s.th}>Opis</th>
-                  <th style={s.th}>Tagi</th>
-                  <th style={s.th}>Prio</th>
-                  <th style={{ ...s.th, textAlign: "right" }}>Kwota</th>
-                  <th style={s.th}>Autor</th>
-                  <th style={s.th}>Akcje</th>
+                  <th style={(s as any).th}>Data</th>
+                  <th style={(s as any).th}>Kategoria</th>
+                  <th style={(s as any).th}>Opis</th>
+                  <th style={(s as any).th}>Tagi</th>
+                  <th style={(s as any).th}>Prio</th>
+                  <th style={{ ...(s as any).th, textAlign: "right" }}>Kwota</th>
+                  <th style={(s as any).th}>Autor</th>
+                  <th style={(s as any).th}>Akcje</th>
                 </tr>
               </thead>
               <tbody>
@@ -365,9 +403,9 @@ export default function PanelTransactions() {
             {groups.length} grup · strona {groupPage} z {groupTotalPages}
           </div>
           {paginatedGroups.map(group => (
-            <div key={group.key} style={s.card}>
-              <div style={s.groupHeader} onClick={() => toggleGroup(group.key)}>
-                <div style={s.groupTitle}>
+            <div key={group.key} style={(s as any).card}>
+              <div style={(s as any).groupHeader} onClick={() => toggleGroup(group.key)}>
+                <div style={(s as any).groupTitle}>
                   <span style={{ color: "#64748b" }}>{collapsed[group.key] ? "▶" : "▼"}</span>
                   {group.name}
                   <span style={{ color: "#475569", fontSize: 12, fontWeight: 400 }}>
@@ -381,22 +419,21 @@ export default function PanelTransactions() {
                   {group.voucherSum > 0 && (
                     <span style={{ fontSize: 12, color: "#a78bfa" }}>voucher: {fmt(group.voucherSum)}</span>
                   )}
-                  <span style={s.groupSum}>{fmt(group.sum)} PLN</span>
+                  <span style={(s as any).groupSum}>{fmt(group.sum)} PLN</span>
                 </div>
               </div>
-
               {!collapsed[group.key] && (
-                <table style={s.table}>
+                <table style={(s as any).table}>
                   <thead>
                     <tr>
-                      <th style={s.th}>Data</th>
-                      <th style={s.th}>Kategoria</th>
-                      <th style={s.th}>Opis</th>
-                      <th style={s.th}>Tagi</th>
-                      <th style={s.th}>Prio</th>
-                      <th style={{ ...s.th, textAlign: "right" }}>Kwota</th>
-                      <th style={s.th}>Autor</th>
-                      <th style={s.th}>Akcje</th>
+                      <th style={(s as any).th}>Data</th>
+                      <th style={(s as any).th}>Kategoria</th>
+                      <th style={(s as any).th}>Opis</th>
+                      <th style={(s as any).th}>Tagi</th>
+                      <th style={(s as any).th}>Prio</th>
+                      <th style={{ ...(s as any).th, textAlign: "right" }}>Kwota</th>
+                      <th style={(s as any).th}>Autor</th>
+                      <th style={(s as any).th}>Akcje</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -438,6 +475,7 @@ export default function PanelTransactions() {
         </div>
       )}
 
+      {/* Modals */}
       <ConfirmModal
         isOpen={deleteModal.isOpen}
         title="Archiwizuj transakcję"
@@ -445,29 +483,19 @@ export default function PanelTransactions() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteModal({ isOpen: false, txId: null })}
       />
-
       <ConfirmModal
         isOpen={confirmLinkedModal.isOpen}
         title="⚠️ Transakcja ma powiązane zwroty"
-        message={
-          "Ta transakcja ma zarejestrowane zwroty. Archiwizacja spowoduje zarchiwizowanie:\n" +
-          "• wszystkich powiązanych transferów TRANSFER\n" +
-          "• wszystkich voucherów utworzonych ze zwrotów tej transakcji\n\n" +
-          "Czy chcesz kontynuować?"
-        }
+        message="Ta transakcja ma powiązane transfery lub vouchery ze zwrotów. Archiwizacja usunie je wszystkie. Kontynuować?"
         onConfirm={handleConfirmedDeleteWithLinked}
         onCancel={() => setConfirmLinkedModal({ isOpen: false, txId: null })}
       />
-
       {returnTarget && (
         <ReturnModal
           tx={returnTarget}
           activeBudgetMonth={activeBudgetMonth}
           onClose={() => setReturnTarget(null)}
-          onSaved={(updated, sideEffects) => {
-            handleReturnSavedWithRefresh(updated, sideEffects);
-            setReturnTarget(null);
-          }}
+          onSaved={handleReturnSavedWithRefresh}
         />
       )}
     </div>

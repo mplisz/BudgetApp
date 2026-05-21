@@ -27,6 +27,13 @@ export const API_ERRORS = {
   "The update of the transaction failed.": "Nie udało się zaktualizować transakcji.",
   "The transaction couldn't be deleted" : "Nie udało się usunąć transakcji",
   "Data was modified by another user. Please refresh and try again.": "Dane zostały zmodyfikowane przez innego użytkownika. Odśwież i spróbuj ponownie.",
+  
+  // ── Transaction form validation ───────────────────────────────
+  "Select a subcategory.":                                          "Wybierz subkategorię.",
+  "Enter an amount greater than 0.":                               "Podaj kwotę większą od zera.",
+  "Missing exchange rate.":                                         "Brak kursu walutowego.",
+  "Select a currency.":                                             "Wybierz walutę.",
+  "Discount cannot be equal to or greater than the gross amount.": "Upust nie może być równy ani większy od kwoty brutto.",
 
   // ── Returns ──────────────────────────────────────────────────
   "Transaction is deleted.":             "Transakcja jest usunięta.",

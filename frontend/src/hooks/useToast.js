@@ -29,8 +29,10 @@ export function useToastState() {
   const showError   = useCallback((msg) => show(msg, "error",   4000), [show]);
   const showSuccess = useCallback((msg) => show(msg, "success", 3000), [show]);
   const showInfo    = useCallback((msg) => show(msg, "info",    3000), [show]);
+  const showWarning = useCallback((msg) => show(msg, "warning", 4000), [show]);
 
-  return { toasts, dismiss, showError, showSuccess, showInfo };
+
+  return { toasts, dismiss, showError, showSuccess, showInfo, showWarning };
 }
 
 export function useToast() {

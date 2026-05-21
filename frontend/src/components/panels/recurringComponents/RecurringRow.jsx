@@ -3,7 +3,8 @@
 // ============================================================
 
 import { useEffect }              from "react";
-import { FREQUENCY_OPTIONS, MONTH_NAMES, getActiveCost } from "../../../hooks/useRecurring";
+import {  MONTH_NAMES, getActiveCost } from "../../../hooks/useRecurring";
+import {FREQUENCY_OPTIONS} from  "../../../data/constants";
 import { useCurrencyConverter }   from "../../../hooks/useCurrencyConverter";
 import { fmt, fmtAmount }            from "../../../utils/helpers";
 

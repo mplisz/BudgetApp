@@ -16,6 +16,7 @@ import { ToastContainer } from "./components/ui/ToastContainer";
 import { MonthStatusButton } from "./components/layout/MonthStatusButton";
 import { PANEL_META, MONTH_SELECTOR_PANELS, MONTH_TITLE_PANELS }        from "./data/constants";
 
+
 const PanelExpenses      = lazy(() => import("./components/panels/PanelExpenses"));
 const PanelTransactions  = lazy(() => import("./components/panels/PanelTransactions"));
 const PanelRecurring     = lazy(() => import("./components/panels/PanelRecurring"));
@@ -28,6 +29,8 @@ const PanelIncomeTransactions = lazy(() => import("./components/panels/PanelInco
 const PanelPlanned = lazy(() => import("./components/panels/PanelPlanned"));
 const PanelAddRecurring = lazy(() => import("./components/panels/PanelAddRecurring"));
 const PanelAddPlanned   = lazy(() => import("./components/panels/PanelAddPlanned"));
+const PanelSummary = lazy(() => import("./components/panels/PanelSummary"));
+
 
 // PANEL_META,MONTH_SELECTOR_PANELS,MONTH_TITLE_PANELS imported from ./data/constants.js
 
@@ -87,6 +90,8 @@ export default function App() {
             {panel === "incometransactions" && <PanelIncomeTransactions />}
             {panel === "recurring"    && <PanelRecurring />}
             {panel === "basebudget"   && <PanelBaseBudget />}
+            {panel === "summary" && <PanelSummary />}
+
             {panel === "settings"     && <PanelSettings />}
             {panel === "admin"        && <PanelAdmin />}
             {panel === "vouchers"     && <PanelVouchers />}

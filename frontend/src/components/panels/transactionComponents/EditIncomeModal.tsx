@@ -1,7 +1,6 @@
 // ============================================================
-// File: src/components/panels/transactionComponents/EditIncomeModal.jsx
+// File: src/components/panels/transactionComponents/EditIncomeModal.tsx
 // Edit modal for INCOME / TRANSFER — uses shared IncomeForm.
-// No priority, no vouchers, no returns.
 // ============================================================
 
 import { useAuth }    from "../../../context/AuthContext";
@@ -10,16 +9,40 @@ import { IncomeForm } from "./IncomeForm";
 import { toYMD }      from "../../ui/AppDatePicker";
 import { translateError } from "../../../data/constants/errorMessages";
 import { s }          from "./txStyles.jsx";
+import type { IncomeFormValues } from "./IncomeForm";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-export function EditIncomeModal({ tx, onClose, onUpdated }) {
-  const { fetchWithAuth } = useAuth();
-  const { showSuccess, showError } = useToast();
+interface Transaction {
+  id:              string;
+  type:            "INCOME" | "TRANSFER";
+  date:            string;
+  budgetMonth:     string;
+  subcategoryId:   string;
+  subcategoryName: string;
+  categoryId:      string;
+  categoryName:    string;
+  amount:          number;
+  originalAmount?: number;
+  description?:    string;
+}
 
-  // Init form values from existing transaction
+interface EditIncomeModalProps {
+  tx:         Transaction;
+  onClose:    () => void;
+  onUpdated:  (updated: Transaction) => void;
+}
+
+export function EditIncomeModal({ tx, onClose, onUpdated }: EditIncomeModalProps) {
+  const { fetchWithAuth }          = useAuth() as { fetchWithAuth: typeof fetch };
+  const { showSuccess, showError } = useToast() as {
+    showSuccess: (m: string) => void;
+    showError:   (m: string) => void;
+  };
+
   const [y, m, d] = tx.date.split("-").map(Number);
-  const initialValues = {
+
+  const initialValues: IncomeFormValues = {
     subcategoryId:   tx.subcategoryId   || "",
     subcategoryName: tx.subcategoryName || "",
     categoryId:      tx.categoryId      || "",
@@ -27,11 +50,13 @@ export function EditIncomeModal({ tx, onClose, onUpdated }) {
     categoryType:    tx.type            || "INCOME",
     amount:          String(tx.originalAmount ?? tx.amount ?? ""),
     date:            new Date(y, m - 1, d),
+    description:     tx.description     || "",
   };
 
-  async function handleSubmit(form) {
+  async function handleSubmit(form: IncomeFormValues) {
     const res = await fetchWithAuth(`${API_URL}/api/transactions/${tx.id}`, {
       method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type:             form.categoryType ?? tx.type,
         subcategoryId:    form.subcategoryId,
@@ -43,38 +68,39 @@ export function EditIncomeModal({ tx, onClose, onUpdated }) {
         originalCurrency: "PLN",
         fxRate:           1,
         date:             toYMD(form.date),
-        description:      tx.description ?? "",
+        description:      form.description || "",
       }),
-    });
+    }) as Response;
+
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(translateError(body.error, "Nie udało się zaktualizować wpływu."));
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(translateError(body.error ?? "", "Nie udało się zaktualizować wpływu."));
     }
-    const updated = await res.json();
+    const updated = await res.json() as Transaction;
     showSuccess("Wpływ zaktualizowany! ✅");
     onUpdated(updated);
     onClose();
   }
 
-  const modalInp = {
-    width: "100%",
-    background: "#0a0f1e",
-    border: "1px solid #1e293b",
+  const modalInp: React.CSSProperties = {
+    width:        "100%",
+    background:   "#0a0f1e",
+    border:       "1px solid #1e293b",
     borderRadius: 8,
-    color: "#e2e8f0",
-    padding: "9px 12px",
-    fontSize: 14,
-    outline: "none",
-    boxSizing: "border-box",
+    color:        "#e2e8f0",
+    padding:      "9px 12px",
+    fontSize:     14,
+    outline:      "none",
+    boxSizing:    "border-box",
   };
 
   return (
-    <div style={s.modal} onClick={onClose}>
+    <div style={(s as any).modal} onClick={onClose}>
       <div
-        style={{ ...s.modalBox, maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}
-        onClick={e => e.stopPropagation()}
+        style={{ ...(s as any).modalBox, maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
       >
-        <div style={s.modalTitle}>✏️ Edytuj wpływ</div>
+        <div style={(s as any).modalTitle}>✏️ Edytuj wpływ</div>
 
         <IncomeForm
           initialValues={initialValues}
@@ -85,8 +111,8 @@ export function EditIncomeModal({ tx, onClose, onUpdated }) {
           showBudgetHint
           budgetMonth={tx.budgetMonth}
           inputStyle={modalInp}
-          btnPrimaryStyle={s.btn("primary")}
-          btnSecondaryStyle={s.btn("secondary")}
+          btnPrimaryStyle={(s as any).btn("primary")}
+          btnSecondaryStyle={(s as any).btn("secondary")}
         />
       </div>
     </div>

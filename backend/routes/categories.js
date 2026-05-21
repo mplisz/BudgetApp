@@ -143,6 +143,7 @@ router.patch('/update/:id', async (req, res) => {
     if (icon !== undefined)       safeUpdates.icon       = icon.substring(0, 10);
     if (isArchived !== undefined) safeUpdates.isArchived = isArchived;
     if (priority !== undefined)   safeUpdates.priority   = priority;
+    if (canBeRecurring !== undefined) safeUpdates.canBeRecurring = canBeRecurring;
 
     safeUpdates.updatedAt     = new Date().toISOString();
     safeUpdates.updatedBy     = req.user.id;

@@ -30,7 +30,7 @@ export function SubcategorySelect({
         icon: cat.icon,
         subs: (cat.sub || []).filter(s => {
           if (s.isArchived) return false;
-          if (filter) return filter(s);
+          if (filter) return filter(s, cat);
           return true;
         }),
         type: cat.type,

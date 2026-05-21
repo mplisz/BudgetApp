@@ -1,25 +1,50 @@
 // ============================================================
-// File: frontend/src/components/panels/CartPanel.jsx
+// File: src/components/panels/CartPanel.tsx
 // Shopping cart — appears dynamically when cart.length > 0.
 // Desktop: second column next to the form.
 // Mobile: sticky bar at the bottom, expandable on tap.
+//
+// Changes vs .jsx:
+//   - Full TypeScript types
+//   - Fix: handleLoadToForm no longer removes item from cart
+//     (was causing merged items to disappear on edit)
 // ============================================================
 
 import { useState, useCallback } from "react";
-import { useAppContext }   from "../../context/AppContext";
-import { useTransactions } from "../../hooks/useTransactions";
-import { useToast }        from "../../hooks/useToast";
-import { fmt }             from "../../utils/helpers";
-import { PRIORITY_COLORS } from "../ui/PriorityPicker";
+import { useAppContext }    from "../../../context/AppContext";
+import { useTransactions }  from "../../../hooks/useTransactions";
+import { useToast }         from "../../../hooks/useToast";
+import { fmt }              from "../../../utils/helpers";
+import { PRIORITY_COLORS }  from "../../ui/PriorityPicker";
+import type { TransactionPayload } from "../../../types/transaction";
 
-const STATUS = { PENDING: "pending", SAVING: "saving", DONE: "done", ERROR: "error" };
+// ── Types ─────────────────────────────────────────────────────
+
+export interface CartItem extends TransactionPayload {
+  _cartId:       string;
+  _allCartIds?:  string[];
+  _mergedCount?: number;
+}
+
+interface CartPanelProps {
+  onLoadToForm:   (item: CartItem) => void;
+  onSaveComplete?: () => void;
+}
+
+type ItemStatus = "pending" | "saving" | "done" | "error";
+
+const STATUS: Record<string, ItemStatus> = {
+  PENDING: "pending",
+  SAVING:  "saving",
+  DONE:    "done",
+  ERROR:   "error",
+};
 
 // ── Cart aggregation ──────────────────────────────────────────
 // Two items are mergeable when they share: subcategoryId, priority,
 // tags (sorted), originalCurrency, fxRate, useVoucher, voucherId.
-// Amounts are summed; descriptions are concatenated.
 
-function aggregationKey(item) {
+function aggregationKey(item: CartItem): string {
   const tags = [...(item.tags || [])].sort().join(",");
   return [
     item.subcategoryId,
@@ -32,12 +57,12 @@ function aggregationKey(item) {
   ].join("|");
 }
 
-export function aggregateCart(items) {
-  const groups = new Map();
+export function aggregateCart(items: CartItem[]): CartItem[] {
+  const groups = new Map<string, CartItem>();
   for (const item of items) {
     const key = aggregationKey(item);
     if (groups.has(key)) {
-      const existing = groups.get(key);
+      const existing = groups.get(key)!;
       existing.amount         = Math.round((existing.amount + item.amount) * 100) / 100;
       existing.originalAmount = Math.round((existing.originalAmount + item.originalAmount) * 100) / 100;
       const existingNet = existing.netAmount ?? (existing.useVoucher ? Math.max(0, existing.amount - (existing.voucherAmount || 0)) : existing.amount);
@@ -63,59 +88,61 @@ export function aggregateCart(items) {
 
 // ── Component ─────────────────────────────────────────────────
 
-/**
- * Props:
- *   onLoadToForm    – fn(item) — loads a cart item back into the form
- *   onSaveComplete  – fn()    — called after all items saved successfully;
- *                               used by PanelExpenses to re-fetch voucher dropdown
- */
-export function CartPanel({ onLoadToForm, onSaveComplete }) {
-  const { cart, setCart }                    = useAppContext();
-  const { addTransaction }                   = useTransactions();
-  const { showSuccess, showError, showInfo } = useToast();
-  const [statuses,   setStatuses]   = useState({});
+export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
+  const { cart, setCart } = useAppContext() as {
+    cart:    CartItem[];
+    setCart: (v: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
+  };
+  const { addTransaction }                   = useTransactions() as { addTransaction: (p: TransactionPayload) => Promise<unknown> };
+  const { showSuccess, showError, showInfo } = useToast() as {
+    showSuccess: (m: string) => void;
+    showError:   (m: string) => void;
+    showInfo:    (m: string) => void;
+  };
+
+  const [statuses,   setStatuses]   = useState<Record<string, ItemStatus>>({});
   const [saving,     setSaving]     = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // ── Derived totals ─────────────────────────────────────────
-  const totalGross = cart.reduce((s, i) => s + (i.amount || 0), 0);
-  const totalNet   = cart.reduce((s, i) =>
+
+  const totalGross   = cart.reduce((s, i) => s + (i.amount || 0), 0);
+  const totalNet     = cart.reduce((s, i) =>
     s + (i.useVoucher && i.voucherAmount > 0
       ? Math.max(0, (i.amount || 0) - i.voucherAmount)
-      : (i.amount || 0)),
-    0);
+      : (i.amount || 0)), 0);
   const totalVoucher = cart.reduce((s, i) => s + (i.useVoucher ? (i.voucherAmount || 0) : 0), 0);
   const hasVouchers  = totalVoucher > 0;
-  const doneCount    = Object.values(statuses).filter(s => s === STATUS.DONE).length;
   const errorCount   = Object.values(statuses).filter(s => s === STATUS.ERROR).length;
 
-  function setStatus(id, status) {
+  function setStatus(id: string, status: ItemStatus) {
     setStatuses(prev => ({ ...prev, [id]: status }));
   }
 
-  function removeFromCart(id) {
+  function removeFromCart(id: string) {
     setCart(prev => prev.filter(i => i._cartId !== id));
     setStatuses(prev => { const n = { ...prev }; delete n[id]; return n; });
   }
 
-  function handleLoadToForm(item) {
-    if (onLoadToForm) onLoadToForm(item);
-    removeFromCart(item._cartId);
+  // Fix: do NOT remove from cart here — PanelExpenses handles
+  // replacement after save/cancel. Removing here caused merged
+  // items (_allCartIds) to disappear before the edit was applied.
+  function handleLoadToForm(item: CartItem) {
+    onLoadToForm(item);
   }
 
-  // ── Save all ─────────────────────────────────────────────────
+  // ── Save all ──────────────────────────────────────────────
 
   const saveAll = useCallback(async () => {
     const pending = aggregateCart(cart.filter(i => statuses[i._cartId] !== STATUS.DONE));
     if (!pending.length) return;
 
     setSaving(true);
+    const savedIds:  string[] = [];
+    const failedIds: string[] = [];
 
-    const savedIds  = [];
-    const failedIds = [];
-
-    // Sequential — not parallel — to avoid race conditions on voucher documents
-    // (concurrent writes to usedInTransactions would cause last-write-wins data loss)
+    // Sequential saves — not parallel — to prevent race conditions
+    // on voucher usedInTransactions (last-write-wins would corrupt data)
     for (const item of pending) {
       setStatus(item._cartId, STATUS.SAVING);
       try {
@@ -138,15 +165,19 @@ export function CartPanel({ onLoadToForm, onSaveComplete }) {
 
     setSaving(false);
 
-    const savedCount = savedIds.length;
-    const failCount  = failedIds.length;
+    // Count transactions saved (not individual cart ids — merged items count as 1)
+    const savedTxCount = pending.filter(item =>
+      (item._allCartIds || [item._cartId]).some(id => savedIds.includes(id))
+    ).length;
+    const failTxCount  = pending.length - savedTxCount;
+    const noun         = savedTxCount === 1 ? "pozycję" : savedTxCount < 5 ? "pozycje" : "pozycji";
 
-    if (failCount === 0) {
-      showSuccess(`Zapisano ${savedCount} ${savedCount === 1 ? "pozycję" : savedCount < 5 ? "pozycje" : "pozycji"}! ✅`);
-    } else if (savedCount === 0) {
+    if (failTxCount === 0) {
+      showSuccess(`Zapisano ${savedTxCount} ${noun}! ✅`);
+    } else if (savedTxCount === 0) {
       showError("Nie udało się zapisać żadnej pozycji. Sprawdź połączenie.");
     } else {
-      showInfo(`Zapisano ${savedCount} z ${pending.length} pozycji. ${failCount} nie udało się.`);
+      showInfo(`Zapisano ${savedTxCount} z ${pending.length} pozycji. ${failTxCount} nie udało się.`);
     }
 
     // Remove saved items after short delay so user sees ✅
@@ -157,11 +188,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }) {
         savedIds.forEach(id => delete n[id]);
         return n;
       });
-
-      // Notify parent to refresh voucher dropdown
-      if (savedCount > 0 && typeof onSaveComplete === "function") {
-        onSaveComplete();
-      }
+      if (savedCount > 0) onSaveComplete?.();
     }, 1200);
 
   }, [cart, statuses, addTransaction, setCart, showSuccess, showError, showInfo, onSaveComplete]);
@@ -169,10 +196,11 @@ export function CartPanel({ onLoadToForm, onSaveComplete }) {
   if (cart.length === 0) return null;
 
   const displayItems = aggregateCart(cart.filter(i => statuses[i._cartId] !== STATUS.DONE));
-  const doneItems    = cart.filter(i => statuses[i._cartId] === STATUS.DONE);
+  // Aggregate done items too — merged items should show as one ✅ row, not N rows
+  const doneItems    = aggregateCart(cart.filter(i => statuses[i._cartId] === STATUS.DONE));
   const allDisplay   = [...displayItems, ...doneItems];
 
-  // ── Shared cart content ───────────────────────────────────
+  // ── Cart content (shared between desktop and mobile) ──────
 
   const cartContent = (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -205,9 +233,9 @@ export function CartPanel({ onLoadToForm, onSaveComplete }) {
 
       {/* Item list */}
       <div style={{ flex: 1, overflowY: "auto", marginBottom: 12 }}>
-        {allDisplay.map((item) => {
-          const status  = statuses[item._cartId] || STATUS.PENDING;
-          const pColor  = PRIORITY_COLORS[item.priority] || "#64748b";
+        {allDisplay.map(item => {
+          const status = statuses[item._cartId] || STATUS.PENDING;
+          const pColor = (PRIORITY_COLORS as Record<number, string>)[item.priority] || "#64748b";
           const itemNet = item.useVoucher && item.voucherAmount > 0
             ? Math.max(0, item.amount - item.voucherAmount)
             : item.amount;
@@ -221,7 +249,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }) {
               opacity:      status === STATUS.DONE ? 0.5 : 1,
               border:       status === STATUS.ERROR ? "1px solid #ef444444" : "1px solid transparent",
             }}>
-              {/* Row 1: name + amount + status */}
+              {/* Row 1: name + amount + status icon */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -247,7 +275,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }) {
                 </div>
               </div>
 
-              {/* Row 2: meta + actions */}
+              {/* Row 2: meta + action buttons */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <span style={{ fontSize: 10, color: pColor, fontWeight: 700, border: `1px solid ${pColor}`, borderRadius: 4, padding: "1px 5px" }}>
@@ -259,18 +287,24 @@ export function CartPanel({ onLoadToForm, onSaveComplete }) {
                       {item.originalAmount} {item.originalCurrency}
                     </span>
                   )}
-                  {item._mergedCount > 1 && (
+                  {(item._mergedCount ?? 1) > 1 && (
                     <span style={{ fontSize: 10, color: "#475569" }}>×{item._mergedCount}</span>
                   )}
                 </div>
                 {status !== STATUS.DONE && status !== STATUS.SAVING && (
                   <div style={{ display: "flex", gap: 4 }}>
-                    <button onClick={() => handleLoadToForm(item)} title="Edytuj"
-                      style={{ background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}>
+                    <button
+                      onClick={() => handleLoadToForm(item)}
+                      title="Edit"
+                      style={{ background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
+                    >
                       ✏️
                     </button>
-                    <button onClick={() => removeFromCart(item._cartId)} title="Usuń z koszyka"
-                      style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}>
+                    <button
+                      onClick={() => removeFromCart(item._cartId)}
+                      title="Remove from cart"
+                      style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
+                    >
                       ✕
                     </button>
                   </div>
@@ -292,52 +326,34 @@ export function CartPanel({ onLoadToForm, onSaveComplete }) {
         <button
           onClick={saveAll}
           disabled={saving || cart.every(i => statuses[i._cartId] === STATUS.DONE)}
-          style={{ display: "block", width: "100%", padding: "12px", borderRadius: 10, border: "none", background: saving ? "#064e3b" : "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: saving ? "not-allowed" : "pointer", marginBottom: 8 }}>
-          {saving
-            ? `⏳ Zapisuję… (${doneCount}/${cart.length})`
-            : `💾 Zapisz wszystko (${cart.length})`}
+          style={{ display: "block", width: "100%", padding: "12px", borderRadius: 10, border: "none", background: saving ? "#064e3b" : "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: saving ? "not-allowed" : "pointer", marginBottom: 8 }}
+        >
+          {saving ? "⏳ Zapisuję…" : "💾 Zapisz wszystko"}
         </button>
         <button
-          onClick={() => { setCart([]); setStatuses({}); }}
+          onClick={() => setCart([])}
           disabled={saving}
-          style={{ display: "block", width: "100%", padding: "8px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#475569", cursor: "pointer", fontSize: 12 }}>
-          🗑️ Wyczyść koszyk
+          style={{ display: "block", width: "100%", padding: "8px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#475569", fontSize: 12, cursor: saving ? "not-allowed" : "pointer" }}
+        >
+          Wyczyść koszyk
         </button>
       </div>
     </div>
   );
 
-  // ── Mobile sticky bar ─────────────────────────────────────
+  // ── Mobile bar ────────────────────────────────────────────
 
   const mobileBar = (
-    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: "#0d1424", borderTop: "1px solid #1e293b" }}>
-      {!mobileOpen && (
-        <div onClick={() => setMobileOpen(true)}
-          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", cursor: "pointer" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 18 }}>🛒</span>
-            <span style={{ color: "#e2e8f0", fontWeight: 700 }}>
-              {cart.length} pozycj{cart.length === 1 ? "a" : cart.length < 5 ? "e" : "i"}
-            </span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ textAlign: "right" }}>
-              {hasVouchers ? (
-                <>
-                  <span style={{ color: "#10b981", fontWeight: 800, fontSize: 16 }}>{fmt(totalNet)}</span>
-                  <span style={{ color: "#a855f7", fontSize: 11, marginLeft: 4 }}>🎫</span>
-                </>
-              ) : (
-                <span style={{ color: "#10b981", fontWeight: 800, fontSize: 16 }}>{fmt(totalGross)}</span>
-              )}
-            </div>
-            <button onClick={e => { e.stopPropagation(); saveAll(); }} disabled={saving}
-              style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-              {saving ? "⏳" : "💾 Zapisz"}
-            </button>
-          </div>
-        </div>
-      )}
+    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, background: "#0d1424", borderTop: "1px solid #1e293b" }}>
+      <button
+        onClick={() => setMobileOpen(v => !v)}
+        style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "none", border: "none", cursor: "pointer" }}
+      >
+        <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14 }}>
+          🛒 Koszyk ({cart.length})
+        </span>
+        <span style={{ color: "#10b981", fontWeight: 800, fontSize: 16 }}>{fmt(totalGross)}</span>
+      </button>
 
       {mobileOpen && (
         <div style={{ padding: "16px", maxHeight: "70vh", overflowY: "auto" }}>

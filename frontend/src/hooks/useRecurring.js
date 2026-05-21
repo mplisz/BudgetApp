@@ -9,19 +9,10 @@ import { useState, useCallback, useMemo } from "react";
 import { useAuth }       from "../context/AuthContext";
 import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
-import { MONTHS }        from "../data/constants";
+import { MONTHS,FREQUENCY_OPTIONS}        from "../data/constants";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-// ── Pure helpers ──────────────────────────────────────────────
-
-export const FREQUENCY_OPTIONS = [
-  { value: "monthly",   label: "Co miesiąc" },
-  { value: "quarterly", label: "Co kwartał"  },
-  { value: "biannual",  label: "Co pół roku" },
-  { value: "yearly",    label: "Co rok"      },
-  { value: "custom",    label: "Niestandardowo (wybierz miesiące)" },
-];
 
 // Short month names from constants (DRY)
 export const MONTH_NAMES = MONTHS.map(m => m.slice(0, 3));
@@ -83,14 +74,61 @@ export function shouldNotify(doc, todayStr) {
   return td >= triggerDay;
 }
 
-// Compute validTo from monthsCount + validFrom
-export function computeValidTo(validFrom, monthsCount) {
-  if (!monthsCount || monthsCount <= 0) return null;
-  const [y, m] = validFrom.split("-").map(Number);
-  const totalMonths = (y * 12 + m - 1) + (monthsCount - 1);
-  const endY = Math.floor(totalMonths / 12);
-  const endM = (totalMonths % 12) + 1;
-  return `${endY}-${String(endM).padStart(2, "0")}`;
+/**
+ * Compute validTo based on validFrom, monthsCount and frequency.
+ * For "custom" frequency, counts N occurrences of activeMonths starting from validFrom.
+ * For periodic frequencies, counts N actual occurrences (every 3/6/12 months).
+ * For "monthly", original simple math is correct.
+ */
+export function computeValidTo(validFrom, monthsCount, frequency = "monthly", activeMonths = []) {
+  if (!monthsCount || monthsCount <= 0 || !validFrom) return null;
+ 
+  const count = parseInt(monthsCount);
+  const [startY, startM] = validFrom.split("-").map(Number);
+ 
+  // monthly — simple math, unchanged
+  if (frequency === "monthly") {
+    const totalMonths = (startY * 12 + startM - 1) + (count - 1);
+    const endY = Math.floor(totalMonths / 12);
+    const endM = (totalMonths % 12) + 1;
+    return `${endY}-${String(endM).padStart(2, "0")}`;
+  }
+ 
+  // For all other frequencies: iterate forward, count occurrences
+  const step = frequency === "quarterly" ? 3 : frequency === "biannual" ? 6 : frequency === "yearly" ? 12 : 1;
+ 
+  if (frequency === "custom") {
+    if (!activeMonths.length) return null;
+    // Iterate month by month, count hits in activeMonths
+    let hits = 0;
+    let y = startY, m = startM;
+    for (let i = 0; i < 600; i++) { // max 50 years
+      if (activeMonths.includes(m)) {
+        hits++;
+        if (hits === count) {
+          return `${y}-${String(m).padStart(2, "0")}`;
+        }
+      }
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+    return null;
+  }
+ 
+  // quarterly / biannual / yearly — count N steps of `step` months
+  let hits = 0;
+  let y = startY, m = startM;
+  // First occurrence is validFrom itself
+  hits = 1;
+  if (hits === count) return `${y}-${String(m).padStart(2, "0")}`;
+  for (let i = 1; i < 600; i++) {
+    const totalM = (startY * 12 + startM - 1) + i * step;
+    y = Math.floor(totalM / 12);
+    m = (totalM % 12) + 1;
+    hits++;
+    if (hits === count) return `${y}-${String(m).padStart(2, "0")}`;
+  }
+  return null;
 }
 
 // ── Hook ─────────────────────────────────────────────────────

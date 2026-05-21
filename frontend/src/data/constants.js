@@ -60,8 +60,10 @@ addplanned: {
   incometransactions:{ icon: "💵", label: "Wpływy",         section: "Analiza" },  
   planned:           {icon: "📅", label: "Planowane", section: "Analiza"},
   recurring:         { icon: "🔄", label: "Cykliczne",      section: "Analiza" },
+  summary: { icon: "📊", label: "Podsumowanie", section: "Analiza" },
   basebudget:        { icon: "🏦", label: "Baza budżetu",   section: "Narzędzia" },
   vouchers:          { icon: "🎫", label: "Vouchery",       section: "Narzędzia" },
+
   settings:          { icon: "⚙️", label: "Ustawienia",     section: "Administracja" },
   admin:             { icon: "🔐", label: "Admin",          section: "Administracja" },
 };
@@ -69,11 +71,11 @@ addplanned: {
 
 export const MONTH_SELECTOR_PANELS = [
   "expenses", "results", "income",  "transactions",
-  "addincome", "incometransactions", "basebudget","recurring","addrecurring","addplanned"
+  "addincome", "incometransactions", "basebudget","recurring","addrecurring","addplanned","summary"
 ];
 export const MONTH_TITLE_PANELS = [
   "expenses", "results", "income",  "transactions",
-  "addincome", "incometransactions", "basebudget", "recurring","addrecurring","addplanned"
+  "addincome", "incometransactions", "basebudget", "recurring","addrecurring","addplanned","summary"
 ];
 
 export const DATE_PILLS = [
@@ -82,4 +84,12 @@ export const DATE_PILLS = [
   { label: "6 msc",  months: 6  },
   { label: "12 msc", months: 12 },
   { label: "Wszystkie", months: null },
+];
+
+export const FREQUENCY_OPTIONS = [
+  { value: "monthly",   label: "Co miesiąc" },
+  { value: "quarterly", label: "Co kwartał"  },
+  { value: "biannual",  label: "Co pół roku" },
+  { value: "yearly",    label: "Co rok"      },
+  { value: "custom",    label: "Niestandardowo (wybierz miesiące)" },
 ];

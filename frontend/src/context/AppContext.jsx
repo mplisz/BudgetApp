@@ -31,6 +31,7 @@ export function AppProvider({ children }) {
 
   // ── Transactions ─────────────────────────────────────────────
   const [transactions, setTransactions] = useState([]);
+  const [cart, setCart] = useState([]);
 
   // ── Vouchers ─────────────────────────────────────────────────
   const [vouchers, setVouchers] = useState([]);
@@ -160,7 +161,7 @@ export function AppProvider({ children }) {
 
     // Transactions
     transactions, setTransactions,
-
+    cart, setCart,
     // Vouchers
     vouchers, setVouchers,
 
