@@ -59,6 +59,7 @@ export function emptyFormValues(): FormValues {
     voucherAmount:   "",
     amountGross:     "",
     discountAmount:  "",
+    qty: 1
   };
 }
 
@@ -84,6 +85,7 @@ export function txToFormValues(tx: Record<string, unknown>): FormValues {
     voucherAmount:   tx.voucherAmount   ? String(tx.voucherAmount) : "",
     amountGross:     "",
     discountAmount:  "",
+    qty: 1
   };
 }
 

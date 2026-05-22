@@ -96,7 +96,7 @@ export default function PanelAnalytics() {
     for (const m of monthsInRange) {
       byMonth[m] = { month: m, income: 0, transfers: 0, expenses: 0, savings: 0, balance: 0 };
     }
-    for (const tx of (transactions as Transaction[])) {
+    for (const tx of (transactions as unknown as Transaction[])) {
       const row = byMonth[tx.budgetMonth];
       if (!row) continue;
       const effective = (tx.type === "EXPENSE" || tx.type === "SAVING")
@@ -119,7 +119,7 @@ export default function PanelAnalytics() {
 
   const categoryTotals = useMemo<CategoryTotal[]>(() => {
     const byCat: Record<string, CategoryTotal & { subcategories: Map<string, { id: string; name: string; total: number }> }> = {};
-    for (const tx of (transactions as Transaction[])) {
+    for (const tx of (transactions as unknown as Transaction[])) {
       if (tx.type !== "EXPENSE") continue;
       const effective = calculateEffectiveAmount(tx, tx.budgetMonth);
       if (!byCat[tx.categoryId]) {
@@ -175,7 +175,7 @@ export default function PanelAnalytics() {
 
   const heatmapRows = useMemo<HeatmapRow[]>(() => {
     const byCat: Record<string, HeatmapRow> = {};
-    for (const tx of (transactions as Transaction[])) {
+    for (const tx of (transactions as unknown as Transaction[])) {
       if (tx.type !== "EXPENSE") continue;
       const effective = calculateEffectiveAmount(tx, tx.budgetMonth);
       if (!byCat[tx.categoryId]) {

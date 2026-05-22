@@ -20,7 +20,7 @@ import { AppDatePicker }      from "../../ui/AppDatePicker";
 
 // ── Types ─────────────────────────────────────────────────────
 
-interface IncomeFormValues {
+export interface IncomeFormValues {
   subcategoryId:   string;
   subcategoryName: string;
   categoryId:      string;

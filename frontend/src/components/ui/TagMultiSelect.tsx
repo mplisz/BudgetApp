@@ -1,37 +1,63 @@
 // ============================================================
-// File: src/components/ui/TagMultiSelect.jsx
-// Multiselector of tags tags
+// File: src/components/ui/TagMultiSelect.tsx
+// Multi-selector of tags.
 // ============================================================
 
 import { useState } from "react";
+import type { ReactElement } from "react";
 import { useAppContext } from "../../context/AppContext";
 
+interface Tag {
+  id:         string;
+  name:       string;
+  icon?:      string;
+  isArchived: boolean;
+}
 
-export function TagMultiSelect({ value = [], onChange, disabled = false, placeholder = "Szukaj tagów…" }) {
-  const { tags } = useAppContext();
+export interface TagMultiSelectProps {
+  /** Array of selected tag IDs. */
+  value:        string[];
+  /** Called with the new array of tag IDs when selection changes. */
+  onChange:     (next: string[]) => void;
+  disabled?:    boolean;
+  placeholder?: string;
+}
+
+export function TagMultiSelect({
+  value = [],
+  onChange,
+  disabled = false,
+  placeholder = "Szukaj tagów…",
+}: TagMultiSelectProps): ReactElement {
+  const { tags } = useAppContext() as { tags: Tag[] };
   const [search, setSearch] = useState("");
   const [open,   setOpen]   = useState(false);
 
   const activeTags   = tags.filter(t => !t.isArchived);
-  const filteredTags = activeTags.filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredTags = activeTags.filter(t =>
+    t.name.toLowerCase().includes(search.toLowerCase()),
+  );
   const selectedTags = activeTags.filter(t => value.includes(t.id));
 
-  function toggle(id) {
+  function toggle(id: string): void {
     if (disabled) return;
-    onChange(value.includes(id) ? value.filter(t => t !== id) : [...value, id]);
+    onChange(value.includes(id)
+      ? value.filter(t => t !== id)
+      : [...value, id],
+    );
   }
 
-  const inp = {
-    width: "100%",
-    background: "#0a0f1e",
-    border: "1px solid #1e293b",
+  const inp: React.CSSProperties = {
+    width:        "100%",
+    background:   "#0a0f1e",
+    border:       "1px solid #1e293b",
     borderRadius: 8,
-    color: "#e2e8f0",
-    padding: "9px 12px",
-    fontSize: 14,
-    outline: "none",
-    opacity: disabled ? 0.5 : 1,
-    cursor: disabled ? "not-allowed" : "text",
+    color:        "#e2e8f0",
+    padding:      "9px 12px",
+    fontSize:     14,
+    outline:      "none",
+    opacity:      disabled ? 0.5 : 1,
+    cursor:       disabled ? "not-allowed" : "text",
   };
 
   return (

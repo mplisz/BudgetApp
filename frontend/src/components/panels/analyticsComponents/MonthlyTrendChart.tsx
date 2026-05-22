@@ -38,7 +38,10 @@ export function MonthlyTrendChart({ data }: MonthlyTrendChartProps) {
         <Tooltip
           contentStyle={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8 }}
           labelStyle={{ color: "#e2e8f0" }}
-          formatter={(v: number) => `${v.toLocaleString("pl-PL")} zł`}
+          formatter={(v: unknown) => {
+            const num = typeof v === "number" ? v : Number(v) || 0;
+            return `${num.toLocaleString("pl-PL")} zł`;
+          }}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         <Line type="monotone" dataKey="income"    name="Wpływy"        stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />

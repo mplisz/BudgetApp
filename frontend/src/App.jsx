@@ -31,6 +31,7 @@ const PanelAddRecurring = lazy(() => import("./components/panels/PanelAddRecurri
 const PanelAddPlanned   = lazy(() => import("./components/panels/PanelAddPlanned"));
 const PanelSummary = lazy(() => import("./components/panels/PanelSummary"));
 const PanelAnalytics = lazy(() => import("./components/panels/PanelAnalytics"));
+const PanelSafetyNet = lazy(() => import("./components/panels/PanelSafetyNet"));
 
 
 // PANEL_META,MONTH_SELECTOR_PANELS,MONTH_TITLE_PANELS imported from ./data/constants.js
@@ -93,6 +94,7 @@ export default function App() {
             {panel === "basebudget"   && <PanelBaseBudget />}
             {panel === "summary" && <PanelSummary />}
             {panel === "analytics" && <PanelAnalytics />}
+            {panel === "safetynet" && <PanelSafetyNet />}
             {panel === "settings"     && <PanelSettings />}
             {panel === "admin"        && <PanelAdmin />}
             {panel === "vouchers"     && <PanelVouchers />}

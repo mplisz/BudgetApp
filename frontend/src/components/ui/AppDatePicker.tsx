@@ -1,23 +1,27 @@
 // ============================================================
-// File: src/components/ui/AppDatePicker.jsx
+// File: src/components/ui/AppDatePicker.tsx
 // Reusable date picker with dark theme.
 // Supports day picker (default) and month picker (monthPicker prop).
 // ============================================================
 
+import type { CSSProperties, ReactElement } from "react";
 import DatePicker, { registerLocale } from "react-datepicker";
-import { pl }                         from "date-fns/locale";
+import { pl } from "date-fns/locale";
 import "react-datepicker/dist/react-datepicker.css";
 
-registerLocale("pl", pl);
+// `pl` import from date-fns/locale is typed as Locale; registerLocale expects a
+// looser shape across react-datepicker versions, so cast through unknown to avoid
+// a version-coupling error if either lib bumps.
+registerLocale("pl", pl as unknown as Parameters<typeof registerLocale>[1]);
 
 // ── Helpers (exported for reuse) ─────────────────────────────
 
-export const todayLocal = () => {
+export const todayLocal = (): Date => {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 };
 
-export const toYMD = (date) => {
+export const toYMD = (date: Date | null | undefined): string => {
   if (!date) return "";
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -25,20 +29,20 @@ export const toYMD = (date) => {
   return `${y}-${m}-${d}`;
 };
 
-export const fromYMD = (ymd) => {
+export const fromYMD = (ymd: string | null | undefined): Date | null => {
   if (!ymd) return null;
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(y, m - 1, d);
 };
 
 // Convert Date → "YYYY-MM"
-export const toYM = (date) => {
+export const toYM = (date: Date | null | undefined): string => {
   if (!date) return "";
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 };
 
 // Convert "YYYY-MM" → Date (first day of month)
-export const fromYM = (ym) => {
+export const fromYM = (ym: string | null | undefined): Date | null => {
   if (!ym) return null;
   const [y, m] = ym.split("-").map(Number);
   return new Date(y, m - 1, 1);
@@ -46,18 +50,28 @@ export const fromYM = (ym) => {
 
 // ── Component ─────────────────────────────────────────────────
 
-/**
- * Props:
- *   value           – Date object
- *   onChange        – fn(date: Date)
- *   maxDate         – Date object (default: todayLocal())
- *   minDate         – Date object (optional)
- *   placeholder     – string
- *   disabled        – boolean
- *   popperPlacement – string (default: "bottom-start")
- *   style           – optional style override for the input
- *   monthPicker     – boolean — show month/year picker only (YYYY-MM)
- */
+export interface AppDatePickerProps {
+  /** Selected value (or null when empty). */
+  value:           Date | null;
+  /** Called with the new Date when the user picks one. */
+  onChange:        (date: Date) => void;
+  /** Latest allowable date. `undefined` → defaults to today (or null when monthPicker). */
+  maxDate?:        Date | null;
+  /** Earliest allowable date. */
+  minDate?:        Date | null;
+  /** Placeholder text. Defaults based on monthPicker mode. */
+  placeholder?:    string;
+  /** Disable interaction. */
+  disabled?:       boolean;
+  /** react-datepicker popperPlacement. Type loosened to string for back-compat
+   *  with existing call sites (e.g. "bottom-start"). */
+  popperPlacement?: string;
+  /** Inline style override for the input. */
+  style?:          CSSProperties;
+  /** Show month/year picker instead of day picker. */
+  monthPicker?:    boolean;
+}
+
 export function AppDatePicker({
   value,
   onChange,
@@ -68,8 +82,8 @@ export function AppDatePicker({
   popperPlacement = "bottom-start",
   style = {},
   monthPicker = false,
-}) {
-  const inputStyle = {
+}: AppDatePickerProps): ReactElement {
+  const inputStyle: CSSProperties = {
     width:        "100%",
     background:   "#0a0f1e",
     border:       "1px solid #1e293b",
@@ -86,23 +100,46 @@ export function AppDatePicker({
 
   const defaultPlaceholder = monthPicker ? "MM.YYYY" : "dd.MM.yyyy";
 
+  // react-datepicker's onChange signature is (date: Date | null, e?) => void,
+  // but every call site in the project expects to receive a Date. We coerce
+  // here so callers can keep their (d: Date) => void contract.
+  const handleChange = (date: Date | null): void => {
+    if (date) onChange(date);
+  };
+
+  // react-datepicker types are picky about null vs undefined. The original
+  // .jsx accepted `null` for "no constraint". We map null → undefined where
+  // the library expects undefined, and keep null where it accepts it.
+  const resolvedMaxDate: Date | undefined =
+    maxDate === null
+      ? undefined
+      : maxDate ?? (monthPicker ? undefined : todayLocal());
+
+  const resolvedMinDate: Date | undefined =
+    minDate === null ? undefined : minDate ?? undefined;
+
+  // popperPlacement is a union of literal strings in react-datepicker types.
+  // We accept any string from callers and pass through unchecked — callers
+  // are responsible for passing valid values (e.g. "bottom-start").
+  const popperPlacementProp = popperPlacement as unknown as undefined;
+
   return (
     <>
       <DatePicker
         selected={value}
-        onChange={onChange}
+        onChange={handleChange}
         locale="pl"
         dateFormat={monthPicker ? "MM.yyyy" : "dd.MM.yyyy"}
         placeholderText={placeholder ?? defaultPlaceholder}
-        maxDate={maxDate !== undefined ? maxDate : (monthPicker ? null : todayLocal())}
-        minDate={minDate}
+        maxDate={resolvedMaxDate}
+        minDate={resolvedMinDate}
         calendarStartDay={1}
         disabled={disabled}
         showMonthYearPicker={monthPicker}
         showFullMonthYearPicker={monthPicker}
         customInput={<input style={inputStyle} readOnly />}
         wrapperClassName="dp-full-width"
-        popperPlacement={popperPlacement}
+        popperPlacement={popperPlacement as never}
       />
 
       <style>{`

@@ -29,7 +29,7 @@ interface PieEntry {
 }
 
 // Recharts passes (data, index, event) to onClick — only data is typed here
-type PieClickHandler = (data: PieEntry) => void;
+type PieClickHandler = (data: unknown) => void
 
 interface CustomTooltipProps {
   active?: boolean;
@@ -90,7 +90,8 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
     }
 
     const handleClick: PieClickHandler = (entry) => {
-      setDrillCategoryId(entry.categoryId);
+      const e = entry as PieEntry;
+      setDrillCategoryId(e.categoryId);
     };
 
     return (

@@ -21,7 +21,7 @@ import { generateSavingsMonths } from "../../../hooks/usePlanned";
 import { AppDatePicker, fromYM, toYM } from "../../ui/AppDatePicker";
 import { theme as s }          from "../../../styles/theme";
 import { fmt }                 from "../../../utils/helpers";
-import type { PlannedPostPayload, PlannedPatchPayload, PlannedDoc } from "../../../hooks/usePlanned";
+import type { PlannedPostPayload, PlannedPatchPayload, PlannedDoc, VirtualSaving } from "../../../hooks/usePlanned";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ interface FormState {
   targetSubcategoryName:string;
   targetCategoryId:     string;
   targetCategoryName:   string;
-  tags:                 string[];
+  tags: string[];
   priority:             1 | 2 | 3 | 4;
   mode:                 "oneoff" | "envelope";
   plannedMonth:         Date | null;
@@ -106,7 +106,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
     targetSubcategoryName: initialValues?.targetSubcategoryName ?? "",
     targetCategoryId:      initialValues?.targetCategoryId     ?? "",
     targetCategoryName:    initialValues?.targetCategoryName   ?? "",
-    tags:                  initialValues?.tags                 ?? [],
+    tags:                  initialValues?.tags                 ?? [] as string[],
     priority:              (initialValues?.priority             ?? 2) as 1 | 2 | 3 | 4,
     mode:                  initialValues?.mode                 ?? "oneoff",
     plannedMonth:          initialValues?.plannedMonth ? fromYM(initialValues.plannedMonth) : fromYM(minPlan),
@@ -195,7 +195,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
     }
 
     // ── ADD: generate virtualSavings for new envelope ──────
-    let virtualSavings = [];
+    let virtualSavings: VirtualSaving[] = []
     if (form.mode === "envelope") {
       const months   = monthsBetween(cur, plannedMonthStr);
       const suggOrig = Math.round(parseFloat(form.totalAmount) / months * 100) / 100;

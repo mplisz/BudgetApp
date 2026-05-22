@@ -98,11 +98,12 @@ export function AnalyticsPieChart({ data }: AnalyticsPieChartProps) {
             outerRadius={110}
             stroke="#0d1424"
             strokeWidth={2}
-            onClick={(payload: { _categoryId?: string }) => {
+            onClick={(data: unknown) => {
+              const payload = data as { _categoryId?: string };
               if (!drillCategory && payload._categoryId) {
                 setDrillCategoryId(payload._categoryId);
               }
-            }}
+              }}
             cursor={!drillCategory ? "pointer" : "default"}
           >
             {chartData.map((_, i) => (
@@ -111,10 +112,13 @@ export function AnalyticsPieChart({ data }: AnalyticsPieChartProps) {
           </Pie>
           <Tooltip
             contentStyle={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8 }}
-            formatter={(v: number) => [
-              `${fmt(v)} zł (${total > 0 ? ((v / total) * 100).toFixed(1) : 0}%)`,
-              "Suma",
-            ]}
+            formatter={(v: unknown) => {
+              const num = typeof v === "number" ? v : Number(v) || 0;
+                  return [
+                `${fmt(num)} zł (${total > 0 ? ((num / total) * 100).toFixed(1) : 0}%)`,
+                "Suma",
+              ];
+            }}
           />
           <Legend
             wrapperStyle={{ fontSize: 11, paddingTop: 8 }}

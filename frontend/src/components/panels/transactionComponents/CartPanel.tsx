@@ -188,7 +188,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
         savedIds.forEach(id => delete n[id]);
         return n;
       });
-      if (savedCount > 0) onSaveComplete?.();
+      if (savedTxCount > 0) onSaveComplete?.();
     }, 1200);
 
   }, [cart, statuses, addTransaction, setCart, showSuccess, showError, showInfo, onSaveComplete]);

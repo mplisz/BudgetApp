@@ -7,7 +7,7 @@
 import { useState, useCallback, useRef, useMemo } from "react";
 import { SubcategorySelect }  from "../../ui/SubcategorySelect";
 import { PriorityPicker }     from "../../ui/PriorityPicker";
-import { TagMultiSelect }     from "../../ui/Tagmultiselect";
+import { TagMultiSelect }     from "../../ui/TagMultiSelect";
 import { CurrencyRateField }  from "../../ui/CurrencyRateField";
 import { useToast }           from "../../../hooks/useToast";
 import { useCurrencyManager } from "../../../hooks/useCurrencyManager";

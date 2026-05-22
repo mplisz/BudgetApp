@@ -53,13 +53,19 @@ export function TopCategoriesBar({ data, topN = 10, onClick }: TopCategoriesBarP
         <Tooltip
           cursor={{ fill: "#1e293b22" }}
           contentStyle={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8 }}
-          formatter={(v: number, _name: string, item: { payload: CategoryTotal }) =>
-            [`${fmt(v)} zł (${item.payload.share.toFixed(1)}%)`, "Suma"]
-          }
+          formatter={(v: unknown, _name: unknown, item: unknown) => {
+            const num = typeof v === "number" ? v : Number(v) || 0;
+            const payload = (item as { payload?: CategoryTotal })?.payload;
+            const share = payload?.share ?? 0;
+            return [`${fmt(num)} zł (${share.toFixed(1)}%)`, "Suma"];
+          }}
         />
         <Bar
           dataKey="total" radius={[0, 6, 6, 0]}
-          onClick={(payload: { payload?: CategoryTotal }) => onClick && payload?.payload && onClick(payload.payload)}
+          onClick={(data: unknown) => {
+            const payload = (data as { payload?: CategoryTotal })?.payload;
+            if (onClick && payload) onClick(payload);
+          }}
           cursor={onClick ? "pointer" : "default"}
         >
           {chartData.map((_, i) => (

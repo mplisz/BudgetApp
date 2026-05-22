@@ -63,8 +63,8 @@ addplanned: {
   summary: { icon: "📊", label: "Podsumowanie", section: "Analiza miesiąca" },
   basebudget:        { icon: "🏦", label: "Baza budżetu",   section: "Narzędzia" },
   vouchers:          { icon: "🎫", label: "Vouchery",       section: "Narzędzia" },
-  analytics: {icon:    "📊",label: "Analiza", section: "Analiza trendów",  
-},
+  analytics: {icon:    "📊",label: "Analiza", section: "Analiza trendów"},
+  safetynet: { icon: "🛡️", label: "Fundusz awaryjny", section: "Analiza trendów" },
   settings:          { icon: "⚙️", label: "Ustawienia",     section: "Administracja" },
   admin:             { icon: "🔐", label: "Admin",          section: "Administracja" },
 };

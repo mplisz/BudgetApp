@@ -156,6 +156,7 @@ interface UsePlannedResult {
   planned:         PlannedDoc[];
   isLoading:       boolean;
   isSaving:        boolean;
+  pendingNotifications: PlannedDoc[];
   loadAll:         () => Promise<void>;
   createPlanned:   (payload: PlannedPostPayload) => Promise<PlannedDoc | null>;
   updatePlanned:   (id: string, patch: PlannedPatchPayload) => Promise<PlannedDoc | null>;

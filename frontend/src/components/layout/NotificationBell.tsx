@@ -46,6 +46,8 @@ interface RecurringBellItemProps {
   doc:       RecurringDoc;
   onConfirm: (doc: RecurringDoc, date: string, amountPLN: number, liveRate: number) => void;
   onDismiss: (doc: RecurringDoc) => void;
+
+
 }
 
 function RecurringBellItem({ doc, onConfirm, onDismiss }: RecurringBellItemProps) {

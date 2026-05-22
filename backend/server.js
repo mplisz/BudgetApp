@@ -29,8 +29,44 @@ const PORT = process.env.PORT || 5000;
 // SECURITY MIDDLEWARE
 // ==========================================
 
-// 1. Helmet
-app.use(helmet());
+// 1. Helmet — with explicit CSP.
+//
+// Why this matters: helmet()'s default CSP allows only `default-src 'self'`,
+// which BLOCKS direct browser fetches to api.nbp.pl and Google OAuth pop-ups.
+// The PanelSafetyNet (and TransactionForm, PlannedForm, RecurringForm)
+// rely on NBP rates being fetched from the browser, so we must whitelist:
+//
+//   - api.nbp.pl                 → currency rate lookups (useCurrencyConverter)
+//   - accounts.google.com        → @react-oauth/google sign-in pop-up
+//   - lh3.googleusercontent.com  → user profile pictures returned by Google
+//
+// connect-src covers fetch/XHR, frame-src covers iframes (OAuth popup),
+// img-src covers <img> tags (profile pics).
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "connect-src": [
+        "'self'",
+        "https://api.nbp.pl",
+        "https://accounts.google.com",
+      ],
+      "frame-src": [
+        "'self'",
+        "https://accounts.google.com",
+      ],
+      "img-src": [
+        "'self'",
+        "data:",
+        "https://lh3.googleusercontent.com",
+      ],
+      // Inline styles are extensively used across the app (style={{...}}).
+      // We keep 'unsafe-inline' for style-src; without it the entire UI breaks.
+      "style-src":  ["'self'", "'unsafe-inline'"],
+      "script-src": ["'self'", "https://accounts.google.com"],
+    },
+  },
+}));
 
 // 2. CORS
 const allowedOrigins = process.env.FRONTEND_URL 
@@ -135,5 +171,5 @@ process.on('uncaughtException', (err) => {
 });
 app.listen(PORT, () => {
   console.log(`🚀 Server is listening on port ${PORT}`);
-  console.log(`🔒 Security active: Helmet, Rate Limiter, Strict CORS`);
+  console.log(`🔒 Security active: Helmet (CSP), Rate Limiter, Strict CORS`);
 });

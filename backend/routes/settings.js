@@ -21,6 +21,38 @@ const CurrencySchema = z.object({
   isBase:     z.boolean().optional().default(false),
 });
 
+// ── Safety Net schemas (must come BEFORE SettingsSchema) ─────
+
+const AssetBucketSchema = z.object({
+  id:               z.string().min(1).max(100),
+  label:            z.string().min(1).max(80),
+  amount:           z.number().min(0),
+  liquidity:        z.enum(["instant", "fast", "slow"]),
+  categoryId:       z.string().optional(),
+  categoryName:     z.string().optional(),
+  // FX origin (optional — only when user entered foreign currency)
+  originalAmount:   z.number().min(0).optional(),
+  originalCurrency: z.string().length(3).optional(),
+  fxRate:           z.number().positive().optional(),
+  fxRateDate:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Soft delete metadata — physical removal only via admin cleanup
+  isArchived:       z.boolean().optional(),
+  archivedAt:       z.string().optional(),
+});
+
+const SafetyNetSchema = z.object({
+  lookbackMonths:     z.number().int().min(1).max(36).optional(),
+  horizonMonths:      z.number().int().min(1).max(36).optional(),
+  excludedIncomeKeys: z.array(z.string().max(200)).max(100).optional(),
+  // 200 max — we never delete physically, so this lets the user have a
+  // long history of archived buckets without hitting the cap.
+  assets:             z.array(AssetBucketSchema).max(200).optional(),
+  selectedLevel:      z.number().int().min(1).max(4).optional(),
+  // Toggle: include upcoming planned expenses (oneoff + envelope) in the
+  // cushion target. Defaults to true on the client; persisted explicitly.
+  includePlannedExpenses: z.boolean().optional(),
+});
+
 const SettingsSchema = z.object({
   thresholds: z.object({
     warningPercent:  z.number().min(1).max(99).optional(),
@@ -39,8 +71,15 @@ const SettingsSchema = z.object({
     .regex(BUDGET_MONTH_REGEX, "Nieprawidłowy format appStartMonth (YYYY-MM)")
     .nullable()
     .optional(),
+  // Persisted state for PanelSafetyNet (Poduszka finansowa)
+  safetyNet:     SafetyNetSchema.optional(),
 }).refine(
-  data => data.thresholds || data.targets || data.currencies || data.appStartMonth !== undefined || data.voucherExpiryWarningDays !== undefined,
+  data => data.thresholds
+       || data.targets
+       || data.currencies
+       || data.appStartMonth !== undefined
+       || data.voucherExpiryWarningDays !== undefined
+       || data.safetyNet !== undefined,
   { message: "No valid fields provided for update." }
 );
 
@@ -66,6 +105,7 @@ const DEFAULT_SETTINGS = {
   currencies:    DEFAULT_CURRENCIES,
   voucherExpiryWarningDays: 14,
   appStartMonth: null,  // null = no restriction
+  safetyNet:     null,  // null = user hasn't configured the panel yet
 };
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -98,9 +138,10 @@ router.get('/', async (req, res) => {
 
     backfillCurrencies(doc);
 
-    // Backfill appStartMonth for old documents
-    if (!("appStartMonth" in doc)) doc.appStartMonth = null;
+    // Backfill missing fields for old documents
+    if (!("appStartMonth"            in doc)) doc.appStartMonth = null;
     if (!("voucherExpiryWarningDays" in doc)) doc.voucherExpiryWarningDays = 14;
+    if (!("safetyNet"                in doc)) doc.safetyNet = null;
 
     res.json(doc);
   } catch (error) {
@@ -158,6 +199,11 @@ router.patch('/', async (req, res) => {
       appStartMonth: parsed.data.appStartMonth !== undefined
         ? parsed.data.appStartMonth
         : (existing.appStartMonth ?? null),
+      // Safety net: shallow merge so partial patches don't wipe other fields.
+      // Frontend currently always sends the full object, but be defensive.
+      safetyNet: parsed.data.safetyNet !== undefined
+        ? { ...(existing.safetyNet || {}), ...parsed.data.safetyNet }
+        : (existing.safetyNet ?? null),
       updatedAt:     new Date().toISOString(),
       updatedBy:     req.user.id,
       updatedByName: req.user.name,
