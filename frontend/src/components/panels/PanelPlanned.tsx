@@ -12,6 +12,8 @@ import { PlannedCard }    from "./plannedComponents/PlannedCard";
 import { PlannedForm }    from "./plannedComponents/PlannedForm";
 import { fmt }            from "../../utils/helpers";
 import { theme as s }     from "../../styles/theme";
+import { RangePicker, type DateRange } from "../ui/RangePicker";
+import { AppDatePicker, fromYM, toYM } from "../ui/AppDatePicker";
 import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload } from "../../hooks/usePlanned";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -26,16 +28,6 @@ function addMonths(monthStr: string, n: number): string {
   const total  = (y * 12 + m - 1) + n;
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
-
-// ── Date pill config ─────────────────────────────────────────
-
-const DATE_PILLS = [
-  { label: "1 msc",      months: 1  },
-  { label: "3 msc",      months: 3  },
-  { label: "6 msc",      months: 6  },
-  { label: "12 msc",     months: 12 },
-  { label: "Wszystkie",  months: 0  },
-];
 
 // ── Archive modal state ───────────────────────────────────────
 
@@ -62,9 +54,9 @@ export default function PanelPlanned() {
 
   const { activeBudgetMonth } = useMonthStatus() as { activeBudgetMonth: string };
 
-  const [activePill,    setActivePill]    = useState(3);
+  const [range,         setRange]         = useState<DateRange>({ months: 3, from: null, to: null });
   const [filterMode,    setFilterMode]    = useState<"all" | "envelope" | "oneoff">("all");
-  const [filterMonth,   setFilterMonth]   = useState("");
+  const [filterMonth,   setFilterMonth]   = useState<Date | null>(null);
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState<PlannedDoc | null>(null);
   const [archiveModal,  setArchiveModal]  = useState<ArchiveModalState>({
@@ -81,16 +73,23 @@ export default function PanelPlanned() {
   // ── Filter ────────────────────────────────────────────────
 
   const filtered = useMemo<PlannedDoc[]>(() => {
-    const maxMonth = activePill ? addMonths(cur, activePill) : null;
+    const filterMonthStr = filterMonth ? toYM(filterMonth) : "";
+    const maxMonth = range.months > 0 && !range.from && !range.to
+      ? addMonths(cur, range.months)
+      : null;
+    const fromMonth = range.from ? toYM(range.from) : null;
+    const toMonth   = range.to   ? toYM(range.to)   : null;
 
     return planned.filter(doc => {
       if (doc.isArchived) return false;
       if (filterMode !== "all" && doc.mode !== filterMode) return false;
-      if (filterMonth && doc.plannedMonth !== filterMonth) return false;
-      if (maxMonth && doc.plannedMonth > maxMonth) return false;
+      if (filterMonthStr && doc.plannedMonth !== filterMonthStr) return false;
+      if (fromMonth && doc.plannedMonth < fromMonth) return false;
+      if (toMonth   && doc.plannedMonth > toMonth)   return false;
+      if (maxMonth && doc.plannedMonth > maxMonth)   return false;
       return true;
     }).sort((a, b) => a.plannedMonth.localeCompare(b.plannedMonth));
-  }, [planned, activePill, filterMode, filterMonth, cur]);
+  }, [planned, range, filterMode, filterMonth, cur]);
 
   // ── Totals ────────────────────────────────────────────────
 
@@ -176,25 +175,11 @@ export default function PanelPlanned() {
       </div>
 
       {/* Filters */}
+      <div style={{ marginBottom: 16 }}>
+        <RangePicker value={range} onChange={setRange} />
+      </div>
+
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
-        {/* Date pills */}
-        {DATE_PILLS.map((pill, i) => (
-          <button
-            key={pill.months}
-            onClick={() => setActivePill(pill.months)}
-            style={{
-              padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer",
-              fontWeight: 700, fontSize: 12,
-              background: activePill === pill.months ? "#10b981" : "#1e293b",
-              color:      activePill === pill.months ? "#fff"     : "#64748b",
-            }}
-          >
-            {pill.label}
-          </button>
-        ))}
-
-        <div style={{ width: 1, height: 20, background: "#1e293b" }} />
-
         {/* Mode filter */}
         {(["all", "envelope", "oneoff"] as const).map(m => (
           <button
@@ -211,18 +196,21 @@ export default function PanelPlanned() {
           </button>
         ))}
 
-        {/* Month filter */}
-        <input
-          type="month"
+        <div style={{ width: 1, height: 20, background: "#1e293b" }} />
+
+        {/* Specific month filter — uses AppDatePicker (clickable anywhere in input) */}
+        <span style={{ fontSize: 11, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          Konkretny miesiąc:
+        </span>
+        <AppDatePicker
           value={filterMonth}
-          onChange={e => setFilterMonth(e.target.value)}
-          style={{ background: "#0a0f1e", border: `1px solid ${filterMonth ? "#3b82f6" : "#1e293b"}`, borderRadius: 8, color: filterMonth ? "#3b82f6" : "#94a3b8", padding: "6px 10px", fontSize: 12, cursor: "pointer", colorScheme: "dark" }}
-          title="Filtruj po miesiącu zakupu"
+          onChange={(d: Date) => setFilterMonth(d)}
+          monthPicker
         />
         {filterMonth && (
-          <button onClick={() => setFilterMonth("")}
+          <button onClick={() => setFilterMonth(null)}
             style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "transparent", color: "#64748b", fontSize: 12, cursor: "pointer" }}>
-            ✕ {filterMonth}
+            ✕
           </button>
         )}
       </div>

@@ -642,4 +642,47 @@ router.post("/:id/returns", async (req, res) => {
   }
 });
 
+router.get("/range", async (req, res) => {
+  const { from, to } = req.query;
+
+  if (!from || !to || !BUDGET_MONTH_REGEX.test(from) || !BUDGET_MONTH_REGEX.test(to)) {
+    return res.status(400).json({ error: "Invalid range. Use from=YYYY-MM&to=YYYY-MM." });
+  }
+
+  if (from > to) {
+    return res.status(400).json({ error: "from must be <= to." });
+  }
+
+  // Sanity: prevent runaway queries
+  const [fy, fm] = from.split("-").map(Number);
+  const [ty, tm] = to.split("-").map(Number);
+  const monthsCount = (ty - fy) * 12 + (tm - fm) + 1;
+  if (monthsCount > 24) {
+    return res.status(400).json({ error: "Range too wide. Maximum is 24 months." });
+  }
+
+  try {
+    const { resources } = await transactionsContainer.items
+      .query({
+        query: `SELECT * FROM c
+                WHERE c.userId = @userId
+                  AND c.budgetMonth >= @from
+                  AND c.budgetMonth <= @to
+                  AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))
+                ORDER BY c.date DESC`,
+        parameters: [
+          { name: "@userId", value: req.user.familyId },
+          { name: "@from",   value: from              },
+          { name: "@to",     value: to                },
+        ],
+      })
+      .fetchAll();
+
+    console.log(`[TX RANGE] ${from}..${to}: ${resources.length} transactions for ${req.user.familyId}`);
+    res.json(resources);
+  } catch (err) {
+    console.error("[TX RANGE] Error:", err);
+    res.status(500).json({ error: "Failed to fetch transactions range." });
+  }
+});
 module.exports = router;
