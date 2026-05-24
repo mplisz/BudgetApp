@@ -12,7 +12,8 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
   return (
     <div style={{
       display:             "grid",
-      gridTemplateColumns: isExpense ? "1fr 140px 100px 40px" : "1fr 40px",
+      // EXPENSE: name | priority | recurring | critical | archive
+      gridTemplateColumns: isExpense ? "1fr 140px 100px 100px 40px" : "1fr 40px",
       gap:                 8,
       alignItems:          "center",
       padding:             "8px 0",
@@ -65,6 +66,36 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
         </button>
       )}
 
+      {/* isCritical toggle — only EXPENSE.
+          When ON, expenses in this subcategory bypass the priority filter
+          in PanelSafetyNet and are treated as "non-negotiable" (counted into
+          Survival Mode regardless of priority).
+          Use for: school fees, medication, kids' essentials. */}
+      {isExpense && (
+        <button
+          onClick={() => !isDisabled && onUpdate(subData.id, subName, parentId, { isCritical: !subData.isCritical })}
+          disabled={isDisabled}
+          title={subData.isCritical
+            ? "Wyłącz jako 'nienaruszalne' (przestanie wpadać do Survival Mode)"
+            : "Oznacz jako 'nienaruszalne' (czesne, leki, opłata za przedszkole). Te wydatki będą wliczane do każdego trybu w poduszce finansowej, niezależnie od priorytetu."
+          }
+          style={{
+            background:    subData.isCritical ? "#a855f722" : "transparent",
+            border:        `1px solid ${subData.isCritical ? "#a855f766" : "#1e293b"}`,
+            color:         subData.isCritical ? "#a855f7" : "#334155",
+            borderRadius:  6,
+            padding:       "4px 8px",
+            cursor:        isDisabled ? "not-allowed" : "pointer",
+            fontSize:      11,
+            fontWeight:    700,
+            whiteSpace:    "nowrap",
+            opacity:       isDisabled ? 0.4 : 1,
+          }}
+        >
+          🔒 {subData.isCritical ? "Krytyczne" : "—"}
+        </button>
+      )}
+
       {/* Archive/Restore */}
       <button
         onClick={() => {
@@ -74,15 +105,20 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
           }
           onUpdate(subData.id, subName, parentId, { isArchived: !subData.isArchived });
         }}
+        disabled={isDisabled && parentIsArchived && subData.isArchived}
+        title={subData.isArchived ? "Przywróć" : "Archiwizuj"}
         style={{
-          background: "none",
-          border:     "none",
-          color:      subData.isArchived ? "#10b981" : "#475569",
-          cursor:     (parentIsArchived && subData.isArchived) ? "not-allowed" : "pointer",
-          fontSize:   16,
-          opacity:    (parentIsArchived && subData.isArchived) ? 0.3 : 1,
-        }}>
-        {subData.isArchived ? "🔄" : "🗑️"}
+          background:    "transparent",
+          border:        "1px solid #1e293b",
+          color:         "#64748b",
+          borderRadius:  6,
+          padding:       "4px 8px",
+          cursor:        "pointer",
+          fontSize:      12,
+          opacity:       (parentIsArchived && subData.isArchived) ? 0.3 : 1,
+        }}
+      >
+        {subData.isArchived ? "↺" : "🗄"}
       </button>
     </div>
   );

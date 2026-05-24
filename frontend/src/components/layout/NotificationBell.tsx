@@ -8,12 +8,14 @@ import { createPortal }          from "react-dom";
 import { useRecurring, getActiveCost } from "../../hooks/useRecurring";
 import { usePlanned, sumPaid, computeSuggestion, isReadyToPurchase } from "../../hooks/usePlanned";
 import { useCurrencyConverter }  from "../../hooks/useCurrencyConverter";
-import { useAppContext }         from "../../context/AppContext";
+
 import { ConfirmModal }          from "../ui/ConfirmModal";
 import { PaymentConfirmModal }   from "../ui/PaymentConfirmModal";
 import { fmt, fmtAmount }        from "../../utils/helpers";
 import type { PlannedDoc }       from "../../hooks/usePlanned";
 
+import { useNavigate }   from "react-router-dom";
+import { PANEL_PATHS }   from "../../data/routes";
 // ── Types ─────────────────────────────────────────────────────
 
 interface RecurringDoc {
@@ -297,7 +299,7 @@ export function NotificationBell() {
     purchasePlanned,
   } = usePlanned();
 
-  const { setPanel } = useAppContext() as { setPanel: (p: string) => void };
+  const navigate = useNavigate();
 
   const [open,        setOpen]        = useState(false);
   const [purchaseDoc, setPurchaseDoc] = useState<PlannedDoc | null>(null);
@@ -412,7 +414,7 @@ export function NotificationBell() {
 
             <div style={{ textAlign: "center", paddingTop: 6 }}>
               <button
-                onClick={() => { setOpen(false); setPanel("recurring"); }}
+                onClick={() => { setOpen(false); navigate(PANEL_PATHS.recurring); }}
                 style={{ background: "none", border: "none", color: "#475569", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
               >
                 Zarządzaj cyklicznymi →

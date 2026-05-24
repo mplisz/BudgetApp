@@ -10,7 +10,9 @@
 // ============================================================
 
 import { useState, useEffect, useMemo } from "react";
-import { useAppContext } from "../../context/AppContext";
+import { useAppContext }              from "../../context/AppContext";
+import { useNavigate }                from "react-router-dom";
+import { PANEL_PATHS }                from "../../data/routes";
 import { useTransactionsRange } from "../../hooks/useTransactionsRange";
 import { calculateEffectiveAmount } from "../../utils/returnUtils";
 import { RangePicker, resolveRange, type DateRange } from "../ui/RangePicker";
@@ -65,12 +67,8 @@ function enumerateMonths(fromYM: string, toYM: string): string[] {
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelAnalytics() {
-  const { categories, setMonth, setYear, setPanel } = useAppContext() as {
-    categories: Category[];
-    setMonth:   (m: number) => void;
-    setYear:    (y: number) => void;
-    setPanel:   (p: string) => void;
-  };
+  const { categories } = useAppContext() as { categories: Category[] };
+  const navigate       = useNavigate();
 
   const { transactions, isLoading, loadRange, currentRange } = useTransactionsRange();
 
@@ -201,10 +199,7 @@ export default function PanelAnalytics() {
   // ── Navigation handlers ───────────────────────────────────
 
   function navigateToMonth(monthStr: string) {
-    const [y, m] = monthStr.split("-").map(Number);
-    setYear(y);
-    setMonth(m - 1);
-    setPanel("summary");
+    navigate(`${PANEL_PATHS.summary}?m=${monthStr}`);
   }
 
   // ── Range header summary ──────────────────────────────────

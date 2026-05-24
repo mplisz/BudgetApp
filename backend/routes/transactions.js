@@ -1,17 +1,19 @@
 // ============================================================
 // File: backend/routes/transactions.js
 // GET    /api/transactions?budgetMonth=YYYY-MM
+// GET    /api/transactions/range?from=YYYY-MM&to=YYYY-MM
 // POST   /api/transactions
 // PATCH  /api/transactions/:id
-// DELETE /api/transactions/:id        (soft archive)
+// DELETE /api/transactions/:id              (soft archive)
 // POST   /api/transactions/:id/returns
 //
-// Changes vs previous version:
-//   - isDeleted → isArchived (unified soft-delete convention)
-//   - readItemWithEtag + If-Match for PATCH and DELETE
-//   - Voucher sync BEFORE transaction upsert (safer failure mode)
-//   - All error messages in English (translateError on frontend)
-//   - patchFields strips undefined to avoid overwriting existing fields
+// Changes from previous version:
+//   - All voucher operations now use compensation (saga pattern):
+//     if a downstream operation fails, we revert the voucher mutation.
+//   - All money rounding goes through roundMoney() helper.
+//   - DELETE archives transaction first, then attempts side-effects.
+//   - POST /returns isolates each side-effect (transfer, voucher)
+//     so a failure in one doesn't leave inconsistent state in another.
 // ============================================================
 
 const express = require("express");
@@ -20,7 +22,9 @@ const { z }   = require("zod");
 const { transactionsContainer, vouchersContainer, monthsContainer } = require("../cosmos");
 const { requireAuth }                                                 = require("../middleware/auth");
 const {
-  generateId, readItem, readItemWithEtag, syncVoucherUsage,
+  generateId, readItem, readItemWithEtag,
+  syncVoucherUsage, revertVoucherSync,
+  roundMoney, sumMoney,
   IdParamSchema, BUDGET_MONTH_REGEX,
   currentServerMonth, prevServerMonth,
 } = require('../utils/helpers');
@@ -109,7 +113,6 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ error: "budgetMonth parameter is required (format: YYYY-MM)." });
     }
 
-    // isArchived replaces isDeleted — filter out soft-archived transactions
     let query = `SELECT * FROM c
                  WHERE c.userId      = @userId
                    AND c.budgetMonth = @budgetMonth
@@ -120,7 +123,6 @@ router.get("/", async (req, res) => {
       { name: "@budgetMonth", value: budgetMonth },
     ];
 
-    // Optional type filter: ?type=EXPENSE or ?type=EXPENSE,SAVING
     if (type) {
       const types = type.split(",").map(t => t.trim()).filter(Boolean);
       if (types.length === 1) {
@@ -144,503 +146,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ── POST ──────────────────────────────────────────────────────
-
-router.post("/", async (req, res) => {
-  const parsed = TransactionPostSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-
-  try {
-    const data     = parsed.data;
-    const familyId = req.user.familyId;
-
-    const newId = `tx_${familyId}_${data.date.replace(/-/g,"")}_${generateId(data.subcategoryName)}_${Date.now()}`;
-
-    const newTx = {
-      id:           newId,
-      userId:       familyId,
-      ...data,
-      netAmount:    data.useVoucher
-        ? Math.max(0, data.amount - (data.voucherAmount || 0))
-        : data.amount,
-      returns:      [],
-      author:       req.user.name || req.user.email,
-      authorId:     req.user.id,
-      // Unified soft-archive convention (isArchived replaces isDeleted)
-      isArchived:   false,
-      archivedAt:   null,
-      archivedBy:   null,
-      archivedById: null,
-      createdAt:    new Date().toISOString(),
-    };
-
-    const { resource } = await transactionsContainer.items.create(newTx);
-
-    // ── Voucher sync BEFORE we consider the TX final ──────────
-    if (data.useVoucher && data.voucherId && data.voucherAmount > 0) {
-      const voucherResult = await syncVoucherUsage(vouchersContainer, data.voucherId, familyId, {
-        type:          "add",
-        transactionId: resource.id,
-        amount:        data.voucherAmount,
-        usedAt:        data.date,
-        description:   data.description || "",
-      });
-      if (!voucherResult) {
-        // Rollback — archive the transaction we just created
-        await transactionsContainer.items.upsert({
-          ...resource,
-          isArchived: true,
-          archivedAt: new Date().toISOString(),
-        });
-        return res.status(400).json({ error: "Voucher not found or is archived." });
-      }
-    }
-
-    console.log(`[TX POST] Created: ${resource.id}`);
-    res.status(201).json(resource);
-  } catch (err) {
-    console.error("[TX POST]", err);
-    res.status(500).json({ error: "Failed to create transaction." });
-  }
-});
-
-// ── PATCH ─────────────────────────────────────────────────────
-
-router.patch("/:id", async (req, res) => {
-  const idParsed = IdParamSchema.safeParse(req.params.id);
-  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
-
-  const parsed = TransactionPatchSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-
-  try {
-    const id       = idParsed.data;
-    const familyId = req.user.familyId;
-
-    const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
-    if (!existing)            return res.status(404).json({ error: "Transaction not found." });
-    if (existing.isArchived)  return res.status(409).json({ error: "Cannot edit an archived transaction." });
-
-    // ── Block edit on recurring transactions ──────────────────
-    // Recurring logic is handled separately — direct edit is disabled.
-    if (existing.isRecurring) {
-      return res.status(409).json({ error: "Cannot edit a recurring transaction directly." });
-    }
-
-    const hasReturns = (existing.returns || []).length > 0;
-    const { forceArchiveLinked } = req.body;
-
-    // ── If transaction has returns, require explicit confirmation ─
-    // Frontend must send forceArchiveLinked: true after user confirms.
-    if (hasReturns && !forceArchiveLinked) {
-      return res.status(409).json({
-        error: "Transaction has returns. Editing will archive all linked transfers and vouchers.",
-        requiresConfirmation: true,
-        hasReturns: true,
-      });
-    }
-
-    // ── If confirmed — archive linked TRANSFERs and return vouchers ──
-    if (hasReturns && forceArchiveLinked) {
-      // Find and archive all cross-month TRANSFER transactions linked to this tx
-      const { resources: linkedTransfers } = await transactionsContainer.items
-        .query({
-          query: "SELECT * FROM c WHERE c.userId = @userId AND c.sourceTransactionId = @txId AND c.type = 'TRANSFER' AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))",
-          parameters: [
-            { name: "@userId", value: familyId },
-            { name: "@txId",   value: id        },
-          ],
-        })
-        .fetchAll();
-
-      for (const transfer of linkedTransfers) {
-        await transactionsContainer.items.upsert({
-          ...transfer,
-          isArchived:   true,
-          archivedAt:   new Date().toISOString(),
-          archivedBy:   req.user.name || req.user.email,
-          archivedById: req.user.id,
-        });
-      }
-
-      // Find and archive vouchers created from returns
-      const { resources: linkedVouchers } = await vouchersContainer.items
-        .query({
-          query: "SELECT * FROM c WHERE c.userId = @userId AND c.sourceTransactionId = @txId AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))",
-          parameters: [
-            { name: "@userId", value: familyId },
-            { name: "@txId",   value: id        },
-          ],
-        })
-        .fetchAll();
-
-      for (const voucher of linkedVouchers) {
-        await vouchersContainer.items.upsert({
-          ...voucher,
-          isArchived:   true,
-          archivedAt:   new Date().toISOString(),
-          archivedBy:   req.user.name || req.user.email,
-          archivedById: req.user.id,
-        });
-      }
-
-      console.log(`[TX PATCH] Archived ${linkedTransfers.length} transfers and ${linkedVouchers.length} vouchers linked to ${id}`);
-
-      // Clear returns[] — linked items are archived, history is no longer valid
-      existing.returns = [];
-    }
-
-    // Strip undefined to avoid overwriting existing fields with undefined
-    const patchFields = Object.fromEntries(
-      Object.entries(parsed.data).filter(([k, v]) => v !== undefined && k !== "forceArchiveLinked")
-    );
-
-    const updated = {
-      ...existing,
-      ...patchFields,
-      updatedAt:   new Date().toISOString(),
-      updatedBy:   req.user.name || req.user.email,
-      updatedById: req.user.id,
-    };
-
-    // Recompute netAmount
-    const useVoucher    = patchFields.useVoucher    ?? existing.useVoucher;
-    const voucherAmount = patchFields.voucherAmount ?? existing.voucherAmount ?? 0;
-    const amount        = patchFields.amount        ?? existing.amount;
-    updated.netAmount   = useVoucher ? Math.max(0, amount - voucherAmount) : amount;
-
-    const oldVoucherId  = existing.voucherId;
-    const newVoucherId  = updated.voucherId;
-    const newUseVoucher = updated.useVoucher;
-    const newVoucherAmt = updated.voucherAmount || 0;
-
-    // ── STEP 1: Sync voucher BEFORE updating transaction ──────
-    if (oldVoucherId && oldVoucherId !== newVoucherId) {
-      await syncVoucherUsage(vouchersContainer, oldVoucherId, familyId, {
-        type: "remove", transactionId: id,
-      });
-    }
-
-    if (newUseVoucher && newVoucherId && newVoucherAmt > 0) {
-      const opType = (oldVoucherId === newVoucherId) ? "update" : "add";
-      await syncVoucherUsage(vouchersContainer, newVoucherId, familyId, {
-        type:          opType,
-        transactionId: id,
-        amount:        newVoucherAmt,
-        usedAt:        updated.date      ?? existing.date,
-        description:   updated.description ?? existing.description ?? "",
-      });
-    } else if (!newUseVoucher && oldVoucherId) {
-      await syncVoucherUsage(vouchersContainer, oldVoucherId, familyId, {
-        type: "remove", transactionId: id,
-      });
-    }
-
-    // ── STEP 2: Update transaction with optimistic lock ───────
-    const { resource } = await transactionsContainer.items.upsert(updated, {
-      accessCondition: { type: "IfMatch", condition: etag },
-    });
-
-    console.log(`[TX PATCH] Updated: ${resource.id}`);
-    res.json(resource);
-  } catch (err) {
-    if (err.code === 412) {
-      return res.status(409).json({
-        error: "Data was modified by another user. Please refresh and try again.",
-      });
-    }
-    console.error("[TX PATCH]", err);
-    res.status(500).json({ error: "Failed to update transaction." });
-  }
-});
-
-// ── DELETE (soft archive) ─────────────────────────────────────
-
-router.delete("/:id", async (req, res) => {
-  const idParsed = IdParamSchema.safeParse(req.params.id);
-  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
-
-  try {
-    const id       = idParsed.data;
-    const familyId = req.user.familyId;
-
-    const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
-    if (!existing)           return res.status(404).json({ error: "Transaction not found." });
-    if (existing.isArchived) return res.status(409).json({ error: "Transaction is already archived." });
-
-    const hasReturns = (existing.returns || []).length > 0;
-    const { forceArchiveLinked } = req.body || {};
-
-    // ── If transaction has returns, require explicit confirmation ─
-    if (hasReturns && !forceArchiveLinked) {
-      return res.status(409).json({
-        error: "Transaction has returns. Archiving will also archive all linked transfers and vouchers.",
-        requiresConfirmation: true,
-        hasReturns: true,
-      });
-    }
-
-    // ── STEP 1: Sync voucher BEFORE archiving transaction ─────
-    if (existing.useVoucher && existing.voucherId) {
-      await syncVoucherUsage(vouchersContainer, existing.voucherId, familyId, {
-        type: "remove", transactionId: id,
-      });
-    }
-
-    // ── STEP 2: Archive linked TRANSFERs and return vouchers ──
-    if (hasReturns && forceArchiveLinked) {
-      const { resources: linkedTransfers } = await transactionsContainer.items
-        .query({
-          query: "SELECT * FROM c WHERE c.userId = @userId AND c.sourceTransactionId = @txId AND c.type = 'TRANSFER' AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))",
-          parameters: [
-            { name: "@userId", value: familyId },
-            { name: "@txId",   value: id        },
-          ],
-        })
-        .fetchAll();
-
-      for (const transfer of linkedTransfers) {
-        await transactionsContainer.items.upsert({
-          ...transfer,
-          isArchived:   true,
-          archivedAt:   new Date().toISOString(),
-          archivedBy:   req.user.name || req.user.email,
-          archivedById: req.user.id,
-        });
-      }
-
-      const { resources: linkedVouchers } = await vouchersContainer.items
-        .query({
-          query: "SELECT * FROM c WHERE c.userId = @userId AND c.sourceTransactionId = @txId AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))",
-          parameters: [
-            { name: "@userId", value: familyId },
-            { name: "@txId",   value: id        },
-          ],
-        })
-        .fetchAll();
-
-      for (const voucher of linkedVouchers) {
-        await vouchersContainer.items.upsert({
-          ...voucher,
-          isArchived:   true,
-          archivedAt:   new Date().toISOString(),
-          archivedBy:   req.user.name || req.user.email,
-          archivedById: req.user.id,
-        });
-      }
-
-      console.log(`[TX DELETE] Archived ${linkedTransfers.length} transfers and ${linkedVouchers.length} vouchers linked to ${id}`);
-    }
-
-    // ── STEP 2: Soft-archive transaction ──────────────────────
-    const archived = {
-      ...existing,
-      isArchived:   true,
-      archivedAt:   new Date().toISOString(),
-      archivedBy:   req.user.name || req.user.email,
-      archivedById: req.user.id,
-    };
-
-    const { resource } = await transactionsContainer.items.upsert(archived, {
-      accessCondition: { type: "IfMatch", condition: etag },
-    });
-
-    console.log(`[TX DELETE] Archived: ${resource.id}`);
-    res.json({ success: true, id: resource.id });
-  } catch (err) {
-    if (err.code === 412) {
-      return res.status(409).json({
-        error: "Data was modified by another user. Please refresh and try again.",
-      });
-    }
-    console.error("[TX DELETE]", err);
-    res.status(500).json({ error: "Failed to archive transaction." });
-  }
-});
-
-// ── POST /returns ─────────────────────────────────────────────
-
-router.post("/:id/returns", async (req, res) => {
-  const idParsed = IdParamSchema.safeParse(req.params.id);
-  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
-
-  const parsed = ReturnSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-
-  try {
-    const id       = idParsed.data;
-    const familyId = req.user.familyId;
-    const data     = parsed.data;
-
-    const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
-    if (!existing)           return res.status(404).json({ error: "Transaction not found." });
-    if (existing.isArchived) return res.status(409).json({ error: "Transaction is archived." });
-
-    // ── Validate moneyReturnedInMonth window ──────────────────
-    const serverNow  = currentServerMonth();
-    const serverPrev = prevServerMonth();
-
-    if (data.moneyReturnedInMonth < serverPrev) {
-      return res.status(400).json({ error: "Return month is outside the allowed window." });
-    }
-    if (data.moneyReturnedInMonth < existing.budgetMonth) {
-      return res.status(400).json({ error: "Return month cannot be before purchase month." });
-    }
-
-    // ── Validate amounts ──────────────────────────────────────
-    const totalReturnedSoFar = Math.round(
-      (existing.returns || []).reduce((s, r) => s + r.amount, 0) * 100
-    ) / 100;
-    const newTotal = Math.round((totalReturnedSoFar + data.amount) * 100) / 100;
-
-    if (newTotal > existing.amount + 0.01) {
-      return res.status(400).json({ error: "Return amount exceeds transaction amount." });
-    }
-    if (Math.abs(data.cashAmount + data.voucherAmount - data.amount) > 0.01) {
-      return res.status(400).json({ error: "cashAmount + voucherAmount must equal amount." });
-    }
-
-    // ── Check target month not closed ─────────────────────────
-    const monthDoc = await readItem(
-      monthsContainer,
-      `month_${familyId}_${data.moneyReturnedInMonth}`,
-      familyId
-    );
-    if (monthDoc?.isClosed) {
-      return res.status(403).json({ error: "Target month is closed." });
-    }
-
-    // ── Pre-compute TRANSFER target month and validate it ─────
-    // CRITICAL: must happen BEFORE upsert to avoid partial state.
-    // If transferBudgetMonth is closed, we reject here — not after saving.
-    const isCrossMonth = data.moneyReturnedInMonth !== existing.budgetMonth;
-    let transferBudgetMonth = null;
-
-    if (isCrossMonth && data.cashAmount > 0) {
-      transferBudgetMonth = data.moneyReturnedInMonth < serverNow
-        ? serverNow
-        : data.moneyReturnedInMonth;
-
-      // Validate transfer target month is not closed BEFORE saving anything
-      if (transferBudgetMonth !== data.moneyReturnedInMonth) {
-        // Only re-check if different from already-checked moneyReturnedInMonth
-        const transferMonthDoc = await readItem(
-          monthsContainer,
-          `month_${familyId}_${transferBudgetMonth}`,
-          familyId
-        );
-        if (transferMonthDoc?.isClosed) {
-          return res.status(403).json({ error: "Target month is closed." });
-        }
-      }
-    }
-
-    // ── Build return entry ────────────────────────────────────
-    const returnEntry = {
-      amount:               data.amount,
-      cashAmount:           data.cashAmount,
-      voucherAmount:        data.voucherAmount,
-      moneyReturnedInMonth: data.moneyReturnedInMonth,
-      returnedAt:           data.returnedAt,
-      reason:               data.reason,
-      returnedBy:           req.user.name || req.user.email,
-      returnedById:         req.user.id,
-      createdAt:            new Date().toISOString(),
-    };
-
-    const updatedTx = {
-      ...existing,
-      returns:     [...(existing.returns || []), returnEntry],
-      updatedAt:   new Date().toISOString(),
-      updatedBy:   req.user.name || req.user.email,
-      updatedById: req.user.id,
-    };
-
-    // ── STEP 1: Save transaction (all validations passed) ─────
-    const { resource: savedTx } = await transactionsContainer.items.upsert(updatedTx, {
-      accessCondition: { type: "IfMatch", condition: etag },
-    });
-
-    const sideEffects = { transferCreated: false, voucherCreated: false, transferBudgetMonth: null };
-
-    // ── STEP 2: Create TRANSFER if cross-month cash return ────
-    if (isCrossMonth && data.cashAmount > 0 && transferBudgetMonth) {
-      const transferId  = `tx_${familyId}_${transferBudgetMonth.replace("-","")}_zwrot_${Date.now()}`;
-      const transferDoc = {
-        id:               transferId,
-        userId:           familyId,
-        type:             "TRANSFER",
-        categoryId:       process.env.RETURN_CATEGORY_ID      || "cat_srodki",
-        categoryName:     process.env.RETURN_CATEGORY_NAME    || "Środki własne",
-        subcategoryId:    process.env.RETURN_SUBCATEGORY_ID   || "cat_root_srodki_zwroty_MMs",
-        subcategoryName:  process.env.RETURN_SUBCATEGORY_NAME || "Zwroty",
-        amount:           data.cashAmount,
-        originalAmount:   data.cashAmount,
-        originalCurrency: "PLN",
-        fxRate:           1,
-        date:             data.returnedAt,
-        budgetMonth:      transferBudgetMonth,
-        priority:         2,
-        tags:             [],
-        description:      `Zwrot: ${existing.categoryName} › ${existing.subcategoryName}${data.reason ? ` — ${data.reason}` : ""}${data.moneyReturnedInMonth !== transferBudgetMonth ? ` (faktyczny zwrot: ${data.moneyReturnedInMonth})` : ""}`,
-        sourceTransactionId: existing.id,
-        useVoucher:       false,
-        voucherId:        null,
-        voucherAmount:    0,
-        isRecurring:      false,
-        recurringId:      null,
-        netAmount:        data.cashAmount,
-        returns:          [],
-        author:           req.user.name || req.user.email,
-        authorId:         req.user.id,
-        isArchived:       false,
-        archivedAt:       null,
-        archivedBy:       null,
-        archivedById:     null,
-        createdAt:        new Date().toISOString(),
-      };
-
-      await transactionsContainer.items.upsert(transferDoc);
-      sideEffects.transferCreated     = true;
-      sideEffects.transferBudgetMonth = transferBudgetMonth;
-      console.log(`[TX RETURN] TRANSFER created: ${transferId} → ${transferBudgetMonth}`);
-    }
-
-    // ── STEP 3: Create voucher if requested ───────────────────
-    if (data.voucherAmount > 0 && data.createVoucher) {
-      const voucherId  = `vchr_${familyId}_zwrot_${Date.now()}`;
-      const voucherDoc = {
-        id:           voucherId,
-        userId:       familyId,
-        code:         data.voucherCode || `ZWROT-${Date.now()}`,
-        initialValue: data.voucherAmount,
-        usedInTransactions: [],
-        isArchived:   false,
-        expiresAt:    data.voucherExpiresAt ?? null,
-        description:  `Voucher ze zwrotu: ${existing.categoryName} › ${existing.subcategoryName}`,
-        sourceTransactionId: existing.id,
-        createdAt:    new Date().toISOString(),
-        createdBy:    req.user.name,
-        createdById:  req.user.id,
-      };
-      await vouchersContainer.items.upsert(voucherDoc);
-      sideEffects.voucherCreated = true;
-      console.log(`[TX RETURN] Voucher created: ${voucherId}`);
-    }
-
-    console.log(`[TX RETURN] ✅ Return added to ${existing.id}`);
-    res.json({ transaction: savedTx, sideEffects });
-
-  } catch (err) {
-    if (err.code === 412) {
-      return res.status(409).json({
-        error: "Data was modified by another user. Please refresh and try again.",
-      });
-    }
-    console.error("[TX RETURN]", err);
-    res.status(500).json({ error: "Failed to save return." });
-  }
-});
+// ── GET /range ────────────────────────────────────────────────
 
 router.get("/range", async (req, res) => {
   const { from, to } = req.query;
@@ -648,12 +154,10 @@ router.get("/range", async (req, res) => {
   if (!from || !to || !BUDGET_MONTH_REGEX.test(from) || !BUDGET_MONTH_REGEX.test(to)) {
     return res.status(400).json({ error: "Invalid range. Use from=YYYY-MM&to=YYYY-MM." });
   }
-
   if (from > to) {
     return res.status(400).json({ error: "from must be <= to." });
   }
 
-  // Sanity: prevent runaway queries
   const [fy, fm] = from.split("-").map(Number);
   const [ty, tm] = to.split("-").map(Number);
   const monthsCount = (ty - fy) * 12 + (tm - fm) + 1;
@@ -681,8 +185,615 @@ router.get("/range", async (req, res) => {
     console.log(`[TX RANGE] ${from}..${to}: ${resources.length} transactions for ${req.user.familyId}`);
     res.json(resources);
   } catch (err) {
-    console.error("[TX RANGE] Error:", err);
+    console.error("[TX RANGE]", err);
     res.status(500).json({ error: "Failed to fetch transactions range." });
   }
 });
+
+// ── POST ──────────────────────────────────────────────────────
+//
+// Saga pattern: voucher mutation BEFORE transaction save is fine because
+// if voucher sync fails (returns null) we never created the tx in the
+// first place. But if the tx upsert AFTER voucher sync fails, we need
+// to roll the voucher back.
+//
+// We invert the order from before: TX CREATE first → voucher SYNC second.
+// If voucher sync fails, we archive the freshly-created TX. If voucher
+// sync succeeds but something AFTER it throws, we revert the voucher
+// AND archive the TX.
+
+router.post("/", async (req, res) => {
+  const parsed = TransactionPostSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const data     = parsed.data;
+  const familyId = req.user.familyId;
+  let createdTx   = null;   // for rollback if voucher sync fails
+  let voucherSnap = null;   // for rollback if anything fails after voucher sync
+
+  try {
+    const newId = `tx_${familyId}_${data.date.replace(/-/g,"")}_${generateId(data.subcategoryName)}_${Date.now()}`;
+    const useVoucher    = !!data.useVoucher;
+    const voucherAmount = roundMoney(data.voucherAmount || 0);
+    const amount        = roundMoney(data.amount);
+
+    const newTx = {
+      id:           newId,
+      userId:       familyId,
+      ...data,
+      amount,
+      voucherAmount,
+      netAmount:    useVoucher ? roundMoney(Math.max(0, amount - voucherAmount)) : amount,
+      returns:      [],
+      author:       req.user.name || req.user.email,
+      authorId:     req.user.id,
+      isArchived:   false,
+      archivedAt:   null,
+      archivedBy:   null,
+      archivedById: null,
+      createdAt:    new Date().toISOString(),
+    };
+
+    // ── STEP 1: Create the transaction ────────────────────────
+    const { resource } = await transactionsContainer.items.create(newTx);
+    createdTx = resource;
+
+    // ── STEP 2: Sync voucher usage (if applicable) ────────────
+    if (useVoucher && data.voucherId && voucherAmount > 0) {
+      const syncResult = await syncVoucherUsage(vouchersContainer, data.voucherId, familyId, {
+        type:          "add",
+        transactionId: createdTx.id,
+        amount:        voucherAmount,
+        usedAt:        data.date,
+        description:   data.description || "",
+      });
+
+      if (!syncResult) {
+        // Voucher missing/archived. Roll the TX back (best effort).
+        await transactionsContainer.items.upsert({
+          ...createdTx,
+          isArchived: true,
+          archivedAt: new Date().toISOString(),
+          archivedBy: "system_rollback",
+        }).catch(rollbackErr => {
+          console.error(`[TX POST ROLLBACK FAILED] ${createdTx.id}:`, rollbackErr);
+        });
+        return res.status(400).json({ error: "Voucher not found or is archived." });
+      }
+
+      voucherSnap = syncResult.previousState;
+    }
+
+    console.log(`[TX POST] Created: ${createdTx.id}${useVoucher ? ` (voucher: ${data.voucherId})` : ""}`);
+    res.status(201).json(createdTx);
+  } catch (err) {
+    // Full saga rollback — voucher first (more important to keep clean),
+    // then the transaction.
+    console.error("[TX POST] Saga error:", err);
+    await revertVoucherSync(vouchersContainer, voucherSnap);
+    if (createdTx) {
+      await transactionsContainer.items.upsert({
+        ...createdTx,
+        isArchived: true,
+        archivedAt: new Date().toISOString(),
+        archivedBy: "system_rollback",
+      }).catch(rollbackErr => {
+        console.error(`[TX POST ROLLBACK FAILED] ${createdTx.id}:`, rollbackErr);
+      });
+    }
+    res.status(500).json({ error: "Failed to create transaction." });
+  }
+});
+
+// ── PATCH ─────────────────────────────────────────────────────
+//
+// PATCH is the most complex case because we may need to:
+//   1. Remove voucher usage from OLD voucher (if voucher changed)
+//   2. Add/update voucher usage on NEW voucher
+//   3. Save the transaction itself
+//
+// Order matters: we touch vouchers BEFORE the tx upsert, then if the
+// tx upsert fails, we revert both voucher mutations. If only one of
+// the two voucher ops succeeds and the other fails, we revert the
+// successful one immediately and bail.
+
+router.patch("/:id", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
+  const parsed = TransactionPatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const id       = idParsed.data;
+  const familyId = req.user.familyId;
+
+  // Snapshots for rollback — each is non-null only after a successful mutation.
+  let oldVoucherSnap = null;
+  let newVoucherSnap = null;
+
+  try {
+    const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
+    if (!existing)            return res.status(404).json({ error: "Transaction not found." });
+    if (existing.isArchived)  return res.status(409).json({ error: "Cannot edit an archived transaction." });
+
+    // Strip undefined to avoid overwriting existing fields
+    const patchFields = Object.fromEntries(
+      Object.entries(parsed.data).filter(([, v]) => v !== undefined),
+    );
+
+    const updated = {
+      ...existing,
+      ...patchFields,
+      updatedAt:   new Date().toISOString(),
+      updatedBy:   req.user.name || req.user.email,
+      updatedById: req.user.id,
+    };
+
+    // Recompute netAmount with rounded values
+    const useVoucher    = patchFields.useVoucher    ?? existing.useVoucher;
+    const voucherAmount = roundMoney(patchFields.voucherAmount ?? existing.voucherAmount ?? 0);
+    const amount        = roundMoney(patchFields.amount        ?? existing.amount);
+    updated.amount       = amount;
+    updated.voucherAmount = voucherAmount;
+    updated.netAmount    = useVoucher
+      ? roundMoney(Math.max(0, amount - voucherAmount))
+      : amount;
+
+    const oldVoucherId  = existing.voucherId;
+    const newVoucherId  = updated.voucherId;
+    const newUseVoucher = updated.useVoucher;
+    const newVoucherAmt = updated.voucherAmount || 0;
+
+    // ── STEP 1a: Remove usage from old voucher if it changed ──
+    if (oldVoucherId && oldVoucherId !== newVoucherId) {
+      const removeResult = await syncVoucherUsage(vouchersContainer, oldVoucherId, familyId, {
+        type: "remove", transactionId: id,
+      });
+      // null is OK here — voucher might have been archived in the meantime
+      if (removeResult) oldVoucherSnap = removeResult.previousState;
+    }
+
+    // ── STEP 1b: Add/update usage on new voucher ──────────────
+    if (newUseVoucher && newVoucherId && newVoucherAmt > 0) {
+      const opType = (oldVoucherId === newVoucherId) ? "update" : "add";
+      try {
+        const addResult = await syncVoucherUsage(vouchersContainer, newVoucherId, familyId, {
+          type:          opType,
+          transactionId: id,
+          amount:        newVoucherAmt,
+          usedAt:        updated.date      ?? existing.date,
+          description:   updated.description ?? existing.description ?? "",
+        });
+
+        if (!addResult) {
+          // New voucher missing/archived → roll the old voucher's removal back
+          await revertVoucherSync(vouchersContainer, oldVoucherSnap);
+          return res.status(400).json({ error: "Voucher not found or is archived." });
+        }
+        newVoucherSnap = addResult.previousState;
+      } catch (voucherErr) {
+        // Roll the old voucher removal back, then surface the error
+        await revertVoucherSync(vouchersContainer, oldVoucherSnap);
+        throw voucherErr;
+      }
+    } else if (!newUseVoucher && oldVoucherId) {
+      // Voucher disabled — clean up the old reference
+      const removeResult = await syncVoucherUsage(vouchersContainer, oldVoucherId, familyId, {
+        type: "remove", transactionId: id,
+      });
+      if (removeResult) oldVoucherSnap = removeResult.previousState;
+    }
+    // EDGE CASE: useVoucher=true && voucherAmount=0 leaves the voucher's
+    // usedInTransactions[].amount untouched. This is accepted behaviour —
+    // if the user wants to clear the voucher usage they should explicitly
+    // set useVoucher=false. Treating 0 amount as "implicit disable" would
+    // surprise users who briefly clear the field while editing.
+
+    // ── STEP 2: Update transaction with optimistic lock ───────
+    try {
+      const { resource } = await transactionsContainer.items.upsert(updated, {
+        accessCondition: { type: "IfMatch", condition: etag },
+      });
+      console.log(`[TX PATCH] Updated: ${resource.id}`);
+      res.json(resource);
+    } catch (txErr) {
+      // Transaction save failed AFTER vouchers were already mutated.
+      // Revert both voucher mutations to keep state consistent.
+      console.error(`[TX PATCH] Tx save failed for ${id}, rolling back vouchers`);
+      await revertVoucherSync(vouchersContainer, oldVoucherSnap);
+      await revertVoucherSync(vouchersContainer, newVoucherSnap);
+      throw txErr;   // re-throw to outer catch for proper HTTP response
+    }
+  } catch (err) {
+    if (err.code === 412) {
+      return res.status(409).json({
+        error: "Data was modified by another user. Please refresh and try again.",
+      });
+    }
+    console.error("[TX PATCH]", err);
+    res.status(500).json({ error: "Failed to update transaction." });
+  }
+});
+
+// ── DELETE (soft archive) ─────────────────────────────────────
+//
+// DELETE flow: archive the transaction FIRST, then deal with side-effects.
+// This inverts the previous behaviour (voucher → tx) but is safer here:
+// the worst case is a tx archived with vouchers/transfers still active,
+// which is fixable by user action. The reverse — vouchers freed and tx
+// still active — silently corrupts voucher balance.
+
+router.delete("/:id", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
+  const id       = idParsed.data;
+  const familyId = req.user.familyId;
+  let voucherSnap = null;
+
+  try {
+    const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
+    if (!existing)           return res.status(404).json({ error: "Transaction not found." });
+    if (existing.isArchived) return res.status(409).json({ error: "Transaction is already archived." });
+
+    const hasReturns = (existing.returns || []).length > 0;
+    const { forceArchiveLinked } = req.body || {};
+
+    if (hasReturns && !forceArchiveLinked) {
+      return res.status(409).json({
+        error: "Transaction has returns. Archiving will also archive all linked transfers and vouchers.",
+        requiresConfirmation: true,
+        hasReturns: true,
+      });
+    }
+
+    // ── STEP 1: Archive the transaction (primary intent) ──────
+    const archived = {
+      ...existing,
+      isArchived:   true,
+      archivedAt:   new Date().toISOString(),
+      archivedBy:   req.user.name || req.user.email,
+      archivedById: req.user.id,
+    };
+
+    const { resource: savedTx } = await transactionsContainer.items.upsert(archived, {
+      accessCondition: { type: "IfMatch", condition: etag },
+    });
+
+    // ── STEP 2: Sync voucher usage (free up the spent amount) ─
+    if (existing.useVoucher && existing.voucherId) {
+      try {
+        const syncResult = await syncVoucherUsage(vouchersContainer, existing.voucherId, familyId, {
+          type: "remove", transactionId: id,
+        });
+        if (syncResult) voucherSnap = syncResult.previousState;
+      } catch (voucherErr) {
+        // Voucher sync failed but tx is already archived — log loudly,
+        // user can re-archive via manual cleanup. We do NOT undo the
+        // archive because the user's intent was "delete this".
+        console.error(
+          `[TX DELETE] Voucher sync failed for archived tx ${id}, ` +
+          `voucher ${existing.voucherId} may show stale usage. Error:`,
+          voucherErr,
+        );
+      }
+    }
+
+    // ── STEP 3: Archive linked transfers and return vouchers ──
+    if (hasReturns && forceArchiveLinked) {
+      try {
+        await archiveLinkedItems(transactionsContainer, vouchersContainer, familyId, id, req.user);
+      } catch (linkedErr) {
+        console.error(
+          `[TX DELETE] Failed to archive some linked items for ${id}. ` +
+          `Tx is archived; orphans may remain. Error:`,
+          linkedErr,
+        );
+      }
+    }
+
+    console.log(`[TX DELETE] Archived: ${savedTx.id}`);
+    res.json({ success: true, id: savedTx.id });
+  } catch (err) {
+    if (err.code === 412) {
+      return res.status(409).json({
+        error: "Data was modified by another user. Please refresh and try again.",
+      });
+    }
+    // Outer catch — primary archive failed, voucher untouched
+    console.error("[TX DELETE]", err);
+    await revertVoucherSync(vouchersContainer, voucherSnap);
+    res.status(500).json({ error: "Failed to archive transaction." });
+  }
+});
+
+// ── POST /returns ─────────────────────────────────────────────
+//
+// The most complex flow: a return can spawn:
+//   - A TRANSFER tx in a different month (cross-month cash return)
+//   - A new VOUCHER (when user chose store credit)
+//
+// Order of operations:
+//   1. Validate everything (no DB mutations)
+//   2. Upsert the parent tx with new returns[] entry (primary intent)
+//   3. Create TRANSFER (side-effect, isolated)
+//   4. Create VOUCHER (side-effect, isolated)
+//
+// If step 3 or 4 fails, the parent tx is already saved — we log the
+// orphan side-effect and return SUCCESS for the return itself, with
+// a `partialFailure` flag so the frontend can warn the user.
+
+router.post("/:id/returns", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
+  const parsed = ReturnSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const id       = idParsed.data;
+  const familyId = req.user.familyId;
+  const data     = parsed.data;
+
+  try {
+    const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
+    if (!existing)           return res.status(404).json({ error: "Transaction not found." });
+    if (existing.isArchived) return res.status(409).json({ error: "Transaction is archived." });
+
+    // ── Validation block (zero mutations) ─────────────────────
+    const serverNow  = currentServerMonth();
+    const serverPrev = prevServerMonth();
+
+    if (data.moneyReturnedInMonth < serverPrev) {
+      return res.status(400).json({ error: "Return month is outside the allowed window." });
+    }
+    if (data.moneyReturnedInMonth < existing.budgetMonth) {
+      return res.status(400).json({ error: "Return month cannot be before purchase month." });
+    }
+
+    // Amount checks via roundMoney for consistency
+    const amount         = roundMoney(data.amount);
+    const cashAmount     = roundMoney(data.cashAmount);
+    const voucherAmount  = roundMoney(data.voucherAmount);
+    const totalReturnedSoFar = sumMoney((existing.returns || []).map(r => r.amount));
+    const newTotal           = roundMoney(totalReturnedSoFar + amount);
+
+    if (newTotal > existing.amount + 0.01) {
+      return res.status(400).json({ error: "Return amount exceeds transaction amount." });
+    }
+    if (Math.abs(cashAmount + voucherAmount - amount) > 0.01) {
+      return res.status(400).json({ error: "cashAmount + voucherAmount must equal amount." });
+    }
+
+    // Target month closed check
+    const monthDoc = await readItem(
+      monthsContainer,
+      `month_${familyId}_${data.moneyReturnedInMonth}`,
+      familyId,
+    );
+    if (monthDoc?.isClosed) {
+      return res.status(403).json({ error: "Target month is closed." });
+    }
+
+    // Resolve transfer target month and validate it BEFORE saving anything
+    const isCrossMonth = data.moneyReturnedInMonth !== existing.budgetMonth;
+    let transferBudgetMonth = null;
+
+    if (isCrossMonth && cashAmount > 0) {
+      transferBudgetMonth = data.moneyReturnedInMonth < serverNow
+        ? serverNow
+        : data.moneyReturnedInMonth;
+
+      if (transferBudgetMonth !== data.moneyReturnedInMonth) {
+        const transferMonthDoc = await readItem(
+          monthsContainer,
+          `month_${familyId}_${transferBudgetMonth}`,
+          familyId,
+        );
+        if (transferMonthDoc?.isClosed) {
+          return res.status(403).json({ error: "Target month is closed." });
+        }
+      }
+    }
+
+    // ── STEP 1: Save the parent transaction (PRIMARY) ─────────
+    const returnEntry = {
+      amount,
+      cashAmount,
+      voucherAmount,
+      moneyReturnedInMonth: data.moneyReturnedInMonth,
+      returnedAt:           data.returnedAt,
+      reason:               data.reason,
+      returnedBy:           req.user.name || req.user.email,
+      returnedById:         req.user.id,
+      createdAt:            new Date().toISOString(),
+    };
+
+    const updatedTx = {
+      ...existing,
+      returns:     [...(existing.returns || []), returnEntry],
+      updatedAt:   new Date().toISOString(),
+      updatedBy:   req.user.name || req.user.email,
+      updatedById: req.user.id,
+    };
+
+    const { resource: savedTx } = await transactionsContainer.items.upsert(updatedTx, {
+      accessCondition: { type: "IfMatch", condition: etag },
+    });
+
+    const sideEffects = {
+      transferCreated:     false,
+      voucherCreated:      false,
+      transferBudgetMonth: null,
+      partialFailure:      false,
+    };
+
+    // ── STEP 2: Create TRANSFER (best effort) ─────────────────
+    if (isCrossMonth && cashAmount > 0 && transferBudgetMonth) {
+      try {
+        const transferId  = `tx_${familyId}_${transferBudgetMonth.replace("-","")}_zwrot_${Date.now()}`;
+        const transferDoc = {
+          id:               transferId,
+          userId:           familyId,
+          type:             "TRANSFER",
+          categoryId:       process.env.RETURN_CATEGORY_ID      || "cat_srodki",
+          categoryName:     process.env.RETURN_CATEGORY_NAME    || "Środki własne",
+          subcategoryId:    process.env.RETURN_SUBCATEGORY_ID   || "cat_root_srodki_zwroty_MMs",
+          subcategoryName:  process.env.RETURN_SUBCATEGORY_NAME || "Zwroty",
+          amount:           cashAmount,
+          originalAmount:   cashAmount,
+          originalCurrency: "PLN",
+          fxRate:           1,
+          date:             data.returnedAt,
+          budgetMonth:      transferBudgetMonth,
+          priority:         2,
+          tags:             [],
+          description:      `Zwrot: ${existing.categoryName} › ${existing.subcategoryName}${data.reason ? ` — ${data.reason}` : ""}${data.moneyReturnedInMonth !== transferBudgetMonth ? ` (faktyczny zwrot: ${data.moneyReturnedInMonth})` : ""}`,
+          sourceTransactionId: existing.id,
+          useVoucher:       false,
+          voucherId:        null,
+          voucherAmount:    0,
+          isRecurring:      false,
+          recurringId:      null,
+          netAmount:        cashAmount,
+          returns:          [],
+          author:           req.user.name || req.user.email,
+          authorId:         req.user.id,
+          isArchived:       false,
+          archivedAt:       null,
+          archivedBy:       null,
+          archivedById:     null,
+          createdAt:        new Date().toISOString(),
+        };
+
+        await transactionsContainer.items.upsert(transferDoc);
+        sideEffects.transferCreated     = true;
+        sideEffects.transferBudgetMonth = transferBudgetMonth;
+        console.log(`[TX RETURN] TRANSFER created: ${transferId} → ${transferBudgetMonth}`);
+      } catch (transferErr) {
+        console.error(
+          `[TX RETURN] TRANSFER creation failed for ${existing.id}. ` +
+          `Return is saved but cross-month transfer is MISSING. Error:`,
+          transferErr,
+        );
+        sideEffects.partialFailure = true;
+      }
+    }
+
+    // ── STEP 3: Create VOUCHER (best effort) ──────────────────
+    if (voucherAmount > 0 && data.createVoucher) {
+      try {
+        const voucherId  = `vchr_${familyId}_zwrot_${Date.now()}`;
+        const voucherDoc = {
+          id:           voucherId,
+          userId:       familyId,
+          code:         data.voucherCode || `ZWROT-${Date.now()}`,
+          initialValue: voucherAmount,
+          usedInTransactions: [],
+          isArchived:   false,
+          expiresAt:    data.voucherExpiresAt ?? null,
+          description:  `Voucher ze zwrotu: ${existing.categoryName} › ${existing.subcategoryName}`,
+          sourceTransactionId: existing.id,
+          createdAt:    new Date().toISOString(),
+          createdBy:    req.user.name,
+          createdById:  req.user.id,
+        };
+        await vouchersContainer.items.upsert(voucherDoc);
+        sideEffects.voucherCreated = true;
+        console.log(`[TX RETURN] Voucher created: ${voucherId}`);
+      } catch (voucherErr) {
+        console.error(
+          `[TX RETURN] Voucher creation failed for ${existing.id}. ` +
+          `Return is saved but voucher is MISSING. Error:`,
+          voucherErr,
+        );
+        sideEffects.partialFailure = true;
+      }
+    }
+
+    console.log(`[TX RETURN] ✅ Return added to ${existing.id}${sideEffects.partialFailure ? " (with partial side-effect failures)" : ""}`);
+
+    // Add a user-facing warning if any side-effect failed
+    const response = { transaction: savedTx, sideEffects };
+    if (sideEffects.partialFailure) {
+      response.warning = "Zwrot został zapisany, ale powiązane operacje nie powiodły się. Sprawdź miesiąc zwrotu i vouchery.";
+    }
+
+    res.json(response);
+
+  } catch (err) {
+    if (err.code === 412) {
+      return res.status(409).json({
+        error: "Data was modified by another user. Please refresh and try again.",
+      });
+    }
+    console.error("[TX RETURN]", err);
+    res.status(500).json({ error: "Failed to save return." });
+  }
+});
+
+// ── Helper: archive linked transfers + return-vouchers ───────
+//
+// Extracted from DELETE handler. Best-effort: failure to archive one
+// item logs the error and continues, so user is left with as few
+// orphans as possible.
+
+async function archiveLinkedItems(transactionsContainer, vouchersContainer, familyId, txId, user) {
+  // Linked TRANSFER transactions
+  const { resources: linkedTransfers } = await transactionsContainer.items
+    .query({
+      query: `SELECT * FROM c WHERE c.userId = @userId
+              AND c.sourceTransactionId = @txId
+              AND c.type = 'TRANSFER'
+              AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))`,
+      parameters: [
+        { name: "@userId", value: familyId },
+        { name: "@txId",   value: txId     },
+      ],
+    })
+    .fetchAll();
+
+  for (const transfer of linkedTransfers) {
+    try {
+      await transactionsContainer.items.upsert({
+        ...transfer,
+        isArchived:   true,
+        archivedAt:   new Date().toISOString(),
+        archivedBy:   user.name || user.email,
+        archivedById: user.id,
+      });
+    } catch (e) {
+      console.error(`[archiveLinkedItems] Transfer ${transfer.id} archive failed:`, e);
+    }
+  }
+
+  // Linked vouchers (return-generated)
+  const { resources: linkedVouchers } = await vouchersContainer.items
+    .query({
+      query: `SELECT * FROM c WHERE c.userId = @userId
+              AND c.sourceTransactionId = @txId
+              AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))`,
+      parameters: [
+        { name: "@userId", value: familyId },
+        { name: "@txId",   value: txId     },
+      ],
+    })
+    .fetchAll();
+
+  for (const voucher of linkedVouchers) {
+    try {
+      await vouchersContainer.items.upsert({
+        ...voucher,
+        isArchived:   true,
+        archivedAt:   new Date().toISOString(),
+        archivedBy:   user.name || user.email,
+        archivedById: user.id,
+      });
+    } catch (e) {
+      console.error(`[archiveLinkedItems] Voucher ${voucher.id} archive failed:`, e);
+    }
+  }
+
+  console.log(`[archiveLinkedItems] ${linkedTransfers.length} transfers, ${linkedVouchers.length} vouchers archived for ${txId}`);
+}
+
 module.exports = router;

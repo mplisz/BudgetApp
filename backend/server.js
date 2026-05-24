@@ -86,34 +86,59 @@ app.use(cors({
   credentials: true
 }));
 
-// 3. Rate Limiting
-const refreshLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_REFRESH_WINDOW_MS) || 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_REFRESH_MAX) || 20,
-  message: { error: "Too many refresh attempts, please try again later." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/auth/refresh', refreshLimiter); // strict limit - before a global one
+/*
+ TRUST PROXY (CRITICAL FOR AZURE) Required because Azure App Service / Container Apps sit behind a reverse proxy.
+ Without this, rate-limiter sees the load balancer's IP instead of the actual user IP.
+*/
+app.set('trust proxy', 1);
 
-const apiLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX) || 200,
-  message: { error: "Too many requests from this IP, please try again later." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// ------------------------------------------------------------
+//  RATE LIMITING 
+// ------------------------------------------------------------
+
+// Helper factory function to keep rate limiters DRY and format the time message automatically
+const createLimiter = (windowMs, maxRequests, baseMessage) => {
+    return rateLimit({
+        windowMs: windowMs,
+        max: maxRequests,
+        message: { error: `${baseMessage}, please try again later.` },
+        standardHeaders: true,
+        legacyHeaders: false,
+    });
+};
+
+// Specific limiter for token refresh
+const refreshLimiter = createLimiter(
+    parseInt(process.env.RATE_LIMIT_REFRESH_WINDOW_MS) || 60 * 1000,
+    parseInt(process.env.RATE_LIMIT_REFRESH_MAX) || 20,
+    "Too many refresh attempts"
+);
+app.use('/api/auth/refresh', refreshLimiter); 
+
+// Specific limiter for login to prevent brute-force attacks
+const loginLimiter = createLimiter(
+    parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MS) || 15 * 60 * 1000,
+    parseInt(process.env.RATE_LIMIT_LOGIN_MAX) || 5,
+    "Too many login attempts"
+);
+app.use('/api/auth/login', loginLimiter);
+
+// Specific limiter for limits container due to batch upserts
+const limitsLimiter = createLimiter(
+    parseInt(process.env.RATE_LIMIT_WINDOW_MS_LIMITS_CONTAINER) || 15 * 60 * 1000,
+    parseInt(process.env.RATE_LIMIT_MAX_LIMITS_CONTAINER) || 600,
+    "Too many requests to limits container"
+);
+app.use('/api/limits', limitsLimiter);
+
+// Global API limiter
+const apiLimiter = createLimiter(
+    parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+    parseInt(process.env.RATE_LIMIT_MAX) || 200,
+    "Too many requests from this IP"
+);
 app.use('/api/', apiLimiter);
 
-//for limits container - there is a batch type upsert which means number of requests may be higher 
-const limitsLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS_LIMITS_CONTAINER) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_LIMITS_CONTAINER) || 600,
-  message: { error: "Too many limit requests, please slow down." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/limits', limitsLimiter);
 // ==========================================
 // STANDARD MIDDLEWARE
 // ==========================================
@@ -125,6 +150,10 @@ app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
+
+
+
+
 
 // ==========================================
 // ROUTES
@@ -142,8 +171,9 @@ app.use("/api/recurring", recurringRoutes);
 app.use("/api/planned", plannedRoutes);
 
 
-
-
+// ------------------------------------------------------------
+// GLOBAL ERROR HANDLER
+// ------------------------------------------------------------
 app.use((err, req, res, next) => {
   console.error("Uncaught Server Error:", err.stack);
   res.status(500).json({ error: "Internal Server Error" });

@@ -74,35 +74,60 @@ export function nextNMonths(n: number, today: Date = new Date()): BudgetMonth[] 
 
 /**
  * Compute the 4 cost layers (Survival → No Change).
+ *
  * For each priority bucket we use the EFFECTIVE amount (after same-month
  * cash returns). Transactions missing a priority are treated as P4 — same
  * convention as PriorityBreakdown.tsx.
+ *
+ * `criticalSubcategoryIds` (optional): when provided, EXPENSE transactions
+ * with `subcategoryId` in this set are treated as non-negotiable. They are:
+ *   - Excluded from the regular priority buckets (so they don't double-count)
+ *   - Aggregated separately into `criticalCost` on every returned layer
+ *   - Added to `monthlyCost` of every layer (so even Survival Mode includes
+ *     them, regardless of the transaction's stated priority)
+ *
+ * Without `criticalSubcategoryIds`, behaviour is identical to the original
+ * version — `criticalCost` is always 0.
  */
 export function computeCostLayers(
   txInWindow: SnTransaction[],
   lookbackMonths: number,
+  criticalSubcategoryIds: Set<string> = new Set(),
 ): CostLayer[] {
   const buckets: Record<PriorityLevel, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  let criticalTotal = 0;
 
   for (const tx of txInWindow) {
     if (tx.type !== "EXPENSE") continue;
+    const effective = calculateEffectiveAmount(tx, tx.budgetMonth);
+
+    // Critical wins over priority — diverts the amount into the critical
+    // pool instead of the per-priority bucket. This prevents double-counting
+    // when we later add criticalCost to every layer's monthlyCost.
+    if (tx.subcategoryId && criticalSubcategoryIds.has(tx.subcategoryId)) {
+      criticalTotal += effective;
+      continue;
+    }
+
     const prio = (tx.priority ?? 4) as PriorityLevel;
-    buckets[prio] += calculateEffectiveAmount(tx, tx.budgetMonth);
+    buckets[prio] += effective;
   }
 
-  const months = Math.max(1, lookbackMonths);
+  const months          = Math.max(1, lookbackMonths);
+  const criticalMonthly = criticalTotal / months;
 
-  // Cumulative running total
+  // Cumulative running total — critical is added to every level on top.
   let running = 0;
   return ([1, 2, 3, 4] as PriorityLevel[]).map(level => {
     const bucketAvg = buckets[level] / months;
     running += bucketAvg;
     return {
       level,
-      label:       LEVEL_META[level].modeLabel,
-      color:       LEVEL_META[level].color,
-      monthlyCost: running,
-      bucketCost:  bucketAvg,
+      label:        LEVEL_META[level].modeLabel,
+      color:        LEVEL_META[level].color,
+      monthlyCost:  running + criticalMonthly,   // include critical on every level
+      bucketCost:   bucketAvg,
+      criticalCost: criticalMonthly,
     };
   });
 }
@@ -187,11 +212,17 @@ export function computeRemainingIncome(
  *     window (because losing the job means we can just halt remaining
  *     savings on a far-future goal)
  *   - Sorted by plannedMonth ascending (earliest first) for UI display.
+ *
+ * `criticalSubcategoryIds` (optional): when a plan targets a subcategory in
+ * this set, the result item is flagged `isCritical: true`. The flag is
+ * read by `sumPlannedForLevel` to include the plan in every level — even
+ * Survival — regardless of the plan's stated priority.
  */
 export function computeUpcomingPlanned(
-  planned:       PlannedDoc[],
-  horizonMonths: number,
-  today:         Date = new Date(),
+  planned:                PlannedDoc[],
+  horizonMonths:          number,
+  today:                  Date = new Date(),
+  criticalSubcategoryIds: Set<string> = new Set(),
 ): UpcomingPlanned[] {
   if (!Array.isArray(planned) || planned.length === 0) return [];
   const window      = nextNMonths(horizonMonths, today);
@@ -241,13 +272,18 @@ export function computeUpcomingPlanned(
 
     if (amountInHorizon <= 0) continue;
 
+    const subId      = doc.targetSubcategoryId;
+    const isCritical = !!subId && criticalSubcategoryIds.has(subId);
+
     result.push({
       id:              doc.id,
       description:     doc.description,
       categoryName:    doc.targetCategoryName,
+      subcategoryId:   subId,
       subcategoryName: doc.targetSubcategoryName,
       mode:            doc.mode,
       priority:        doc.priority,
+      isCritical,
       plannedMonth:    doc.plannedMonth,
       amountInHorizon: Math.round(amountInHorizon * 100) / 100,
       totalAmountPLN:  doc.totalAmountPLN,
@@ -259,16 +295,21 @@ export function computeUpcomingPlanned(
 }
 
 /**
- * Sum amountInHorizon of all upcoming planned items at or below the
- * given priority level. P_max=1 (Survival) only includes priority 1
- * items, P_max=4 (No Change) sums everything.
+ * Sum amountInHorizon of all upcoming planned items that should hit the
+ * cushion target at the given priority level.
+ *
+ * Two paths:
+ *   - Critical (isCritical=true): ALWAYS included, regardless of level
+ *     (school fees etc. don't get cut even in Survival Mode)
+ *   - Regular: included only when `priority <= level`
+ *     (a P4 vacation only burdens P4 No Change Mode, not Survival)
  */
 export function sumPlannedForLevel(
   upcoming: UpcomingPlanned[],
   level:    PriorityLevel,
 ): number {
   return upcoming
-    .filter(u => u.priority <= level)
+    .filter(u => u.isCritical || u.priority <= level)
     .reduce((s, u) => s + u.amountInHorizon, 0);
 }
 

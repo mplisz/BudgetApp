@@ -104,7 +104,7 @@ export function DeficitTable({
                       style={{ fontSize: 10, color: "#a78bfa", marginTop: 2 }}
                       title={`Cel życia: ${fmt(d.baseTarget)} + planowane: ${fmt(d.plannedTarget)}`}
                     >
-                      📅 + {fmt(d.plannedTarget)} planowane
+                      📅 W tym {fmt(d.plannedTarget)} planowane
                     </div>
                   )}
                 </>

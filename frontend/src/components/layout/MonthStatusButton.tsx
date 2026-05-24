@@ -1,18 +1,29 @@
 // ============================================================
-// File: src/components/layout/MonthStatusButton.jsx
+// File: src/components/layout/MonthStatusButton.tsx
 // Shows open/closed status of the active budget month.
 // Placed in the header next to NotificationBell and LogoutButton.
+//
+// Active month is now derived from the URL (?m=YYYY-MM) instead
+// of AppContext state.
 // ============================================================
 
 import { useState } from "react";
 import { useMonthStatus } from "../../hooks/useMonthStatus";
-import { MONTHS }         from "../../data/constants";
-import { useAppContext }  from "../../context/AppContext";
+import { useMonthFromUrl } from "../../hooks/useMonthFromUrl";
+import { MONTHS } from "../../data/constants";
 
 export function MonthStatusButton() {
-  const { month, year }                                    = useAppContext();
-  const { isActiveMonthClosed, closeMonth, openMonth,
-          activeBudgetMonth, isFutureMonth }               = useMonthStatus();
+  const { month, year } = useMonthFromUrl();
+  const {
+    isActiveMonthClosed, closeMonth, openMonth,
+    activeBudgetMonth, isFutureMonth,
+  } = useMonthStatus() as {
+    isActiveMonthClosed: boolean;
+    closeMonth:          (m: string) => Promise<unknown>;
+    openMonth:           (m: string) => Promise<unknown>;
+    activeBudgetMonth:   string;
+    isFutureMonth:       boolean;
+  };
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSaving,    setIsSaving]    = useState(false);
@@ -32,7 +43,6 @@ export function MonthStatusButton() {
     setIsSaving(false);
   }
 
-  // Don't show button for future months (nothing to close)
   if (isFutureMonth) return null;
 
   // ── Closed state ─────────────────────────────────────────
@@ -88,39 +98,38 @@ export function MonthStatusButton() {
           <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 16, marginBottom: 8 }}>
             Zamknąć {monthLabel}?
           </div>
-          <div style={{ color: "#64748b", fontSize: 13, lineHeight: 1.6, marginBottom: 20 }}>
-            Po zamknięciu nie będzie można dodawać ani edytować transakcji w tym miesiącu.
-            Możesz go ponownie otworzyć w każdej chwili.
-            Aplikacja przejdzie automatycznie do następnego otwartego miesiąca.
+          <div style={{ color: "#94a3b8", fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+            Po zamknięciu miesiąca nie będzie można dodawać ani edytować transakcji w tym okresie.
+            Można go później ponownie otworzyć.
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleClose}
-              disabled={isSaving}
-              style={{
-                flex:         1,
-                padding:      "10px",
-                borderRadius: 8,
-                border:       "none",
-                background:   isSaving ? "#334155" : "#10b981",
-                color:        "#fff",
-                fontWeight:   700,
-                cursor:       isSaving ? "not-allowed" : "pointer",
-              }}>
-              {isSaving ? "⏳ Zamykanie…" : "✅ Zamknij miesiąc"}
-            </button>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button
               onClick={() => setShowConfirm(false)}
               disabled={isSaving}
               style={{
-                padding:      "10px 16px",
+                background: "transparent",
+                border:     "1px solid #1e293b",
+                color:      "#94a3b8",
+                padding:    "8px 16px",
                 borderRadius: 8,
-                border:       "1px solid #1e293b",
-                background:   "transparent",
-                color:        "#475569",
-                cursor:       "pointer",
+                cursor:     "pointer",
+                fontWeight: 600,
               }}>
               Anuluj
+            </button>
+            <button
+              onClick={handleClose}
+              disabled={isSaving}
+              style={{
+                background: "#ef4444",
+                border:     "none",
+                color:      "#fff",
+                padding:    "8px 16px",
+                borderRadius: 8,
+                cursor:     isSaving ? "not-allowed" : "pointer",
+                fontWeight: 700,
+              }}>
+              {isSaving ? "Zamykam…" : "🔒 Zamknij miesiąc"}
             </button>
           </div>
         </div>
@@ -128,7 +137,7 @@ export function MonthStatusButton() {
     );
   }
 
-  // ── Open state — default button ───────────────────────────
+  // ── Open state — button ───────────────────────────────────
   return (
     <button
       onClick={() => setShowConfirm(true)}
@@ -139,7 +148,7 @@ export function MonthStatusButton() {
         gap:          5,
         padding:      "5px 10px",
         borderRadius: 8,
-        border:       "1px solid #10b98133",
+        border:       "1px solid #10b98144",
         background:   "#10b98111",
         color:        "#10b981",
         cursor:       "pointer",

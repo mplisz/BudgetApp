@@ -45,11 +45,12 @@ export function useCategoryManager() {
           const parentObj = parents.find(p => p.id === child.parentCategoryId);
           if (parentObj) {
             parentObj.sub.push({
-              id:         child.id,
-              name:       child.name,
-              priority:   child.priority || 2,
-              isArchived: child.isArchived || false,
+              id:             child.id,
+              name:           child.name,
+              priority:       child.priority || 2,
+              isArchived:     child.isArchived || false,
               canBeRecurring: child.canBeRecurring ?? false,
+              isCritical:     child.isCritical     ?? false,
             });
           }
         });
@@ -96,12 +97,25 @@ export function useCategoryManager() {
   }
 
   // ── Add ─────────────────────────────────────────────────────
-  async function addCategoryToDb(cleanName, cleanIcon, type, parentId = null, parentName = null, priority = 2,canBeRecurring = false) {
+  // Note: parameter list grew organically; default args keep call sites that
+  // don't care about the new flags backwards-compatible.
+  async function addCategoryToDb(
+    cleanName, cleanIcon, type,
+    parentId = null, parentName = null,
+    priority = 2,
+    canBeRecurring = false,
+    isCritical = false,
+  ) {
     setIsSavingCat(true);
     try {
       const response = await fetchWithAuth(`${API_URL}/api/categories`, {
         method: "POST",
-        body:   JSON.stringify({ name: cleanName, icon: cleanIcon, type, parentCategoryId: parentId, priority,canBeRecurring: canBeRecurring ?? false,}),
+        body:   JSON.stringify({
+          name: cleanName, icon: cleanIcon, type, parentCategoryId: parentId,
+          priority,
+          canBeRecurring: canBeRecurring ?? false,
+          isCritical:     isCritical     ?? false,
+        }),
       });
 
       if (!response.ok) {
@@ -113,11 +127,25 @@ export function useCategoryManager() {
 
       setCategories(prev => {
         if (!parentId) {
-          return [...prev, { id: saved.id, name: saved.name, icon: saved.icon, type: saved.type, isArchived: false, canBeRecurring: saved.canBeRecurring ?? false ,sub: [] }];
+          return [...prev, {
+            id: saved.id, name: saved.name, icon: saved.icon, type: saved.type,
+            isArchived: false,
+            canBeRecurring: saved.canBeRecurring ?? false,
+            sub: [],
+          }];
         }
         return prev.map(cat => {
           if (cat.id === parentId) {
-            return { ...cat, sub: [...cat.sub, { id: saved.id, name: saved.name, priority: saved.priority || priority, isArchived: false, canBeRecurring: saved.canBeRecurring ?? false }] };
+            return {
+              ...cat,
+              sub: [...cat.sub, {
+                id: saved.id, name: saved.name,
+                priority: saved.priority || priority,
+                isArchived: false,
+                canBeRecurring: saved.canBeRecurring ?? false,
+                isCritical:     saved.isCritical     ?? false,
+              }],
+            };
           }
           return cat;
         });

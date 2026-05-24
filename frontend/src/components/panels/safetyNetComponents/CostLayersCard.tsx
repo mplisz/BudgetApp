@@ -4,6 +4,12 @@
 // Each level shows: cumulative monthly cost, contribution from this
 // priority bucket, and a stacked bar so the user sees how each layer
 // adds on top of the previous one.
+//
+// Critical expenses (subcategory.isCritical=true) are shown as a separate
+// 🔒 segment in the stacked bar — they are included in EVERY level's
+// monthlyCost, so the legend makes it explicit. Without the visual split
+// the user would see Survival Mode = 7 000 zł and ask: "why so high?".
+// With the split: "ah, 4 000 base + 3 000 critical".
 // ============================================================
 
 import { useMemo } from "react";
@@ -11,6 +17,8 @@ import { fmt } from "../../../utils/helpers";
 import { EmptyState } from "../../ui/summaryUi";
 import { LEVEL_META } from "./types";
 import type { CostLayer, PriorityLevel } from "./types";
+
+const CRITICAL_COLOR = "#a855f7";   // purple — same hue as 🔒 button in Settings
 
 interface CostLayersCardProps {
   layers:           CostLayer[];
@@ -24,6 +32,10 @@ export function CostLayersCard({ layers, highlightLevel }: CostLayersCardProps) 
     return layers.length ? layers[layers.length - 1].monthlyCost : 0;
   }, [layers]);
 
+  // Critical is the same on every layer — read it from index 0
+  const criticalCost = layers.length ? layers[0].criticalCost : 0;
+  const hasCritical  = criticalCost > 0;
+
   if (maxCost === 0) {
     return (
       <EmptyState
@@ -35,8 +47,13 @@ export function CostLayersCard({ layers, highlightLevel }: CostLayersCardProps) 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Stacked bar — shows how P1..P4 stack into No Change */}
-      <StackedLayersBar layers={layers} total={maxCost} highlight={highlightLevel} />
+      {/* Stacked bar — shows critical first (always included), then P1..P4 */}
+      <StackedLayersBar
+        layers={layers}
+        total={maxCost}
+        criticalCost={criticalCost}
+        highlight={highlightLevel}
+      />
 
       {/* Per-level rows */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -57,6 +74,13 @@ export function CostLayersCard({ layers, highlightLevel }: CostLayersCardProps) 
         border: "1px solid #1e293b", borderRadius: 8,
       }}>
         💡 Każdy wyższy poziom zawiera koszty poprzednich (P1 ⊂ P1+P2 ⊂ …). Średnia liczona na bazie wybranego okna historycznego.
+        {hasCritical && (
+          <>
+            {" "}
+            <strong style={{ color: CRITICAL_COLOR }}>🔒 Nienaruszalne</strong>{" "}
+            (czesne, leki, opłaty dla dzieci) są wliczane na <em>każdym</em> poziomie, niezależnie od priorytetu.
+          </>
+        )}
       </div>
     </div>
   );
@@ -65,12 +89,13 @@ export function CostLayersCard({ layers, highlightLevel }: CostLayersCardProps) 
 // ── Stacked layers bar ──────────────────────────────────────
 
 interface StackedLayersBarProps {
-  layers:    CostLayer[];
-  total:     number;
-  highlight?: PriorityLevel;
+  layers:        CostLayer[];
+  total:         number;
+  criticalCost:  number;
+  highlight?:    PriorityLevel;
 }
 
-function StackedLayersBar({ layers, total, highlight }: StackedLayersBarProps) {
+function StackedLayersBar({ layers, total, criticalCost, highlight }: StackedLayersBarProps) {
   return (
     <div>
       <div style={{
@@ -78,6 +103,20 @@ function StackedLayersBar({ layers, total, highlight }: StackedLayersBarProps) {
         borderRadius: 99, overflow: "hidden",
         background: "#0d1424", border: "1px solid #1e293b",
       }}>
+        {/* Critical segment first — always present in every level */}
+        {criticalCost > 0 && total > 0 && (
+          <div
+            title={`🔒 Nienaruszalne: ${fmt(criticalCost)} / mies. — wliczane do każdego poziomu`}
+            style={{
+              width:      `${(criticalCost / total) * 100}%`,
+              background: CRITICAL_COLOR,
+              // Critical never dims — it's part of every level
+              opacity:    1,
+              transition: "opacity 0.2s",
+            }}
+          />
+        )}
+
         {layers.map(layer => {
           const widthPct = total > 0 ? (layer.bucketCost / total) * 100 : 0;
           const isHl = layer.level === highlight;
@@ -99,6 +138,18 @@ function StackedLayersBar({ layers, total, highlight }: StackedLayersBarProps) {
 
       {/* Legend */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+        {criticalCost > 0 && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6,
+            fontSize: 11, color: CRITICAL_COLOR, fontWeight: 700,
+          }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: 2,
+              background: CRITICAL_COLOR, flexShrink: 0,
+            }} />
+            🔒 Nienaruszalne · {fmt(criticalCost)}
+          </div>
+        )}
         {layers.map(layer => (
           <div key={layer.level} style={{
             display: "flex", alignItems: "center", gap: 6,
@@ -127,6 +178,9 @@ interface LevelRowProps {
 function LevelRow({ layer, maxCost, isHighlighted }: LevelRowProps) {
   const meta = LEVEL_META[layer.level];
   const fillPct = maxCost > 0 ? Math.min(100, (layer.monthlyCost / maxCost) * 100) : 0;
+  // Net of critical = what this priority bucket contributes on top of always-included critical
+  const bucketContribution = layer.bucketCost;
+  const hasCritical        = layer.criticalCost > 0;
 
   return (
     <div style={{
@@ -167,8 +221,17 @@ function LevelRow({ layer, maxCost, isHighlighted }: LevelRowProps) {
             {fmt(layer.monthlyCost)}
           </div>
           <div style={{ fontSize: 10, color: "#475569" }}>
-            / mies.{layer.level > 1 && (
-              <> · +{fmt(layer.bucketCost)} z P{layer.level}</>
+            / mies.
+            {layer.level > 1 && bucketContribution > 0 && (
+              <> · +{fmt(bucketContribution)} z P{layer.level}</>
+            )}
+            {hasCritical && (
+              <>
+                {" · "}
+                <span style={{ color: CRITICAL_COLOR }}>
+                  🔒 {fmt(layer.criticalCost)}
+                </span>
+              </>
             )}
           </div>
         </div>

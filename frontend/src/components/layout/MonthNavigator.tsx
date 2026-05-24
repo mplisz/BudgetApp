@@ -1,22 +1,24 @@
 // ============================================================
 // File: src/components/layout/MonthNavigator.tsx
-// Month navigation with "back to today" button.
-// The today button appears only when the user has navigated
-// away from the current calendar month.
+// Month navigation that writes to ?m=YYYY-MM in the URL.
+//
+// Replaces the old setMonth/setYear pattern. Because the URL is
+// now the source of truth, F5 keeps the month and a back-button
+// click on mobile walks through visited months.
 // ============================================================
 
-import { useAppContext }    from "../../context/AppContext";
-import { useMonthStatus }   from "../../hooks/useMonthStatus";
-import { MONTHS }           from "../../data/constants";
+import { useAppContext }  from "../../context/AppContext";
+import { useMonthStatus } from "../../hooks/useMonthStatus";
+import { MONTHS }         from "../../data/constants";
+import { useMonthFromUrl, addMonthsToYM, currentMonthYMD } from "../../hooks/useMonthFromUrl";
+
+interface AppSettingsView {
+  settings: { appStartMonth?: string } | null;
+}
 
 export function MonthNavigator() {
-  const { month, setMonth, year, setYear, settings } = useAppContext() as {
-    month:    number;
-    setMonth: (m: number | ((prev: number) => number)) => void;
-    year:     number;
-    setYear:  (y: number | ((prev: number) => number)) => void;
-    settings: { appStartMonth?: string } | null;
-  };
+  const { settings } = useAppContext() as AppSettingsView;
+  const { budgetMonth, month, year, setBudgetMonth } = useMonthFromUrl();
 
   const { navigateToFirstOpenMonth } = useMonthStatus() as {
     navigateToFirstOpenMonth: () => void;
@@ -25,36 +27,26 @@ export function MonthNavigator() {
   // ── Boundary check ────────────────────────────────────────
 
   const startMonth = settings?.appStartMonth;
-  const [startYear, startM] = startMonth
-    ? startMonth.split("-").map(Number)
-    : [null, null];
-
-  const canGoBack = !startMonth ||
-    (year > (startYear ?? 0) || (year === startYear && month > (startM ?? 1) - 1));
+  const canGoBack = !startMonth || budgetMonth > startMonth;
 
   // ── "Back to today" visibility ────────────────────────────
   // Show when current nav month ≠ actual calendar month
-
-  const now          = new Date();
-  const todayMonth   = now.getMonth();
-  const todayYear    = now.getFullYear();
-  const isOnToday    = month === todayMonth && year === todayYear;
+  const today      = currentMonthYMD();
+  const isOnToday  = budgetMonth === today;
 
   // ── Handlers ──────────────────────────────────────────────
 
   function goBack() {
     if (!canGoBack) return;
-    if (month === 0) { setMonth(11); setYear(y => y - 1); }
-    else setMonth(m => m - 1);
+    setBudgetMonth(addMonthsToYM(budgetMonth, -1));
   }
 
   function goForward() {
-    if (month === 11) { setMonth(0); setYear(y => y + 1); }
-    else setMonth(m => m + 1);
+    setBudgetMonth(addMonthsToYM(budgetMonth, +1));
   }
 
   function goToToday() {
-    // Navigate to the first open month starting from today
+    // navigateToFirstOpenMonth is now URL-aware (see useMonthStatus refactor)
     navigateToFirstOpenMonth();
   }
 
@@ -63,7 +55,6 @@ export function MonthNavigator() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
 
-      {/* Back to today button — only when not already on current month */}
       {!isOnToday && (
         <button
           onClick={goToToday}
@@ -87,7 +78,6 @@ export function MonthNavigator() {
         </button>
       )}
 
-      {/* Month navigation */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#1e293b", borderRadius: 10, padding: "4px 6px" }}>
         <button
           onClick={goBack}
@@ -107,7 +97,7 @@ export function MonthNavigator() {
 
         <div style={{ textAlign: "center", minWidth: 100 }}>
           <div style={{ color: "#10b981", fontWeight: 800, fontSize: 15 }}>
-            {(MONTHS as string[])[month]}
+            {MONTHS[month]}
           </div>
           <div style={{ color: "#475569", fontSize: 10 }}>{year}</div>
         </div>

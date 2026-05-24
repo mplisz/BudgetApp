@@ -161,6 +161,56 @@ describe("computeCostLayers", () => {
     // Effective = 1000 - 300 = 700
     expect(layers[0].monthlyCost).toBe(700);
   });
+
+  // ── Critical subcategories (Feature #1) ──────────────────
+
+  it("critical subcategory: diverted from priority bucket into criticalCost", () => {
+    const txs: SnTransaction[] = [
+      tx({ amount: 600, budgetMonth: "2026-05", priority: 1 }),
+      // P3 but subcategory is critical (e.g. preschool fees) — must NOT
+      // count into bucket P3, must count into criticalCost instead.
+      tx({ amount: 1200, budgetMonth: "2026-05", priority: 3,
+           subcategoryId: "sub_czesne" }),
+    ];
+    const critical = new Set(["sub_czesne"]);
+    const layers = computeCostLayers(txs, 6, critical);
+
+    expect(layers[0].criticalCost).toBe(200);    // 1200/6, same on every layer
+    expect(layers[3].criticalCost).toBe(200);
+
+    // Bucket P3 must NOT include the critical tx
+    expect(layers[2].bucketCost).toBe(0);
+  });
+
+  it("critical: added to monthlyCost of EVERY layer", () => {
+    const txs: SnTransaction[] = [
+      tx({ amount: 600,  budgetMonth: "2026-05", priority: 1 }),     // P1, regular
+      tx({ amount: 1200, budgetMonth: "2026-05", priority: 4,
+           subcategoryId: "sub_czesne" }),                            // P4 + critical
+    ];
+    const layers = computeCostLayers(txs, 6, new Set(["sub_czesne"]));
+    // Survival: P1 (100) + critical (200) = 300
+    expect(layers[0].monthlyCost).toBe(300);
+    // No Change: same P1 + critical still (no P2/P3/P4 regular) = 300
+    expect(layers[3].monthlyCost).toBe(300);
+  });
+
+  it("without criticalSubcategoryIds: criticalCost is 0 (back-compat)", () => {
+    const txs: SnTransaction[] = [
+      tx({ amount: 1200, budgetMonth: "2026-05", priority: 1 }),
+    ];
+    const layers = computeCostLayers(txs, 6);   // no critical set
+    expect(layers[0].criticalCost).toBe(0);
+    expect(layers[0].monthlyCost).toBe(200);    // 1200/6
+  });
+
+  it("critical subcategory present in set but no matching txs: zero criticalCost", () => {
+    const txs: SnTransaction[] = [
+      tx({ amount: 600, budgetMonth: "2026-05", priority: 1 }),
+    ];
+    const layers = computeCostLayers(txs, 6, new Set(["sub_nonexistent"]));
+    expect(layers[0].criticalCost).toBe(0);
+  });
 });
 
 // ── computeIncomeSources ─────────────────────────────────────
@@ -261,10 +311,10 @@ describe("computeRemainingIncome", () => {
 
 describe("computeLevelDeficits", () => {
   const layers: CostLayer[] = [
-    { level: 1, label: "Survival",  color: "x", monthlyCost: 4000, bucketCost: 4000 },
-    { level: 2, label: "OK",        color: "x", monthlyCost: 6000, bucketCost: 2000 },
-    { level: 3, label: "Nice",      color: "x", monthlyCost: 8000, bucketCost: 2000 },
-    { level: 4, label: "No Change", color: "x", monthlyCost: 9000, bucketCost: 1000 },
+    { level: 1, label: "Survival",  color: "x", monthlyCost: 4000, bucketCost: 4000, criticalCost: 0 },
+    { level: 2, label: "OK",        color: "x", monthlyCost: 6000, bucketCost: 2000, criticalCost: 0 },
+    { level: 3, label: "Nice",      color: "x", monthlyCost: 8000, bucketCost: 2000, criticalCost: 0 },
+    { level: 4, label: "No Change", color: "x", monthlyCost: 9000, bucketCost: 1000, criticalCost: 0 },
   ];
 
   it("zero deficit when remaining income covers costs", () => {
@@ -289,7 +339,7 @@ describe("computeLevelDeficits", () => {
   it("runway uses 30-day month for days conversion", () => {
     // deficit 3000, assets 9000 → 3 months → 90 days
     const deficits = computeLevelDeficits(
-      [{ level: 1, label: "x", color: "x", monthlyCost: 3000, bucketCost: 3000 }] as CostLayer[],
+      [{ level: 1, label: "x", color: "x", monthlyCost: 3000, bucketCost: 3000, criticalCost: 0 }] as CostLayer[],
       0, 6, 9000,
     );
     expect(deficits[0].runwayMonths).toBe(3);
@@ -553,6 +603,41 @@ describe("computeUpcomingPlanned", () => {
     // Should not throw
     expect(() => computeUpcomingPlanned(plans, 6, today)).not.toThrow();
   });
+
+  // ── Critical subcategory propagation (Feature #1) ──────────
+
+  it("flags isCritical=true when plan targets a critical subcategory", () => {
+    const plans: PlannedDoc[] = [
+      pl({ id: "edu", description: "Czesne sierpień", mode: "oneoff",
+           plannedMonth: "2026-07", totalAmountPLN: 1500, priority: 4,
+           targetSubcategoryId: "sub_czesne" }),
+    ];
+    const critical = new Set(["sub_czesne"]);
+    const r = computeUpcomingPlanned(plans, 6, today, critical);
+    expect(r).toHaveLength(1);
+    expect(r[0].isCritical).toBe(true);
+    expect(r[0].subcategoryId).toBe("sub_czesne");
+  });
+
+  it("isCritical=false when targeted subcategory is not in critical set", () => {
+    const plans: PlannedDoc[] = [
+      pl({ id: "vac", mode: "oneoff", plannedMonth: "2026-07",
+           totalAmountPLN: 3000, priority: 4,
+           targetSubcategoryId: "sub_wakacje" }),
+    ];
+    const r = computeUpcomingPlanned(plans, 6, today, new Set(["sub_czesne"]));
+    expect(r[0].isCritical).toBe(false);
+  });
+
+  it("defaults to isCritical=false when no critical set provided", () => {
+    const plans: PlannedDoc[] = [
+      pl({ id: "x", mode: "oneoff", plannedMonth: "2026-07",
+           totalAmountPLN: 1000,
+           targetSubcategoryId: "sub_anything" }),
+    ];
+    const r = computeUpcomingPlanned(plans, 6, today);
+    expect(r[0].isCritical).toBe(false);
+  });
 });
 
 // ── sumPlannedForLevel ───────────────────────────────────────
@@ -560,13 +645,13 @@ describe("computeUpcomingPlanned", () => {
 describe("sumPlannedForLevel", () => {
   const upcoming: UpcomingPlanned[] = [
     { id: "a", description: "P1", categoryName: "x", mode: "oneoff",
-      priority: 1, plannedMonth: "2026-06", amountInHorizon: 1000,
+      priority: 1, isCritical: false, plannedMonth: "2026-06", amountInHorizon: 1000,
       totalAmountPLN: 1000, paidPLN: 0 },
     { id: "b", description: "P3", categoryName: "x", mode: "oneoff",
-      priority: 3, plannedMonth: "2026-07", amountInHorizon: 2000,
+      priority: 3, isCritical: false, plannedMonth: "2026-07", amountInHorizon: 2000,
       totalAmountPLN: 2000, paidPLN: 0 },
     { id: "c", description: "P4", categoryName: "x", mode: "oneoff",
-      priority: 4, plannedMonth: "2026-08", amountInHorizon: 5000,
+      priority: 4, isCritical: false, plannedMonth: "2026-08", amountInHorizon: 5000,
       totalAmountPLN: 5000, paidPLN: 0 },
   ];
 
@@ -582,24 +667,42 @@ describe("sumPlannedForLevel", () => {
   it("No Change (P4): includes everything", () => {
     expect(sumPlannedForLevel(upcoming, 4)).toBe(8000);
   });
+
+  // ── isCritical bypass: a P4 item flagged isCritical must be included
+  //    in every level, even Survival. This is exactly the "school fees"
+  //    use case — they don't get cut when you tighten belts.
+  it("critical items bypass the priority filter on every level", () => {
+    const withCritical: UpcomingPlanned[] = [
+      ...upcoming,
+      // P4 normally only in P4 → with isCritical, in every level
+      { id: "edu", description: "Czesne", categoryName: "Edukacja",
+        subcategoryId: "sub_czesne", mode: "oneoff",
+        priority: 4, isCritical: true, plannedMonth: "2026-06",
+        amountInHorizon: 1500, totalAmountPLN: 1500, paidPLN: 0 },
+    ];
+    expect(sumPlannedForLevel(withCritical, 1)).toBe(1000 + 1500);
+    expect(sumPlannedForLevel(withCritical, 2)).toBe(1000 + 1500);
+    expect(sumPlannedForLevel(withCritical, 3)).toBe(1000 + 2000 + 1500);
+    expect(sumPlannedForLevel(withCritical, 4)).toBe(1000 + 2000 + 5000 + 1500);
+  });
 });
 
 // ── computeLevelDeficits with planned ────────────────────────
 
 describe("computeLevelDeficits with upcoming planned", () => {
   const layers: CostLayer[] = [
-    { level: 1, label: "Survival",  color: "x", monthlyCost: 4000, bucketCost: 4000 },
-    { level: 2, label: "OK",        color: "x", monthlyCost: 6000, bucketCost: 2000 },
-    { level: 3, label: "Nice",      color: "x", monthlyCost: 8000, bucketCost: 2000 },
-    { level: 4, label: "No Change", color: "x", monthlyCost: 9000, bucketCost: 1000 },
+    { level: 1, label: "Survival",  color: "x", monthlyCost: 4000, bucketCost: 4000, criticalCost: 0 },
+    { level: 2, label: "OK",        color: "x", monthlyCost: 6000, bucketCost: 2000, criticalCost: 0 },
+    { level: 3, label: "Nice",      color: "x", monthlyCost: 8000, bucketCost: 2000, criticalCost: 0 },
+    { level: 4, label: "No Change", color: "x", monthlyCost: 9000, bucketCost: 1000, criticalCost: 0 },
   ];
 
   const planned: UpcomingPlanned[] = [
     { id: "oc", description: "OC", categoryName: "Auto", mode: "oneoff",
-      priority: 1, plannedMonth: "2026-06", amountInHorizon: 3000,
+      priority: 1, isCritical: false, plannedMonth: "2026-06", amountInHorizon: 3000,
       totalAmountPLN: 3000, paidPLN: 0 },
     { id: "obo", description: "Obóz", categoryName: "Dzieci", mode: "envelope",
-      priority: 3, plannedMonth: "2026-08", amountInHorizon: 2000,
+      priority: 3, isCritical: false, plannedMonth: "2026-08", amountInHorizon: 2000,
       totalAmountPLN: 2000, paidPLN: 0 },
   ];
 

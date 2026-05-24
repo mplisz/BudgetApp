@@ -33,10 +33,16 @@ export interface CostLayer {
   level:           PriorityLevel;     // 1..4
   label:           string;            // "Survival Mode" etc.
   color:           string;
-  // Average monthly cost = sum(EXPENSE with priority <= level) / months
+  // Average monthly cost = sum(EXPENSE with priority <= level OR isCritical) / months
   monthlyCost:     number;
-  // Average monthly cost from this single priority bucket (for stacked breakdown)
+  // Average monthly cost from this single priority bucket (for stacked breakdown).
+  // Does NOT include critical — that lives in its own field.
   bucketCost:      number;
+  // Average monthly cost from EXPENSES in subcategories marked as `isCritical`
+  // (non-negotiable like school fees, medication). Same number across all
+  // levels — they're always included regardless of priority filter.
+  // Kept separate so the UI can show a 🔒 segment.
+  criticalCost:    number;
 }
 
 export const LEVEL_META: Record<PriorityLevel, { label: string; modeLabel: string; color: string; desc: string }> = {
@@ -97,9 +103,12 @@ export interface UpcomingPlanned {
   id:               string;
   description:      string;
   categoryName:     string;
+  subcategoryId?:   string;        // present when the plan targets a specific subcategory
   subcategoryName?: string;
   mode:             "oneoff" | "envelope";
   priority:         PriorityLevel;
+  /** True when subcategory is flagged isCritical — bypasses priority filter. */
+  isCritical:       boolean;
   plannedMonth:     string;        // YYYY-MM
   amountInHorizon:  number;        // PLN — what we still need to set aside in the horizon
   totalAmountPLN:   number;        // total cost (for context)
@@ -173,4 +182,28 @@ export interface SavingCapability {
 export interface WhatIfDelta {
   extraSavingsPerMonth: number;   // Slider: "I save X zł more per month"
   cutCostsPerMonth:     number;   // Slider: "I cut X zł of monthly costs"
+}
+
+// ── Categories — local view, just what we need ───────────────
+//
+// AppContext exposes categories as JS without types. Defining a minimal
+// shape here lets PanelSafetyNet read isCritical / sub[] safely without
+// having to retrofit the entire categories layer.
+
+export interface AppSubcategory {
+  id:              string;
+  name:            string;
+  priority?:       PriorityLevel;
+  isArchived?:     boolean;
+  canBeRecurring?: boolean;
+  isCritical?:     boolean;
+}
+
+export interface AppCategory {
+  id:         string;
+  name:       string;
+  icon?:      string;
+  type:       "EXPENSE" | "INCOME" | "SAVING" | "TRANSFER";
+  isArchived: boolean;
+  sub:        AppSubcategory[];
 }

@@ -54,7 +54,7 @@ import { SavingAssistant }      from "./safetyNetComponents/SavingAssistant";
 import { PillGroup }            from "./safetyNetComponents/uiBits";
 import { DEFAULT_SAFETY_NET }   from "./safetyNetComponents/types";
 import type {
-  AssetBucket, PriorityLevel, SafetyNetSettings, SnTransaction,
+  AssetBucket, PriorityLevel, SafetyNetSettings, SnTransaction, AppCategory,
 } from "./safetyNetComponents/types";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -106,7 +106,10 @@ export default function PanelSafetyNet() {
 function PanelSafetyNetDesktop() {
   const { settings }                            = useSettings()  as UseSettingsResult;
   const { fetchWithAuth }                       = useAuth()      as { fetchWithAuth: typeof fetch };
-  const { setSettings }                         = useAppContext() as { setSettings: (v: AppSettings) => void };
+  const { setSettings, categories }             = useAppContext() as {
+    setSettings: (v: AppSettings) => void;
+    categories:  AppCategory[];
+  };
   const { transactions, isLoading, loadRange }  = useTransactionsRange();
   const { baseCurrency }                        = useCurrencyManager() as { baseCurrency: { code: string } };
   const { planned, loadAll: loadAllPlanned }    = usePlanned();
@@ -181,7 +184,6 @@ function PanelSafetyNetDesktop() {
       );
       setTimeout(() => setFxRefreshNote(null), 4000);
     }).catch(err => {
-      console.warn("[SafetyNet] FX refresh failed:", err);
       // Stay silent — user can still use the panel with last-known rates
     });
   }, [hydrated, baseCurrency.code]);   // snState.assets intentionally omitted
@@ -270,9 +272,24 @@ function PanelSafetyNetDesktop() {
     && txInWindow.length > 0
     && monthsWithData < snState.lookbackMonths;
 
+  // ── Critical subcategories (Feature #1) ──────────────────
+  // Collect all subcategory IDs marked `isCritical` from AppContext.
+  // Filtered to non-archived only — archived subcategories don't apply.
+  // Plain Set lookup, recomputed only when categories array changes.
+  const criticalSubcategoryIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const cat of (categories || [])) {
+      if (cat.isArchived) continue;
+      for (const sub of (cat.sub || [])) {
+        if (sub.isCritical && !sub.isArchived) set.add(sub.id);
+      }
+    }
+    return set;
+  }, [categories]);
+
   const layers = useMemo(
-    () => computeCostLayers(txInWindow, snState.lookbackMonths),
-    [txInWindow, snState.lookbackMonths],
+    () => computeCostLayers(txInWindow, snState.lookbackMonths, criticalSubcategoryIds),
+    [txInWindow, snState.lookbackMonths, criticalSubcategoryIds],
   );
 
   const incomeSources = useMemo(
@@ -305,9 +322,12 @@ function PanelSafetyNetDesktop() {
   // ── Upcoming planned in horizon ───────────────────────────
   // Always computed (so the UpcomingPlannedCard can show the list even when
   // toggled off), but only fed into deficits if the toggle is on.
+  // Critical subcategories propagate here too: a plan targeting an isCritical
+  // subcategory gets isCritical=true in the result and bypasses the priority
+  // filter in sumPlannedForLevel.
   const upcomingPlanned = useMemo(
-    () => computeUpcomingPlanned(planned, snState.horizonMonths),
-    [planned, snState.horizonMonths],
+    () => computeUpcomingPlanned(planned, snState.horizonMonths, new Date(), criticalSubcategoryIds),
+    [planned, snState.horizonMonths, criticalSubcategoryIds],
   );
 
   const includePlannedEnabled = snState.includePlannedExpenses ?? true;
@@ -577,7 +597,6 @@ async function refreshAssetRates(
       }
     } catch (err) {
       // Per-currency failure → skip those, keep others
-      console.warn(`[SafetyNet] NBP fetch failed for ${currency}:`, err);
     }
   }
 

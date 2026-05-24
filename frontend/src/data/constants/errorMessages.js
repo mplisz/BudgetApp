@@ -78,6 +78,13 @@ export const API_ERRORS = {
   "Name must be at most 50 characters":  "Nazwa nie może przekraczać 50 znaków.",
   "Invalid budgetMonth format (YYYY-MM)": "Nieprawidłowy format miesiąca (YYYY-MM).",
   "Failed to fetch":                     "Nie udało się pobrać danych.",
+
+
+  // ──RATE LIMITING ─────────────────────────────────────────────
+  "Too many refresh attempts, please try again later.":           "Zbyt wiele prób odświeżenia. Spróbuj ponownie później.",
+  "Too many login attempts, please try again later.":             "Zbyt wiele prób logowania. Spróbuj ponownie później.",
+  "Too many requests to limits container, please try again later.": "Zbyt wiele zapytań o limity. Spróbuj ponownie później.",
+  "Too many requests from this IP, please try again later.":      "Zbyt wiele zapytań z Twojego adresu IP. Spróbuj ponownie później.",
 };
 
 export function translateError(backendMsg, fallback = "Wystąpił nieoczekiwany błąd.") {

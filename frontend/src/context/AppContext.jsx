@@ -9,7 +9,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useAuth }  from "./AuthContext";
 import { MONTHS }   from "../data/constants";
-import { formatBudgetMonth } from "../utils/helpers";
 import { fmt }      from "../utils/helpers";
 
 const AppContext = createContext(null);
@@ -24,10 +23,6 @@ export function useAppContext() {
 export function AppProvider({ children }) {
   const { fetchWithAuth, accessToken } = useAuth();
 
-  // ── Navigation ───────────────────────────────────────────────
-  const [panel, _setPanel] = useState(import.meta.env.VITE_DEFAULT_PANEL || "expenses");
-  const [month, setMonth]  = useState(new Date().getMonth());
-  const [year,  setYear]   = useState(new Date().getFullYear());
 
   // ── Transactions ─────────────────────────────────────────────
   const [transactions, setTransactions] = useState([]);
@@ -54,27 +49,6 @@ export function AppProvider({ children }) {
   const [settings,    setSettings]    = useState(null);
   const [bootstrapDone, setBootstrapDone] = useState(false);
 
-  // ── Navigate to first open month from today ───────────────────
-  const navigateToFirstOpenMonth = useCallback((closed = closedMonths) => {
-    const now = new Date();
-    let m = now.getMonth();
-    let y = now.getFullYear();
-    for (let i = 0; i < 24; i++) {
-      const bm = formatBudgetMonth(m, y);
-      if (!closed.has(bm)) {
-        setMonth(m);
-        setYear(y);
-        return;
-      }
-      m++;
-      if (m > 11) { m = 0; y++; }
-    }
-  }, [closedMonths]);
-
-  const setPanel = useCallback((id) => {
-    navigateToFirstOpenMonth();
-    _setPanel(id);
-  }, [navigateToFirstOpenMonth]);
 
   // ── Parse categories from DB format ──────────────────────────
   const parseCategories = (dbCategories) => {
@@ -98,6 +72,7 @@ export function AppProvider({ children }) {
           priority:       child.priority    || 2,
           isArchived:     child.isArchived  || false,
           canBeRecurring: child.canBeRecurring ?? false,
+          isCritical:     child.isCritical     ?? false
         });
       }
     });
@@ -132,7 +107,6 @@ export function AppProvider({ children }) {
           const data = await monthsRes.json();
           const closedSet = new Set(data.map(m => m.budgetMonth));
           setClosedMonths(closedSet);
-          navigateToFirstOpenMonth(closedSet);
         }
 
         // Vouchers
@@ -154,11 +128,6 @@ export function AppProvider({ children }) {
 
   // ── Context value ─────────────────────────────────────────────
   const value = {
-    // Navigation
-    panel,  setPanel,
-    month,  setMonth,
-    year,   setYear,
-
     // Transactions
     transactions, setTransactions,
     cart, setCart,

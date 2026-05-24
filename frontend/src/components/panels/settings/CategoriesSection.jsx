@@ -29,6 +29,7 @@ export function CategoriesSection() {
   const [newSubName,       setNewSubName]       = useState("");
   const [newSubPriority,   setNewSubPriority]   = useState(2);
   const [newSubCanBeRecurring, setNewSubCanBeRecurring] = useState(false);
+  const [newSubIsCritical, setNewSubIsCritical] = useState(false);
   const [modalConfig,      setModalConfig]      = useState(MODAL_CLOSED);
 
   const expandedCat = useMemo(() =>
@@ -62,8 +63,17 @@ export function CategoriesSection() {
     if (!cleanName || cleanName.length < 2)  { showError("Nazwa subkategorii jest za krótka."); return; }
     if (cleanName.length > 50)               { showError("Nazwa subkategorii nie może przekraczać 50 znaków."); return; }
     if (!expandedCat) return;
-    const success = await addCategoryToDb(cleanName, "📁", null, expandedCat.id, expandedCat.name, newSubPriority,newSubCanBeRecurring);
-    if (success) { setNewSubName(""); setNewSubPriority(2); setNewSubCanBeRecurring(false);}
+    const success = await addCategoryToDb(
+      cleanName, "📁", null,
+      expandedCat.id, expandedCat.name,
+      newSubPriority,
+      newSubCanBeRecurring,
+      newSubIsCritical,
+    );
+    if (success) {
+      setNewSubName(""); setNewSubPriority(2);
+      setNewSubCanBeRecurring(false); setNewSubIsCritical(false);
+    }
   }
 
   async function handleAddCategory() {
@@ -102,7 +112,6 @@ export function CategoriesSection() {
                   />
                 </div>
 
-                {/* Type selector — from categoryTypes.js */}
                 <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "#0d1424", padding: 3, borderRadius: 10 }}>
                   {typeSections.map(({ type, label, icon }) => (
                     <button
@@ -181,9 +190,9 @@ export function CategoriesSection() {
                   </div>
 
                   {/* Add subcategory */}
-                  <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
                     <input
-                      style={{ ...s.input, flex: 1 }}
+                      style={{ ...s.input, flex: "1 1 200px", minWidth: 160 }}
                       placeholder="Nazwa subkategorii..."
                       value={newSubName}
                       onChange={e => setNewSubName(e.target.value)}
@@ -205,19 +214,35 @@ export function CategoriesSection() {
                           >
                             P{p}
                           </button>
-                          
                         ))}
                       </div>
                     )}
 
                     {expandedCat.type === "EXPENSE" && (
-                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "0 4px", whiteSpace: "nowrap" }}>
+                      <label
+                        title="Cykliczne"
+                        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "0 4px", whiteSpace: "nowrap" }}
+                      >
                         <input
                           type="checkbox"
                           checked={newSubCanBeRecurring}
                           onChange={e => setNewSubCanBeRecurring(e.target.checked)}
                         />
                         <span style={{ fontSize: 11, color: "#64748b" }}>🔄</span>
+                      </label>
+                    )}
+
+                    {expandedCat.type === "EXPENSE" && (
+                      <label
+                        title="Krytyczne — wliczane do Survival Mode niezależnie od priorytetu (czesne, leki, opłaty dla dzieci)"
+                        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "0 4px", whiteSpace: "nowrap" }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={newSubIsCritical}
+                          onChange={e => setNewSubIsCritical(e.target.checked)}
+                        />
+                        <span style={{ fontSize: 11, color: "#64748b" }}>🔒</span>
                       </label>
                     )}
 
@@ -233,14 +258,19 @@ export function CategoriesSection() {
                   {/* Subcategory list header */}
                   <div style={{
                     display: "grid",
-                    gridTemplateColumns: expandedCat.type === "EXPENSE" ? "1fr 140px 40px" : "1fr 40px",
+                    gridTemplateColumns: expandedCat.type === "EXPENSE"
+                      ? "1fr 140px 100px 100px 40px"
+                      : "1fr 40px",
                     gap: 8, marginBottom: 8,
                   }}>
                     <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>NAZWA</span>
                     {expandedCat.type === "EXPENSE" && (
-                      <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>PRIORYTET</span>
+                      <>
+                        <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>PRIORYTET</span>
+                        <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>CYKLICZNE</span>
+                        <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>KRYTYCZNE</span>
+                      </>
                     )}
-                  {expandedCat.type === "EXPENSE" && <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>CYKLICZNE</span>}
                   </div>
 
                   {/* Subcategory rows */}

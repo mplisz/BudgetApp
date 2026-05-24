@@ -9,10 +9,11 @@ import { useTransactions }  from "../../hooks/useTransactions";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { theme as s }       from "../../styles/theme";
 import { fmt }              from "../../utils/helpers";
-import { TransactionForm, emptyFormValues } from "./transactionComponents/TransactionForm";
-import type { FormValues, TransactionPayload } from "../../types/transaction";
+import { TransactionForm} from "./transactionComponents/TransactionForm";
+import type { TransactionPayload } from "../../types/transaction";
 import { CartPanel } from "./transactionComponents/CartPanel";
 import type { CartItem } from "./transactionComponents/CartPanel";
+import { useMonthFromUrl }   from "../../hooks/useMonthFromUrl";
 
 // ── Cart ID generator ─────────────────────────────────────────
 
@@ -37,12 +38,13 @@ interface OcrLine {
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelExpenses() {
-  const { month, year, cart, setCart } = useAppContext() as {
-    month:   number;
-    year:    number;
+  const { cart, setCart } = useAppContext() as {
     cart:    CartItem[];
     setCart: (v: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
   };
+
+  const { budgetMonth } = useMonthFromUrl();
+
   const { addTransaction, isSaving, errorMsg, successMsg } = useTransactions() as {
     addTransaction: (p: TransactionPayload) => Promise<unknown>;
     isSaving:       boolean;
@@ -55,7 +57,7 @@ export default function PanelExpenses() {
     isFutureMonth:       boolean;
   };
 
-  const budgetMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
+
   const fileRef     = useRef<HTMLInputElement>(null);
 
   const [ocrLines,        setOcrLines]        = useState<OcrLine[]>([]);
@@ -157,7 +159,7 @@ export default function PanelExpenses() {
 
   // ── Form initial values ───────────────────────────────────
 
-  const formInitialValues: FormValues | undefined = editingCartItem
+  const formInitialValues = editingCartItem
     ? (() => {
         const [y, m, d] = editingCartItem.date.split("-").map(Number);
         return {
