@@ -39,6 +39,7 @@ import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { PANEL_META } from "./data/constants";
 import { panelIdFromPath, getDefaultPath } from "./data/routes";
 import { useMonthFromUrl } from "./hooks/useMonthFromUrl";
+import { PanelLoader }   from "./components/ui/PanelLoader";
 
 // ── Lazy-loaded panels ───────────────────────────────────────
 
@@ -148,7 +149,7 @@ function AuthenticatedLayout() {
           {/* Panel boundary, keyed on pathname so it auto-resets
               when the user navigates to a different panel. */}
           <ErrorBoundary name="Panel" key={pathname}>
-            <Suspense fallback={<div style={{ color: "#64748b" }}>Ładowanie panelu...</div>}>
+            <Suspense fallback={<PanelLoader />}>
               <Outlet />
             </Suspense>
           </ErrorBoundary>

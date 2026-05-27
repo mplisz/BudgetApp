@@ -26,14 +26,14 @@ const STYLES = {
     border:     "1px solid #3b82f6",
     color:      "#93c5fd",
     icon:       "ℹ",
+  },
   warning: {
     background: "#1a1200",
     border:     "1px solid #f59e0b",
     color:      "#fbbf24",
     icon:       "⚠",
   },
-  },
-};
+}
 
 // ── Provider ──────────────────────────────────────────────────
 // Wrap your app once with this — provides toast context to all children.

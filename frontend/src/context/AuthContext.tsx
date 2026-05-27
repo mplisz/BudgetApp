@@ -76,7 +76,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading,   setIsLoading]   = useState(true);
   const [error,       setError]       = useState<string | null>(null);
 
-  const { showError } = useToast() as { showError: (msg: string) => void };
+  const { showWarning } = useToast() as { showWarning: (msg: string) => void };
 
   // Ref mirrors the access token so fetchWithAuth always reads the latest
   // value without needing accessToken in its closure.
@@ -98,6 +98,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Attempts a silent token refresh using the httpOnly refresh cookie.
   // If successful, the app is ready without showing the login page.
   useEffect(() => {
+
+
     async function initializeAuth() {
       try {
         const response = await fetch(`${API_URL}/api/auth/refresh`, {
@@ -115,6 +117,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
             familyId: decoded.familyId,
             name:     decoded.name,
           });
+        }else if (response.status === 429) {
+          const errorData = await response.json().catch(() => ({}));
+          const errMsg = translateError(errorData.error) || "Too many refresh attempts, please try again later.";
+          showWarning(errMsg);
         }
       } catch (err) {
           // No active session — user will see login screen.
@@ -156,6 +162,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (response.status === 429) {
           const errorData = await response.json().catch(() => ({}));
           const errMsg = errorData.error || "Too many refresh attempts, please try again later.";
+          showWarning(errMsg);
           throw new Error(errMsg); 
         }
         throw new Error("Session expired. Please log in again.");
@@ -202,7 +209,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     let response = await makeRequest(accessTokenRef.current);
 
-    if (response.status === 401) {
+   /* if (response.status === 401) {
       try {
         const newToken = await refreshAccessToken();
         response       = await makeRequest(newToken);
@@ -215,7 +222,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(null);
         throw new Error("Session expired. Please log in again.");
       }
-
+    }
+    */
       if (response.status === 401) {
       try {
         const newToken = await refreshAccessToken();
@@ -232,12 +240,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
             ? refreshErr.message 
             : "Session expired. Please log in again.";
         // ShowToast
-        showError(translateError(errMsg)); 
+        showWarning(translateError(errMsg)); 
         
         throw refreshErr;
       }
     }
-    }
+
 
     return response;
   }, [applyToken, refreshAccessToken]);

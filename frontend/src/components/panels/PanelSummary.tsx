@@ -3,7 +3,7 @@
 // "Podsumowanie miesiąca" panel — desktop only.
 // ============================================================
 
-import { useMemo, useEffect, useCallback } from "react";
+import { useMemo, useEffect, useCallback, useState  } from "react";
 import { useAppContext }    from "../../context/AppContext";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useTransactions }  from "../../hooks/useTransactions";
@@ -19,6 +19,7 @@ import { PriorityBreakdown } from "./summaryComponents/PriorityBreakdown";
 import { TopTransactions }  from "./summaryComponents/TopTransactions";
 import { SavingsSummary }   from "./summaryComponents/SavingsSummary";
 import { DEFAULT_TARGETS }  from "../../types/summaryConstants";
+import { SkeletonKpiCard, SkeletonCard, SkeletonChart, Skeleton } from "../ui/Skeleton";
 import type {
   Transaction,
   CategorySummary,
@@ -150,14 +151,19 @@ export default function PanelSummary() {
   };
 
   const { activeBudgetMonth }             = useMonthStatus() as { activeBudgetMonth: BudgetMonth };
-  const { loadTransactions }              = useTransactions() as { loadTransactions: (m: BudgetMonth) => void };
+   const { loadTransactions } = useTransactions() as { loadTransactions: (m: BudgetMonth) => Promise<void> };
   const { limits: rawLimits, loadLimits } = useLimits() as {
     limits: Parameters<typeof buildLimitMap>[0];
     loadLimits: () => void;
   };
+const [loadedMonth, setLoadedMonth] = useState<string | null>(null);
+const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
   useEffect(() => {
-    loadTransactions(activeBudgetMonth);
+   setLoadedMonth(null);
+   loadTransactions(activeBudgetMonth)
+    .then(() => setLoadedMonth(activeBudgetMonth))
+    .catch(() => setLoadedMonth(activeBudgetMonth));   // stop skeleton on error
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBudgetMonth]);
 
@@ -257,7 +263,7 @@ export default function PanelSummary() {
 
   const hasData = monthTx.length > 0;
 
-  // ── Render ────────────────────────────────────────────────
+ // ── Render ────────────────────────────────────────────────
   return (
     <div style={{ padding: "0 0 60px 0", maxWidth: 1200 }}>
 
@@ -267,138 +273,195 @@ export default function PanelSummary() {
         <div style={s.sectionSub}>Przegląd budżetu miesiąca</div>
       </div>
 
-      {/* KPI row */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <KpiPill icon="💰" label="Wpływy"    value={fmt(totalIncome)}   color="#10b981" />
-        {totalTransfers > 0 && (
-          <KpiPill icon="🔄" label="Transfery" value={fmt(totalTransfers)} color="#10b981" />
-        )}
-        <KpiPill
-          icon="💸" label="Wydatki"
-          value={fmt(totalExpenses)} color="#ef4444"
-          sub={budgetPct !== null ? `${budgetPct.toFixed(1)}% wpływów` : undefined}
-        />
-        <KpiPill
-          icon="🏦" label="Oszczędności"
-          value={fmt(totalSavings)} color="#3b82f6"
-          sub={totalIncome > 0 ? `${((totalSavings / totalIncome) * 100).toFixed(1)}% wpływów` : undefined}
-        />
-        <KpiPill
-          icon="⚖️" label="Saldo"
-          value={fmt(balance)}
-          color={balance >= 0 ? "#10b981" : "#ef4444"}
-        />
-        {budgetPct !== null && (
-          <KpiPill
-            icon="🎯" label="Wydatki / wpływy"
-            value={`${budgetPct.toFixed(1)}%`}
-            color={budgetPct > 90 ? "#ef4444" : budgetPct > 70 ? "#f59e0b" : "#10b981"}
-            sub={`${fmt(totalExpenses)} / ${fmt(totalRealIncome)}`}
-          />
-        )}
-      </div>
+      {/* ── Loading skeletons ───────────────────────────── */}
+      {isFirstLoad && (
+        <>
+          {/* KPI row skeleton */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            {[0, 1, 2, 3, 4].map(i => (
+              <SkeletonKpiCard key={i} style={{ flex: 1, minWidth: 130 }} />
+            ))}
+          </div>
 
-      {/* Empty state */}
-      {!hasData && (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "#475569", fontSize: 15 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
-          Brak transakcji dla miesiąca{" "}
-          <strong style={{ color: "#64748b" }}>{activeBudgetMonth}</strong>
-        </div>
+          {/* ROW 1: Limity + Pie */}
+          <div style={{ display: "flex", gap: 16, marginBottom: 16, alignItems: "flex-start" }}>
+            <SkeletonCard title style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {[0, 1, 2, 3].map(i => (
+                  <div key={i}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <Skeleton width={140} height={12} />
+                      <Skeleton width={70}  height={12} />
+                    </div>
+                    <Skeleton height={8} rounded={4} />
+                  </div>
+                ))}
+              </div>
+            </SkeletonCard>
+            <SkeletonCard title style={{ flex: 1, minWidth: 0 }}>
+              <SkeletonChart height={220} legend={false} />
+            </SkeletonCard>
+          </div>
+
+          {/* ROW 2: Targets */}
+          <SkeletonCard title style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} style={{ flex: 1, minWidth: 160 }}>
+                  <Skeleton width="80%" height={12} style={{ marginBottom: 8 }} />
+                  <Skeleton height={8} rounded={4} />
+                </div>
+              ))}
+            </div>
+          </SkeletonCard>
+
+          {/* ROW 3: 3 columns */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+            <SkeletonCard title height={140} />
+            <SkeletonCard title height={140} />
+            <SkeletonCard title height={140} />
+          </div>
+        </>
       )}
 
-      {hasData && (
+      {/* ── Real content ────────────────────────────────── */}
+      {!isFirstLoad && (
         <>
-          {/* ROW 1: Limity | Wykres kołowy */}
-          <div style={{ display: "flex", gap: 16, marginBottom: 16, alignItems: "flex-start" }}>
-            <Card title="📋 Limity kategorii" style={{ flex: 1, minWidth: 0 }}>
-              {categoriesWithLimit.length === 0 && categoriesWithoutLimit.length === 0 && (
-                <div style={{ color: "#475569", fontSize: 13 }}>Brak wydatków.</div>
-              )}
-              {categoriesWithLimit.map(cat => (
-                <CategoryLimitBar
-                  key={cat.categoryId}
-                  category={cat}
-                  subcategories={getSubcategories(cat.categoryId)}
-                />
-              ))}
-              {categoriesWithoutLimit.length > 0 && (
-                <>
-                  <div style={{ color: "#475569", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginTop: 16, marginBottom: 8, letterSpacing: "0.5px" }}>
-                    Bez limitu
-                  </div>
-                  {categoriesWithoutLimit.map(cat => (
+          {/* KPI row */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            <KpiPill icon="💰" label="Wpływy"    value={fmt(totalIncome)}   color="#10b981" />
+            {totalTransfers > 0 && (
+              <KpiPill icon="🔄" label="Transfery" value={fmt(totalTransfers)} color="#10b981" />
+            )}
+            <KpiPill
+              icon="💸" label="Wydatki"
+              value={fmt(totalExpenses)} color="#ef4444"
+              sub={budgetPct !== null ? `${budgetPct.toFixed(1)}% wpływów` : undefined}
+            />
+            <KpiPill
+              icon="🏦" label="Oszczędności"
+              value={fmt(totalSavings)} color="#3b82f6"
+              sub={totalIncome > 0 ? `${((totalSavings / totalIncome) * 100).toFixed(1)}% wpływów` : undefined}
+            />
+            <KpiPill
+              icon="⚖️" label="Saldo"
+              value={fmt(balance)}
+              color={balance >= 0 ? "#10b981" : "#ef4444"}
+            />
+            {budgetPct !== null && (
+              <KpiPill
+                icon="🎯" label="Wydatki / wpływy"
+                value={`${budgetPct.toFixed(1)}%`}
+                color={budgetPct > 90 ? "#ef4444" : budgetPct > 70 ? "#f59e0b" : "#10b981"}
+                sub={`${fmt(totalExpenses)} / ${fmt(totalRealIncome)}`}
+              />
+            )}
+          </div>
+
+          {/* Empty state */}
+          {!hasData && (
+            <div style={{ textAlign: "center", padding: "60px 0", color: "#475569", fontSize: 15 }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+              Brak transakcji dla miesiąca{" "}
+              <strong style={{ color: "#64748b" }}>{activeBudgetMonth}</strong>
+            </div>
+          )}
+
+          {hasData && (
+            <>
+              {/* ROW 1: Limity | Wykres kołowy */}
+              <div style={{ display: "flex", gap: 16, marginBottom: 16, alignItems: "flex-start" }}>
+                <Card title="📋 Limity kategorii" style={{ flex: 1, minWidth: 0 }}>
+                  {categoriesWithLimit.length === 0 && categoriesWithoutLimit.length === 0 && (
+                    <div style={{ color: "#475569", fontSize: 13 }}>Brak wydatków.</div>
+                  )}
+                  {categoriesWithLimit.map(cat => (
                     <CategoryLimitBar
                       key={cat.categoryId}
                       category={cat}
                       subcategories={getSubcategories(cat.categoryId)}
                     />
                   ))}
-                </>
-              )}
-            </Card>
+                  {categoriesWithoutLimit.length > 0 && (
+                    <>
+                      <div style={{ color: "#475569", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginTop: 16, marginBottom: 8, letterSpacing: "0.5px" }}>
+                        Bez limitu
+                      </div>
+                      {categoriesWithoutLimit.map(cat => (
+                        <CategoryLimitBar
+                          key={cat.categoryId}
+                          category={cat}
+                          subcategories={getSubcategories(cat.categoryId)}
+                        />
+                      ))}
+                    </>
+                  )}
+                </Card>
 
-            <Card title="🥧 Struktura wydatków" style={{ flex: 1, minWidth: 0 }}>
-              <SpendingPieChart
-                categories={expenseCategories}
-                getSubcategories={getSubcategories}
-                totalExpenses={totalExpenses}
-              />
-            </Card>
-          </div>
+                <Card title="🥧 Struktura wydatków" style={{ flex: 1, minWidth: 0 }}>
+                  <SpendingPieChart
+                    categories={expenseCategories}
+                    getSubcategories={getSubcategories}
+                    totalExpenses={totalExpenses}
+                  />
+                </Card>
+              </div>
 
-          {/* ROW 2: Wskaźniki targets */}
-          <Card title="🎯 Wskaźniki budżetowe" style={{ marginBottom: 16 }}>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <TargetIndicator
-                icon="🛡️" label="Ubezpieczenia"
-                spent={insuranceSpent}
-                targetPercent={targets.maxInsurancePercent}
-                totalIncome={totalIncome}
-                direction="max"
-              />
-              <TargetIndicator
-                icon="🏦" label="Zobowiązania/Raty"
-                spent={obligationsSpent}
-                targetPercent={targets.maxObligationsPercent}
-                totalIncome={totalIncome}
-                direction="max"
-              />
-              <TargetIndicator
-                icon="👴" label="Emerytura"
-                spent={retirementSpent}
-                targetPercent={targets.minRetirementPercent}
-                totalIncome={totalIncome}
-                direction="min"
-              />
-              <TargetIndicator
-                icon="💎" label="Oszczędności"
-                spent={totalSavings}
-                targetPercent={targets.minSavingsPercent}
-                totalIncome={totalIncome}
-                direction="min"
-              />
-            </div>
-          </Card>
+              {/* ROW 2: Wskaźniki targets */}
+              <Card title="🎯 Wskaźniki budżetowe" style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <TargetIndicator
+                    icon="🛡️" label="Ubezpieczenia"
+                    spent={insuranceSpent}
+                    targetPercent={targets.maxInsurancePercent}
+                    totalIncome={totalIncome}
+                    direction="max"
+                  />
+                  <TargetIndicator
+                    icon="🏦" label="Zobowiązania/Raty"
+                    spent={obligationsSpent}
+                    targetPercent={targets.maxObligationsPercent}
+                    totalIncome={totalIncome}
+                    direction="max"
+                  />
+                  <TargetIndicator
+                    icon="👴" label="Emerytura"
+                    spent={retirementSpent}
+                    targetPercent={targets.minRetirementPercent}
+                    totalIncome={totalIncome}
+                    direction="min"
+                  />
+                  <TargetIndicator
+                    icon="💎" label="Oszczędności"
+                    spent={totalSavings}
+                    targetPercent={targets.minSavingsPercent}
+                    totalIncome={totalIncome}
+                    direction="min"
+                  />
+                </div>
+              </Card>
 
-          {/* ROW 3: Priorytety | Top 5 | Oszczędności */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-            <Card title="🎖️ Rozkład priorytetów">
-              <PriorityBreakdown monthTx={monthTx} totalExpenses={totalExpenses} />
-            </Card>
-            <Card title="🔝 Top 5 wydatków">
-              <TopTransactions monthTx={monthTx} totalExpenses={totalExpenses} limit={5} />
-            </Card>
-            <Card title="💎 Oszczędności miesiąca">
-              <SavingsSummary
-                monthTx={monthTx}
-                totalIncome={totalIncome}
-                minSavingsPercent={targets.minSavingsPercent}
-              />
-            </Card>
-          </div>
+              {/* ROW 3: Priorytety | Top 5 | Oszczędności */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+                <Card title="🎖️ Rozkład priorytetów">
+                  <PriorityBreakdown monthTx={monthTx} totalExpenses={totalExpenses} />
+                </Card>
+                <Card title="🔝 Top 5 wydatków">
+                  <TopTransactions monthTx={monthTx} totalExpenses={totalExpenses} limit={5} />
+                </Card>
+                <Card title="💎 Oszczędności miesiąca">
+                  <SavingsSummary
+                    monthTx={monthTx}
+                    totalIncome={totalIncome}
+                    minSavingsPercent={targets.minSavingsPercent}
+                  />
+                </Card>
+              </div>
+            </>
+          )}
         </>
       )}
+
     </div>
   );
 }

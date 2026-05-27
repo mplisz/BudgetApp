@@ -16,7 +16,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import App from './App';
 import { AuthProvider }  from './context/AuthContext';
 import { AppProvider }   from './context/AppContext';
-import { ToastProvider } from './components/ui/ToastContainer';
+import { ToastProvider,ToastContainer  } from './components/ui/ToastContainer';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -25,6 +25,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
         <ToastProvider>
+          <ToastContainer/>
           <AuthProvider>
             <AppProvider>
               <App />

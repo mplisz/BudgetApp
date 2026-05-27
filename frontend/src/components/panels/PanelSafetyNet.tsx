@@ -56,6 +56,7 @@ import { DEFAULT_SAFETY_NET }   from "./safetyNetComponents/types";
 import type {
   AssetBucket, PriorityLevel, SafetyNetSettings, SnTransaction, AppCategory,
 } from "./safetyNetComponents/types";
+import { SkeletonKpiCard, SkeletonCard, SkeletonChart, SkeletonListRow } from "../ui/Skeleton";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -348,7 +349,46 @@ function PanelSafetyNetDesktop() {
     [txInWindow, snState.lookbackMonths],
   );
 
-  // ── Render ────────────────────────────────────────────────
+// ── Render ────────────────────────────────────────────────
+
+  if (isLoading && transactions.length === 0) {
+    return (
+      <div style={{ padding: "0 0 40px 0", maxWidth: 1200 }}>
+        {/* Header — zostaje, bo nie zależy od danych */}
+        <div style={{ marginBottom: 20, marginTop: 8 }}>
+          <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>
+            Ładowanie danych z ostatnich {snState.lookbackMonths} miesięcy…
+          </div>
+        </div>
+
+        {/* Cost layers card */}
+        <SkeletonCard title height={140} style={{ marginBottom: 16 }} />
+
+        {/* Income sources toggle row */}
+        <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+          <SkeletonKpiCard style={{ flex: 1 }} />
+          <SkeletonKpiCard style={{ flex: 1 }} />
+          <SkeletonKpiCard style={{ flex: 1 }} />
+        </div>
+
+        {/* Deficit table */}
+        <SkeletonCard title style={{ marginBottom: 16 }}>
+          <SkeletonListRow columns={5} count={4} />
+        </SkeletonCard>
+
+        {/* Assets portfolio + saving assistant */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <SkeletonCard title style={{ minHeight: 200 }}>
+            <SkeletonListRow columns={3} count={3} />
+          </SkeletonCard>
+          <SkeletonCard title style={{ minHeight: 200 }}>
+            <SkeletonChart height={140} legend={false} />
+          </SkeletonCard>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "0 0 60px 0", maxWidth: 1200 }}>
@@ -427,83 +467,75 @@ function PanelSafetyNetDesktop() {
         </div>
       </Card>
 
-      {isLoading && !hydrated && (
-        <div style={{ color: "#475569", textAlign: "center", padding: 40 }}>Ładowanie…</div>
-      )}
+      {/* Row 1: cost layers + income toggles */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 16,
+        marginBottom: 16,
+      }} data-sn-row>
+        <Card title="🧮 4 warstwy kosztów (Survival → No Change)">
+          <CostLayersCard layers={layers} highlightLevel={selectedLevel} />
+        </Card>
 
-      {(!isLoading || hydrated) && (
-        <>
-          {/* Row 1: cost layers + income toggles */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 16,
-            marginBottom: 16,
-          }} data-sn-row>
-            <Card title="🧮 4 warstwy kosztów (Survival → No Change)">
-              <CostLayersCard layers={layers} highlightLevel={selectedLevel} />
-            </Card>
+        <Card title="💰 Symulator utraty dochodu">
+          <IncomeSourcesToggle
+            sources={incomeSources}
+            excludedKeys={snState.excludedIncomeKeys}
+            onChange={setExcluded}
+            lookbackMonths={snState.lookbackMonths}
+          />
+        </Card>
+      </div>
 
-            <Card title="💰 Symulator utraty dochodu">
-              <IncomeSourcesToggle
-                sources={incomeSources}
-                excludedKeys={snState.excludedIncomeKeys}
-                onChange={setExcluded}
-                lookbackMonths={snState.lookbackMonths}
-              />
-            </Card>
-          </div>
+      {/* Row 2: deficit table */}
+      <Card title="📊 Deficyt, target i runway" style={{ marginBottom: 16 }}>
+        <DeficitTable
+          deficits={deficits}
+          horizonMonths={snState.horizonMonths}
+          selectedLevel={selectedLevel}
+          onSelectLevel={setSelectedLevel}
+        />
+        <div style={{
+          fontSize: 11, color: "#475569", marginTop: 10,
+          padding: "8px 10px", background: "#0d1424",
+          border: "1px solid #1e293b", borderRadius: 8, lineHeight: 1.6,
+        }}>
+          💡 Kliknij wiersz, aby ustawić poziom jako cel asystenta poniżej. Aktywnie wybrany poziom:{" "}
+          <strong style={{ color: "#e2e8f0" }}>P1–P{selectedLevel}</strong>{" "}
+          <span style={{ color: "#334155" }}>(tylko w bieżącej sesji — nie zapisywane)</span>.
+        </div>
+      </Card>
 
-          {/* Row 2: deficit table */}
-          <Card title="📊 Deficyt, target i runway" style={{ marginBottom: 16 }}>
-            <DeficitTable
-              deficits={deficits}
-              horizonMonths={snState.horizonMonths}
-              selectedLevel={selectedLevel}
-              onSelectLevel={setSelectedLevel}
-            />
-            <div style={{
-              fontSize: 11, color: "#475569", marginTop: 10,
-              padding: "8px 10px", background: "#0d1424",
-              border: "1px solid #1e293b", borderRadius: 8, lineHeight: 1.6,
-            }}>
-              💡 Kliknij wiersz, aby ustawić poziom jako cel asystenta poniżej. Aktywnie wybrany poziom:{" "}
-              <strong style={{ color: "#e2e8f0" }}>P1–P{selectedLevel}</strong>{" "}
-              <span style={{ color: "#334155" }}>(tylko w bieżącej sesji — nie zapisywane)</span>.
-            </div>
-          </Card>
+      {/* Row 2b: upcoming planned expenses in horizon */}
+      <div style={{ marginBottom: 16 }}>
+        <UpcomingPlannedCard
+          upcoming={upcomingPlanned}
+          selectedLevel={selectedLevel}
+          horizonMonths={snState.horizonMonths}
+          enabled={includePlannedEnabled}
+          onToggle={setIncludePlanned}
+        />
+      </div>
 
-          {/* Row 2b: upcoming planned expenses in horizon */}
-          <div style={{ marginBottom: 16 }}>
-            <UpcomingPlannedCard
-              upcoming={upcomingPlanned}
-              selectedLevel={selectedLevel}
-              horizonMonths={snState.horizonMonths}
-              enabled={includePlannedEnabled}
-              onToggle={setIncludePlanned}
-            />
-          </div>
+      {/* Row 3: assets portfolio */}
+      <Card title="🪙 Portfel aktywów (Twoja poduszka)" style={{ marginBottom: 16 }}>
+        <AssetsPortfolio
+          assets={snState.assets}
+          onChange={setAssets}
+        />
+      </Card>
 
-          {/* Row 3: assets portfolio */}
-          <Card title="🪙 Portfel aktywów (Twoja poduszka)" style={{ marginBottom: 16 }}>
-            <AssetsPortfolio
-              assets={snState.assets}
-              onChange={setAssets}
-            />
-          </Card>
-
-          {/* Row 4: saving assistant */}
-          <Card title="🚀 Asystent odkładania">
-            <SavingAssistant
-              deficits={deficits}
-              selectedLevel={selectedLevel}
-              horizonMonths={snState.horizonMonths}
-              assetsTotal={assetsTotal}
-              capability={capability}
-            />
-          </Card>
-        </>
-      )}
+      {/* Row 4: saving assistant */}
+      <Card title="🚀 Asystent odkładania">
+        <SavingAssistant
+          deficits={deficits}
+          selectedLevel={selectedLevel}
+          horizonMonths={snState.horizonMonths}
+          assetsTotal={assetsTotal}
+          capability={capability}
+        />
+      </Card>
 
       <style>{`
         @media (max-width: 900px) {

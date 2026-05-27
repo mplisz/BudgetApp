@@ -9,7 +9,6 @@ import { useState, useMemo, useEffect } from "react";
 import { useAppContext }   from "../../context/AppContext";
 import { useTransactions } from "../../hooks/useTransactions";
 import { useMonthStatus }  from "../../hooks/useMonthStatus";
-import { useToast }        from "../../hooks/useToast";
 import { AppDatePicker, toYMD } from "../ui/AppDatePicker";
 import { ConfirmModal }    from "../ui/ConfirmModal";
 import { fmt }             from "../../utils/helpers";
@@ -17,6 +16,7 @@ import { calculateEffectiveAmount } from "../../utils/returnUtils";
 import { TransactionRow, ReturnModal, s, PRIO_COLORS } from "./transactionComponents";
 import { usePagination }   from "../../hooks/usePagination";
 import { Pagination }      from "../ui/Pagination";
+import { SkeletonListRow } from "../ui/Skeleton";
 
 const PAGE_SIZE = 25;
 
@@ -75,9 +75,6 @@ export default function PanelTransactions() {
     isActiveMonthClosed: boolean;
     activeBudgetMonth:   string;
   };
-  const { showError: showToastError } = useToast() as {
-    showError: (m: string) => void;
-  };
 
   // ── Filter state ──────────────────────────────────────────
 
@@ -92,10 +89,16 @@ export default function PanelTransactions() {
   const [confirmLinkedModal, setConfirmLinkedModal] = useState<LinkedModal>({ isOpen: false, txId: null });
   const [returnTarget,   setReturnTarget]   = useState<Transaction | null>(null);
   const [grouped,        setGrouped]        = useState(true);
+  const [loadedMonth,    setLoadedMonth]    = useState<string | null>(null);
+
 
   useEffect(() => {
-    loadTransactions(activeBudgetMonth);
+    setLoadedMonth(null);
+    loadTransactions(activeBudgetMonth).then(() => {
+    setLoadedMonth(activeBudgetMonth);
+    });
   }, [activeBudgetMonth]);
+  const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
   // ── Enrich transactions ───────────────────────────────────
   // - Resolve tag names
@@ -120,7 +123,6 @@ export default function PanelTransactions() {
       }),
     [transactions, tags, activeBudgetMonth]
   );
-
   const uniqueCats = useMemo(() => {
     const map: Record<string, string> = {};
     enriched.forEach(tx => { if (tx.categoryId) map[tx.categoryId] = tx.categoryName; });
@@ -243,18 +245,26 @@ export default function PanelTransactions() {
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>🧾 Wydatki</div>
         <div style={{ fontSize: 13, color: "#64748b" }}>
-          {activeBudgetMonth} · {filtered.length} transakcji · łącznie{" "}
-          <strong style={{ color: "#e2e8f0" }}>{fmt(totalSum)} PLN</strong>
-          {totalVoucherSum > 0 && (
-            <span style={{ marginLeft: 8, color: "#a78bfa" }}>voucher: {fmt(totalVoucherSum)}</span>
-          )}
-          {totalReturnedSum > 0 && (
-            <span style={{ marginLeft: 8, color: "#34d399" }}>zwroty: -{fmt(totalReturnedSum)}</span>
-          )}
-          {isActiveMonthClosed && (
-            <span style={{ marginLeft: 10, ...(s as any).badge("#ef4444") }}>🔒 zamknięty</span>
-          )}
-        </div>
+      {activeBudgetMonth} ·{" "}
+      {isFirstLoad ? (
+        <span style={{ color: "#475569" }}>ładowanie…</span>
+      ) : (
+        <>
+              {filtered.length} transakcji · łącznie{" "}
+              <strong style={{ color: "#e2e8f0" }}>{fmt(totalSum)} PLN</strong>
+
+              {totalVoucherSum > 0 && (
+                <span style={{ marginLeft: 8, color: "#a78bfa" }}>voucher: {fmt(totalVoucherSum)}</span>
+              )}
+              {totalReturnedSum > 0 && (
+                <span style={{ marginLeft: 8, color: "#34d399" }}>zwroty: -{fmt(totalReturnedSum)}</span>
+              )}
+              {isActiveMonthClosed && (
+                <span style={{ marginLeft: 10, ...(s as any).badge("#ef4444") }}>🔒 zamknięty</span>
+              )}
+        </>
+      )}
+      </div>
       </div>
 
       {/* Filters */}
@@ -351,15 +361,19 @@ export default function PanelTransactions() {
           )}
         </div>
       </div>
-
-      {filtered.length === 0 && (
+      {isFirstLoad && (
+        <div style={(s as any).card}>
+          <SkeletonListRow columns={6} count={8} height={48} />
+        </div>
+      )}
+      {!isFirstLoad && filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
           Brak transakcji{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
         </div>
       )}
 
       {/* Flat list */}
-      {!grouped && filtered.length > 0 && (
+      {!isFirstLoad && !grouped && filtered.length > 0 && (
         <>
           <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {flatPage} z {flatTotalPages}
@@ -397,7 +411,7 @@ export default function PanelTransactions() {
       )}
 
       {/* Grouped view */}
-      {grouped && groups.length > 0 && (
+      {!isFirstLoad && grouped && groups.length > 0 && (
         <>
           <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {groups.length} grup · strona {groupPage} z {groupTotalPages}
@@ -457,7 +471,7 @@ export default function PanelTransactions() {
       )}
 
       {/* Totals row */}
-      {filtered.length > 0 && (
+      {!isFirstLoad && filtered.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "12px 4px", gap: 24 }}>
           {totalReturnedSum > 0 && (
             <span style={{ fontSize: 12, color: "#34d399" }}>
