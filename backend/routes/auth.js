@@ -34,20 +34,46 @@ const SessionsQuerySchema = z.object({
 });
 
 // ── Family Members ───────────────────────────────────────────
-let FAMILY_MEMBERS = [];
+let FAMILY_MEMBERS;
 try {
-  FAMILY_MEMBERS = JSON.parse(process.env.FAMILY_MEMBERS || '[]');
+  const raw = process.env.FAMILY_MEMBERS;
+  if (!raw) {
+    throw new Error("env var is missing or empty");
+  }
+  FAMILY_MEMBERS = JSON.parse(raw);
+  if (!Array.isArray(FAMILY_MEMBERS)) {
+    throw new Error(`expected JSON array, got ${typeof FAMILY_MEMBERS}`);
+  }
+  if (FAMILY_MEMBERS.length === 0) {
+    throw new Error("array is empty — nobody could log in");
+  }
+  // Validate each entry has the minimum required shape
+  FAMILY_MEMBERS.forEach((m, i) => {
+    if (!m || typeof m !== "object") {
+      throw new Error(`entry [${i}] is not an object`);
+    }
+    if (typeof m.email !== "string" || !m.email.trim()) {
+      throw new Error(`entry [${i}] missing or empty 'email' field`);
+    }
+    if (typeof m.name !== "string" || !m.name.trim()) {
+      throw new Error(`entry [${i}] missing or empty 'name' field`);
+    }
+  });
 } catch (err) {
-  console.error("CRITICAL: FAMILY_MEMBERS is not valid JSON!");
+  console.error("❌ [auth] CRITICAL: FAMILY_MEMBERS invalid —", err.message);
+  console.error("    Expected format: '[{\"email\":\"x@y.com\",\"name\":\"X\"},...]'");
+  console.error(`    Got: ${(process.env.FAMILY_MEMBERS || "<empty>").substring(0, 120)}${(process.env.FAMILY_MEMBERS || "").length > 120 ? "..." : ""}`);
+  process.exit(1);
 }
 
-if (FAMILY_MEMBERS.length === 0) {
-  console.error("CRITICAL: FAMILY_MEMBERS is not set or empty!");
-}
-
-const allowedEmails = FAMILY_MEMBERS.map(m => m.email.trim().toLowerCase());
+const allowedEmails    = FAMILY_MEMBERS.map(m => m.email.trim().toLowerCase());
 const SHARED_FAMILY_ID = process.env.FAMILY_ID || 'MMs';
 
+if (process.env.NODE_ENV === 'development') {
+  console.log(`✅ [auth] Loaded ${FAMILY_MEMBERS.length} family member(s): ${allowedEmails.join(", ")}`);
+} else {
+  console.log(`✅ [auth] Loaded ${FAMILY_MEMBERS.length} family member(s)`);
+}
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 // 1. LOGIN ENDPOINT
