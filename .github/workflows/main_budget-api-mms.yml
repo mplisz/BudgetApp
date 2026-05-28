@@ -62,4 +62,3 @@ jobs:
           app-name: 'budget-api-mms'
           slot-name: 'Production'
           package: 'backend'
-          
