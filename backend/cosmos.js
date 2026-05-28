@@ -2,7 +2,6 @@
 // File: backend/cosmos.js
 // ============================================================
 require('dotenv').config();
-
 // ── TLS verification: SAFE BY DEFAULT ─────────────────────────
 //
 // Local emulator (Cosmos DB Emulator) uses a self-signed cert that
@@ -18,13 +17,14 @@ require('dotenv').config();
 //
 // Previous version used `if (NODE_ENV !== 'production')`, which had
 // the opposite default: missing env var = TLS off. That's a footgun.
-
-if (process.env.NODE_ENV === 'development') {
+const { isDevelopment } = require('./utils/helpers');
+if (isDevelopment) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   console.warn("⚠️ [cosmos] TLS verification DISABLED — local emulator mode (NODE_ENV=development)");
 }
 
 const { CosmosClient } = require("@azure/cosmos");
+
 
 const endpoint   = process.env.COSMOS_ENDPOINT;
 const key        = process.env.COSMOS_KEY;

@@ -85,6 +85,7 @@ export const API_ERRORS = {
   "Too many login attempts, please try again later.":             "Zbyt wiele prób logowania. Spróbuj ponownie później.",
   "Too many requests to limits container, please try again later.": "Zbyt wiele zapytań o limity. Spróbuj ponownie później.",
   "Too many requests from this IP, please try again later.":      "Zbyt wiele zapytań z Twojego adresu IP. Spróbuj ponownie później.",
+  "Too many write operations, please slow down.":                 "Zbyt wiele zapisów do bazy. Zwolnij troszeczkę."
 };
 
 export function translateError(backendMsg, fallback = "Wystąpił nieoczekiwany błąd.") {

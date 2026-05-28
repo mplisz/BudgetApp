@@ -359,7 +359,7 @@ export default function PanelExpenses() {
         @media (max-width: 700px) {
           .expenses-layout   { flex-direction: column; gap: 0; }
           .expenses-form-col { flex: 1 1 auto; width: 100%; }
-          .expenses-cart-col { display: none; }
+          .expenses-cart-col { width: 100%; padding-bottom: 80px; }
         }
       `}</style>
     </>

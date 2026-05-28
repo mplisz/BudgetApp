@@ -3,7 +3,41 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BudżetRodzinny</title>
+
+    <!--
+      ─────────────────────────────────────────────────────────────
+      Content Security Policy (LOCAL DEV ONLY)
+      ─────────────────────────────────────────────────────────────
+      This meta-tag CSP applies when running `npm run dev` locally.
+      In production (Azure Static Web Apps), the equivalent CSP is
+      served as an HTTP header via `staticwebapp.config.json` and
+      should be the SOURCE OF TRUTH for prod.
+
+      Important: keep these two CSPs in sync. When you change one,
+      update the other. Local-only difference is `http://localhost:5000`
+      (and any other localhost ports you use) in `connect-src` — they
+      have no business in production.
+
+      Browsers apply the MOST RESTRICTIVE union when both meta and
+      header are present, so on prod the meta-CSP is "extra strict"
+      and might block things the header allows. After verifying prod,
+      consider removing this meta tag entirely to leave only the
+      header-based CSP active.
+      ─────────────────────────────────────────────────────────────
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      connect-src 'self' http://localhost:5000 https://api.nbp.pl https://accounts.google.com;
+      frame-src 'self' https://accounts.google.com;
+      img-src 'self' data: https://lh3.googleusercontent.com;
+      style-src 'self' 'unsafe-inline';
+      script-src 'self' https://accounts.google.com https://apis.google.com;
+      base-uri 'self';
+      form-action 'self';
+      object-src 'none';
+    " />
+
+    <title>Budżet MMs</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { background: #0a0f1e; font-family: 'DM Sans', 'Segoe UI', sans-serif; }

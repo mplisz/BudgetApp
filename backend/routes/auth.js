@@ -11,6 +11,7 @@ const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { requireAuth } = require('../middleware/auth');
+const {isProduction,sameSitePolicy} = require("../utils/helpers")
 const { refreshTokensContainer } = require('../cosmos');
 
 const JWT_SECRET_EXPIRATION = process.env.JWT_SECRET_EXPIRATION || '15m';
@@ -69,7 +70,7 @@ try {
 const allowedEmails    = FAMILY_MEMBERS.map(m => m.email.trim().toLowerCase());
 const SHARED_FAMILY_ID = process.env.FAMILY_ID || 'MMs';
 
-if (process.env.NODE_ENV === 'development') {
+if (!isProduction) {
   console.log(`✅ [auth] Loaded ${FAMILY_MEMBERS.length} family member(s): ${allowedEmails.join(", ")}`);
 } else {
   console.log(`✅ [auth] Loaded ${FAMILY_MEMBERS.length} family member(s)`);
@@ -125,9 +126,9 @@ router.post('/login', async (req, res) => {
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
       maxAge: expirationMiliseconds,
+      secure: isProduction,      // in prod (HTTPS) true for sameSite: 'none'
+      sameSite: sameSitePolicy,  // Allows traffic between azurestaticapps.net and azurewebsites.net
       path: '/api/auth/refresh'
     });
 
@@ -186,7 +187,7 @@ router.post('/logout', async (req, res) => {
       console.warn("[LOGOUT] Token not found in DB.");
     }
   }
-  res.clearCookie('refreshToken', { path: '/api/auth/refresh' });
+  res.clearCookie('refreshToken', { path: '/api/auth/refresh' ,secure: isProduction, sameSite: sameSitePolicy,httpOnly: true});
   res.json({ message: "Logged out successfully" });
 });
 

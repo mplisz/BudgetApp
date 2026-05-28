@@ -733,12 +733,19 @@ router.post("/:id/returns", async (req, res) => {
 
 // ── Helper: archive linked transfers + return-vouchers ───────
 //
-// Extracted from DELETE handler. Best-effort: failure to archive one
-// item logs the error and continues, so user is left with as few
-// orphans as possible.
+// Extracted from DELETE/PATCH handlers. Best-effort: a failure to
+// archive one item is logged but doesn't stop the others, so the
+// user is left with as few orphans as possible.
 
 async function archiveLinkedItems(transactionsContainer, vouchersContainer, familyId, txId, user) {
-  // Linked TRANSFER transactions
+  const archiveStamp = {
+    isArchived:   true,
+    archivedAt:   new Date().toISOString(),
+    archivedBy:   user.name || user.email,
+    archivedById: user.id,
+  };
+
+  // ── Linked TRANSFER transactions ──────────────────────────
   const { resources: linkedTransfers } = await transactionsContainer.items
     .query({
       query: `SELECT * FROM c WHERE c.userId = @userId
@@ -752,21 +759,14 @@ async function archiveLinkedItems(transactionsContainer, vouchersContainer, fami
     })
     .fetchAll();
 
-  for (const transfer of linkedTransfers) {
-    try {
-      await transactionsContainer.items.upsert({
-        ...transfer,
-        isArchived:   true,
-        archivedAt:   new Date().toISOString(),
-        archivedBy:   user.name || user.email,
-        archivedById: user.id,
-      });
-    } catch (e) {
-      console.error(`[archiveLinkedItems] Transfer ${transfer.id} archive failed:`, e);
-    }
-  }
+  const transferResults = await Promise.allSettled(
+    linkedTransfers.map(transfer =>
+      transactionsContainer.items.upsert({ ...transfer, ...archiveStamp })
+    )
+  );
+  const failedTransfers = transferResults.filter(r => r.status === "rejected").length;
 
-  // Linked vouchers (return-generated)
+  // ── Linked vouchers (return-generated) ────────────────────
   const { resources: linkedVouchers } = await vouchersContainer.items
     .query({
       query: `SELECT * FROM c WHERE c.userId = @userId
@@ -779,21 +779,17 @@ async function archiveLinkedItems(transactionsContainer, vouchersContainer, fami
     })
     .fetchAll();
 
-  for (const voucher of linkedVouchers) {
-    try {
-      await vouchersContainer.items.upsert({
-        ...voucher,
-        isArchived:   true,
-        archivedAt:   new Date().toISOString(),
-        archivedBy:   user.name || user.email,
-        archivedById: user.id,
-      });
-    } catch (e) {
-      console.error(`[archiveLinkedItems] Voucher ${voucher.id} archive failed:`, e);
-    }
-  }
+  const voucherResults = await Promise.allSettled(
+    linkedVouchers.map(voucher =>
+      vouchersContainer.items.upsert({ ...voucher, ...archiveStamp })
+    )
+  );
+  const failedVouchers = voucherResults.filter(r => r.status === "rejected").length;
 
-  console.log(`[archiveLinkedItems] ${linkedTransfers.length} transfers, ${linkedVouchers.length} vouchers archived for ${txId}`);
+  if (failedTransfers > 0 || failedVouchers > 0) {
+    console.error(`[archiveLinkedItems] ${failedTransfers} transfer(s) and ${failedVouchers} voucher(s) FAILED for ${txId}`);
+  }
+  console.log(`[archiveLinkedItems] ${linkedTransfers.length - failedTransfers}/${linkedTransfers.length} transfers, ${linkedVouchers.length - failedVouchers}/${linkedVouchers.length} vouchers archived for ${txId}`);
 }
 
 module.exports = router;

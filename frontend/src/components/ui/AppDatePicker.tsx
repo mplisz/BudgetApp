@@ -185,6 +185,34 @@ export function AppDatePicker({
           border-color: #10b981 !important;
         }
         .react-datepicker-popper { z-index: 9999 !important; }
+        
+        /* Year header in month-picker mode + any dropdowns */
+        .react-datepicker__header__dropdown,
+        .react-datepicker__year-read-view,
+        .react-datepicker__month-read-view,
+        .react-datepicker__month-year-read-view {
+          color: #e2e8f0 !important;
+        }
+        .react-datepicker__year-dropdown,
+        .react-datepicker__month-dropdown,
+        .react-datepicker__month-year-dropdown {
+          background: #0d1424 !important;
+          border: 1px solid #1e293b !important;
+        }
+        .react-datepicker__year-option,
+        .react-datepicker__month-option,
+        .react-datepicker__month-year-option {
+          color: #e2e8f0 !important;
+        }
+        .react-datepicker__year-option:hover,
+        .react-datepicker__month-option:hover {
+          background: #1e293b !important;
+        }
+        /* The year shown in the month-picker header */
+        .react-datepicker__current-month--hasMonthYearPicker,
+        .react-datepicker-year-header {
+          color: #e2e8f0 !important;
+        }
       `}</style>
     </>
   );

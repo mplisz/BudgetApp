@@ -91,14 +91,14 @@ function AuthenticatedLayout() {
   return (
     <div style={{ minHeight: "100vh", background: "#0a0f1e", color: "#e2e8f0", fontFamily: "'DM Sans', sans-serif", display: "flex" }}>
       <ToastContainer />
-      <Sidebar />
-      <main style={{ marginLeft: 220, flex: 1, minHeight: "100vh", paddingBottom: 80 }}>
-        <header style={{
-          background: "#0d1424", borderBottom: "1px solid #1e293b",
-          padding: "10px 24px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          position: "sticky", top: 0, zIndex: 100,
-        }}>
+      <div className="app-sidebar"><Sidebar /></div>
+      <main className="app-main" style={{ flex: 1, minHeight: "100vh", paddingBottom: 80 }}>
+      <header className="app-header" style={{
+        background: "#0d1424", borderBottom: "1px solid #1e293b",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        flexWrap: "wrap", gap: 8,
+        position: "sticky", top: 0, zIndex: 100,
+      }}>
           {/* Left: panel title */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}>
@@ -156,7 +156,21 @@ function AuthenticatedLayout() {
         </div>
       </main>
 
-      <MobileNav />
+      <div className="app-mobilenav"><MobileNav /></div>
+        <style>{`
+        /* Desktop default */
+        .app-sidebar   { display: block; }
+        .app-main      { margin-left: 220px; }
+        .app-mobilenav { display: none; }
+        .app-header { padding: 10px 24px; }
+        /* Mobile: hide sidebar, drop the margin, show bottom nav */
+        @media (max-width: 700px) {
+          .app-sidebar   { display: none; }
+          .app-main      { margin-left: 0; }
+          .app-mobilenav { display: block; }
+          .app-header { padding: 8px 12px; }
+        }
+      `}</style>
     </div>
   );
 }

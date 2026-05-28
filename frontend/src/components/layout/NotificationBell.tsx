@@ -15,7 +15,7 @@ import { fmt, fmtAmount }        from "../../utils/helpers";
 import type { PlannedDoc }       from "../../hooks/usePlanned";
 
 import { useNavigate }   from "react-router-dom";
-import { PANEL_PATHS }   from "../../data/routes";
+
 // ── Types ─────────────────────────────────────────────────────
 
 interface RecurringDoc {
@@ -376,7 +376,21 @@ export function NotificationBell() {
         </button>
 
         {open && (
-          <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#0d1424", border: "1px solid #1e293b", borderRadius: 12, padding: 8, minWidth: 320, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", zIndex: 1000 }}>
+              <div style={{
+                position: "fixed",
+                top: 64,
+                right: 12,
+                left: "auto",
+                background: "#0d1424",
+                border: "1px solid #1e293b",
+                borderRadius: 12,
+                padding: 8,
+                width: "min(360px, calc(100vw - 24px))",
+                maxHeight: "calc(100vh - 100px)",
+                overflowY: "auto",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                zIndex: 1000,
+            }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", padding: "4px 8px 10px" }}>
               🔔 Przypomnienia
             </div>
@@ -411,15 +425,6 @@ export function NotificationBell() {
                 onDismiss={handleDismissPlanned}
               />
             ))}
-
-            <div style={{ textAlign: "center", paddingTop: 6 }}>
-              <button
-                onClick={() => { setOpen(false); navigate(PANEL_PATHS.recurring); }}
-                style={{ background: "none", border: "none", color: "#475569", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
-              >
-                Zarządzaj cyklicznymi →
-              </button>
-            </div>
           </div>
         )}
       </div>

@@ -102,7 +102,6 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
 
   const [statuses,   setStatuses]   = useState<Record<string, ItemStatus>>({});
   const [saving,     setSaving]     = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   // ── Derived totals ─────────────────────────────────────────
 
@@ -203,7 +202,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
   // ── Cart content (shared between desktop and mobile) ──────
 
   const cartContent = (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column" }}>
 
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
@@ -232,7 +231,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       </div>
 
       {/* Item list */}
-      <div style={{ flex: 1, overflowY: "auto", marginBottom: 12 }}>
+      <div style={{ marginBottom: 12 }}>
         {allDisplay.map(item => {
           const status = statuses[item._cartId] || STATUS.PENDING;
           const pColor = (PRIORITY_COLORS as Record<number, string>)[item.priority] || "#64748b";
@@ -340,52 +339,16 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       </div>
     </div>
   );
-
-  // ── Mobile bar ────────────────────────────────────────────
-
-  const mobileBar = (
-    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, background: "#0d1424", borderTop: "1px solid #1e293b" }}>
-      <button
-        onClick={() => setMobileOpen(v => !v)}
-        style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "none", border: "none", cursor: "pointer" }}
-      >
-        <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14 }}>
-          🛒 Koszyk ({cart.length})
-        </span>
-        <span style={{ color: "#10b981", fontWeight: 800, fontSize: 16 }}>{fmt(totalGross)}</span>
-      </button>
-
-      {mobileOpen && (
-        <div style={{ padding: "16px", maxHeight: "70vh", overflowY: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 12, textTransform: "uppercase" }}>Koszyk</span>
-            <button onClick={() => setMobileOpen(false)}
-              style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 20 }}>✕</button>
-          </div>
-          {cartContent}
-        </div>
-      )}
-    </div>
-  );
-
   // ── Render ────────────────────────────────────────────────
 
   return (
-    <>
-      <div className="cart-desktop" style={{ minWidth: 280, maxWidth: 320 }}>
-        {cartContent}
-      </div>
-      <div className="cart-mobile">
-        {mobileBar}
-      </div>
-      <style>{`
-        .cart-desktop { display: block; }
-        .cart-mobile  { display: none;  }
-        @media (max-width: 700px) {
-          .cart-desktop { display: none;  }
-          .cart-mobile  { display: block; }
-        }
-      `}</style>
-    </>
+    <div style={{
+      background: "#0d1424",
+      border: "1px solid #1e293b",
+      borderRadius: 14,
+      padding: 16,
+    }}>
+      {cartContent}
+    </div>
   );
 }

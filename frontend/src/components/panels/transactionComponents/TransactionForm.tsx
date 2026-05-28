@@ -16,7 +16,8 @@ import { CurrencyRateField } from "../../ui/CurrencyRateField";
 import { VoucherSection }    from "./VoucherSection";
 import { fmt, parseDecimal } from "../../../utils/helpers";
 import { translateError } from "../../../data/constants/errorMessages";
-import { s }                 from "./txStyles.jsx";
+import { TagMultiSelect } from "../../ui/TagMultiSelect";
+
 import type {
   FormValues, TransactionPayload, TransactionFormProps, RateInfo,
 } from "../../../types/transaction";
@@ -121,7 +122,6 @@ export function TransactionForm({
   const discount = useDiscount();
 
   const dateYMD    = toYMD(form.date);
-  const activeTags = useMemo(() => tags.filter(t => !t.isArchived), [tags]);
 
   // Effective amount — net after discount, or raw if no discount
   const effectiveAmountOrig = discount.effectiveAmount(form.amountOrig);
@@ -194,12 +194,6 @@ export function TransactionForm({
     }
   }, [budgetMonth, transactions, limits, settings, showError, showWarning]);
 
-  function toggleTag(id: string) {
-    setForm(prev => ({
-      ...prev,
-      tags: prev.tags.includes(id) ? prev.tags.filter(t => t !== id) : [...prev.tags, id],
-    }));
-  }
 
   function handleVoucherSelect(id: string) {
     if (!id) {
@@ -466,27 +460,13 @@ export function TransactionForm({
       </div>
 
       {/* Tags */}
-      {activeTags.length > 0 && (
-        <div style={frow}>
-          <label style={lbl}>Tags</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {activeTags.map(tag => {
-              const selected = form.tags.includes(tag.id);
-              return (
-                <button key={tag.id} onClick={() => toggleTag(tag.id)}
-                  style={{
-                    padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12,
-                    border:     `1px solid ${selected ? "#3b82f6" : "#1e293b"}`,
-                    background: selected ? "#3b82f622" : "transparent",
-                    color:      selected ? "#3b82f6"   : "#475569",
-                  }}>
-                  {tag.icon} {tag.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <div style={frow}>
+        <label style={lbl}>Tagi</label>
+        <TagMultiSelect
+          value={form.tags}
+          onChange={(v: string[]) => set("tags", v)}
+        />
+      </div>
 
       {/* Voucher — collapsible, only when EXPENSE + active vouchers */}
       {showVoucherSection && (

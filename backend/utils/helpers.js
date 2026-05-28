@@ -183,6 +183,11 @@ const prevServerMonth = () => {
   return `${y}-${String(m).padStart(2, "0")}`;
 };
 
+// ── ENV file helpers ─────────────────────────────────
+const isProduction = process.env.NODE_ENV === 'production';
+const isDevelopment = process.env.NODE_ENV === 'development'
+const sameSitePolicy = isProduction ? 'none' : 'strict';
+
 module.exports = {
   generateId,
   readItem,
@@ -196,4 +201,7 @@ module.exports = {
   BUDGET_MONTH_REGEX,
   currentServerMonth,
   prevServerMonth,
+  isProduction,
+  isDevelopment,
+  sameSitePolicy
 };

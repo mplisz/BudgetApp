@@ -1,51 +1,70 @@
 // ============================================================
 // File: backend/routes/categories.js
 // Handles all category-related endpoints
+//
+// Cost optimization notes:
+//   - PATCH and POST (parent lookup) use Point Reads via
+//     `container.item(id, partitionKey).read()` (~1 RU) instead of
+//     SQL queries with WHERE c.id = @id (~2.9 RU).
+//   - GET stays as a SQL query because it scans all docs in the
+//     partition without specific IDs — that's the right tool there.
+//
+// Bug fixes vs previous version:
+//   - PATCH no longer overwrites `canBeRecurring` to `false` on
+//     every update. Removed `.default(false)` from PATCH schema
+//     so absent fields stay untouched.
+//   - PATCH now supports `isCritical` (subcategory flag) which
+//     was already in POST schema but missing from PATCH.
 // ============================================================
 
 const express = require('express');
-const router = express.Router();
-const { z } = require('zod');
+const router  = express.Router();
+const { z }   = require('zod');
 const { categoriesContainer } = require('../cosmos');
-const { requireAuth } = require('../middleware/auth');
-const { generateId, IdParamSchema } = require('../utils/helpers'); 
+const { requireAuth }         = require('../middleware/auth');
+const { generateId, readItem, IdParamSchema } = require('../utils/helpers');
 
 router.use(requireAuth);
 
 // ── Zod Schemas ──────────────────────────────────────────────
+//
+// POST: brand-new category, defaults make sense (caller may omit).
+// PATCH: partial update — every field MUST be optional and absent
+//         fields must NOT mutate the doc. Therefore no .default() here.
+
 const CategoryPostSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").max(50, "Name must be at most 50 characters"),
-  icon: z.string().max(10).optional(),
+  name:             z.string().min(2, "Name must be at least 2 characters")
+                              .max(50, "Name must be at most 50 characters"),
+  icon:             z.string().max(10).optional(),
   parentCategoryId: z.string().nullable().optional(),
-  type: z.enum(['EXPENSE', 'INCOME', 'SAVING', 'TRANSFER']).nullable().optional(),
-  priority: z.number().int().min(1).max(4).optional(),
+  type:             z.enum(['EXPENSE', 'INCOME', 'SAVING', 'TRANSFER']).nullable().optional(),
+  priority:         z.number().int().min(1).max(4).optional(),
   canBeRecurring:   z.boolean().optional().default(false),
-  // Subcategory flag: when true, expenses in this subcategory are treated as
-  // non-negotiable (school fees, medication etc.) — included in Survival Mode
-  // regardless of their priority.
   isCritical:       z.boolean().optional().default(false),
 });
 
 const CategoryPatchSchema = z.object({
-  name: z.string().min(2).max(50).optional(),
-  icon: z.string().max(10).optional(),
-  isArchived: z.boolean().optional(),
-  priority: z.number().int().min(1).max(4).optional(),
-  canBeRecurring:   z.boolean().optional().default(false),
-  // See note in PostSchema.
+  name:             z.string().min(2).max(50).optional(),
+  icon:             z.string().max(10).optional(),
+  isArchived:       z.boolean().optional(),
+  priority:         z.number().int().min(1).max(4).optional(),
+  // NOTE: no `.default()` — patch is partial. Missing field == no change.
+  canBeRecurring:   z.boolean().optional(),
   isCritical:       z.boolean().optional(),
 }).refine(data => Object.keys(data).length > 0, {
-  message: "No valid fields provided for update."
+  message: "No valid fields provided for update.",
 });
 
+// ── GET ──────────────────────────────────────────────────────
+// Lists all categories for the user's family. SQL query is the right
+// tool here — we're scanning the whole partition, not fetching a
+// single doc by ID, so Point Read doesn't apply.
 
-
-// GET
 router.get('/', async (req, res) => {
   try {
     const querySpec = {
       query: "SELECT * FROM c WHERE c.userId = @familyId",
-      parameters: [{ name: "@familyId", value: req.user.familyId }]
+      parameters: [{ name: "@familyId", value: req.user.familyId }],
     };
     const { resources: categories } = await categoriesContainer.items.query(querySpec).fetchAll();
     res.status(200).json(categories);
@@ -55,21 +74,23 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST
+// ── POST ─────────────────────────────────────────────────────
+
 router.post('/', async (req, res) => {
-  // Zod validation
   const parsed = CategoryPostSchema.safeParse(req.body);
   if (!parsed.success) {
     console.log("[POST] Zod errors:", JSON.stringify(parsed.error));
     return res.status(400).json({ error: parsed.error.issues[0].message });
-}
+  }
 
   try {
     const { name, icon, parentCategoryId, type, priority } = parsed.data;
-    const familyId = req.user.familyId;
+    const familyId  = req.user.familyId;
     const cleanName = name.trim();
-    let finalType = type;
+    let   finalType = type;
 
+    // Parent lookup — Point Read (~1 RU). Already correctly using
+    // .item().read() in previous version; kept as-is.
     if (parentCategoryId) {
       try {
         const { resource: parent } = await categoriesContainer.item(parentCategoryId, familyId).read();
@@ -89,26 +110,24 @@ router.post('/', async (req, res) => {
       finalPriority = priority || 2;
     }
 
-    const namePart = generateId(cleanName);
+    const namePart   = generateId(cleanName);
     const parentPart = parentCategoryId ? generateId(parentCategoryId.replace('cat_', '')) : 'root';
-    const newId = `cat_${parentPart}_${namePart}_${familyId}`;
-    const cleanIcon = (icon && icon.length <= 10) ? icon : "📦";
+    const newId      = `cat_${parentPart}_${namePart}_${familyId}`;
+    const cleanIcon  = (icon && icon.length <= 10) ? icon : "📦";
 
     const newCategory = {
-      id: newId,
-      userId: familyId,
-      name: cleanName,
-      icon: cleanIcon,
+      id:               newId,
+      userId:           familyId,
+      name:             cleanName,
+      icon:             cleanIcon,
       parentCategoryId: parentCategoryId || null,
-      type: finalType,
-      isArchived: false,
-      priority: finalPriority,
-      createdAt: new Date().toISOString(),
-      createdBy: req.user.id,
-      createdByName: req.user.name,
+      type:             finalType,
+      isArchived:       false,
+      priority:         finalPriority,
+      createdAt:        new Date().toISOString(),
+      createdBy:        req.user.id,
+      createdByName:    req.user.name,
       canBeRecurring:   parsed.data.canBeRecurring ?? false,
-      // Only meaningful for EXPENSE subcategories; we store it on everything
-      // so future shape-evolution doesn't need backfills.
       isCritical:       parsed.data.isCritical     ?? false,
     };
 
@@ -128,53 +147,51 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PATCH
+// ── PATCH ────────────────────────────────────────────────────
+//
+// Uses Point Read via `readItem(container, id, partitionKey)` —
+// costs ~1 RU instead of the ~2.9 RU of an SQL query.
+// 404 (not found) is handled inside readItem (returns null instead
+// of throwing), so no try/catch around the read itself.
+
 router.patch('/update/:id', async (req, res) => {
-  // Validate ID
   const idParsed = IdParamSchema.safeParse(req.params.id);
   if (!idParsed.success) {
     return res.status(400).json({ error: idParsed.error.issues[0].message });
   }
 
-  // Validate body
   const parsed = CategoryPatchSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.errors[0].message });
   }
 
   try {
-    const id = idParsed.data;
+    const id       = idParsed.data;
     const familyId = req.user.familyId;
-    const { name, icon, isArchived, priority, canBeRecurring, isCritical } = parsed.data;
 
+    // ── Point Read (~1 RU) ──────────────────────────────────
+    const existing = await readItem(categoriesContainer, id, familyId);
+    if (!existing) {
+      console.warn(`[PATCH] Category not found or unauthorized for ID: ${id}`);
+      return res.status(404).json({ error: "Category not found or unauthorized." });
+    }
+
+    // ── Build safe updates (only fields that were sent) ─────
+    const { name, icon, isArchived, priority, canBeRecurring, isCritical } = parsed.data;
     const safeUpdates = {};
-    if (name !== undefined)           safeUpdates.name           = name.trim();
-    if (icon !== undefined)           safeUpdates.icon           = icon.substring(0, 10);
-    if (isArchived !== undefined)     safeUpdates.isArchived     = isArchived;
-    if (priority !== undefined)       safeUpdates.priority       = priority;
+    if (name           !== undefined) safeUpdates.name           = name.trim();
+    if (icon           !== undefined) safeUpdates.icon           = icon.substring(0, 10);
+    if (isArchived     !== undefined) safeUpdates.isArchived     = isArchived;
+    if (priority       !== undefined) safeUpdates.priority       = priority;
     if (canBeRecurring !== undefined) safeUpdates.canBeRecurring = canBeRecurring;
-    if (isCritical !== undefined)     safeUpdates.isCritical     = isCritical;
+    if (isCritical     !== undefined) safeUpdates.isCritical     = isCritical;
 
     safeUpdates.updatedAt     = new Date().toISOString();
     safeUpdates.updatedBy     = req.user.id;
     safeUpdates.updatedByName = req.user.name;
 
-    const { resources } = await categoriesContainer.items
-      .query({
-        query: "SELECT * FROM c WHERE c.id = @id AND c.userId = @familyId",
-        parameters: [
-          { name: "@id", value: id },
-          { name: "@familyId", value: familyId }
-        ]
-      })
-      .fetchAll();
-
-    if (resources.length === 0) {
-      console.warn(`[PATCH] Category not found or unauthorized for ID: ${id}`);
-      return res.status(404).json({ error: "Category not found or unauthorized." });
-    }
-
-    const updatedCategoryData = { ...resources[0], ...safeUpdates };
+    // ── Write ───────────────────────────────────────────────
+    const updatedCategoryData = { ...existing, ...safeUpdates };
     const { resource: updatedCategory } = await categoriesContainer.items.upsert(updatedCategoryData);
 
     res.json(updatedCategory);

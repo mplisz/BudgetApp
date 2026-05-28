@@ -131,6 +131,33 @@ const limitsLimiter = createLimiter(
 );
 app.use('/api/limits', limitsLimiter);
 
+// ── Write operations limiter ────────────────────────────────
+// Tighter limit on POST/PATCH/PUT/DELETE so a spam loop on
+// "Add transaction" can't drain the global pool. Read operations
+// are unaffected — only mutations count toward this counter.
+//
+// Skipped for /api/auth/* since those endpoints have their own
+// dedicated limiters (refresh, login) with different semantics.
+const writeLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WRITE_WINDOW_MS) || 15 * 60 * 1000,
+  max:      parseInt(process.env.RATE_LIMIT_WRITE_MAX)        || 60,
+  message:  { error: "Too many write operations, please slow down." },
+  standardHeaders: true,
+  legacyHeaders:   false,
+  // Only count mutating methods. GET/HEAD/OPTIONS bypass this limiter.
+  skip: (req) => {
+    const method = req.method.toUpperCase();
+    return method === "GET" || method === "HEAD" || method === "OPTIONS";
+  },
+});
+
+// Apply to all /api/* except /api/auth/* (auth has its own limiters).
+// We pass the limiter to app.use with a path filter via middleware so
+// auth routes don't double-count.
+app.use('/api/', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) return next();
+  return writeLimiter(req, res, next);
+});
 // Global API limiter
 const apiLimiter = createLimiter(
     parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
@@ -152,7 +179,10 @@ app.use((req, res, next) => {
 });
 
 
-
+// Lightweight liveness probe — no auth, no DB hit.
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
 
 
 // ==========================================
