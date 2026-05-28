@@ -32,7 +32,8 @@ jobs:
           api_location: "" # Api source code path - optional
           output_location: "dist" # Built app content directory - optional
           ###### End of Repository/Build Configurations ######
-        app_build_command: "VITE_API_URL=https://budget-api-mms-ccagbvf9hwdqbuhr.polandcentral-01.azurewebsites.net VITE_GOOGLE_CLIENT_ID=864399228284-kgcdr08m0jcb5301h4nfb95kuvvs7304.apps.googleusercontent.com VITE_ACCESS_TOKEN_EXPIRY='15 min' VITE_DEFAULT_PANEL=expenses npm run build"  close_pull_request_job:
+        app_build_command: "VITE_API_URL=https://budget-api-mms-ccagbvf9hwdqbuhr.polandcentral-01.azurewebsites.net VITE_GOOGLE_CLIENT_ID=864399228284-kgcdr08m0jcb5301h4nfb95kuvvs7304.apps.googleusercontent.com VITE_ACCESS_TOKEN_EXPIRY='15 min' VITE_DEFAULT_PANEL=expenses npm run build" 
+  close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     name: Close Pull Request Job
