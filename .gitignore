@@ -36,3 +36,5 @@ coverage/
 .turbo/
 
 setup-db-prod.js
+seed-tags.js
+seed-categories.js
