@@ -218,8 +218,12 @@ export function TransactionForm({
     if (discount.isOpen) {
       const gross = parseDecimal(discount.amountGross) || 0;
       const disc  = parseDecimal(discount.discountAmount) || 0;
-      if (gross > 0 && disc >= gross) {
-        showError(translateError("Discount cannot be equal to or greater than the gross amount."));
+    // per_unit: discount caps at per-unit gross
+    // per_order: discount caps at total (gross × qty)
+      const msgKey = discount.discountMode === "per_unit"? "Discount cannot be equal to or greater than the gross amount.": "Discount cannot be equal to or greater than the order total.";
+      const cap = discount.discountMode === "per_unit" ? gross: gross * discount.qty;
+      if (cap > 0 && disc >= cap) {
+        showError(translateError(msgKey));
         return null;
       }
     }

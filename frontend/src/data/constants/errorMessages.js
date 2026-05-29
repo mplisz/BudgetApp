@@ -34,6 +34,7 @@ export const API_ERRORS = {
   "Missing exchange rate.":                                         "Brak kursu walutowego.",
   "Select a currency.":                                             "Wybierz walutę.",
   "Discount cannot be equal to or greater than the gross amount.": "Upust nie może być równy ani większy od kwoty brutto.",
+  "Discount cannot be equal to or greater than the order total.": "Upust nie może być równy ani większy od sumy zamówienia.",
 
   // ── Returns ──────────────────────────────────────────────────
   "Transaction is deleted.":             "Transakcja jest usunięta.",
