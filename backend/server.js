@@ -212,24 +212,24 @@ app.use((err, req, res, next) => {
 
 let aiClient = null;
 
-console.log("[AI] Checking environment variable...");
-console.log("[AI] APPLICATIONINSIGHTS_CONNECTION_STRING present:", !!process.env.APPLICATIONINSIGHTS_CONNECTION_STRING);
-
 if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
   try {
-    console.log("[AI] Loading applicationinsights module...");
     const appInsights = require('applicationinsights');
-    console.log("[AI] Module loaded, version:", appInsights.version || "unknown");
-    console.log("[AI] Calling setup()...");
-    appInsights.setup(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING).start();
+    appInsights.setup(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING)
+      .setAutoCollectRequests(true)        // ← HTTP incoming
+      .setAutoCollectDependencies(true)    // ← HTTP outgoing (Cosmos, NBP API)
+      .setAutoCollectExceptions(true)      // ← exceptions
+      .setAutoCollectPerformance(true)     // ← CPU, RAM
+      .setAutoCollectConsole(true, true)   // ← console.log + console.error
+      .setSendLiveMetrics(true)            // ← Live Metrics tab
+      .start();
     aiClient = appInsights.defaultClient;
-    console.log("[AI] ✅ Application Insights started successfully");
+    console.log("📊 Application Insights initialized (full auto-collect)");
   } catch (err) {
-    console.error("[AI] ❌ Failed to initialize:", err.message);
-    console.error(err.stack);
+    console.error("📊 Application Insights initialization failed:", err.message);
   }
 } else {
-  console.log("[AI] ⚠️ Disabled — no connection string env var");
+  console.log("📊 Application Insights disabled (no connection string)");
 }
 // Catch unhandled promise rejections — prevent silent crashes
 process.on('unhandledRejection', (reason) => {
