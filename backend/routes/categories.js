@@ -74,9 +74,19 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ── POST ─────────────────────────────────────────────────────
+// Backend POST /api/categories — ID convention matching seed-categories.js
+//
+// Format:
+//   Root:        cat_<slug>                          (e.g. cat_zakupy)
+//   Subcategory: cat_root_<parentSlug>_<slug>_<familyId>
+//                                                    (e.g. cat_root_dom_czynsz_MMs)
+//
+// Parent slug = parent.id stripped of leading "cat_" (since parent IDs
+// in the new convention are just `cat_<slug>` for roots; we strip the
+// prefix to avoid `cat_cat_dom_...`).
 
 router.post('/', async (req, res) => {
+  // Zod validation
   const parsed = CategoryPostSchema.safeParse(req.body);
   if (!parsed.success) {
     console.log("[POST] Zod errors:", JSON.stringify(parsed.error));
@@ -85,12 +95,10 @@ router.post('/', async (req, res) => {
 
   try {
     const { name, icon, parentCategoryId, type, priority } = parsed.data;
-    const familyId  = req.user.familyId;
+    const familyId = req.user.familyId;
     const cleanName = name.trim();
-    let   finalType = type;
+    let finalType = type;
 
-    // Parent lookup — Point Read (~1 RU). Already correctly using
-    // .item().read() in previous version; kept as-is.
     if (parentCategoryId) {
       try {
         const { resource: parent } = await categoriesContainer.item(parentCategoryId, familyId).read();
@@ -110,25 +118,35 @@ router.post('/', async (req, res) => {
       finalPriority = priority || 2;
     }
 
-    const namePart   = generateId(cleanName);
-    const parentPart = parentCategoryId ? generateId(parentCategoryId.replace('cat_', '')) : 'root';
-    const newId      = `cat_${parentPart}_${namePart}_${familyId}`;
-    const cleanIcon  = (icon && icon.length <= 10) ? icon : "📦";
+    // ── ID generation (matches seed-categories.js convention) ──
+    const nameSlug = generateId(cleanName);
+    let newId;
+    if (parentCategoryId) {
+      // Subcategory: cat_root_<parentSlug>_<nameSlug>_<familyId>
+      // Strip "cat_" prefix from parent id, then slugify the rest in case
+      // the parent has an old-format id like "cat_root_dom_MMs".
+      const parentSlug = generateId(parentCategoryId.replace(/^cat_/, ''));
+      newId = `cat_root_${parentSlug}_${nameSlug}_${familyId}`;
+    } else {
+      // Root: cat_<nameSlug>   (no familyId suffix — matches seed)
+      newId = `cat_${nameSlug}`;
+    }
+
+    const cleanIcon = (icon && icon.length <= 10) ? icon : "📦";
 
     const newCategory = {
-      id:               newId,
-      userId:           familyId,
-      name:             cleanName,
-      icon:             cleanIcon,
+      id: newId,
+      userId: familyId,
+      name: cleanName,
+      icon: cleanIcon,
       parentCategoryId: parentCategoryId || null,
-      type:             finalType,
-      isArchived:       false,
-      priority:         finalPriority,
-      createdAt:        new Date().toISOString(),
-      createdBy:        req.user.id,
-      createdByName:    req.user.name,
-      canBeRecurring:   parsed.data.canBeRecurring ?? false,
-      isCritical:       parsed.data.isCritical     ?? false,
+      type: finalType,
+      isArchived: false,
+      priority: finalPriority,
+      createdAt: new Date().toISOString(),
+      createdBy: req.user.id,
+      createdByName: req.user.name,
+      canBeRecurring: parsed.data.canBeRecurring ?? false
     };
 
     const { resource } = await categoriesContainer.items.create(newCategory);
