@@ -209,15 +209,29 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Internal Server Error" });
 });
 
-// Catch unhandled promise rejections — prevent silent crashes
+
 let aiClient = null;
 
-if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
-  const appInsights = require('applicationinsights');
-  appInsights.setup(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING).start();
-  aiClient = appInsights.defaultClient;
-}
+console.log("[AI] Checking environment variable...");
+console.log("[AI] APPLICATIONINSIGHTS_CONNECTION_STRING present:", !!process.env.APPLICATIONINSIGHTS_CONNECTION_STRING);
 
+if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
+  try {
+    console.log("[AI] Loading applicationinsights module...");
+    const appInsights = require('applicationinsights');
+    console.log("[AI] Module loaded, version:", appInsights.version || "unknown");
+    console.log("[AI] Calling setup()...");
+    appInsights.setup(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING).start();
+    aiClient = appInsights.defaultClient;
+    console.log("[AI] ✅ Application Insights started successfully");
+  } catch (err) {
+    console.error("[AI] ❌ Failed to initialize:", err.message);
+    console.error(err.stack);
+  }
+} else {
+  console.log("[AI] ⚠️ Disabled — no connection string env var");
+}
+// Catch unhandled promise rejections — prevent silent crashes
 process.on('unhandledRejection', (reason) => {
   console.error('[UNHANDLED REJECTION]', reason);
   aiClient?.trackException({ exception: reason });
