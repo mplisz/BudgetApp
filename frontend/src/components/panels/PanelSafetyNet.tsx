@@ -20,6 +20,13 @@
 //     with originalCurrency != base. Updates `amount` in place.
 //   - Cache in useCurrencyConverter dedupes per (currency, date) — 5 USD
 //     buckets = 1 NBP fetch.
+//
+// APP-START FLOOR:
+//   - The historical window is clamped to settings.appStartMonth — we
+//     never look at months before the budget officially started.
+//   - When the floor is in the future (no historical data yet), the
+//     panel shows a friendly "brak historii" placeholder instead of
+//     computing on an empty window.
 // ============================================================
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
@@ -107,9 +114,10 @@ export default function PanelSafetyNet() {
 function PanelSafetyNetDesktop() {
   const { settings }                            = useSettings()  as UseSettingsResult;
   const { fetchWithAuth }                       = useAuth()      as { fetchWithAuth: typeof fetch };
-  const { setSettings, categories }             = useAppContext() as {
+  const { setSettings, categories, settings: appSettings } = useAppContext() as {
     setSettings: (v: AppSettings) => void;
     categories:  AppCategory[];
+    settings:    { appStartMonth?: string } | null;
   };
   const { transactions, isLoading, loadRange }  = useTransactionsRange();
   const { baseCurrency }                        = useCurrencyManager() as { baseCurrency: { code: string } };
@@ -142,8 +150,6 @@ function PanelSafetyNetDesktop() {
   }, [settings, hydrated]);
 
   // ── FX auto-refresh on panel entry ────────────────────────
-  // Mutates assets in place with today's rate, but only when the cached
-  // rate is older than today (avoids needless writes on quick re-entries).
   const fxRefreshDone = useRef(false);
   useEffect(() => {
     if (!hydrated || fxRefreshDone.current) return;
@@ -161,7 +167,6 @@ function PanelSafetyNetDesktop() {
 
     if (staleForeign.length === 0) return;
 
-    // Dynamic import → only loaded when needed, doesn't bloat first paint
     refreshAssetRates(staleForeign, today).then(updates => {
       if (updates.length === 0) return;
 
@@ -184,7 +189,7 @@ function PanelSafetyNetDesktop() {
         `✓ Odświeżono kursy dla ${updates.length} ${updates.length === 1 ? "koszyka" : "koszyków"}`,
       );
       setTimeout(() => setFxRefreshNote(null), 4000);
-    }).catch(err => {
+    }).catch(() => {
       // Stay silent — user can still use the panel with last-known rates
     });
   }, [hydrated, baseCurrency.code]);   // snState.assets intentionally omitted
@@ -237,15 +242,37 @@ function PanelSafetyNetDesktop() {
   const setAssets          = useCallback((assets: AssetBucket[]) => setSnState(s => ({ ...s, assets })), []);
   const setIncludePlanned  = useCallback((next: boolean)         => setSnState(s => ({ ...s, includePlannedExpenses: next })), []);
 
-  // ── Load transactions for the lookback window ─────────────
+  // ── Historical window (clamped to appStartMonth) ──────────
 
-  const windowMonths = useMemo(() => lastNMonths(snState.lookbackMonths), [snState.lookbackMonths]);
-  const fromMonth    = windowMonths[0];
-  const toMonth      = windowMonths[windowMonths.length - 1];
+  // Raw window — N months back from today, before any clamping.
+  const rawWindow = useMemo(
+    () => lastNMonths(snState.lookbackMonths),
+    [snState.lookbackMonths],
+  );
+
+  // Clamp to appStartMonth — never look at months before the budget started.
+  // This affects both the data fetch range AND the per-month aggregations
+  // downstream (computeCostLayers, computeIncomeSources, etc.) since they
+  // all use windowMonths.length to divide by.
+  const floor = appSettings?.appStartMonth;
+  const windowMonths = useMemo(
+    () => (floor ? rawWindow.filter(m => m >= floor) : rawWindow),
+    [rawWindow, floor],
+  );
+
+  // hasHistory = there's at least ONE month in the window that's not
+  // before the budget start. When floor is in the future (e.g. floor=2026-06
+  // and today is 2026-05), windowMonths is empty → no analysis possible.
+  const hasHistory = windowMonths.length > 0;
+
+  // fromMonth/toMonth used by header AND by loadRange (only when hasHistory)
+  const fromMonth = windowMonths[0];
+  const toMonth   = windowMonths[windowMonths.length - 1];
 
   useEffect(() => {
-    if (fromMonth && toMonth) loadRange(fromMonth, toMonth);
-  }, [fromMonth, toMonth, loadRange]);
+    // Don't fetch when window is empty — would result in from>to and a 400.
+    if (hasHistory && fromMonth && toMonth) loadRange(fromMonth, toMonth);
+  }, [hasHistory, fromMonth, toMonth, loadRange]);
 
   // Load planned expenses once (used for cushion target adjustment)
   useEffect(() => {
@@ -254,29 +281,29 @@ function PanelSafetyNetDesktop() {
   }, []);
 
   // ── Derived computations ──────────────────────────────────
+  // All useMemo below MUST run on every render (no early returns above).
+  // When hasHistory is false, they compute on an empty array and yield
+  // safe zero-values — the render branch handles displaying the
+  // "no history" placeholder instead.
 
   const txInWindow = useMemo(
-    // RangeTransaction is a loose superset of SnTransaction (same key fields,
-    // looser typing). Go via `unknown` so TS accepts the narrowing.
     () => (transactions as unknown as SnTransaction[]).filter(tx => isInWindow(tx, windowMonths)),
     [transactions, windowMonths],
   );
 
-  // Detect insufficient history — warn the user if they have less than
-  // lookbackMonths of data. Average would otherwise be artificially low.
   const monthsWithData = useMemo(() => {
     const months = new Set<string>();
     for (const tx of txInWindow) months.add(tx.budgetMonth);
     return months.size;
   }, [txInWindow]);
   const insufficientHistory = hydrated
+    && hasHistory
     && txInWindow.length > 0
-    && monthsWithData < snState.lookbackMonths;
+    && monthsWithData < windowMonths.length;
+
+  const windowClamped = hydrated && !!floor && rawWindow.length !== windowMonths.length && hasHistory;
 
   // ── Critical subcategories (Feature #1) ──────────────────
-  // Collect all subcategory IDs marked `isCritical` from AppContext.
-  // Filtered to non-archived only — archived subcategories don't apply.
-  // Plain Set lookup, recomputed only when categories array changes.
   const criticalSubcategoryIds = useMemo(() => {
     const set = new Set<string>();
     for (const cat of (categories || [])) {
@@ -288,14 +315,20 @@ function PanelSafetyNetDesktop() {
     return set;
   }, [categories]);
 
+  // Divide by the actual window length (not lookbackMonths), so when the
+  // window is clamped, averages reflect the real number of months available.
+  // effectiveMonths >= 1 guard prevents division-by-zero in computations
+  // (the no-history branch handles the user-facing case separately).
+  const effectiveMonths = windowMonths.length || 1;
+
   const layers = useMemo(
-    () => computeCostLayers(txInWindow, snState.lookbackMonths, criticalSubcategoryIds),
-    [txInWindow, snState.lookbackMonths, criticalSubcategoryIds],
+    () => computeCostLayers(txInWindow, effectiveMonths, criticalSubcategoryIds),
+    [txInWindow, effectiveMonths, criticalSubcategoryIds],
   );
 
   const incomeSources = useMemo(
-    () => computeIncomeSources(txInWindow, snState.lookbackMonths),
-    [txInWindow, snState.lookbackMonths],
+    () => computeIncomeSources(txInWindow, effectiveMonths),
+    [txInWindow, effectiveMonths],
   );
 
   useEffect(() => {
@@ -321,11 +354,6 @@ function PanelSafetyNetDesktop() {
   const assetsTotal   = useMemo(() => sumAssets(activeAssets), [activeAssets]);
 
   // ── Upcoming planned in horizon ───────────────────────────
-  // Always computed (so the UpcomingPlannedCard can show the list even when
-  // toggled off), but only fed into deficits if the toggle is on.
-  // Critical subcategories propagate here too: a plan targeting an isCritical
-  // subcategory gets isCritical=true in the result and bypasses the priority
-  // filter in sumPlannedForLevel.
   const upcomingPlanned = useMemo(
     () => computeUpcomingPlanned(planned, snState.horizonMonths, new Date(), criticalSubcategoryIds),
     [planned, snState.horizonMonths, criticalSubcategoryIds],
@@ -345,16 +373,68 @@ function PanelSafetyNetDesktop() {
   );
 
   const capability = useMemo(
-    () => computeSavingCapability(txInWindow, snState.lookbackMonths),
-    [txInWindow, snState.lookbackMonths],
+    () => computeSavingCapability(txInWindow, effectiveMonths),
+    [txInWindow, effectiveMonths],
   );
 
-// ── Render ────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────
 
+  // ── Branch 1: No historical data yet (floor in the future) ──
+  // Shown when appStartMonth hasn't been reached yet — the budget
+  // officially starts later, so we have nothing to analyse. Friendly
+  // placeholder instead of "0 months / 0 zł" everywhere. The user can
+  // still pre-populate the assets portfolio so it's ready when analysis
+  // kicks in.
+  if (hydrated && !hasHistory) {
+    return (
+      <div style={{ padding: "0 0 60px 0", maxWidth: 1200 }}>
+        <div style={{ marginBottom: 20, marginTop: 8 }}>
+          <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>
+            Analiza zostanie odblokowana po rozpoczęciu budżetu.
+          </div>
+        </div>
+
+        <Card>
+          <div style={{ textAlign: "center", padding: "60px 20px", color: "#94a3b8" }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>📅</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", marginBottom: 8 }}>
+              Brak danych historycznych
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 520, margin: "0 auto" }}>
+              Budżet rozpoczyna się od{" "}
+              <strong style={{ color: "#10b981" }}>{floor}</strong>.
+              Panel poduszki finansowej zacznie pokazywać analizę kosztów,
+              dochodów i deficytów po zakończeniu pierwszego pełnego miesiąca
+              budżetowego.
+            </div>
+            <div style={{
+              marginTop: 24, padding: "10px 14px",
+              background: "#0d1424", border: "1px solid #1e293b",
+              borderRadius: 8, fontSize: 12, color: "#64748b",
+              maxWidth: 520, margin: "24px auto 0",
+            }}>
+              💡 Możesz już teraz przygotować portfel aktywów — gdy ruszy
+              analiza, te dane będą od razu uwzględnione w wyliczeniach.
+            </div>
+          </div>
+        </Card>
+
+        {/* Even without history, the user can still manage assets ahead of time */}
+        <Card title="🪙 Portfel aktywów (Twoja poduszka)" style={{ marginTop: 16 }}>
+          <AssetsPortfolio
+            assets={snState.assets}
+            onChange={setAssets}
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Branch 2: Loading skeleton (have history, awaiting fetch) ──
   if (isLoading && transactions.length === 0) {
     return (
       <div style={{ padding: "0 0 40px 0", maxWidth: 1200 }}>
-        {/* Header — zostaje, bo nie zależy od danych */}
         <div style={{ marginBottom: 20, marginTop: 8 }}>
           <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>
@@ -362,22 +442,18 @@ function PanelSafetyNetDesktop() {
           </div>
         </div>
 
-        {/* Cost layers card */}
         <SkeletonCard title height={140} style={{ marginBottom: 16 }} />
 
-        {/* Income sources toggle row */}
         <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
           <SkeletonKpiCard style={{ flex: 1 }} />
           <SkeletonKpiCard style={{ flex: 1 }} />
           <SkeletonKpiCard style={{ flex: 1 }} />
         </div>
 
-        {/* Deficit table */}
         <SkeletonCard title style={{ marginBottom: 16 }}>
           <SkeletonListRow columns={5} count={4} />
         </SkeletonCard>
 
-        {/* Assets portfolio + saving assistant */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <SkeletonCard title style={{ minHeight: 200 }}>
             <SkeletonListRow columns={3} count={3} />
@@ -390,6 +466,7 @@ function PanelSafetyNetDesktop() {
     );
   }
 
+  // ── Branch 3: Full panel with data ──
   return (
     <div style={{ padding: "0 0 60px 0", maxWidth: 1200 }}>
 
@@ -397,7 +474,7 @@ function PanelSafetyNetDesktop() {
       <div style={{ marginBottom: 20, marginTop: 8 }}>
         <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
         <div style={{ fontSize: 13, color: "#64748b" }}>
-          {fromMonth} → {toMonth} · {snState.lookbackMonths}-miesięczna baza ·
+          {fromMonth} → {toMonth} · {windowMonths.length}-miesięczna baza ·
           horyzont przetrwania: {snState.horizonMonths} mies. · obecne aktywa:{" "}
           <strong style={{ color: "#10b981" }}>{fmt(assetsTotal)}</strong>
         </div>
@@ -412,6 +489,17 @@ function PanelSafetyNetDesktop() {
           </div>
         )}
 
+        {windowClamped && (
+          <div style={{
+            marginTop: 8, padding: "6px 10px",
+            background: "#3b82f611", border: "1px solid #3b82f644",
+            borderRadius: 6, fontSize: 11, color: "#60a5fa",
+          }}>
+            ℹ️ Okno historyczne przycięte do {fromMonth} (budżet zaczyna się od {floor}).
+            Średnie liczone z {windowMonths.length} {windowMonths.length === 1 ? "miesiąca" : "miesięcy"}.
+          </div>
+        )}
+
         {insufficientHistory && (
           <div style={{
             marginTop: 8, padding: "6px 10px",
@@ -419,7 +507,7 @@ function PanelSafetyNetDesktop() {
             borderRadius: 6, fontSize: 11, color: "#f59e0b",
           }}>
             ⚠️ Masz tylko {monthsWithData} {monthsWithData === 1 ? "miesiąc" : "miesięcy"} historii
-            w wybranym oknie ({snState.lookbackMonths} mies.). Średnie mogą być zaniżone —
+            w wybranym oknie ({windowMonths.length} mies.). Średnie mogą być zaniżone —
             rozważ krótsze okno historyczne.
           </div>
         )}
@@ -483,7 +571,7 @@ function PanelSafetyNetDesktop() {
             sources={incomeSources}
             excludedKeys={snState.excludedIncomeKeys}
             onChange={setExcluded}
-            lookbackMonths={snState.lookbackMonths}
+            lookbackMonths={effectiveMonths}
           />
         </Card>
       </div>
@@ -583,14 +671,6 @@ function MobileBlocker() {
 }
 
 // ── FX rate refresher ───────────────────────────────────────
-//
-// Lazy-loads useCurrencyConverter's underlying fetch routine. We don't call
-// the hook itself (hooks can't be called from effects), so we re-export the
-// pure fetch from the hook module (or duplicate the same NBP call here).
-//
-// To keep this isolated, we use the cached module-level fetchNbpRate from
-// the hook by dynamic-importing it. If it isn't exported, we fall back to a
-// minimal inline NBP call.
 
 interface FxUpdate {
   id:             string;
@@ -627,7 +707,7 @@ async function refreshAssetRates(
           effectiveDate: rate.effectiveDate,
         });
       }
-    } catch (err) {
+    } catch {
       // Per-currency failure → skip those, keep others
     }
   }
@@ -636,7 +716,6 @@ async function refreshAssetRates(
 }
 
 // Minimal inline NBP fetcher mirroring useCurrencyConverter's logic.
-// Same 14-day lookback, same table A then B fallback.
 async function fetchNbpRateInline(
   currency: string,
   date: string,

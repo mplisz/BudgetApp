@@ -9,13 +9,21 @@
 //   - keeps the URL as the SOLE source of truth (no parallel state)
 //   - panels that don't care about month don't pay any subscription cost
 //
+// Clamp (appStartMonth):
+//   The URL is user-editable — someone can type ?m=2026-04 directly.
+//   We must NOT trust it blindly. useMonthGuard() (below) enforces the
+//   appStartMonth floor: if the URL month is earlier than the configured
+//   start month, it redirects (replace) to the start month. Call it once
+//   near the top of the app (AuthenticatedLayout) so every route honours
+//   the floor regardless of how the user arrived.
+//
 // Returns:
 //   - budgetMonth: "YYYY-MM" string (current calendar month when ?m= absent or invalid)
 //   - setBudgetMonth(next): updates `?m=` keeping all other query params intact
 //   - month / year: convenience numerics (0-indexed month for compat with old code)
 // ============================================================
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -75,6 +83,38 @@ export function useMonthFromUrl(): UseMonthFromUrlResult {
   };
 }
 
+// ── Clamp guard ──────────────────────────────────────────────
+//
+// Enforces the appStartMonth floor on the ?m= param. Mount once high in
+// the tree. If the current URL month is below `minMonth`, it rewrites
+// the URL (replace) to `minMonth` so:
+//   - deep links like ?m=2026-04 self-correct to ?m=2026-06
+//   - the back button isn't polluted by the bad entry (replace, not push)
+//   - every panel downstream sees a valid month, no per-panel checks
+//
+// `minMonth` is null/undefined → no floor (feature disabled). Pass
+// settings.appStartMonth from the caller (it has AppContext access).
+
+export function useMonthGuard(minMonth: string | null | undefined): void {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const raw = searchParams.get("m");
+
+  useEffect(() => {
+    if (!minMonth || !MONTH_RE.test(minMonth)) return;     // floor disabled
+    // Only act when ?m= is explicitly present AND below the floor.
+    // When ?m= is absent we leave it alone — the default-month logic
+    // (navigateToFirstOpenMonth) handles the no-param case elsewhere.
+    if (!raw || !MONTH_RE.test(raw)) return;
+    if (raw >= minMonth) return;                            // already valid
+
+    setSearchParams(prev => {
+      const out = new URLSearchParams(prev);
+      out.set("m", minMonth);
+      return out;
+    }, { replace: true });                                 // replace — no history spam
+  }, [raw, minMonth, setSearchParams]);
+}
+
 // ── Month arithmetic helpers (independent of URL state) ──────
 
 export function addMonthsToYM(ym: string, n: number): string {
@@ -83,4 +123,9 @@ export function addMonthsToYM(ym: string, n: number): string {
   const newY = Math.floor(idx / 12);
   const newM = ((idx % 12) + 12) % 12;
   return `${newY}-${String(newM + 1).padStart(2, "0")}`;
+}
+
+// True if ym is strictly before floor ("YYYY-MM" lexicographic compare is safe)
+export function isBeforeMonth(ym: string, floor: string): boolean {
+  return ym < floor;
 }

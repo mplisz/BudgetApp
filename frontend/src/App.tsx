@@ -23,7 +23,7 @@
 //                         error would linger until manual reset).
 // ============================================================
 
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import { LoginPage } from "./components/LoginPage";
@@ -38,8 +38,10 @@ import { MonthStatusButton } from "./components/layout/MonthStatusButton";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { PANEL_META } from "./data/constants";
 import { panelIdFromPath, getDefaultPath } from "./data/routes";
-import { useMonthFromUrl } from "./hooks/useMonthFromUrl";
+import { useMonthFromUrl, useMonthGuard } from "./hooks/useMonthFromUrl";
 import { PanelLoader }   from "./components/ui/PanelLoader";
+import { useAppContext } from "./context/AppContext";
+import { useMonthStatus } from "./hooks/useMonthStatus";
 
 // ── Lazy-loaded panels ───────────────────────────────────────
 
@@ -80,6 +82,13 @@ const PANELS_WITH_MONTH_TITLE = new Set([
 function AuthenticatedLayout() {
   const { pathname } = useLocation();
   const { month, year } = useMonthFromUrl();
+
+  // Clamp ?m= to the configured floor (appStartMonth). If the URL month
+  // is earlier than the floor, this redirects (replace) to the floor.
+  // Protects against deep links like ?m=2026-04 when start is 2026-06.
+  const { settings } = useAppContext() as { settings: { appStartMonth?: string } | null };
+  useMonthGuard(settings?.appStartMonth);
+  
   const panelId = panelIdFromPath(pathname);
   const currentItem = panelId
     ? (PANEL_META as Record<string, { icon: string; label: string; section: string }>)[panelId]
@@ -87,7 +96,26 @@ function AuthenticatedLayout() {
 
   const showMonthNav   = panelId !== null && PANELS_WITH_MONTH_NAVIGATOR.has(panelId);
   const showMonthTitle = panelId !== null && PANELS_WITH_MONTH_TITLE.has(panelId);
+  
+  const { isExplicit, setBudgetMonth } = useMonthFromUrl();
+  const { closedMonths } = useAppContext() as { closedMonths: Set<string> };
 
+  // When ?m= is absent, land on the first OPEN budget month.
+  // Runs once when no explicit month is in the URL.
+  useEffect(() => {
+    if (isExplicit) return;                 // user has ?m=, respect it
+    if (closedMonths === undefined) return; // wait for bootstrap
+    const now = new Date();
+    let y = now.getFullYear();
+    let m = now.getMonth();
+    for (let i = 0; i < 24; i++) {
+      const bm = `${y}-${String(m + 1).padStart(2, "0")}`;
+      if (!closedMonths.has(bm)) { setBudgetMonth(bm); return; }
+      m++;
+      if (m > 11) { m = 0; y++; }
+    }
+  }, [isExplicit, closedMonths, setBudgetMonth]);
+  
   return (
     <div style={{ minHeight: "100vh", background: "#0a0f1e", color: "#e2e8f0", fontFamily: "'DM Sans', sans-serif", display: "flex" }}>
       <ToastContainer />

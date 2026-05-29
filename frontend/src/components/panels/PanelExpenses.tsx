@@ -42,9 +42,6 @@ export default function PanelExpenses() {
     cart:    CartItem[];
     setCart: (v: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
   };
-
-  const { budgetMonth } = useMonthFromUrl();
-
   const { addTransaction, isSaving, errorMsg, successMsg } = useTransactions() as {
     addTransaction: (p: TransactionPayload) => Promise<unknown>;
     isSaving:       boolean;
@@ -56,6 +53,8 @@ export default function PanelExpenses() {
     activeBudgetMonth:   string;
     isFutureMonth:       boolean;
   };
+  // Single source: the URL-derived active month
+  const budgetMonth = activeBudgetMonth;
 
 
   const fileRef     = useRef<HTMLInputElement>(null);

@@ -21,8 +21,7 @@ interface IncomeEntryCardProps {
   onSaved?:      () => void;
 }
 
-function emptyForm(selectedMonth: string): IncomeFormValues {
-  const [y, m] = selectedMonth.split("-").map(Number);
+function emptyForm(): IncomeFormValues {
   return {
     categoryId:      "",
     categoryName:    "",
@@ -30,7 +29,7 @@ function emptyForm(selectedMonth: string): IncomeFormValues {
     subcategoryId:   "",
     subcategoryName: "",
     amount:          "",
-    date:            new Date(y, m - 1, 1),
+    date:            new Date(),
     description:     "",
   };
 }
@@ -96,7 +95,7 @@ export function IncomeEntryCard({ selectedMonth, readOnly = false, onSaved }: In
 
       <IncomeForm
         key={formKey}
-        initialValues={emptyForm(selectedMonth)}
+        initialValues={emptyForm()}
         selectedMonth={selectedMonth}
         onSubmit={handleSubmit}
         submitLabel="➕ Dodaj wpływ"
