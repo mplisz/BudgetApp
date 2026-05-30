@@ -81,7 +81,7 @@ export default function PanelAnalytics() {
     settings:   { appStartMonth?: string } | null;
   };
 
-  const { setBudgetMonth } = useMonthFromUrl();
+  const { budgetMonth: activeBudgetMonth, setBudgetMonth } = useMonthFromUrl();
   const navigate           = useNavigate();
 
   // Clamp the lower bound to appStartMonth so analytics never shows
@@ -100,25 +100,39 @@ export default function PanelAnalytics() {
     [fromMonth, floor],
   );
 
+
+  // For PRESET ranges only: if the active budget month is past the
+  // calendar month (e.g. today=2026-05, active=2026-06 because budget
+  // starts in June), extend `to` so the user sees their forward-dated
+  // data. Custom from/to is left alone — user decides explicitly.
+  const isPreset = !range.from && !range.to;
+  const effectiveTo = useMemo(
+    () => (isPreset && activeBudgetMonth > toMonth ? activeBudgetMonth : toMonth),
+    [toMonth, activeBudgetMonth, isPreset],
+  );
+
+
+
   // True when clamp actually changed the lower bound — drives the banner.
   const wasClamped = clampedFrom !== fromMonth;
 
   // True when even the upper bound is below the floor (e.g. user picked
   // a 3-month preset and the entire window is before the budget started).
   // Render an empty-state instead of fetching from > to.
-  const noDataAvailable = !!floor && toMonth < floor;
+   const noDataAvailable = !!floor && effectiveTo < floor;
+
 
   useEffect(() => {
     // Skip the fetch entirely when the whole requested range is before
     // the floor — backend would 400 with `from must be <= to`.
     if (noDataAvailable) return;
-    loadRange(clampedFrom, toMonth);
-  }, [clampedFrom, toMonth, loadRange, noDataAvailable]);
+    loadRange(clampedFrom, effectiveTo);
+  }, [clampedFrom, effectiveTo, loadRange, noDataAvailable]);
 
   // Months in range (oldest -> newest) — uses the CLAMPED from
   const monthsInRange = useMemo(
-    () => (noDataAvailable ? [] : enumerateMonths(clampedFrom, toMonth)),
-    [clampedFrom, toMonth, noDataAvailable],
+    () => (noDataAvailable ? [] : enumerateMonths(clampedFrom, effectiveTo)),
+    [clampedFrom, effectiveTo, noDataAvailable],
   );
 
   // ── Aggregate per-month totals ─────────────────────────────
@@ -266,7 +280,7 @@ export default function PanelAnalytics() {
             <>Brak danych dla wybranego zakresu</>
           ) : (
             <>
-              {clampedFrom} → {toMonth} · {monthsInRange.length}{" "}
+              {clampedFrom} → {effectiveTo} · {monthsInRange.length}{" "}
               {monthsInRange.length === 1 ? "miesiąc" : "miesięcy"}
               {!isLoading && (
                 <>
