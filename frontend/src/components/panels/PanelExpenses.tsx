@@ -3,17 +3,17 @@
 // Add-expense panel with manual form, OCR receipt scan, and cart.
 // ============================================================
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { useAppContext }    from "../../context/AppContext";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { theme as s }       from "../../styles/theme";
 import { fmt }              from "../../utils/helpers";
-import { TransactionForm} from "./transactionComponents/TransactionForm";
+import { TransactionForm, emptyFormValues} from "./transactionComponents/TransactionForm";
 import type { TransactionPayload } from "../../types/transaction";
 import { CartPanel } from "./transactionComponents/CartPanel";
 import type { CartItem } from "./transactionComponents/CartPanel";
-import { useMonthFromUrl }   from "../../hooks/useMonthFromUrl";
+
 
 // ── Cart ID generator ─────────────────────────────────────────
 
@@ -157,32 +157,46 @@ export default function PanelExpenses() {
   }
 
   // ── Form initial values ───────────────────────────────────
+    // Cart-aware default date — sticky to first cart item's date.
+    // Use case: user types receipt items one by one, all sharing the same date.
+    // First item sets the date; subsequent items inherit it instead of jumping
+    // back to today. When cart empties (save), next entry starts at today again.
+    const cartDate = useMemo(() => {
+      if (cart.length === 0) return null;
+      const first = cart[0];
+      if (!first.date) return null;
+      // Parse YYYY-MM-DD without timezone shift
+      const [y, m, d] = first.date.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }, [cart]);
 
-  const formInitialValues = editingCartItem
-    ? (() => {
-        const [y, m, d] = editingCartItem.date.split("-").map(Number);
-        return {
-          date:            new Date(y, m - 1, d),
-          currency:        editingCartItem.originalCurrency,
-          customCurrency:  "",
-          amountOrig:      String(editingCartItem.originalAmount),
-          subcategoryId:   editingCartItem.subcategoryId,
-          subcategoryName: editingCartItem.subcategoryName,
-          categoryId:      editingCartItem.categoryId,
-          categoryName:    editingCartItem.categoryName,
-          categoryType:    null,
-          priority:        editingCartItem.priority,
-          description:     editingCartItem.description,
-          tags:            editingCartItem.tags || [],
-          useVoucher:      editingCartItem.useVoucher || false,
-          voucherId:       editingCartItem.voucherId  || "",
-          voucherAmount:   editingCartItem.voucherAmount ? String(editingCartItem.voucherAmount) : "",
-          amountGross:     "",
-          discountAmount:  "",
-          qty:             1,
-        };
-      })()
-    : undefined;
+    const formInitialValues = editingCartItem
+      ? (() => {
+          const [y, m, d] = editingCartItem.date.split("-").map(Number);
+          return {
+            date:            new Date(y, m - 1, d),
+            currency:        editingCartItem.originalCurrency,
+            customCurrency:  "",
+            amountOrig:      String(editingCartItem.originalAmount),
+            subcategoryId:   editingCartItem.subcategoryId,
+            subcategoryName: editingCartItem.subcategoryName,
+            categoryId:      editingCartItem.categoryId,
+            categoryName:    editingCartItem.categoryName,
+            categoryType:    null,
+            priority:        editingCartItem.priority,
+            description:     editingCartItem.description,
+            tags:            editingCartItem.tags || [],
+            useVoucher:      editingCartItem.useVoucher || false,
+            voucherId:       editingCartItem.voucherId  || "",
+            voucherAmount:   editingCartItem.voucherAmount ? String(editingCartItem.voucherAmount) : "",
+            amountGross:     "",
+            discountAmount:  "",
+            qty:             1,
+          };
+        })() 
+      : cartDate
+      ? { ...emptyFormValues(), date: cartDate }
+      : undefined;
 
   // ── Guards ────────────────────────────────────────────────
 
