@@ -25,6 +25,8 @@ const plannedRoutes = require("./routes/planned");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const { applyRateLimiters } = require('./middleware/rateLimiter');
+applyRateLimiters(app);
 // ==========================================
 // SECURITY MIDDLEWARE
 // ==========================================
@@ -92,79 +94,7 @@ app.use(cors({
 */
 app.set('trust proxy', 1);
 
-// ------------------------------------------------------------
-//  RATE LIMITING 
-// ------------------------------------------------------------
 
-// Helper factory function to keep rate limiters DRY and format the time message automatically
-const createLimiter = (windowMs, maxRequests, baseMessage) => {
-    return rateLimit({
-        windowMs: windowMs,
-        max: maxRequests,
-        message: { error: `${baseMessage}, please try again later.` },
-        standardHeaders: true,
-        legacyHeaders: false,
-    });
-};
-
-// Specific limiter for token refresh
-const refreshLimiter = createLimiter(
-    parseInt(process.env.RATE_LIMIT_REFRESH_WINDOW_MS) || 60 * 1000,
-    parseInt(process.env.RATE_LIMIT_REFRESH_MAX) || 20,
-    "Too many refresh attempts"
-);
-app.use('/api/auth/refresh', refreshLimiter); 
-
-// Specific limiter for login to prevent brute-force attacks
-const loginLimiter = createLimiter(
-    parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MS) || 15 * 60 * 1000,
-    parseInt(process.env.RATE_LIMIT_LOGIN_MAX) || 5,
-    "Too many login attempts"
-);
-app.use('/api/auth/login', loginLimiter);
-
-// Specific limiter for limits container due to batch upserts
-const limitsLimiter = createLimiter(
-    parseInt(process.env.RATE_LIMIT_WINDOW_MS_LIMITS_CONTAINER) || 15 * 60 * 1000,
-    parseInt(process.env.RATE_LIMIT_MAX_LIMITS_CONTAINER) || 600,
-    "Too many requests to limits container"
-);
-app.use('/api/limits', limitsLimiter);
-
-// ── Write operations limiter ────────────────────────────────
-// Tighter limit on POST/PATCH/PUT/DELETE so a spam loop on
-// "Add transaction" can't drain the global pool. Read operations
-// are unaffected — only mutations count toward this counter.
-//
-// Skipped for /api/auth/* since those endpoints have their own
-// dedicated limiters (refresh, login) with different semantics.
-const writeLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WRITE_WINDOW_MS) || 15 * 60 * 1000,
-  max:      parseInt(process.env.RATE_LIMIT_WRITE_MAX)        || 60,
-  message:  { error: "Too many write operations, please slow down." },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  // Only count mutating methods. GET/HEAD/OPTIONS bypass this limiter.
-  skip: (req) => {
-    const method = req.method.toUpperCase();
-    return method === "GET" || method === "HEAD" || method === "OPTIONS";
-  },
-});
-
-// Apply to all /api/* except /api/auth/* (auth has its own limiters).
-// We pass the limiter to app.use with a path filter via middleware so
-// auth routes don't double-count.
-app.use('/api/', (req, res, next) => {
-  if (req.path.startsWith('/auth/')) return next();
-  return writeLimiter(req, res, next);
-});
-// Global API limiter
-const apiLimiter = createLimiter(
-    parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-    parseInt(process.env.RATE_LIMIT_MAX) || 200,
-    "Too many requests from this IP"
-);
-app.use('/api/', apiLimiter);
 
 // ==========================================
 // STANDARD MIDDLEWARE
