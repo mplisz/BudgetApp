@@ -8,31 +8,20 @@
 //   - Cross-cutting writeLimiter — POST/PATCH/PUT/DELETE
 //   - Cross-cutting apiLimiter — global last-line-of-defense
 //
-// All limiters use a custom keyGenerator that strips Azure's
-// proxy port from request.ip (express-rate-limit's default
-// keyGenerator rejects "ip:port" format).
 // ============================================================
 
 const rateLimit = require('express-rate-limit');
 
 // ── Helpers ─────────────────────────────────────────────────
 
-// Extract client IP from req, handling Azure proxy "ip:port" format.
-// Azure App Service load balancer adds source port to X-Forwarded-For —
-// express-rate-limit's default keyGenerator rejects this. We strip the
-// port for IPv4-with-port, leave IPv4 plain and IPv6 alone.
-const ipKeyGenerator = (req) => {
-  const ip = req.ip || req.connection?.remoteAddress || 'unknown';
-  if (ip.includes('.') && ip.split(':').length === 2) {
-    return ip.split(':')[0];   // IPv4 with port
-  }
-  return ip;                   // IPv4 plain or IPv6
-};
+/*express-rate-limit 8.x exports an `ipKeyGenerator` helper that handles
+ IPv4-with-port (Azure proxy format), plain IPv4, and IPv6 (with /64
+ masking to prevent abuse). Use it directly — safer than custom logic.
+*/
+const { ipKeyGenerator } = require('express-rate-limit');
 
-// Paths that have their own dedicated limiter — skip these in
-// cross-cutting (write, global) limiters to avoid double-counting.
 const hasDedicatedLimiter = (path) =>
-  path.startsWith('/auth/') || path.startsWith('/limits');
+    path.startsWith('/auth/') || path.startsWith('/limits');
 
 // Factory — keeps limiters DRY
 const createLimiter = (windowMs, maxRequests, baseMessage, extraOptions = {}) => {
