@@ -67,9 +67,10 @@ function plannedItemsForCategory(
   month: string,
 ): PlannedItem[] {
   return (planned as any[])
-    .filter(p => !p.isArchived && !p.isPurchased && p.targetCategoryId === categoryId && p.mode !== "envelope")
+    .filter(p => !p.isArchived && !p.isPurchased && p.targetCategoryId === categoryId )
     .flatMap((p): PlannedItem[] => {
-      if (p.plannedMonth === month) {
+      //we do not show envelops here - only if that's the planned buying month
+      if(p.plannedMonth === month) {
         return [{
           amount:      p.totalAmountPLN ?? p.totalAmount ?? 0,
           isEnvelope:  false,
