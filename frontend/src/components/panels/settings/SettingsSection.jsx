@@ -19,6 +19,7 @@ export function SettingsSection() {
   const [minSavings,      setMinSavings]      = useState(20);
 
   const [voucherExpiryDays, setVoucherExpiryDays] = useState(14);
+  const [recurringNotifyDays, setRecurringNotifyDays] = useState(3);
 
   // appStartMonth — null means no restriction
   const [startMonthEnabled, setStartMonthEnabled] = useState(false);
@@ -35,6 +36,7 @@ export function SettingsSection() {
     setMinSavings(settings.targets?.minSavingsPercent        ?? 20);
 
     setVoucherExpiryDays(settings.voucherExpiryWarningDays ?? 14);
+    setRecurringNotifyDays(settings.notifyDaysBefore  ?? 3);
 
     const sm = settings.appStartMonth ?? null;
     setStartMonthEnabled(sm !== null);
@@ -74,6 +76,7 @@ export function SettingsSection() {
       },
       appStartMonth: startMonthEnabled ? toYM(startMonthValue) : null,
       voucherExpiryWarningDays: Number(voucherExpiryDays),
+      notifyDaysBefore: Number(recurringNotifyDays),
     });
   }
 
@@ -236,7 +239,22 @@ export function SettingsSection() {
               <span style={{ color: "#64748b", fontSize: 13 }}>dni</span>
             </div>
           </div>
-
+          {/* Recurring notification window */}
+          <div style={{ ...rowStyle, marginTop: 8 }}>
+            <div>
+              <div style={labelStyle}>🔔 Przypomnienia o płatnościach</div>
+              <div style={descStyle}>Ile dni przed terminem (cykliczne i planowane). 📅 W obrębie miesiąca.</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="number" min={0} max={14}
+                value={recurringNotifyDays}
+                onChange={e => setRecurringNotifyDays(e.target.value)}
+                style={inputStyle}
+              />
+              <span style={{ color: "#64748b", fontSize: 13 }}>dni</span>
+            </div>
+          </div>
           <button
             onClick={handleSave}
             disabled={isSaving || !!validationError}

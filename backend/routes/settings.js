@@ -66,6 +66,7 @@ const SettingsSchema = z.object({
   }).optional(),
   currencies:    z.array(CurrencySchema).max(30).optional(),
   voucherExpiryWarningDays: z.number().int().min(1).max(90).optional(),
+  notifyDaysBefore: z.number().int().min(0).max(14).optional(),
   // First month visible in MonthNavigator — blocks navigating before this month
   appStartMonth: z.string()
     .regex(BUDGET_MONTH_REGEX, "Nieprawidłowy format appStartMonth (YYYY-MM)")
@@ -79,7 +80,8 @@ const SettingsSchema = z.object({
        || data.currencies
        || data.appStartMonth !== undefined
        || data.voucherExpiryWarningDays !== undefined
-       || data.safetyNet !== undefined,
+       || data.safetyNet !== undefined
+       || data.notifyDaysBefore !== undefined,
   { message: "No valid fields provided for update." }
 );
 
@@ -104,6 +106,7 @@ const DEFAULT_SETTINGS = {
   },
   currencies:    DEFAULT_CURRENCIES,
   voucherExpiryWarningDays: 14,
+  notifyDaysBefore: 3,
   appStartMonth: null,  // null = no restriction
   safetyNet:     null,  // null = user hasn't configured the panel yet
 };
@@ -196,6 +199,7 @@ router.patch('/', async (req, res) => {
       currencies:    parsed.data.currencies    ?? existing.currencies    ?? DEFAULT_CURRENCIES,
       // null explicitly clears the restriction; undefined means "not sent — keep existing"
       voucherExpiryWarningDays: parsed.data.voucherExpiryWarningDays ?? existing.voucherExpiryWarningDays ?? 14,
+      notifyDaysBefore: parsed.data.notifyDaysBefore ?? existing.notifyDaysBefore ?? 3,
       appStartMonth: parsed.data.appStartMonth !== undefined
         ? parsed.data.appStartMonth
         : (existing.appStartMonth ?? null),

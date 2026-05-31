@@ -108,20 +108,38 @@ export function isReadyToPurchase(doc: PlannedDoc): boolean {
   return sumPaid(doc.virtualSavings) >= doc.totalAmountPLN;
 }
 
-export function shouldNotifyPlanned(doc: PlannedDoc, todayStr: string): boolean {
+export function shouldNotifyPlanned(doc: PlannedDoc, todayStr: string, daysBefore = 3): boolean {
   if (doc.isArchived || doc.isPurchased) return false;
+  if (isReadyToPurchase(doc)) return true;   // ← zawsze pokazuj gdy gotowe do zakupu
+
   const [ty, tm, td] = todayStr.split("-").map(Number);
-  const currentMonth  = `${ty}-${String(tm).padStart(2, "0")}`;
-  if (isReadyToPurchase(doc)) return true;
+  const today = new Date(ty, tm - 1, td);
+  const currentMonth = `${ty}-${String(tm).padStart(2, "0")}`;
+
+  // oneoff mode
   if (doc.mode === "oneoff") {
     if (doc.plannedMonth !== currentMonth) return false;
-    const triggerDay = Math.max(1, (doc.monthlySavingDay || 1) - 3);
-    return td >= triggerDay;
+    return checkTrigger(today, ty, tm, doc.monthlySavingDay, daysBefore);
   }
+
+  // envelope mode
   const entry = (doc.virtualSavings || []).find(v => v.month === currentMonth);
   if (!entry || entry.paidByUser || entry.dismissedByUser) return false;
-  const triggerDay = Math.max(1, (doc.monthlySavingDay || 1) - 3);
-  return td >= triggerDay;
+  return checkTrigger(today, ty, tm, doc.monthlySavingDay, daysBefore);
+}
+
+// Helper to avoid duplication
+function checkTrigger(today: Date, year: number, month: number, plannedDay: number | undefined, daysBefore: number): boolean {
+  const lastDay = new Date(year, month, 0).getDate();
+  const day = Math.min(plannedDay || 1, lastDay);
+  const plannedDate = new Date(year, month - 1, day);
+  const triggerDate = new Date(plannedDate);
+  triggerDate.setDate(triggerDate.getDate() - daysBefore);
+
+  const firstOfMonth = new Date(year, month - 1, 1);
+  const effectiveTrigger = triggerDate < firstOfMonth ? firstOfMonth : triggerDate;
+
+  return today >= effectiveTrigger;
 }
 
 // Generate virtualSavings months from startMonth to plannedMonth.
@@ -168,10 +186,11 @@ interface UsePlannedResult {
 
 export function usePlanned(): UsePlannedResult {
   const { fetchWithAuth }                        = useAuth() as { fetchWithAuth: typeof fetch };
-  const { planned, setPlanned, setTransactions } = useAppContext() as {
+  const { planned, setPlanned, setTransactions, settings} = useAppContext() as {
     planned:         PlannedDoc[];
     setPlanned:      (v: PlannedDoc[] | ((p: PlannedDoc[]) => PlannedDoc[])) => void;
     setTransactions: (v: unknown[] | ((p: unknown[]) => unknown[])) => void;
+    settings:        { notifyDaysBefore?: number } | null;
   };
   const { showSuccess, showError } = useToast() as {
     showSuccess: (m: string) => void;
@@ -343,9 +362,10 @@ export function usePlanned(): UsePlannedResult {
 
   const today = new Date().toISOString().slice(0, 10);
 
+  const daysBefore = settings?.notifyDaysBefore ?? 3;
   const pendingNotifications = useMemo(
-    () => (planned || []).filter(p => shouldNotifyPlanned(p, today)),
-    [planned, today]
+    () => (planned || []).filter(p => shouldNotifyPlanned(p, today, daysBefore)),
+    [planned, today, daysBefore]
   );
 
   return {

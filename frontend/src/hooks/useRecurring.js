@@ -60,7 +60,7 @@ export function isActiveInMonth(doc, month) {
 }
 
 // Bell notification logic
-export function shouldNotify(doc, todayStr) {
+export function shouldNotify(doc, todayStr, daysBefore = 3){
   if (!doc || doc.isArchived) return false;
 
   const [ty, tm, td] = todayStr.split("-").map(Number);
@@ -70,7 +70,7 @@ export function shouldNotify(doc, todayStr) {
   if (doc.lastConfirmedMonth === currentMonth) return false;
   if (doc.notifiedAt && doc.notifiedAt.slice(0, 7) === currentMonth) return false;
 
-  const triggerDay = Math.max(1, (doc.plannedDay || 1) - 3);
+  const triggerDay = Math.max(1, (doc.plannedDay || 1) - daysBefore);
   return td >= triggerDay;
 }
 
@@ -135,7 +135,7 @@ export function computeValidTo(validFrom, monthsCount, frequency = "monthly", ac
 
 export function useRecurring() {
   const { fetchWithAuth }                       = useAuth();
-  const { recurring, setRecurring, setTransactions } = useAppContext();
+  const { recurring, setRecurring, setTransactions, settings  } = useAppContext();
   const { showSuccess, showError }              = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -262,9 +262,10 @@ export function useRecurring() {
 
   // Pending notifications — one per doc (no grouping needed anymore)
   const today = new Date().toISOString().slice(0, 10);
+  const daysBefore = settings?.notifyDaysBefore ?? 3;
   const pendingNotifications = useMemo(() =>
-    recurring.filter(r => shouldNotify(r, today)),
-    [recurring, today]
+    recurring.filter(r => shouldNotify(r, today,daysBefore)),
+    [recurring, today,daysBefore]
   );
 
   return {
