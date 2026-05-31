@@ -433,7 +433,7 @@ export default function PanelBaseBudget() {
     );
     const monthlyIncome = useMemo(() =>
     transactions
-      .filter(t => t.budgetMonth === activeBudgetMonth && t.type === "INCOME" && !t.isArchived)
+      .filter(t => t.budgetMonth === activeBudgetMonth && (t.type === "INCOME" || t.type === "TRANSFER") && !t.isArchived)
       .reduce((sum, t) => sum + t.amount, 0),
     [transactions, activeBudgetMonth],
   );
@@ -611,7 +611,7 @@ export default function PanelBaseBudget() {
                 borderRadius: 8,
                 overflow: "hidden",
               }}>
-                {/* Wiersz 1 — Razem wypływy */}
+                {/* Row 1 - expenses */}
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: GRID,
@@ -663,7 +663,7 @@ export default function PanelBaseBudget() {
                     {/* Left handside */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#94a3b8" }}>
-                        <span>📤 Estymata wypływów:</span>
+                        <span>📤 Estymata wydatków:</span>
                         <span style={{ fontWeight: 700, color: "#e2e8f0" }}>
                           {fmt(totalOutflow)} zł
                         </span>
@@ -674,13 +674,13 @@ export default function PanelBaseBudget() {
                         )}
                       </div>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#94a3b8" }}>
-                        <span>📥 Wpływy bieżącego miesiąca:</span>
+                        <span>📥 Kwota dostępna w miesiącu:</span>
                         <span style={{ fontWeight: 700, color: "#10b981" }}>
                           {fmt(monthlyIncome)} zł
                         </span>
                         {monthlyIncome === 0 && (
                           <span style={{ fontSize: 10, color: "#475569", fontStyle: "italic" }}>
-                            (brak zaksięgowanych wpływów)
+                            (brak zaksięgowanych wpływów / transferów)
                           </span>
                         )}
                       </div>
