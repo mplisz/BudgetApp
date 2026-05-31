@@ -3,6 +3,10 @@
 // Panel "Baza budżetu" — limity per kategoria (EXPENSE + SAVING).
 // Kolumny: Baza | Nadpisanie | Aktywny | Cykliczne | Planowane
 // Cykliczne i Planowane = podgląd ile "zajęte" w danym miesiącu.
+// Obie sekcje (EXPENSE i SAVING) używają TEGO SAMEGO grida — dla
+// savings cele 5 i 6 (Cykliczne, Planowane) renderują się jako
+// puste komórki, żeby Baza/Nadpisanie/Aktywny wyrównały się
+// pikselowo między sekcjami.
 // ============================================================
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -37,7 +41,6 @@ interface EnvelopeBreakdownItem {
   amount:       number;
   isPaid:       boolean;
 }
-// LimitEntry, LimitDoc, ActiveLimit imported from useLimits.ts
 
 interface PlannedItem {
   amount: number;
@@ -45,9 +48,9 @@ interface PlannedItem {
   description: string;
 }
 
-// ── Grids ──────────────────
+// ── Grid (shared between EXPENSE and SAVING for visual alignment) ──
 const GRID = "1fr 140px 140px 80px 110px 130px";
-const GRID_SAVING  = "1fr 140px 140px 80px";
+
 // ── Pure helpers ──────────────────────────────────────────────
 
 function sumRecurringForCategory(
@@ -69,10 +72,10 @@ function plannedItemsForCategory(
   month: string,
 ): PlannedItem[] {
   return (planned as any[])
-    .filter(p => !p.isArchived && !p.isPurchased && p.targetCategoryId === categoryId )
+    .filter(p => !p.isArchived && !p.isPurchased && p.targetCategoryId === categoryId)
     .flatMap((p): PlannedItem[] => {
-      //we do not show envelops here - only if that's the planned buying month
-      if(p.plannedMonth === month) {
+      // We do not show envelopes here — only if that's the planned buying month
+      if (p.plannedMonth === month) {
         return [{
           amount:      p.totalAmountPLN ?? p.totalAmount ?? 0,
           isEnvelope:  false,
@@ -128,14 +131,14 @@ interface LimitRowProps {
   isReadOnly: boolean;
   recurringAmount: number;
   plannedItems: PlannedItem[];
-  grid?:      string;
   showExtra?: boolean;
 }
 
 function LimitRow({
   cat, activeBudgetMonth, getLimitDoc,
   baseEdits, overrideEdits, setBase, setOverride,
-  isReadOnly, recurringAmount, plannedItems,grid = GRID, showExtra = true,
+  isReadOnly, recurringAmount, plannedItems,
+  showExtra = true,
 }: LimitRowProps) {
   const doc    = getLimitDoc(cat.id);
   const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
@@ -163,7 +166,7 @@ function LimitRow({
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: grid,
+      gridTemplateColumns: GRID,
       gap: 8,
       alignItems: "start",
       padding: "10px 0",
@@ -240,42 +243,37 @@ function LimitRow({
         )}
       </div>
 
-      {/* Recurring */}
-      {showExtra &&  (
+      {/* Recurring — empty cell for SAVING (showExtra=false) preserves grid alignment */}
       <div style={{ textAlign: "right", paddingTop: 2 }}>
-        {recurringAmount > 0 ? (
+        {showExtra && (recurringAmount > 0 ? (
           <span style={{ fontSize: 13, color: "#3b82f6", fontWeight: 600 }}>
             {fmt(recurringAmount)}
           </span>
         ) : (
           <span style={{ color: "#334155", fontSize: 12 }}>—</span>
-        )}
+        ))}
       </div>
-      )}
 
-      {/* Planned */}
-      {showExtra &&  (
-        <div style={{ textAlign: "right" }}>
-        <PlannedCell items={plannedItems} />
+      {/* Planned — empty cell for SAVING (showExtra=false) preserves grid alignment */}
+      <div style={{ textAlign: "right" }}>
+        {showExtra && <PlannedCell items={plannedItems} />}
       </div>
-      )}
     </div>
   );
 }
 
 // ── TotalsRow ─────────────────────────────────────────────────
 
-function TotalsRow({ activeLimit, recurring, planned, grid = GRID, showExtra = true  }: {
+function TotalsRow({ activeLimit, recurring, planned, showExtra = true }: {
   activeLimit: number;
-  recurring: number;
-  planned: number;
-  grid?:        string;
-  showExtra?:   boolean;
+  recurring:   number;
+  planned:     number;
+  showExtra?:  boolean;
 }) {
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: grid,
+      gridTemplateColumns: GRID,
       gap: 8,
       alignItems: "center",
       padding: "10px 0",
@@ -292,20 +290,16 @@ function TotalsRow({ activeLimit, recurring, planned, grid = GRID, showExtra = t
           <span style={{ fontWeight: 800, fontSize: 13, color: "#10b981" }}>{fmt(activeLimit)}</span>
         )}
       </div>
-      {showExtra && ( 
-        <div style={{ textAlign: "right" }}>
-        {recurring > 0 && (
+      <div style={{ textAlign: "right" }}>
+        {showExtra && recurring > 0 && (
           <span style={{ fontWeight: 800, fontSize: 13, color: "#3b82f6" }}>{fmt(recurring)}</span>
         )}
       </div>
-      )}
-      {showExtra && ( 
-        <div style={{ textAlign: "right" }}>
-        {planned > 0 && (
+      <div style={{ textAlign: "right" }}>
+        {showExtra && planned > 0 && (
           <span style={{ fontWeight: 800, fontSize: 13, color: "#a855f7" }}>{fmt(planned)}</span>
         )}
       </div>
-      )}
     </div>
   );
 }
@@ -313,9 +307,10 @@ function TotalsRow({ activeLimit, recurring, planned, grid = GRID, showExtra = t
 // ── SectionHeader ─────────────────────────────────────────────
 
 function SectionHeader({ title, activeBudgetMonth, showExtra = true }: {
-   title:              string;
-  activeBudgetMonth:  string;
-   showExtra?:         boolean;}) {
+  title:             string;
+  activeBudgetMonth: string;
+  showExtra?:        boolean;
+}) {
   return (
     <>
       <div style={{ marginTop: 28, marginBottom: 10 }}>
@@ -343,15 +338,21 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true }: {
           </div>
         </div>
         <div style={{ ...(s as any).label, textAlign: "right" }}>Aktywny</div>
-        {showExtra && <div style={{ ...(s as any).label, textAlign: "right", color: "#3b82f6" }}>
-          🔄 Cykliczne
-          <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
-            ten miesiąc
-          </div>
-        </div>}
-        {showExtra &&<div style={{ ...(s as any).label, textAlign: "right", color: "#a855f7" }}>
-          📅 Planowane
-        </div>}
+
+        {/* Cyclical / Planned headers — empty cells for SAVING preserve grid alignment */}
+        <div style={{ ...(s as any).label, textAlign: "right", color: "#3b82f6" }}>
+          {showExtra && (
+            <>
+              🔄 Cykliczne
+              <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+                ten miesiąc
+              </div>
+            </>
+          )}
+        </div>
+        <div style={{ ...(s as any).label, textAlign: "right", color: "#a855f7" }}>
+          {showExtra && "📅 Planowane"}
+        </div>
       </div>
     </>
   );
@@ -360,7 +361,7 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true }: {
 // ── Main Panel ────────────────────────────────────────────────
 
 export default function PanelBaseBudget() {
-    const { categories, transactions } = useAppContext() as {
+  const { categories, transactions } = useAppContext() as {
     categories:   AppCategory[];
     transactions: Transaction[];
   };
@@ -383,18 +384,21 @@ export default function PanelBaseBudget() {
     planned: unknown[];
     loadAll: () => void;
   };
+
   const { loadTransactions } = useTransactions() as {
     loadTransactions: (month: string) => void;
   };
+
   const [baseEdits,     setBaseEdits]     = useState<Record<string, number | "">>({});
   const [overrideEdits, setOverrideEdits] = useState<Record<string, number | "">>({});
   const [isDirty,       setIsDirty]       = useState(false);
 
- useEffect(() => {
-   loadLimits();
-   loadRecurring();
-   loadPlanned();
-   loadTransactions(activeBudgetMonth)}, [activeBudgetMonth]);
+  useEffect(() => {
+    loadLimits();
+    loadRecurring();
+    loadPlanned();
+    loadTransactions(activeBudgetMonth);
+  }, [activeBudgetMonth]);
 
   // ── Category lists ────────────────────────────────────────
 
@@ -415,42 +419,52 @@ export default function PanelBaseBudget() {
     );
     return [...active, ...archivedWithLimits.map(c => ({ ...c, _readOnly: true }))];
   }, [categories, limits, activeBudgetMonth]);
-  
-  const envelopeBreakdown = useMemo<EnvelopeBreakdownItem[]>(() => {
-      const items: EnvelopeBreakdownItem[] = [];
-      for (const p of (planned as any[])) {
-        if (p.isArchived || p.isPurchased || p.mode !== "envelope") continue;
-        const entry = (p.virtualSavings || []).find(
-          (v: any) => v.month === activeBudgetMonth && !v.dismissedByUser,
-        );
-        if (!entry) continue;
-        items.push({
-          categoryName: p.targetCategoryName,
-          description:  p.description,
-          amount:       entry.amountPLN || entry.amount || 0,
-          isPaid:       !!entry.paidByUser,
-        });
-      }
-      return items;
-    }, [planned, activeBudgetMonth]);
 
-    const envelopeTotal = useMemo(
-      () => envelopeBreakdown.reduce((s, i) => s + i.amount, 0),
-      [envelopeBreakdown],
-    );
-    const monthlyIncome = useMemo(() =>
+  // ── Virtual envelopes for current month (info-only) ──────
+
+  const envelopeBreakdown = useMemo<EnvelopeBreakdownItem[]>(() => {
+    const items: EnvelopeBreakdownItem[] = [];
+    for (const p of (planned as any[])) {
+      if (p.isArchived || p.isPurchased || p.mode !== "envelope") continue;
+      const entry = (p.virtualSavings || []).find(
+        (v: any) => v.month === activeBudgetMonth && !v.dismissedByUser,
+      );
+      if (!entry) continue;
+      items.push({
+        categoryName: p.targetCategoryName,
+        description:  p.description,
+        amount:       entry.amountPLN || entry.amount || 0,
+        isPaid:       !!entry.paidByUser,
+      });
+    }
+    return items;
+  }, [planned, activeBudgetMonth]);
+
+  const envelopeTotal = useMemo(
+    () => envelopeBreakdown.reduce((s, i) => s + i.amount, 0),
+    [envelopeBreakdown],
+  );
+
+  // ── Monthly available funds (income + transfers) ─────────
+
+  const monthlyIncome = useMemo(() =>
     transactions
-      .filter(t => t.budgetMonth === activeBudgetMonth && (t.type === "INCOME" || t.type === "TRANSFER") && !t.isArchived)
+      .filter(t =>
+        t.budgetMonth === activeBudgetMonth &&
+        (t.type === "INCOME" || t.type === "TRANSFER") &&
+        !t.isArchived
+      )
       .reduce((sum, t) => sum + t.amount, 0),
     [transactions, activeBudgetMonth],
   );
+
   // ── Init edit state (EXPENSE + SAVING combined) ───────────
 
   useEffect(() => {
     const bases: Record<string, number | ""> = {};
     const overrides: Record<string, number | ""> = {};
     for (const cat of [...expenseCategories, ...savingCategories]) {
-      const doc    = getLimitDoc(cat.id);
+      const doc          = getLimitDoc(cat.id);
       const active       = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
       const limitsArr    = (doc?.limits || []) as LimitEntry[];
       const initBase     = limitsArr
@@ -465,7 +479,7 @@ export default function PanelBaseBudget() {
     setIsDirty(false);
   }, [limits, expenseCategories, savingCategories, activeBudgetMonth]);
 
-  const setBase     = useCallback((catId: string, val: number | "") => {
+  const setBase = useCallback((catId: string, val: number | "") => {
     setBaseEdits(p => ({ ...p, [catId]: val }));
     setIsDirty(true);
   }, []);
@@ -513,8 +527,7 @@ export default function PanelBaseBudget() {
     setIsDirty(false);
   }
 
-  // ── Totals ───────────────────────────────────────────────────
-  // calcTotals is inlined so useMemo deps are explicit and complete.
+  // ── Totals ───────────────────────────────────────────────
 
   const expenseTotals = useMemo(() => {
     let activeLimit = 0, recurringSum = 0, plannedSum = 0;
@@ -530,21 +543,18 @@ export default function PanelBaseBudget() {
   }, [expenseCategories, limits, recurring, planned, activeBudgetMonth]);
 
   const savingTotals = useMemo(() => {
-    let activeLimit = 0, recurringSum = 0, plannedSum = 0;
+    let activeLimit = 0;
     for (const cat of savingCategories) {
       const doc    = limits.find((l: LimitDoc) => l.categoryId === cat.id) ?? null;
       const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
       if (active) activeLimit += active.amount;
-      recurringSum += sumRecurringForCategory(recurring, cat.id, activeBudgetMonth);
-      plannedSum   += plannedItemsForCategory(planned, cat.id, activeBudgetMonth)
-        .reduce((s, p) => s + p.amount, 0);
     }
-    return { activeLimit, recurring: recurringSum, planned: plannedSum };
-  }, [savingCategories, limits, recurring, planned, activeBudgetMonth]);
+    return { activeLimit, recurring: 0, planned: 0 };
+  }, [savingCategories, limits, activeBudgetMonth]);
 
   // ── Rows renderers ───────────────────────────────────
 
-  const renderRow = (cat: AppCategory) => (
+  const renderExpenseRow = (cat: AppCategory) => (
     <LimitRow
       key={cat.id}
       cat={cat}
@@ -560,23 +570,22 @@ export default function PanelBaseBudget() {
     />
   );
 
- const renderSavingRow = (cat: AppCategory) => (
-   <LimitRow
-     key={cat.id}
-     cat={cat}
-     activeBudgetMonth={activeBudgetMonth}
-     getLimitDoc={getLimitDoc}
-     baseEdits={baseEdits}
-     overrideEdits={overrideEdits}
-     setBase={setBase}
-     setOverride={setOverride}
-     isReadOnly={isHistoricalLock || !!cat._readOnly}
-     recurringAmount={0}
-     plannedItems={[]}
-     grid={GRID_SAVING}
-     showExtra={false}
-   />
- );
+  const renderSavingRow = (cat: AppCategory) => (
+    <LimitRow
+      key={cat.id}
+      cat={cat}
+      activeBudgetMonth={activeBudgetMonth}
+      getLimitDoc={getLimitDoc}
+      baseEdits={baseEdits}
+      overrideEdits={overrideEdits}
+      setBase={setBase}
+      setOverride={setOverride}
+      isReadOnly={isHistoricalLock || !!cat._readOnly}
+      recurringAmount={0}
+      plannedItems={[]}
+      showExtra={false}
+    />
+  );
 
   // ── Render ────────────────────────────────────────────────
 
@@ -599,14 +608,15 @@ export default function PanelBaseBudget() {
         <>
           {/* ── EXPENSE ── */}
           <SectionHeader title="💸 Wydatki" activeBudgetMonth={activeBudgetMonth} />
-          {expenseCategories.map(renderRow)}
+          {expenseCategories.map(renderExpenseRow)}
           <TotalsRow {...expenseTotals} />
 
           {/* ── SAVING ── */}
-         <SectionHeader title="🏦 Oszczędności" activeBudgetMonth={activeBudgetMonth} showExtra={false} />
-         {savingCategories.map(renderSavingRow)}
-         <TotalsRow {...savingTotals} grid={GRID_SAVING} showExtra={false} />
- {/* ── GRAND TOTAL ── */}
+          <SectionHeader title="🏦 Oszczędności" activeBudgetMonth={activeBudgetMonth} showExtra={false} />
+          {savingCategories.map(renderSavingRow)}
+          <TotalsRow {...savingTotals} showExtra={false} />
+
+          {/* ── GRAND TOTAL ── */}
           {(expenseTotals.activeLimit + savingTotals.activeLimit) > 0 && (() => {
             const totalOutflow = expenseTotals.activeLimit + savingTotals.activeLimit + envelopeTotal;
             const surplus      = monthlyIncome - totalOutflow;
@@ -618,7 +628,7 @@ export default function PanelBaseBudget() {
                 borderRadius: 8,
                 overflow: "hidden",
               }}>
-                {/* Row 1 - expenses */}
+                {/* Row 1 — limits / recurring / planned summary */}
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: GRID,
@@ -635,29 +645,26 @@ export default function PanelBaseBudget() {
                   <div />{/* override */}
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontWeight: 800, fontSize: 14, color: "#10b981" }}>
-                      {fmt(expenseTotals.activeLimit + savingTotals.activeLimit)} 
-                    </div>
-                    <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>
-                      limity
+                      {fmt(expenseTotals.activeLimit + savingTotals.activeLimit)}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     {(expenseTotals.recurring + savingTotals.recurring) > 0 && (
                       <span style={{ fontWeight: 800, fontSize: 13, color: "#3b82f6" }}>
-                        {fmt(expenseTotals.recurring + savingTotals.recurring)} 
+                        {fmt(expenseTotals.recurring + savingTotals.recurring)}
                       </span>
                     )}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     {(expenseTotals.planned + savingTotals.planned) > 0 && (
                       <span style={{ fontWeight: 800, fontSize: 13, color: "#a855f7" }}>
-                        {fmt(expenseTotals.planned + savingTotals.planned)} 
+                        {fmt(expenseTotals.planned + savingTotals.planned)}
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* Row 2 */}
+                {/* Row 2 — estimate vs available funds */}
                 {hasSurplus && (
                   <div style={{
                     display: "grid",
@@ -667,7 +674,6 @@ export default function PanelBaseBudget() {
                     padding: "10px 12px",
                     background: "#0d1424",
                   }}>
-                    {/* Left handside */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#94a3b8" }}>
                         <span>📤 Estymata wydatków:</span>
@@ -693,7 +699,6 @@ export default function PanelBaseBudget() {
                       </div>
                     </div>
 
-                    {/* Right handside */}
                     {monthlyIncome > 0 && (
                       <div style={{
                         textAlign: "right",
@@ -715,7 +720,8 @@ export default function PanelBaseBudget() {
               </div>
             );
           })()}
-         {/* ── Virtual Envelope ── */}
+
+          {/* ── Virtual envelopes — info-only ── */}
           {envelopeBreakdown.length > 0 && (
             <div style={{
               marginTop: 24,
