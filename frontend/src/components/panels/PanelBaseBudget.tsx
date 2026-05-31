@@ -17,6 +17,7 @@ import { LockBanner }     from "../ui/LockBanner";
 import { BudgetInput }    from "../ui/BudgetInput";
 import { fmt }            from "../../utils/helpers";
 import { theme as s }     from "../../styles/theme";
+import type { Transaction } from "../../types/summary";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -43,9 +44,9 @@ interface PlannedItem {
   description: string;
 }
 
-// ── Grid (shared between EXPENSE and SAVING) ──────────────────
+// ── Grids ──────────────────
 const GRID = "1fr 140px 140px 80px 110px 130px";
-
+const GRID_SAVING  = "1fr 140px 140px 80px";
 // ── Pure helpers ──────────────────────────────────────────────
 
 function sumRecurringForCategory(
@@ -126,12 +127,14 @@ interface LimitRowProps {
   isReadOnly: boolean;
   recurringAmount: number;
   plannedItems: PlannedItem[];
+  grid?:      string;
+  showExtra?: boolean;
 }
 
 function LimitRow({
   cat, activeBudgetMonth, getLimitDoc,
   baseEdits, overrideEdits, setBase, setOverride,
-  isReadOnly, recurringAmount, plannedItems,
+  isReadOnly, recurringAmount, plannedItems,grid = GRID, showExtra = true,
 }: LimitRowProps) {
   const doc    = getLimitDoc(cat.id);
   const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
@@ -159,7 +162,7 @@ function LimitRow({
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: GRID,
+      gridTemplateColumns: grid,
       gap: 8,
       alignItems: "start",
       padding: "10px 0",
@@ -237,6 +240,7 @@ function LimitRow({
       </div>
 
       {/* Recurring */}
+      {showExtra &&  (
       <div style={{ textAlign: "right", paddingTop: 2 }}>
         {recurringAmount > 0 ? (
           <span style={{ fontSize: 13, color: "#3b82f6", fontWeight: 600 }}>
@@ -246,26 +250,31 @@ function LimitRow({
           <span style={{ color: "#334155", fontSize: 12 }}>—</span>
         )}
       </div>
+      )}
 
       {/* Planned */}
-      <div style={{ textAlign: "right" }}>
+      {showExtra &&  (
+        <div style={{ textAlign: "right" }}>
         <PlannedCell items={plannedItems} />
       </div>
+      )}
     </div>
   );
 }
 
 // ── TotalsRow ─────────────────────────────────────────────────
 
-function TotalsRow({ activeLimit, recurring, planned }: {
+function TotalsRow({ activeLimit, recurring, planned, grid = GRID, showExtra = true  }: {
   activeLimit: number;
   recurring: number;
   planned: number;
+  grid?:        string;
+  showExtra?:   boolean;
 }) {
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: GRID,
+      gridTemplateColumns: grid,
       gap: 8,
       alignItems: "center",
       padding: "10px 0",
@@ -282,23 +291,30 @@ function TotalsRow({ activeLimit, recurring, planned }: {
           <span style={{ fontWeight: 800, fontSize: 13, color: "#10b981" }}>{fmt(activeLimit)}</span>
         )}
       </div>
-      <div style={{ textAlign: "right" }}>
+      {showExtra && ( 
+        <div style={{ textAlign: "right" }}>
         {recurring > 0 && (
           <span style={{ fontWeight: 800, fontSize: 13, color: "#3b82f6" }}>{fmt(recurring)}</span>
         )}
       </div>
-      <div style={{ textAlign: "right" }}>
+      )}
+      {showExtra && ( 
+        <div style={{ textAlign: "right" }}>
         {planned > 0 && (
           <span style={{ fontWeight: 800, fontSize: 13, color: "#a855f7" }}>{fmt(planned)}</span>
         )}
       </div>
+      )}
     </div>
   );
 }
 
 // ── SectionHeader ─────────────────────────────────────────────
 
-function SectionHeader({ title, activeBudgetMonth }: { title: string; activeBudgetMonth: string }) {
+function SectionHeader({ title, activeBudgetMonth, showExtra = true }: {
+   title:              string;
+  activeBudgetMonth:  string;
+   showExtra?:         boolean;}) {
   return (
     <>
       <div style={{ marginTop: 28, marginBottom: 10 }}>
@@ -326,15 +342,15 @@ function SectionHeader({ title, activeBudgetMonth }: { title: string; activeBudg
           </div>
         </div>
         <div style={{ ...(s as any).label, textAlign: "right" }}>Aktywny</div>
-        <div style={{ ...(s as any).label, textAlign: "right", color: "#3b82f6" }}>
+        {showExtra && <div style={{ ...(s as any).label, textAlign: "right", color: "#3b82f6" }}>
           🔄 Cykliczne
           <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             ten miesiąc
           </div>
-        </div>
-        <div style={{ ...(s as any).label, textAlign: "right", color: "#a855f7" }}>
+        </div>}
+        {showExtra &&<div style={{ ...(s as any).label, textAlign: "right", color: "#a855f7" }}>
           📅 Planowane
-        </div>
+        </div>}
       </div>
     </>
   );
@@ -343,7 +359,10 @@ function SectionHeader({ title, activeBudgetMonth }: { title: string; activeBudg
 // ── Main Panel ────────────────────────────────────────────────
 
 export default function PanelBaseBudget() {
-  const { categories }        = useAppContext() as { categories: AppCategory[] };
+    const { categories, transactions } = useAppContext() as {
+    categories:   AppCategory[];
+    transactions: Transaction[];
+  };
   const { activeBudgetMonth } = useMonthStatus() as { activeBudgetMonth: string };
   const { isPastMonth, isMonthClosed, isHistoricalLock } = usePanelLock(activeBudgetMonth) as {
     isPastMonth: boolean; isMonthClosed: boolean; isHistoricalLock: boolean;
@@ -412,6 +431,12 @@ export default function PanelBaseBudget() {
       () => envelopeBreakdown.reduce((s, i) => s + i.amount, 0),
       [envelopeBreakdown],
     );
+    const monthlyIncome = useMemo(() =>
+    transactions
+      .filter(t => t.budgetMonth === activeBudgetMonth && t.type === "INCOME" && !t.isArchived)
+      .reduce((sum, t) => sum + t.amount, 0),
+    [transactions, activeBudgetMonth],
+  );
   // ── Init edit state (EXPENSE + SAVING combined) ───────────
 
   useEffect(() => {
@@ -510,7 +535,7 @@ export default function PanelBaseBudget() {
     return { activeLimit, recurring: recurringSum, planned: plannedSum };
   }, [savingCategories, limits, recurring, planned, activeBudgetMonth]);
 
-  // ── Shared row renderer ───────────────────────────────────
+  // ── Rows renderers ───────────────────────────────────
 
   const renderRow = (cat: AppCategory) => (
     <LimitRow
@@ -527,6 +552,24 @@ export default function PanelBaseBudget() {
       plannedItems={plannedItemsForCategory(planned, cat.id, activeBudgetMonth)}
     />
   );
+
+ const renderSavingRow = (cat: AppCategory) => (
+   <LimitRow
+     key={cat.id}
+     cat={cat}
+     activeBudgetMonth={activeBudgetMonth}
+     getLimitDoc={getLimitDoc}
+     baseEdits={baseEdits}
+     overrideEdits={overrideEdits}
+     setBase={setBase}
+     setOverride={setOverride}
+     isReadOnly={isHistoricalLock || !!cat._readOnly}
+     recurringAmount={0}
+     plannedItems={[]}
+     grid={GRID_SAVING}
+     showExtra={false}
+   />
+ );
 
   // ── Render ────────────────────────────────────────────────
 
@@ -553,35 +596,118 @@ export default function PanelBaseBudget() {
           <TotalsRow {...expenseTotals} />
 
           {/* ── SAVING ── */}
-          <SectionHeader title="🏦 Oszczędności" activeBudgetMonth={activeBudgetMonth} />
-          {savingCategories.map(renderRow)}
-          <TotalsRow {...savingTotals} />
+         <SectionHeader title="🏦 Oszczędności" activeBudgetMonth={activeBudgetMonth} showExtra={false} />
+         {savingCategories.map(renderSavingRow)}
+         <TotalsRow {...savingTotals} grid={GRID_SAVING} showExtra={false} />
+ {/* ── GRAND TOTAL ── */}
+          {(expenseTotals.activeLimit + savingTotals.activeLimit) > 0 && (() => {
+            const totalOutflow = expenseTotals.activeLimit + savingTotals.activeLimit + envelopeTotal;
+            const surplus      = monthlyIncome - totalOutflow;
+            const hasSurplus   = monthlyIncome > 0;
+            return (
+              <div style={{
+                marginTop: 8,
+                border: "1px solid #10b98144",
+                borderRadius: 8,
+                overflow: "hidden",
+              }}>
+                {/* Wiersz 1 — Razem wypływy */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: GRID,
+                  gap: 8,
+                  alignItems: "center",
+                  padding: "10px 12px",
+                  background: "#0a0f1e",
+                  borderBottom: hasSurplus ? "1px solid #1e293b" : "none",
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#10b981", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    💰 Razem budżet
+                  </div>
+                  <div />{/* base */}
+                  <div />{/* override */}
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: "#10b981" }}>
+                      {fmt(expenseTotals.activeLimit + savingTotals.activeLimit)} zł
+                    </div>
+                    <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>
+                      limity
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    {(expenseTotals.recurring + savingTotals.recurring) > 0 && (
+                      <span style={{ fontWeight: 800, fontSize: 13, color: "#3b82f6" }}>
+                        {fmt(expenseTotals.recurring + savingTotals.recurring)} zł
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    {(expenseTotals.planned + savingTotals.planned) > 0 && (
+                      <span style={{ fontWeight: 800, fontSize: 13, color: "#a855f7" }}>
+                        {fmt(expenseTotals.planned + savingTotals.planned)} zł
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-          {/* ── GRAND TOTAL —  ── */}
-          {(expenseTotals.activeLimit + savingTotals.activeLimit) > 0 && (
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: GRID,
-              gap: 8,
-              alignItems: "center",
-              padding: "12px 0 8px",
-              marginTop: 8,
-              borderTop: "2px solid #10b981",
-            }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#10b981", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                💰 Razem budżet
+                {/* Row 2 */}
+                {hasSurplus && (
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto auto",
+                    gap: 16,
+                    alignItems: "center",
+                    padding: "10px 12px",
+                    background: "#0d1424",
+                  }}>
+                    {/* Left handside */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#94a3b8" }}>
+                        <span>📤 Estymata wypływów:</span>
+                        <span style={{ fontWeight: 700, color: "#e2e8f0" }}>
+                          {fmt(totalOutflow)} zł
+                        </span>
+                        {envelopeTotal > 0 && (
+                          <span style={{ fontSize: 10, color: "#a855f7" }}>
+                            (w tym 🪙 {fmt(envelopeTotal)} koperty)
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#94a3b8" }}>
+                        <span>📥 Wpływy bieżącego miesiąca:</span>
+                        <span style={{ fontWeight: 700, color: "#10b981" }}>
+                          {fmt(monthlyIncome)} zł
+                        </span>
+                        {monthlyIncome === 0 && (
+                          <span style={{ fontSize: 10, color: "#475569", fontStyle: "italic" }}>
+                            (brak zaksięgowanych wpływów)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right handside */}
+                    {monthlyIncome > 0 && (
+                      <div style={{
+                        textAlign: "right",
+                        padding: "8px 12px",
+                        borderRadius: 6,
+                        background: surplus >= 0 ? "#10b98111" : "#ef444411",
+                        border: `1px solid ${surplus >= 0 ? "#10b98133" : "#ef444433"}`,
+                      }}>
+                        <div style={{ fontSize: 10, color: "#475569", marginBottom: 2 }}>
+                          {surplus >= 0 ? "Nadwyżka" : "Niedobór"}
+                        </div>
+                        <div style={{ fontWeight: 800, fontSize: 15, color: surplus >= 0 ? "#10b981" : "#ef4444" }}>
+                          {surplus >= 0 ? "+" : ""}{fmt(surplus)} zł
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div />{/* base */}
-              <div />{/* override */}
-              <div style={{ textAlign: "right" }}>
-                <span style={{ fontWeight: 800, fontSize: 16, color: "#10b981" }}>
-                  {fmt(expenseTotals.activeLimit + savingTotals.activeLimit)}
-                </span>
-              </div>
-              <div />{/* recurring */}
-              <div />{/* planned */}
-            </div>
-          )}
+            );
+          })()}
          {/* ── Virtual Envelope ── */}
           {envelopeBreakdown.length > 0 && (
             <div style={{
