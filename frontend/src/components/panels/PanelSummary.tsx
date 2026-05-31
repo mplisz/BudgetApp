@@ -144,10 +144,12 @@ export default function PanelSummary() {
     transactions: rawTransactions,
     categories: rawCategories,
     settings: rawSettings,
+    planned: rawPlanned 
   } = useAppContext() as {
     transactions: Transaction[];
     categories: AppCategory[];
     settings: AppSettings | null;
+    planned: any[] | undefined;
   };
 
   const { activeBudgetMonth }             = useMonthStatus() as { activeBudgetMonth: BudgetMonth };
@@ -175,6 +177,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const transactions = rawTransactions ?? [];
   const categories   = rawCategories   ?? [];
   const limits       = rawLimits       ?? [];
+  const planned      = rawPlanned      ?? [];
 
   // ── Filtered transactions ─────────────────────────────────
   const monthTx = useMemo<Transaction[]>(() =>
@@ -187,8 +190,19 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const totalTransfers = useMemo(() => sumTx(monthTx, "TRANSFER"), [monthTx]);
   const totalExpenses  = useMemo(() => sumTx(monthTx, "EXPENSE",  activeBudgetMonth), [monthTx, activeBudgetMonth]);
   const totalSavings   = useMemo(() => sumTx(monthTx, "SAVING",   activeBudgetMonth), [monthTx, activeBudgetMonth]);
-  // SALDO = INCOME + TRANSFER(in) - EXPENSE - SAVING
-  const balance        = totalIncome + totalTransfers - totalExpenses - totalSavings;
+  const virtualEnvelopePaid = useMemo(() => {
+    return (planned as any[])
+      .filter(p => p.mode === "envelope" && !p.isPurchased && !p.isArchived)
+      .reduce((sum, p) => {
+        const entry = (p.virtualSavings || []).find(
+          (v: any) => v.month === activeBudgetMonth && v.paidByUser,
+        );
+        return sum + (entry?.amountPLN || 0);
+      }, 0);
+  }, [planned, activeBudgetMonth]);
+
+  // SALDO = INCOME + TRANSFER(in) - EXPENSE - SAVING - PADI VIRTUAL ENVELOPS
+  const balance        = totalIncome + totalTransfers - totalExpenses - totalSavings- virtualEnvelopePaid;;
 
   const limitMap   = useMemo(() => buildLimitMap(limits, activeBudgetMonth), [limits, activeBudgetMonth]);
   const totalLimit = useMemo(
@@ -343,6 +357,13 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
               value={fmt(totalSavings)} color="#3b82f6"
               sub={totalIncome > 0 ? `${((totalSavings / totalIncome) * 100).toFixed(1)}% wpływów` : undefined}
             />
+             {virtualEnvelopePaid > 0 && (
+            <KpiPill
+              icon="🪙" label="Koperty"
+              value={fmt(virtualEnvelopePaid)} color="#a855f7"
+              sub="wirtualne raty"
+            />
+            )}
             <KpiPill
               icon="⚖️" label="Saldo"
               value={fmt(balance)}

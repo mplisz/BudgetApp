@@ -29,6 +29,12 @@ interface AppCategory {
   _readOnly?: boolean;
 }
 
+interface EnvelopeBreakdownItem {
+  categoryName: string;
+  description:  string;
+  amount:       number;
+  isPaid:       boolean;
+}
 // LimitEntry, LimitDoc, ActiveLimit imported from useLimits.ts
 
 interface PlannedItem {
@@ -61,19 +67,8 @@ function plannedItemsForCategory(
   month: string,
 ): PlannedItem[] {
   return (planned as any[])
-    .filter(p => !p.isArchived && !p.isPurchased && p.targetCategoryId === categoryId)
+    .filter(p => !p.isArchived && !p.isPurchased && p.targetCategoryId === categoryId && p.mode !== "envelope")
     .flatMap((p): PlannedItem[] => {
-      if (p.mode === "envelope") {
-        const entry = (p.virtualSavings || []).find(
-          (v: any) => v.month === month && !v.dismissedByUser,
-        );
-        if (!entry) return [];
-        return [{
-          amount:      entry.amountPLN || entry.amount || 0,
-          isEnvelope:  true,
-          description: p.description || "",
-        }];
-      }
       if (p.plannedMonth === month) {
         return [{
           amount:      p.totalAmountPLN ?? p.totalAmount ?? 0,
@@ -338,9 +333,6 @@ function SectionHeader({ title, activeBudgetMonth }: { title: string; activeBudg
         </div>
         <div style={{ ...(s as any).label, textAlign: "right", color: "#a855f7" }}>
           📅 Planowane
-          <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
-            📋 = koperta
-          </div>
         </div>
       </div>
     </>
@@ -396,7 +388,29 @@ export default function PanelBaseBudget() {
     );
     return [...active, ...archivedWithLimits.map(c => ({ ...c, _readOnly: true }))];
   }, [categories, limits, activeBudgetMonth]);
+  
+  const envelopeBreakdown = useMemo<EnvelopeBreakdownItem[]>(() => {
+      const items: EnvelopeBreakdownItem[] = [];
+      for (const p of (planned as any[])) {
+        if (p.isArchived || p.isPurchased || p.mode !== "envelope") continue;
+        const entry = (p.virtualSavings || []).find(
+          (v: any) => v.month === activeBudgetMonth && !v.dismissedByUser,
+        );
+        if (!entry) continue;
+        items.push({
+          categoryName: p.targetCategoryName,
+          description:  p.description,
+          amount:       entry.amountPLN || entry.amount || 0,
+          isPaid:       !!entry.paidByUser,
+        });
+      }
+      return items;
+    }, [planned, activeBudgetMonth]);
 
+    const envelopeTotal = useMemo(
+      () => envelopeBreakdown.reduce((s, i) => s + i.amount, 0),
+      [envelopeBreakdown],
+    );
   // ── Init edit state (EXPENSE + SAVING combined) ───────────
 
   useEffect(() => {
@@ -542,7 +556,7 @@ export default function PanelBaseBudget() {
           {savingCategories.map(renderRow)}
           <TotalsRow {...savingTotals} />
 
-          {/* ── GRAND TOTAL — tylko kolumna Aktywny ── */}
+          {/* ── GRAND TOTAL —  ── */}
           {(expenseTotals.activeLimit + savingTotals.activeLimit) > 0 && (
             <div style={{
               display: "grid",
@@ -563,8 +577,49 @@ export default function PanelBaseBudget() {
                   {fmt(expenseTotals.activeLimit + savingTotals.activeLimit)}
                 </span>
               </div>
-              <div />{/* cykliczne — pomocnicze, bez sumy */}
-              <div />{/* planowane — pomocnicze, bez sumy */}
+              <div />{/* recurring */}
+              <div />{/* planned */}
+            </div>
+          )}
+         {/* ── Virtual Envelope ── */}
+          {envelopeBreakdown.length > 0 && (
+            <div style={{
+              marginTop: 24,
+              padding: 16,
+              background: "#0a0f1e",
+              border: "1px solid #a855f733",
+              borderRadius: 8,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, color: "#a855f7", fontSize: 13 }}>
+                  🪙 Wirtualne koperty — {activeBudgetMonth}
+                </span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: "#a855f7" }}>
+                  {fmt(envelopeTotal)} zł
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {envelopeBreakdown.map((item, i) => (
+                  <div key={i} style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 12,
+                    padding: "2px 0",
+                  }}>
+                    <span style={{ color: "#94a3b8" }}>
+                      <span style={{ marginRight: 6 }}>{item.isPaid ? "✅" : "○"}</span>
+                      <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{item.description}</span>
+                      <span style={{ color: "#475569", marginLeft: 6 }}>({item.categoryName})</span>
+                    </span>
+                    <span style={{ color: item.isPaid ? "#10b981" : "#94a3b8", fontWeight: 600 }}>
+                      {fmt(item.amount)} zł
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 10, color: "#475569", fontStyle: "italic", lineHeight: 1.5 }}>
+                Wirtualne raty na planowane zakupy. Nie obciążają limitów kategorii — odkładasz na sub-konto poza budżetem miesięcznym. ✅ = już opłacone, ○ = jeszcze nie.
+              </div>
             </div>
           )}
         </>
