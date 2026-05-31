@@ -18,6 +18,7 @@ import { BudgetInput }    from "../ui/BudgetInput";
 import { fmt }            from "../../utils/helpers";
 import { theme as s }     from "../../styles/theme";
 import type { Transaction } from "../../types/summary";
+import { useTransactions } from "../../hooks/useTransactions";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -382,12 +383,18 @@ export default function PanelBaseBudget() {
     planned: unknown[];
     loadAll: () => void;
   };
-
+  const { loadTransactions } = useTransactions() as {
+    loadTransactions: (month: string) => void;
+  };
   const [baseEdits,     setBaseEdits]     = useState<Record<string, number | "">>({});
   const [overrideEdits, setOverrideEdits] = useState<Record<string, number | "">>({});
   const [isDirty,       setIsDirty]       = useState(false);
 
-  useEffect(() => { loadLimits(); loadRecurring(); loadPlanned(); }, []);
+ useEffect(() => {
+   loadLimits();
+   loadRecurring();
+   loadPlanned();
+   loadTransactions(activeBudgetMonth)}, [activeBudgetMonth]);
 
   // ── Category lists ────────────────────────────────────────
 
@@ -628,7 +635,7 @@ export default function PanelBaseBudget() {
                   <div />{/* override */}
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontWeight: 800, fontSize: 14, color: "#10b981" }}>
-                      {fmt(expenseTotals.activeLimit + savingTotals.activeLimit)} zł
+                      {fmt(expenseTotals.activeLimit + savingTotals.activeLimit)} 
                     </div>
                     <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>
                       limity
@@ -637,14 +644,14 @@ export default function PanelBaseBudget() {
                   <div style={{ textAlign: "right" }}>
                     {(expenseTotals.recurring + savingTotals.recurring) > 0 && (
                       <span style={{ fontWeight: 800, fontSize: 13, color: "#3b82f6" }}>
-                        {fmt(expenseTotals.recurring + savingTotals.recurring)} zł
+                        {fmt(expenseTotals.recurring + savingTotals.recurring)} 
                       </span>
                     )}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     {(expenseTotals.planned + savingTotals.planned) > 0 && (
                       <span style={{ fontWeight: 800, fontSize: 13, color: "#a855f7" }}>
-                        {fmt(expenseTotals.planned + savingTotals.planned)} zł
+                        {fmt(expenseTotals.planned + savingTotals.planned)} 
                       </span>
                     )}
                   </div>
@@ -699,7 +706,7 @@ export default function PanelBaseBudget() {
                           {surplus >= 0 ? "Nadwyżka" : "Niedobór"}
                         </div>
                         <div style={{ fontWeight: 800, fontSize: 15, color: surplus >= 0 ? "#10b981" : "#ef4444" }}>
-                          {surplus >= 0 ? "+" : ""}{fmt(surplus)} zł
+                          {surplus >= 0 ? "+" : ""}{fmt(surplus)}
                         </div>
                       </div>
                     )}
