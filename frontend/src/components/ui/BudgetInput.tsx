@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from "react";
 
 interface BudgetInputProps {
   value:        number | "";
-  onChange:     (v: number) => void;
+  onChange:     (v: number | "") => void;
   style?:       React.CSSProperties;
   placeholder?: string;
   disabled?:    boolean;
@@ -38,17 +38,18 @@ export function BudgetInput({ value, onChange, style, placeholder, disabled = fa
     setLocalVal(raw);
     const parsed = parseFloat(raw.replace(",", "."));
     if (!isNaN(parsed)) onChange(parsed);
-    else if (raw === "" || raw === "-") onChange(0);
+    else if (raw === "")  onChange("");   // empty = "no value" (parent decides semantics)
+    else if (raw === "-") onChange(0);    // user typed just minus — treat as 0
   }
 
   function handleBlur() {
     focused.current = false;
     const parsed = parseFloat(String(localVal).replace(",", "."));
-    if (!isNaN(parsed) && parsed !== 0) {
+    if (!isNaN(parsed)) {
       setLocalVal(String(parsed).replace(".", ","));
     } else {
       setLocalVal("");
-      onChange(0);
+        onChange("");
     }
   }
 

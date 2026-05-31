@@ -148,7 +148,7 @@ function ExpensesTable() {
               ) : (
                 <BudgetInput style={s.input}
                   value={parseFloat(editForm.amount)||0}
-                  onChange={v => setEditForm(f => ({...f, amount: String(v)}))} />
+                   onChange={v => setEditForm(f => ({...f, amount: v === "" ? "" : String(v)}))}/>
               )}
             </div>
             <div>

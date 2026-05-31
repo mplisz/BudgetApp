@@ -196,7 +196,7 @@ function LimitRow({
         ) : (
           <BudgetInput
             value={baseEdits[cat.id] ?? ""}
-            onChange={(v: number) => setBase(cat.id, v)}
+            onChange={(v) => setBase(cat.id, v)}
             style={inputStyle}
             placeholder={activeBase ? String(activeBase.amount) : "brak"}
           />
@@ -217,7 +217,7 @@ function LimitRow({
         ) : (
           <BudgetInput
             value={overrideEdits[cat.id] ?? ""}
-            onChange={(v: number) => setOverride(cat.id, v)}
+            onChange={(v) => setOverride(cat.id, v)}
             style={{ ...inputStyle, borderColor: hasOverride ? "#f59e0b66" : "#1e293b" }}
             placeholder="—"
           />
