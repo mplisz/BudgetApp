@@ -93,6 +93,15 @@ function PlannedCell({ items }: { items: PlannedItem[] }) {
   if (items.length === 0) {
     return <span style={{ color: "#334155", fontSize: 12 }}>—</span>;
   }
+  // Single item — render as plain span to match Cykliczne baseline.
+  // Avoids nested flex containers which cause sub-pixel vertical drift.
+  if (items.length === 1) {
+    return (
+      <span style={{ fontSize: 13, color: "#a855f7", fontWeight: 600 }}>
+        {fmt(items[0].amount)}
+      </span>
+    );
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
       {items.map((p, i) => (
@@ -789,7 +798,7 @@ export default function PanelBaseBudget() {
         <div>🟢 <strong style={{ color: "#475569" }}>Baza</strong> — obowiązuje od podanego miesiąca wzwyż.</div>
         <div>🟡 <strong style={{ color: "#475569" }}>Nadpisanie</strong> — jednorazowe tylko dla {activeBudgetMonth}.</div>
         <div>🔵 <strong style={{ color: "#475569" }}>Cykliczne</strong> — suma aktywnych wydatków cyklicznych w tym miesiącu.</div>
-        <div>🟣 <strong style={{ color: "#475569" }}>Planowane</strong> — rata koperty lub jednorazowy wydatek. 📋 = wirtualna koperta.</div>
+        <div>🟣 <strong style={{ color: "#475569" }}>Planowane</strong> — jednorazowy wydatek w tym miesiącu.</div>
       </div>
     </div>
   );
