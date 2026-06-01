@@ -42,11 +42,9 @@ export default function PanelExpenses() {
     cart:    CartItem[];
     setCart: (v: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
   };
-  const { addTransaction, isSaving, errorMsg, successMsg } = useTransactions() as {
+  const { addTransaction, isSaving } = useTransactions() as {
     addTransaction: (p: TransactionPayload) => Promise<unknown>;
     isSaving:       boolean;
-    errorMsg:       string | null;
-    successMsg:     string | null;
   };
   const { isActiveMonthClosed, activeBudgetMonth, isFutureMonth } = useMonthStatus() as {
     isActiveMonthClosed: boolean;
@@ -239,8 +237,6 @@ export default function PanelExpenses() {
             </div>
           </div>
 
-          {errorMsg   && <div style={{ padding: "10px 14px", background: "#ef444422", border: "1px solid #ef4444",  color: "#f87171", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{errorMsg}</div>}
-          {successMsg && <div style={{ padding: "10px 14px", background: "#10b98122", border: "1px solid #10b981", color: "#34d399", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{successMsg}</div>}
 
           {/* Mode toggle: manual / OCR */}
           {!editingCartItem && (

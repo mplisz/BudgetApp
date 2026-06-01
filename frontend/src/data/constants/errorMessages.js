@@ -23,10 +23,12 @@ export const API_ERRORS = {
   // ── Transactions ─────────────────────────────────────────────
   "Transaction not found.":              "Nie znaleziono transakcji.",
   "Cannot edit a deleted transaction.":  "Nie można edytować usuniętej transakcji.",
+  "Transaction cannot be added":"Nie udało się dodać transakcji.",
   "Already deleted.":                    "Transakcja jest już usunięta.",
   "The update of the transaction failed.": "Nie udało się zaktualizować transakcji.",
   "The transaction couldn't be deleted" : "Nie udało się usunąć transakcji",
   "Data was modified by another user. Please refresh and try again.": "Dane zostały zmodyfikowane przez innego użytkownika. Odśwież i spróbuj ponownie.",
+  "Transaction cannot be retrieved" : "Nie udało się pobrać transakcji",
   
   // ── Transaction form validation ───────────────────────────────
   "Select a subcategory.":                                          "Wybierz subkategorię.",
