@@ -255,7 +255,7 @@ function LimitRow({
       </div>
 
       {/* Planned — empty cell for SAVING (showExtra=false) preserves grid alignment */}
-      <div style={{ textAlign: "right" }}>
+      <div style={{ textAlign: "right",  paddingTop: 2  }}>
         {showExtra && <PlannedCell items={plannedItems} />}
       </div>
     </div>
