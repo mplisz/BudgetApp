@@ -378,7 +378,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
             <KpiPill
               icon="🏦" label="Oszczędności"
               value={fmt(totalSavings)} color="#3b82f6"
-              sub={totalIncome > 0 ? `${((totalSavings / totalIncome) * 100).toFixed(1)}% wpływów` : undefined}
+              sub={totalRealIncome > 0 ? `${((totalSavings / totalRealIncome) * 100).toFixed(1)}% wpływów` : undefined}
             />
              {virtualEnvelopePaid > 0 && (
             <KpiPill
@@ -473,28 +473,28 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     icon="🛡️" label="Ubezpieczenia"
                     spent={insuranceSpent}
                     targetPercent={targets.maxInsurancePercent}
-                    totalIncome={totalIncome}
+                    totalIncome={totalRealIncome}
                     direction="max"
                   />
                   <TargetIndicator
                     icon="🏦" label="Zobowiązania/Raty"
                     spent={obligationsSpent}
                     targetPercent={targets.maxObligationsPercent}
-                    totalIncome={totalIncome}
+                    totalIncome={totalRealIncome}
                     direction="max"
                   />
                   <TargetIndicator
                     icon="👴" label="Emerytura"
                     spent={retirementSpent}
                     targetPercent={targets.minRetirementPercent}
-                    totalIncome={totalIncome}
+                    totalIncome={totalRealIncome}
                     direction="min"
                   />
                   <TargetIndicator
                     icon="💎" label="Oszczędności"
                     spent={totalSavings}
                     targetPercent={targets.minSavingsPercent}
-                    totalIncome={totalIncome}
+                    totalIncome={totalRealIncome}
                     direction="min"
                   />
                 </div>
@@ -511,7 +511,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                 <Card title="💎 Oszczędności miesiąca">
                   <SavingsSummary
                     monthTx={monthTx}
-                    totalIncome={totalIncome}
+                    totalIncome={totalRealIncome}
                     minSavingsPercent={targets.minSavingsPercent}
                   />
                 </Card>
