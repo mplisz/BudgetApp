@@ -26,8 +26,8 @@ export const POPULAR_EMOJIS = [
 export const PRIORITY_LABELS = {
   1: { label: "Krytyczne",     color: "#ef4444", desc: "Niezbędne do życia"   },
   2: { label: "Ważne",         color: "#f97316", desc: "Potrzeby podstawowe"  },
-  3: { label: "Komfort",       color: "#eab308", desc: "Luksus i przyjemności" },
-  4: { label: "Poza poduszką", color: "#6b7280", desc: "Nie wlicza się"       },
+  3: { label: "Komforte",       color: "#eab308", desc: "Luksus i przyjemności" },
+  4: { label: "Luksusowe", color: "#6b7280", desc: "Nie wlicza się"       },
 };
 
 export const PRIO_COLORS = {

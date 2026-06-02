@@ -1,31 +1,145 @@
 // ============================================================
 // File: src/components/panels/summaryComponents/SavingsSummary.tsx
+// Redesigned — czytelna karta oszczędności z radialnym wskaźnikiem
 // ============================================================
 
 import { useMemo } from "react";
 import { fmt } from "../../../utils/helpers";
-import { ProgressBar, EmptyState, DividerRow } from "../../ui/summaryUi";
+import { EmptyState } from "../../ui/summaryUi";
 import type { Transaction } from "../../../types/summary";
 
 interface SavingsSummaryProps {
-  monthTx: Transaction[];
-  totalIncome: number;
+  monthTx:           Transaction[];
+  totalIncome:       number;
   minSavingsPercent: number;
 }
 
 interface SavingsCategory {
-  categoryId: string;
+  categoryId:   string;
   categoryName: string;
-  spent: number;
+  spent:        number;
 }
 
-export function SavingsSummary({ monthTx, totalIncome, minSavingsPercent }: SavingsSummaryProps) {
+// ── Radial ring SVG ───────────────────────────────────────────
+
+interface RadialRingProps {
+  pct:   number;   // 0–100+
+  color: string;
+  size?: number;
+}
+
+function RadialRing({ pct, color, size = 88 }: RadialRingProps) {
+  const r        = (size - 10) / 2;
+  const circ     = 2 * Math.PI * r;
+  const fill     = Math.min(pct, 100);
+  const dash     = (fill / 100) * circ;
+  const center   = size / 2;
+
+  return (
+    <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+      {/* track */}
+      <circle
+        cx={center} cy={center} r={r}
+        fill="none"
+        stroke="#1e293b"
+        strokeWidth={8}
+      />
+      {/* fill */}
+      <circle
+        cx={center} cy={center} r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={8}
+        strokeLinecap="round"
+        strokeDasharray={`${dash} ${circ}`}
+        style={{ transition: "stroke-dasharray 0.6s ease" }}
+      />
+      {/* overshoot pulse ring */}
+      {pct > 100 && (
+        <circle
+          cx={center} cy={center} r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={2}
+          opacity={0.3}
+          strokeDasharray={`${circ} 0`}
+        />
+      )}
+    </svg>
+  );
+}
+
+// ── Mini bar per category ─────────────────────────────────────
+
+interface CategoryBarProps {
+  cat:        SavingsCategory;
+  totalSaved: number;
+  color:      string;
+  isLast:     boolean;
+}
+
+function CategoryBar({ cat, totalSaved, color, isLast }: CategoryBarProps) {
+  const pct = totalSaved > 0 ? (cat.spent / totalSaved) * 100 : 0;
+  return (
+    <div style={{
+      paddingBottom: isLast ? 0 : 10,
+      marginBottom:  isLast ? 0 : 10,
+      borderBottom:  isLast ? "none" : "1px solid #1e293b",
+    }}>
+      <div style={{
+        display:        "flex",
+        justifyContent: "space-between",
+        alignItems:     "center",
+        marginBottom:   4,
+      }}>
+        <span style={{ color: "#94a3b8", fontSize: 12 }}>
+          🏦 {cat.categoryName}
+        </span>
+        <span style={{ color: "#e2e8f0", fontSize: 12, fontWeight: 700 }}>
+          {fmt(cat.spent)}
+          <span style={{ color: "#475569", fontSize: 10, marginLeft: 6 }}>
+            {pct.toFixed(0)}%
+          </span>
+        </span>
+      </div>
+      {/* thin bar */}
+      <div style={{
+        height: 3,
+        background: "#0d1424",
+        borderRadius: 99,
+        overflow: "hidden",
+      }}>
+        <div style={{
+          height:     "100%",
+          width:      `${Math.min(pct, 100)}%`,
+          background: color,
+          borderRadius: 99,
+          opacity:    0.7,
+          transition: "width 0.5s ease",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────
+
+export function SavingsSummary({
+  monthTx,
+  totalIncome,
+  minSavingsPercent,
+}: SavingsSummaryProps) {
+
   const savingsByCategory = useMemo<SavingsCategory[]>(() => {
     const map = new Map<string, SavingsCategory>();
     for (const tx of monthTx) {
       if (tx.type !== "SAVING") continue;
       if (!map.has(tx.categoryId)) {
-        map.set(tx.categoryId, { categoryId: tx.categoryId, categoryName: tx.categoryName, spent: 0 });
+        map.set(tx.categoryId, {
+          categoryId:   tx.categoryId,
+          categoryName: tx.categoryName,
+          spent:        0,
+        });
       }
       map.get(tx.categoryId)!.spent += tx.amount;
     }
@@ -36,72 +150,140 @@ export function SavingsSummary({ monthTx, totalIncome, minSavingsPercent }: Savi
   const targetAmt  = totalIncome > 0 ? (minSavingsPercent / 100) * totalIncome : 0;
   const pct        = totalIncome > 0 ? (totalSaved / totalIncome) * 100 : 0;
   const isOk       = totalIncome > 0 && totalSaved >= targetAmt;
-  const barColor   = isOk ? "#10b981" : pct >= minSavingsPercent * 0.75 ? "#f59e0b" : "#ef4444";
-  // Scale bar: targetAmt = 100%, overshoot clamped by ProgressBar
-  const barPct     = targetAmt > 0 ? (totalSaved / targetAmt) * 100 : 0;
+  const shortfall  = Math.max(0, targetAmt - totalSaved);
+
+  const color = isOk
+    ? "#10b981"
+    : pct >= minSavingsPercent * 0.75
+      ? "#f59e0b"
+      : "#ef4444";
 
   if (savingsByCategory.length === 0 && totalIncome === 0) {
     return <EmptyState message="Brak danych" />;
   }
 
   return (
-    <div>
-      {/* Summary card */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+      {/* ── Hero card ── */}
       <div style={{
-        background: "#0d1424",
-        borderRadius: 12,
-        padding: "14px 16px",
-        marginBottom: 14,
-        border: `1px solid ${barColor}33`,
+        background:   "#0d1424",
+        borderRadius: 14,
+        border:       `1px solid ${color}33`,
+        padding:      "16px 18px",
+        display:      "flex",
+        alignItems:   "center",
+        gap:          18,
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
-          <div>
-            <div style={{ color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 600 }}>
-              Łącznie odłożono
-            </div>
-            <div style={{ color: barColor, fontSize: 22, fontWeight: 800, marginTop: 2 }}>
-              {fmt(totalSaved)}
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ color: "#64748b", fontSize: 11 }}>Cel: {minSavingsPercent}% wpływów</div>
-            <div style={{ color: "#94a3b8", fontSize: 13, fontWeight: 700 }}>{fmt(targetAmt)}</div>
+
+        {/* Ring */}
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <RadialRing pct={(targetAmt > 0 ? (totalSaved / targetAmt) * 100 : 0)} color={color} size={88} />
+          {/* center label */}
+          <div style={{
+            position:  "absolute",
+            inset:     0,
+            display:   "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+          }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color, lineHeight: 1 }}>
+              {pct.toFixed(0)}%
+            </span>
+            <span style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>
+              wpływów
+            </span>
           </div>
         </div>
 
-        <ProgressBar percent={barPct} color={barColor} height={8} trackColor="#1e293b" style={{ marginBottom: 4 }} />
+        {/* Text block */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 600, marginBottom: 3 }}>
+            Łącznie odłożono
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color, lineHeight: 1.1, marginBottom: 6 }}>
+            {fmt(totalSaved)}
+          </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: barColor, fontWeight: 700 }}>{pct.toFixed(1)}% wpływów</span>
-          {isOk
-            ? <span style={{ fontSize: 11, color: "#10b981" }}>✅ Cel osiągnięty</span>
-            : targetAmt > 0 && (
-              <span style={{ fontSize: 11, color: "#475569" }}>
-                Brakuje: {fmt(Math.max(0, targetAmt - totalSaved))}
+          {/* Target row */}
+          <div style={{
+            display:    "flex",
+            alignItems: "center",
+            gap:        6,
+            fontSize:   11,
+          }}>
+            <span style={{
+              background:   `${color}18`,
+              border:       `1px solid ${color}44`,
+              color,
+              borderRadius: 6,
+              padding:      "1px 7px",
+              fontWeight:   700,
+              fontSize:     10,
+            }}>
+              Cel {minSavingsPercent}%
+            </span>
+            <span style={{ color: "#475569" }}>
+              = {fmt(targetAmt)}
+            </span>
+          </div>
+
+          {/* Status */}
+          <div style={{ marginTop: 6, fontSize: 11 }}>
+            {isOk ? (
+              <span style={{ color: "#10b981", fontWeight: 600 }}>
+                ✅ Cel osiągnięty
+                {totalSaved > targetAmt && targetAmt > 0 && (
+                  <span style={{ color: "#475569", marginLeft: 5 }}>
+                    (+{fmt(totalSaved - targetAmt)})
+                  </span>
+                )}
               </span>
-            )
-          }
+            ) : targetAmt > 0 ? (
+              <span style={{ color: "#64748b" }}>
+                Brakuje{" "}
+                <strong style={{ color: "#f59e0b" }}>{fmt(shortfall)}</strong>
+                {" "}do celu
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      {/* Per-category breakdown */}
-      {savingsByCategory.length > 0 ? (
-        savingsByCategory.map((cat, i) => {
-          const catPct = totalSaved > 0 ? (cat.spent / totalSaved) * 100 : 0;
-          return (
-            <DividerRow key={cat.categoryId} isLast={i === savingsByCategory.length - 1}
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", fontSize: 13 }}
-            >
-              <span style={{ color: "#94a3b8" }}>🏦 {cat.categoryName}</span>
-              <span style={{ color: "#e2e8f0", fontWeight: 600 }}>
-                {fmt(cat.spent)}
-                <span style={{ color: "#475569", marginLeft: 8, fontSize: 11 }}>{catPct.toFixed(1)}%</span>
-              </span>
-            </DividerRow>
-          );
-        })
-      ) : (
-        <EmptyState message="Brak transakcji oszczędnościowych w tym miesiącu" padding={12} />
+      {/* ── Category breakdown ── */}
+      {savingsByCategory.length > 0 && (
+        <div style={{
+          background:   "#0a0f1e",
+          borderRadius: 10,
+          border:       "1px solid #1e293b",
+          padding:      "12px 14px",
+        }}>
+          <div style={{
+            fontSize:        10,
+            color:           "#334155",
+            fontWeight:      700,
+            textTransform:   "uppercase",
+            letterSpacing:   "0.5px",
+            marginBottom:    10,
+          }}>
+            Podział
+          </div>
+          {savingsByCategory.map((cat, i) => (
+            <CategoryBar
+              key={cat.categoryId}
+              cat={cat}
+              totalSaved={totalSaved}
+              color={color}
+              isLast={i === savingsByCategory.length - 1}
+            />
+          ))}
+        </div>
+      )}
+
+      {savingsByCategory.length === 0 && (
+        <EmptyState message="Brak transakcji oszczędnościowych" padding={12} />
       )}
     </div>
   );

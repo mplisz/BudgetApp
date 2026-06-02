@@ -95,35 +95,37 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
     };
 
     return (
-      <div>
+      <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
         <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 12 }}>
           Kliknij wycinek → podgląd subkategorii
         </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              outerRadius={100}
-              dataKey="value"
-              onClick={handleClick}
-              style={{ cursor: "pointer" }}
-            >
-              {data.map((_, i) => (
-                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip content={<CustomTooltip />} />
-            <Legend
-              formatter={(value: string) => (
-                <span style={{ color: "#e2e8f0", fontSize: 12 }}>{value}</span>
-              )}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+        <div style={{ flex: 1, minHeight: 260 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                outerRadius="75%"
+                dataKey="value"
+                onClick={handleClick}
+                style={{ cursor: "pointer" }}
+              >
+                {data.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+              <Legend
+                formatter={(value: string) => (
+                  <span style={{ color: "#e2e8f0", fontSize: 12 }}>{value}</span>
+                )}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
       </div>
-    );
+);
   }
 
   // ── Drill-down view ────────────────────────────────────────
@@ -136,8 +138,8 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
     icon:       "›",
   }));
 
-  return (
-    <div>
+ return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Back button + title */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <button
@@ -165,21 +167,23 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
         </div>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie data={subData} cx="50%" cy="50%" outerRadius={90} dataKey="value">
-                {subData.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend
-                formatter={(value: string) => (
-                  <span style={{ color: "#e2e8f0", fontSize: 11 }}>{value}</span>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+          <div style={{ flex: 1, minHeight: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={subData} cx="50%" cy="50%" outerRadius="75%" dataKey="value">
+                  {subData.map((_, i) => (
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend
+                  formatter={(value: string) => (
+                    <span style={{ color: "#e2e8f0", fontSize: 11 }}>{value}</span>
+                  )}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
 
           {/* Subcategory table */}
           <div style={{ marginTop: 10 }}>

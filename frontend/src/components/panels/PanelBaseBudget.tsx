@@ -23,6 +23,8 @@ import { fmt }            from "../../utils/helpers";
 import { theme as s }     from "../../styles/theme";
 import type { Transaction } from "../../types/summary";
 import { useTransactions } from "../../hooks/useTransactions";
+import { EnvelopeBreakdown } from "../ui/EnvelopeBreakdown";
+import type { EnvelopeBreakdownItem } from "../ui/EnvelopeBreakdown";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -33,13 +35,6 @@ interface AppCategory {
   type: string;
   isArchived: boolean;
   _readOnly?: boolean;
-}
-
-interface EnvelopeBreakdownItem {
-  categoryName: string;
-  description:  string;
-  amount:       number;
-  isPaid:       boolean;
 }
 
 interface PlannedItem {
@@ -264,7 +259,7 @@ function LimitRow({
       </div>
 
       {/* Planned — empty cell for SAVING (showExtra=false) preserves grid alignment */}
-      <div style={{ textAlign: "right",  paddingTop: 2  }}>
+      <div style={{ textAlign: "right", paddingTop: 2 }}>
         {showExtra && <PlannedCell items={plannedItems} />}
       </div>
     </div>
@@ -501,7 +496,6 @@ export default function PanelBaseBudget() {
   // ── Save (EXPENSE + SAVING) ───────────────────────────────
 
   async function handleSave() {
-    // Collect all changes into a single batch — one HTTP request instead of N.
     const changes: BatchLimitChange[] = [];
 
     for (const cat of [...expenseCategories, ...savingCategories]) {
@@ -512,15 +506,12 @@ export default function PanelBaseBudget() {
       const baseVal  = typeof baseEdits[cat.id]     === "number" ? baseEdits[cat.id]     as number : NaN;
       const ovrVal   = typeof overrideEdits[cat.id] === "number" ? overrideEdits[cat.id] as number : NaN;
 
-      // Base: save to activeBudgetMonth — backend upserts by (date+type),
-      // so this creates a new entry for this month without touching older bases.
       const activeBase   = active?.type === "base" ? active : null;
       const baseChanged  = !isNaN(baseVal) && baseVal !== (activeBase?.amount ?? NaN);
       if (baseChanged) {
         changes.push({ categoryId: cat.id, date: activeBudgetMonth, amount: baseVal, type: "base", action: "upsert" });
       }
 
-      // Override: upsert if value changed, delete if cleared
       const hasOverride = overrideEdits[cat.id] !== "" && !isNaN(ovrVal);
       const hadOverride = active?.type === "override";
       if (hasOverride && ovrVal !== active?.amount) {
@@ -561,7 +552,7 @@ export default function PanelBaseBudget() {
     return { activeLimit, recurring: 0, planned: 0 };
   }, [savingCategories, limits, activeBudgetMonth]);
 
-  // ── Rows renderers ───────────────────────────────────
+  // ── Row renderers ─────────────────────────────────────────
 
   const renderExpenseRow = (cat: AppCategory) => (
     <LimitRow
@@ -731,75 +722,41 @@ export default function PanelBaseBudget() {
           })()}
 
           {/* ── Virtual envelopes — info-only ── */}
-          {envelopeBreakdown.length > 0 && (
-            <div style={{
-              marginTop: 24,
-              padding: 16,
-              background: "#0a0f1e",
-              border: "1px solid #a855f733",
-              borderRadius: 8,
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontWeight: 700, color: "#a855f7", fontSize: 13 }}>
-                  🪙 Wirtualne koperty — {activeBudgetMonth}
-                </span>
-                <span style={{ fontWeight: 800, fontSize: 14, color: "#a855f7" }}>
-                  {fmt(envelopeTotal)} zł
-                </span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {envelopeBreakdown.map((item, i) => (
-                  <div key={i} style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 12,
-                    padding: "2px 0",
-                  }}>
-                    <span style={{ color: "#94a3b8" }}>
-                      <span style={{ marginRight: 6 }}>{item.isPaid ? "✅" : "○"}</span>
-                      <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{item.description}</span>
-                      <span style={{ color: "#475569", marginLeft: 6 }}>({item.categoryName})</span>
-                    </span>
-                    <span style={{ color: item.isPaid ? "#10b981" : "#94a3b8", fontWeight: 600 }}>
-                      {fmt(item.amount)} zł
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 10, fontSize: 10, color: "#475569", fontStyle: "italic", lineHeight: 1.5 }}>
-                Wirtualne raty na planowane zakupy. Nie obciążają limitów kategorii — odkładasz na sub-konto poza budżetem miesięcznym. ✅ = już opłacone, ○ = jeszcze nie.
-              </div>
+          <EnvelopeBreakdown
+            items={envelopeBreakdown}
+            total={envelopeTotal}
+            activeBudgetMonth={activeBudgetMonth}
+            style={{ marginTop: 24 }}
+          />
+
+          {/* Save bar */}
+          {!isHistoricalLock && isDirty && (
+            <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button
+                onClick={() => { loadLimits(); setIsDirty(false); }}
+                style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", cursor: "pointer", fontWeight: 600 }}
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                style={{ ...(s as any).btn("#10b981"), opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}
+              >
+                {isSaving ? "Zapisuję…" : "💾 Zapisz limity"}
+              </button>
             </div>
           )}
+
+          {/* Legend */}
+          <div style={{ marginTop: 32, fontSize: 11, color: "#334155", lineHeight: 1.9 }}>
+            <div>🟢 <strong style={{ color: "#475569" }}>Baza</strong> — obowiązuje od podanego miesiąca wzwyż.</div>
+            <div>🟡 <strong style={{ color: "#475569" }}>Nadpisanie</strong> — jednorazowe tylko dla {activeBudgetMonth}.</div>
+            <div>🔵 <strong style={{ color: "#475569" }}>Cykliczne</strong> — suma aktywnych wydatków cyklicznych w tym miesiącu.</div>
+            <div>🟣 <strong style={{ color: "#475569" }}>Planowane</strong> — jednorazowy wydatek w tym miesiącu.</div>
+          </div>
         </>
       )}
-
-      {/* Save bar */}
-      {!isHistoricalLock && isDirty && (
-        <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button
-            onClick={() => { loadLimits(); setIsDirty(false); }}
-            style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", cursor: "pointer", fontWeight: 600 }}
-          >
-            Anuluj
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            style={{ ...(s as any).btn("#10b981"), opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}
-          >
-            {isSaving ? "Zapisuję…" : "💾 Zapisz limity"}
-          </button>
-        </div>
-      )}
-
-      {/* Legend */}
-      <div style={{ marginTop: 32, fontSize: 11, color: "#334155", lineHeight: 1.9 }}>
-        <div>🟢 <strong style={{ color: "#475569" }}>Baza</strong> — obowiązuje od podanego miesiąca wzwyż.</div>
-        <div>🟡 <strong style={{ color: "#475569" }}>Nadpisanie</strong> — jednorazowe tylko dla {activeBudgetMonth}.</div>
-        <div>🔵 <strong style={{ color: "#475569" }}>Cykliczne</strong> — suma aktywnych wydatków cyklicznych w tym miesiącu.</div>
-        <div>🟣 <strong style={{ color: "#475569" }}>Planowane</strong> — jednorazowy wydatek w tym miesiącu.</div>
-      </div>
     </div>
   );
 }

@@ -20,6 +20,8 @@ import { TopTransactions }  from "./summaryComponents/TopTransactions";
 import { SavingsSummary }   from "./summaryComponents/SavingsSummary";
 import { DEFAULT_TARGETS }  from "../../types/summaryConstants";
 import { SkeletonKpiCard, SkeletonCard, SkeletonChart, Skeleton } from "../ui/Skeleton";
+import { MONTHS } from "../../data/constants";
+
 import type {
   Transaction,
   CategorySummary,
@@ -27,6 +29,8 @@ import type {
   SettingsTargets,
   BudgetMonth,
 } from "../../types/summary";
+import { EnvelopeBreakdown }  from "../ui/EnvelopeBreakdown";
+import type { EnvelopeBreakdownItem } from "../ui/EnvelopeBreakdown";
 
 // ── Local types ───────────────────────────────────────────────
 
@@ -49,20 +53,12 @@ interface KpiPillProps {
   color?: string;
   sub?: string;
 }
-
-// ── Constants ─────────────────────────────────────────────────
-
-const MONTH_NAMES = [
-  "Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
-  "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień",
-] as const;
-
 // ── Pure helpers ──────────────────────────────────────────────
 
 function formatMonthTitle(budgetMonth: BudgetMonth): string {
   if (!budgetMonth) return "";
   const [y, m] = budgetMonth.split("-");
-  return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
+  return `${MONTHS[Number(m) - 1]} ${y}`;
 }
 
 function sumTx(
@@ -230,7 +226,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
           percent:      null,
         });
       }
-      catMap.get(tx.categoryId)!.spent += tx.amount;
+      catMap.get(tx.categoryId)!.spent += calculateEffectiveAmount(tx, activeBudgetMonth);
     }
     for (const cat of catMap.values()) {
       if (cat.limit !== null && cat.limit > 0) {
@@ -259,7 +255,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
           percentOfTotal:    0,
         });
       }
-      subMap.get(tx.subcategoryId)!.spent += tx.amount;
+      subMap.get(tx.subcategoryId)!.spent += calculateEffectiveAmount(tx, activeBudgetMonth);;
     }
     for (const sub of subMap.values()) {
       sub.percentOfCategory = catTotal      > 0 ? (sub.spent / catTotal)      * 100 : 0;
@@ -276,10 +272,37 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const retirementSpent  = useMemo(() => sumByCategoryId(monthTx, "SAVING", ["cat_emerytura"]), [monthTx]);
 
   const hasData = monthTx.length > 0;
+ 
+  //Envelope breakdown
+  const envelopeBreakdown = useMemo<EnvelopeBreakdownItem[]>(() => {
+    const items: EnvelopeBreakdownItem[] = [];
+    for (const p of (planned as any[])) {
+      if (p.isArchived || p.isPurchased || p.mode !== "envelope") continue;
+      const entry = (p.virtualSavings || []).find(
+        (v: any) => v.month === activeBudgetMonth && !v.dismissedByUser,
+      );
+      if (!entry) continue;
+      items.push({
+        categoryName: p.targetCategoryName,
+        description:  p.description,
+        amount:       entry.amountPLN || entry.amount || 0,
+        isPaid:       !!entry.paidByUser,
+      });
+    }
+    return items;
+  }, [planned, activeBudgetMonth]);
+ 
+  const envelopeTotal = useMemo(
+    () => envelopeBreakdown.reduce((s, i) => s + i.amount, 0),
+    [envelopeBreakdown],
+  );
+
+
+
 
  // ── Render ────────────────────────────────────────────────
   return (
-    <div style={{ padding: "0 0 60px 0", maxWidth: 1200 }}>
+    <div style={{ padding: "0 0 60px 0"}}>
 
       {/* Header */}
       <div style={{ marginBottom: 20, marginTop: 8 }}>
@@ -390,9 +413,18 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
           {hasData && (
             <>
-              {/* ROW 1: Limity | Wykres kołowy */}
-              <div style={{ display: "flex", gap: 16, marginBottom: 16, alignItems: "flex-start" }}>
-                <Card title="📋 Limity kategorii" style={{ flex: 1, minWidth: 0 }}>
+              {/* ROW 1: Limits and Pie Chart*/}
+              <div style={{
+                  display: "flex",
+                  gap: 16,
+                  marginBottom: 16,
+                  alignItems: "stretch",
+                }}>
+                <Card title="📋 Limity kategorii"
+                style={{
+                    flex: 1,
+                    minWidth: 0,
+                  }}>
                   {categoriesWithLimit.length === 0 && categoriesWithoutLimit.length === 0 && (
                     <div style={{ color: "#475569", fontSize: 13 }}>Brak wydatków.</div>
                   )}
@@ -419,7 +451,13 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                   )}
                 </Card>
 
-                <Card title="🥧 Struktura wydatków" style={{ flex: 1, minWidth: 0 }}>
+                <Card title="🥧 Struktura wydatków" 
+                style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: "flex",        
+                    flexDirection: "column",
+                  }}>
                   <SpendingPieChart
                     categories={expenseCategories}
                     getSubcategories={getSubcategories}
@@ -428,7 +466,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                 </Card>
               </div>
 
-              {/* ROW 2: Wskaźniki targets */}
+              {/* ROW 2: Indicators */}
               <Card title="🎯 Wskaźniki budżetowe" style={{ marginBottom: 16 }}>
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                   <TargetIndicator
@@ -462,7 +500,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                 </div>
               </Card>
 
-              {/* ROW 3: Priorytety | Top 5 | Oszczędności */}
+              {/* ROW 3: Prio/Top 5/Savings*/}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
                 <Card title="🎖️ Rozkład priorytetów">
                   <PriorityBreakdown monthTx={monthTx} totalExpenses={totalExpenses} />
@@ -477,7 +515,15 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     minSavingsPercent={targets.minSavingsPercent}
                   />
                 </Card>
-              </div>
+              </div>  
+              {/* ROW 4: Virtual envelopes */}
+                <EnvelopeBreakdown
+                  items={envelopeBreakdown}
+                  total={envelopeTotal}
+                  activeBudgetMonth={activeBudgetMonth}
+                  style={{ marginTop: 16 }}  
+                  variant="card"                
+                />
             </>
           )}
         </>

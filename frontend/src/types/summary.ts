@@ -24,6 +24,7 @@ export interface Transaction {
   priority?: 1 | 2 | 3 | 4;
 }
 
+
 export type LimitType = "base" | "override";
 
 export interface LimitEntry {

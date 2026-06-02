@@ -121,6 +121,7 @@ export function Card({ title, children, style }: CardProps) {
       borderRadius: 16,
       padding: 20,
       border: "1px solid #334155",
+      overflow: "hidden",
       ...style,
     }}>
       {title && (
