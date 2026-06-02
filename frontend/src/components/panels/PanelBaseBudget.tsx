@@ -1,12 +1,16 @@
 // ============================================================
 // File: src/components/panels/PanelBaseBudget.tsx
-// Panel "Baza budżetu" — limity per kategoria (EXPENSE + SAVING).
-// Kolumny: Baza | Nadpisanie | Aktywny | Cykliczne | Planowane
-// Cykliczne i Planowane = podgląd ile "zajęte" w danym miesiącu.
-// Obie sekcje (EXPENSE i SAVING) używają TEGO SAMEGO grida — dla
-// savings cele 5 i 6 (Cykliczne, Planowane) renderują się jako
-// puste komórki, żeby Baza/Nadpisanie/Aktywny wyrównały się
-// pikselowo między sekcjami.
+// Panel "Baza budżetu" — per-category limits (EXPENSE + SAVING).
+//
+// Column layout — two visual zones separated by a vertical rule:
+//
+//   ◀── PLAN (budżet) ─────────────────────▶ ◀── FAKT ──▶
+//   Kategoria | Baza | Nadpisanie | Aktywny ‖ Wydano | Cykl. | Plan.
+//
+// "Wydano"   = read-only sum of real transactions (EXPENSE or SAVING).
+// "Cykliczne/Planowane" = estimated/reserved amounts, shown for EXPENSE only.
+// Both sections share the SAME grid so columns align pixel-perfectly.
+// The PLAN | Estymata | Faktycznie wydano separators are rendered via borderLeft on the relevant cells.
 // ============================================================
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -43,8 +47,15 @@ interface PlannedItem {
   description: string;
 }
 
-// ── Grid (shared between EXPENSE and SAVING for visual alignment) ──
-const GRID = "1fr 140px 140px 80px 110px 130px";
+// ── Grid — col order: Kategoria | Baza | Nadpisanie | Aktywny | Cykliczne | Planowane | Faktycznie wydano
+const GRID = "1fr 140px 140px 80px 110px 130px 110px";
+
+// Shared border style that draws the PLAN | FAKT vertical separator.
+// Applied to every Wydano cell (header, data rows, totals, grand total).
+const SEPARATOR: React.CSSProperties = {
+  borderLeft: "1px solid #334155",
+  paddingLeft: 12,
+};
 
 // ── Pure helpers ──────────────────────────────────────────────
 
@@ -69,7 +80,6 @@ function plannedItemsForCategory(
   return (planned as any[])
     .filter(p => !p.isArchived && !p.isPurchased && p.targetCategoryId === categoryId)
     .flatMap((p): PlannedItem[] => {
-      // We do not show envelopes here — only if that's the planned buying month
       if (p.plannedMonth === month) {
         return [{
           amount:      p.totalAmountPLN ?? p.totalAmount ?? 0,
@@ -81,6 +91,23 @@ function plannedItemsForCategory(
     });
 }
 
+// Sum of real transactions (EXPENSE or SAVING) for a category in a given month.
+function sumSpentForCategory(
+  transactions: Transaction[],
+  categoryId: string,
+  month: string,
+  txType: "EXPENSE" | "SAVING" = "EXPENSE",
+): number {
+  return transactions
+    .filter(tx =>
+      tx.categoryId === categoryId &&
+      tx.budgetMonth === month &&
+      tx.type === txType &&
+      !tx.isArchived,
+    )
+    .reduce((sum, tx) => sum + tx.amount, 0);
+}
+
 // ── PlannedCell ───────────────────────────────────────────────
 
 function PlannedCell({ items }: { items: PlannedItem[] }) {
@@ -88,8 +115,7 @@ function PlannedCell({ items }: { items: PlannedItem[] }) {
   if (items.length === 0) {
     return <span style={{ color: "#334155", fontSize: 12 }}>—</span>;
   }
-  // Single item — render as plain span to match Cykliczne baseline.
-  // Avoids nested flex containers which cause sub-pixel vertical drift.
+  // Single item — plain span avoids flex container causing sub-pixel drift vs Cykliczne.
   if (items.length === 1) {
     return (
       <span style={{ fontSize: 13, color: "#a855f7", fontWeight: 600 }}>
@@ -122,7 +148,7 @@ function PlannedCell({ items }: { items: PlannedItem[] }) {
   );
 }
 
-// ── LimitRow — OUTSIDE component to prevent remount (focus bug fix) ──
+// ── LimitRow — defined outside PanelBaseBudget to prevent remount on render ──
 
 interface LimitRowProps {
   cat: AppCategory;
@@ -133,21 +159,22 @@ interface LimitRowProps {
   setBase: (catId: string, val: number | "") => void;
   setOverride: (catId: string, val: number | "") => void;
   isReadOnly: boolean;
+  spentAmount: number;
   recurringAmount: number;
   plannedItems: PlannedItem[];
-  showExtra?: boolean;
+  showExtra?: boolean | "spent-only";
 }
 
 function LimitRow({
   cat, activeBudgetMonth, getLimitDoc,
   baseEdits, overrideEdits, setBase, setOverride,
-  isReadOnly, recurringAmount, plannedItems,
+  isReadOnly, spentAmount, recurringAmount, plannedItems,
   showExtra = true,
 }: LimitRowProps) {
   const doc    = getLimitDoc(cat.id);
   const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
 
-  // Resolve base independently so it's always visible even when override is active
+  // Resolve base independently — stays visible even when an override is active.
   const activeLimits = (doc?.limits || []) as LimitEntry[];
   const activeBase   = activeLimits
     .filter(l => l.type === "base" && l.date <= activeBudgetMonth)
@@ -159,6 +186,7 @@ function LimitRow({
 
   const hasOverride    = active?.type === "override";
   const effectiveLimit = active?.amount ?? null;
+  const isOverBudget   = effectiveLimit !== null && spentAmount > effectiveLimit;
 
   const inputStyle: React.CSSProperties = {
     ...(s.input as React.CSSProperties),
@@ -177,7 +205,7 @@ function LimitRow({
       borderBottom: "1px solid #1e293b",
       opacity: cat._readOnly ? 0.5 : 1,
     }}>
-      {/* Category */}
+      {/* Category name */}
       <div style={{ paddingTop: 2 }}>
         <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13 }}>
           {cat.icon} {cat.name}
@@ -194,7 +222,7 @@ function LimitRow({
         )}
       </div>
 
-      {/* Base — always shows the underlying base even when override is active */}
+      {/* Base limit input — always shows underlying base even when override is active */}
       <div>
         {isReadOnly ? (
           <div style={{ ...inputStyle, color: "#64748b", cursor: "not-allowed", opacity: 0.6 }}>
@@ -215,7 +243,7 @@ function LimitRow({
         )}
       </div>
 
-      {/* Override */}
+      {/* Override input — single-month override */}
       <div>
         {isReadOnly ? (
           <div style={{ ...inputStyle, color: hasOverride ? "#f59e0b" : "#334155", cursor: "not-allowed", opacity: 0.6 }}>
@@ -236,7 +264,7 @@ function LimitRow({
         )}
       </div>
 
-      {/* Active limit */}
+      {/* Active limit (base or override) */}
       <div style={{ textAlign: "right", paddingTop: 2 }}>
         {effectiveLimit !== null ? (
           <span style={{ fontWeight: 700, fontSize: 13, color: hasOverride ? "#f59e0b" : "#10b981" }}>
@@ -247,9 +275,9 @@ function LimitRow({
         )}
       </div>
 
-      {/* Recurring — empty cell for SAVING (showExtra=false) preserves grid alignment */}
+      {/* Cykliczne — empty cell for SAVING preserves grid alignment */}
       <div style={{ textAlign: "right", paddingTop: 2 }}>
-        {showExtra && (recurringAmount > 0 ? (
+        {showExtra === true && (recurringAmount > 0 ? (
           <span style={{ fontSize: 13, color: "#3b82f6", fontWeight: 600 }}>
             {fmt(recurringAmount)}
           </span>
@@ -258,9 +286,22 @@ function LimitRow({
         ))}
       </div>
 
-      {/* Planned — empty cell for SAVING (showExtra=false) preserves grid alignment */}
+      {/* Planowane — empty cell for SAVING preserves grid alignment */}
       <div style={{ textAlign: "right", paddingTop: 2 }}>
-        {showExtra && <PlannedCell items={plannedItems} />}
+        {showExtra === true && <PlannedCell items={plannedItems} />}
+      </div>
+
+      {/* Faktycznie wydano — real transactions; rightmost column; separator from Estymata zone */}
+      <div style={{ textAlign: "right", paddingTop: 2, ...SEPARATOR }}>
+        {showExtra && (
+          spentAmount > 0 ? (
+            <span style={{ fontSize: 13, fontWeight: 600, color: isOverBudget ? "#ef4444" : "#e2e8f0" }}>
+              {fmt(spentAmount)}
+            </span>
+          ) : (
+            <span style={{ color: "#334155", fontSize: 12 }}>—</span>
+          )
+        )}
       </div>
     </div>
   );
@@ -268,12 +309,14 @@ function LimitRow({
 
 // ── TotalsRow ─────────────────────────────────────────────────
 
-function TotalsRow({ activeLimit, recurring, planned, showExtra = true }: {
+function TotalsRow({ activeLimit, spent, recurring, planned, showExtra = true }: {
   activeLimit: number;
+  spent:       number;
   recurring:   number;
   planned:     number;
-  showExtra?:  boolean;
+  showExtra?:  boolean | "spent-only";
 }) {
+  const isOverBudget = activeLimit > 0 && spent > activeLimit;
   return (
     <div style={{
       display: "grid",
@@ -295,13 +338,20 @@ function TotalsRow({ activeLimit, recurring, planned, showExtra = true }: {
         )}
       </div>
       <div style={{ textAlign: "right" }}>
-        {showExtra && recurring > 0 && (
+        {showExtra === true && recurring > 0 && (
           <span style={{ fontWeight: 800, fontSize: 13, color: "#3b82f6" }}>{fmt(recurring)}</span>
         )}
       </div>
       <div style={{ textAlign: "right" }}>
-        {showExtra && planned > 0 && (
+        {showExtra === true && planned > 0 && (
           <span style={{ fontWeight: 800, fontSize: 13, color: "#a855f7" }}>{fmt(planned)}</span>
+        )}
+      </div>
+      <div style={{ textAlign: "right", ...SEPARATOR }}>
+        {showExtra && spent > 0 && (
+          <span style={{ fontWeight: 800, fontSize: 13, color: isOverBudget ? "#ef4444" : "#e2e8f0" }}>
+            {fmt(spent)}
+          </span>
         )}
       </div>
     </div>
@@ -313,18 +363,52 @@ function TotalsRow({ activeLimit, recurring, planned, showExtra = true }: {
 function SectionHeader({ title, activeBudgetMonth, showExtra = true }: {
   title:             string;
   activeBudgetMonth: string;
-  showExtra?:        boolean;
+  showExtra?:        boolean | "spent-only";
 }) {
   return (
     <>
       <div style={{ marginTop: 28, marginBottom: 10 }}>
         <div style={{ fontWeight: 700, color: "#f1f5f9", fontSize: 14 }}>{title}</div>
       </div>
+
+      {/* ── Group label row: PLAN | Estymata | Faktycznie wydano ── */}
       <div style={{
         display: "grid",
         gridTemplateColumns: GRID,
         gap: 8,
-        padding: "6px 0 10px",
+        paddingBottom: 4,
+      }}>
+        <div />{/* category */}
+        {/* PLAN spans: Baza + Nadpisanie + Aktywny = cols 2-4 */}
+        <div style={{ gridColumn: "2 / 5", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Plan
+          </span>
+          <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
+        </div>
+        {/* Estymata — cols 5-6, only for EXPENSE */}
+        {showExtra === true ? (
+          <div style={{ gridColumn: "5 / 7", display: "flex", alignItems: "center", gap: 6, borderLeft: "1px solid #334155", paddingLeft: 12 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Estymata
+            </span>
+            <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
+          </div>
+        ) : (
+          <div style={{ gridColumn: "5 / 7" }} />
+        )}
+        {/* Faktycznie wydano — col 7, always shown when showExtra truthy */}
+        <div style={{ gridColumn: "7 / 8", display: "flex", alignItems: "center", gap: 6, ...SEPARATOR }}>
+          <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
+        </div>
+      </div>
+
+      {/* ── Column header row ── */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: GRID,
+        gap: 8,
+        padding: "4px 0 10px",
         borderBottom: "2px solid #1e293b",
         marginBottom: 4,
       }}>
@@ -343,9 +427,9 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true }: {
         </div>
         <div style={{ ...(s as any).label, textAlign: "right" }}>Aktywny</div>
 
-        {/* Cyclical / Planned headers — empty cells for SAVING preserve grid alignment */}
-        <div style={{ ...(s as any).label, textAlign: "right", color: "#3b82f6" }}>
-          {showExtra && (
+        {/* Cykliczne — Estymata zone, EXPENSE only */}
+        <div style={{ ...(s as any).label, textAlign: "right", color: "#3b82f6", borderLeft: "1px solid #334155", paddingLeft: 12 }}>
+          {showExtra === true && (
             <>
               🔄 Cykliczne
               <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
@@ -355,7 +439,12 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true }: {
           )}
         </div>
         <div style={{ ...(s as any).label, textAlign: "right", color: "#a855f7" }}>
-          {showExtra && "📅 Planowane"}
+          {showExtra === true && "📅 Planowane"}
+        </div>
+
+        {/* Faktycznie wydano — rightmost, separator from Estymata zone */}
+        <div style={{ ...(s as any).label, textAlign: "right", color: "#e2e8f0", ...SEPARATOR }}>
+          {showExtra && "Faktycznie wydano"}
         </div>
       </div>
     </>
@@ -474,7 +563,6 @@ export default function PanelBaseBudget() {
       const initBase     = limitsArr
         .filter(l => l.type === "base" && l.date <= activeBudgetMonth)
         .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
-      // Show underlying base value regardless of whether override is active
       bases[cat.id]     = initBase ? initBase.amount : "";
       overrides[cat.id] = active?.type === "override" ? active.amount : "";
     }
@@ -493,7 +581,7 @@ export default function PanelBaseBudget() {
     setIsDirty(true);
   }, []);
 
-  // ── Save (EXPENSE + SAVING) ───────────────────────────────
+  // ── Save ─────────────────────────────────────────────────
 
   async function handleSave() {
     const changes: BatchLimitChange[] = [];
@@ -530,27 +618,29 @@ export default function PanelBaseBudget() {
   // ── Totals ───────────────────────────────────────────────
 
   const expenseTotals = useMemo(() => {
-    let activeLimit = 0, recurringSum = 0, plannedSum = 0;
+    let activeLimit = 0, spentSum = 0, recurringSum = 0, plannedSum = 0;
     for (const cat of expenseCategories) {
       const doc    = limits.find((l: LimitDoc) => l.categoryId === cat.id) ?? null;
       const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
       if (active) activeLimit += active.amount;
+      spentSum     += sumSpentForCategory(transactions, cat.id, activeBudgetMonth);
       recurringSum += sumRecurringForCategory(recurring, cat.id, activeBudgetMonth);
       plannedSum   += plannedItemsForCategory(planned, cat.id, activeBudgetMonth)
         .reduce((s, p) => s + p.amount, 0);
     }
-    return { activeLimit, recurring: recurringSum, planned: plannedSum };
-  }, [expenseCategories, limits, recurring, planned, activeBudgetMonth]);
+    return { activeLimit, spent: spentSum, recurring: recurringSum, planned: plannedSum };
+  }, [expenseCategories, limits, transactions, recurring, planned, activeBudgetMonth]);
 
   const savingTotals = useMemo(() => {
-    let activeLimit = 0;
+    let activeLimit = 0, spentSum = 0;
     for (const cat of savingCategories) {
       const doc    = limits.find((l: LimitDoc) => l.categoryId === cat.id) ?? null;
       const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
       if (active) activeLimit += active.amount;
+      spentSum += sumSpentForCategory(transactions, cat.id, activeBudgetMonth, "SAVING");
     }
-    return { activeLimit, recurring: 0, planned: 0 };
-  }, [savingCategories, limits, activeBudgetMonth]);
+    return { activeLimit, spent: spentSum, recurring: 0, planned: 0 };
+  }, [savingCategories, limits, transactions, activeBudgetMonth]);
 
   // ── Row renderers ─────────────────────────────────────────
 
@@ -565,6 +655,7 @@ export default function PanelBaseBudget() {
       setBase={setBase}
       setOverride={setOverride}
       isReadOnly={isHistoricalLock || !!cat._readOnly}
+      spentAmount={sumSpentForCategory(transactions, cat.id, activeBudgetMonth)}
       recurringAmount={sumRecurringForCategory(recurring, cat.id, activeBudgetMonth)}
       plannedItems={plannedItemsForCategory(planned, cat.id, activeBudgetMonth)}
     />
@@ -581,9 +672,10 @@ export default function PanelBaseBudget() {
       setBase={setBase}
       setOverride={setOverride}
       isReadOnly={isHistoricalLock || !!cat._readOnly}
+      spentAmount={sumSpentForCategory(transactions, cat.id, activeBudgetMonth, "SAVING")}
       recurringAmount={0}
       plannedItems={[]}
-      showExtra={false}
+      showExtra="spent-only"
     />
   );
 
@@ -612,9 +704,9 @@ export default function PanelBaseBudget() {
           <TotalsRow {...expenseTotals} />
 
           {/* ── SAVING ── */}
-          <SectionHeader title="🏦 Oszczędności" activeBudgetMonth={activeBudgetMonth} showExtra={false} />
+          <SectionHeader title="🏦 Oszczędności" activeBudgetMonth={activeBudgetMonth} showExtra="spent-only" />
           {savingCategories.map(renderSavingRow)}
-          <TotalsRow {...savingTotals} showExtra={false} />
+          <TotalsRow {...savingTotals} showExtra="spent-only" />
 
           {/* ── GRAND TOTAL ── */}
           {(expenseTotals.activeLimit + savingTotals.activeLimit) > 0 && (() => {
@@ -628,7 +720,7 @@ export default function PanelBaseBudget() {
                 borderRadius: 8,
                 overflow: "hidden",
               }}>
-                {/* Row 1 — limits / recurring / planned summary */}
+                {/* Row 1 — limits / spent / recurring / planned totals */}
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: GRID,
@@ -659,6 +751,16 @@ export default function PanelBaseBudget() {
                     {(expenseTotals.planned + savingTotals.planned) > 0 && (
                       <span style={{ fontWeight: 800, fontSize: 13, color: "#a855f7" }}>
                         {fmt(expenseTotals.planned + savingTotals.planned)}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "right", ...SEPARATOR }}>
+                    {(expenseTotals.spent + savingTotals.spent) > 0 && (
+                      <span style={{
+                        fontWeight: 800, fontSize: 13,
+                        color: (expenseTotals.spent + savingTotals.spent) > (expenseTotals.activeLimit + savingTotals.activeLimit) ? "#ef4444" : "#e2e8f0",
+                      }}>
+                        {fmt(expenseTotals.spent + savingTotals.spent)}
                       </span>
                     )}
                   </div>
@@ -750,10 +852,14 @@ export default function PanelBaseBudget() {
 
           {/* Legend */}
           <div style={{ marginTop: 32, fontSize: 11, color: "#334155", lineHeight: 1.9 }}>
-            <div>🟢 <strong style={{ color: "#475569" }}>Baza</strong> — obowiązuje od podanego miesiąca wzwyż.</div>
-            <div>🟡 <strong style={{ color: "#475569" }}>Nadpisanie</strong> — jednorazowe tylko dla {activeBudgetMonth}.</div>
-            <div>🔵 <strong style={{ color: "#475569" }}>Cykliczne</strong> — suma aktywnych wydatków cyklicznych w tym miesiącu.</div>
-            <div>🟣 <strong style={{ color: "#475569" }}>Planowane</strong> — jednorazowy wydatek w tym miesiącu.</div>
+            <div style={{ color: "#475569", fontWeight: 700, marginBottom: 2 }}>Plan</div>
+            <div>🟢 <strong style={{ color: "#475569" }}>Baza</strong> — limit obowiązujący od podanego miesiąca wzwyż.</div>
+            <div>🟡 <strong style={{ color: "#475569" }}>Nadpisanie</strong> — jednorazowa korekta tylko dla {activeBudgetMonth}.</div>
+            <div style={{ marginTop: 8, color: "#475569", fontWeight: 700, marginBottom: 2 }}>Faktycznie wydano</div>
+            <div>⚪ <strong style={{ color: "#475569" }}>Faktycznie wydano</strong> — rzeczywiste transakcje z tego miesiąca (czerwone = przekroczony limit).</div>
+            <div style={{ marginTop: 8, color: "#475569", fontWeight: 700, marginBottom: 2 }}>Estymata</div>
+            <div>🔵 <strong style={{ color: "#475569" }}>Cykliczne</strong> — przewidywane koszty cykliczne; mogą, ale nie muszą wystąpić.</div>
+            <div>🟣 <strong style={{ color: "#475569" }}>Planowane</strong> — zaplanowany jednorazowy wydatek; może, ale nie musi wystąpić.</div>
           </div>
         </>
       )}
