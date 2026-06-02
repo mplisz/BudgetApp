@@ -87,20 +87,23 @@ export function TargetIndicator({ icon, label, spent, targetPercent, totalIncome
         </div>
       </div>
 
-      <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 8 }}>
-        {isNoData ? (
+    <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 8 }}>
+      {isNoData ? (
+        <span style={{ color: "#475569" }}>
+          {totalIncome <= 0 ? "Brak wpływów w tym miesiącu" : "Brak transakcji tego typu"}
+        </span>
+      ) : (
+        <>
+          <span style={{ color: "#e2e8f0", fontWeight: 700 }}>{fmt(spent)}</span>
+          {" "}
           <span style={{ color: "#475569" }}>
-            {totalIncome <= 0 ? "Brak wpływów w tym miesiącu" : "Brak transakcji tego typu"}
+            / {direction === "max" ? "max" : "min"}{" "}
+            {fmt((targetPercent / 100) * totalIncome)}
+            <span style={{ fontSize: 10, marginLeft: 4 }}>({targetPercent}%)</span>
           </span>
-        ) : (
-          <>
-            {fmt(spent)}{" "}
-            <span style={{ color: "#475569" }}>
-              / {direction === "max" ? "max" : "min"} {targetPercent}% z {fmt(totalIncome)} wpływów
-            </span>
-          </>
-        )}
-      </div>
+        </>
+      )}
+    </div>
 
       <ProgressBar percent={barPct} color={meta.color} height={6} />
 
