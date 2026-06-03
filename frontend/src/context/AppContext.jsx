@@ -103,16 +103,18 @@ export function AppProvider({ children }) {
 
     async function bootstrap() {
       try {
-        const [catsRes, tagsRes, settingsRes] = await Promise.all([
+        const [catsRes, tagsRes, settingsRes,limitsRes] = await Promise.all([
           fetchWithAuth(`${API_URL}/api/categories`),
           fetchWithAuth(`${API_URL}/api/tags`),
           fetchWithAuth(`${API_URL}/api/settings`),
+          fetchWithAuth(`${API_URL}/api/limits`), 
         ]);
 
         if (catsRes.ok)     setCategories(parseCategories(await catsRes.json()));
         if (tagsRes.ok)     setTags((await tagsRes.json()).filter(t => !t.isArchived));
         if (settingsRes.ok) setSettings(await settingsRes.json());
-
+        if (limitsRes.ok)   setLimits(await limitsRes.json());  
+        
         // Closed months — the URL/navigator logic reads this set to
         // decide the first open month and to lock closed months.
         const monthsRes = await fetchWithAuth(`${API_URL}/api/months`);

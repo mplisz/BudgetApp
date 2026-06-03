@@ -1,8 +1,8 @@
 // ============================================================
 // File: src/components/ui/ToastContainer.jsx
-// ToastProvider wraps the app and provides toast context.
-// ToastContainer renders active toasts fixed top-right (desktop)
-// or bottom-center above MobileNav (mobile ≤700px).
+// Desktop:  fixed top-right corner (as before).
+// Mobile:   fixed top-right, offset below the sticky header.
+// Rendered via createPortal → always above every stacking context.
 // ============================================================
 
 import { useEffect, useState } from "react";
@@ -59,6 +59,9 @@ export function ToastProvider({ children }) {
 }
 
 // ── Container ─────────────────────────────────────────────────
+// Desktop: fixed top-right corner.
+// Mobile:  fixed top-right, but offset below the sticky header (~52px).
+
 export function ToastContainer() {
   const { toasts, dismiss } = useToast();
   const isMobile = useIsMobile();
@@ -68,9 +71,9 @@ export function ToastContainer() {
   const containerStyle = isMobile
     ? {
         position:      "fixed",
-        bottom:        72,           // above MobileNav (≈60px) + 12px gap
-        left:          12,
+        top:           56,      // below sticky header (≈44px height + border)
         right:         12,
+        left:          12,
         zIndex:        9999,
         display:       "flex",
         flexDirection: "column",
@@ -145,7 +148,7 @@ export function ToastContainer() {
 
       <style>{`
         @keyframes toast-in {
-          from { opacity: 0; transform: translateY(10px); }
+          from { opacity: 0; transform: translateY(-6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
