@@ -368,7 +368,7 @@ export default function PanelExpenses() {
       </div>
 
       <style>{`
-        .expenses-layout   { display: flex; gap: 24px; align-items: flex-start; }
+        .expenses-layout   { display: flex; gap: 24px; align-items: flex-start; justify-content: center;}
         .expenses-form-col { flex: 0 0 520px; min-width: 0; }
         .expenses-cart-col { width: 340px; flex-shrink: 0; }
         @media (max-width: 700px) {
