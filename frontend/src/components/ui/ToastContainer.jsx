@@ -1,11 +1,12 @@
 // ============================================================
 // File: src/components/ui/ToastContainer.jsx
 // ToastProvider wraps the app and provides toast context.
-// ToastContainer renders active toasts fixed top-right.
-// Both live here because this is the only file that needs JSX
-// from the toast system.
+// ToastContainer renders active toasts fixed top-right (desktop)
+// or bottom-center above MobileNav (mobile ≤700px).
 // ============================================================
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ToastContext, useToastState, useToast } from "../../hooks/useToast";
 
 const STYLES = {
@@ -35,9 +36,19 @@ const STYLES = {
   },
 }
 
-// ── Provider ──────────────────────────────────────────────────
-// Wrap your app once with this — provides toast context to all children.
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth <= 700
+  );
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 700);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
 
+// ── Provider ──────────────────────────────────────────────────
 export function ToastProvider({ children }) {
   const state = useToastState();
   return (
@@ -48,25 +59,39 @@ export function ToastProvider({ children }) {
 }
 
 // ── Container ─────────────────────────────────────────────────
-// Mount once inside App — renders toasts in top-right corner.
-
 export function ToastContainer() {
   const { toasts, dismiss } = useToast();
+  const isMobile = useIsMobile();
+
   if (toasts.length === 0) return null;
 
-  return (
-    <div style={{
-      position:      "fixed",
-      top:           16,
-      right:         16,
-      zIndex:        9999,
-      display:       "flex",
-      flexDirection: "column",
-      gap:           8,
-      maxWidth:      360,
-      width:         "calc(100vw - 32px)",
-      pointerEvents: "none",
-    }}>
+  const containerStyle = isMobile
+    ? {
+        position:      "fixed",
+        bottom:        72,           // above MobileNav (≈60px) + 12px gap
+        left:          12,
+        right:         12,
+        zIndex:        9999,
+        display:       "flex",
+        flexDirection: "column",
+        gap:           8,
+        pointerEvents: "none",
+      }
+    : {
+        position:      "fixed",
+        top:           16,
+        right:         16,
+        zIndex:        9999,
+        display:       "flex",
+        flexDirection: "column",
+        gap:           8,
+        maxWidth:      360,
+        width:         "calc(100vw - 32px)",
+        pointerEvents: "none",
+      };
+
+  return createPortal(
+    <div style={containerStyle}>
       {toasts.map(toast => {
         const st = STYLES[toast.type] || STYLES.error;
         return (
@@ -120,10 +145,11 @@ export function ToastContainer() {
 
       <style>{`
         @keyframes toast-in {
-          from { opacity: 0; transform: translateX(20px); }
-          to   { opacity: 1; transform: translateX(0); }
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 }
