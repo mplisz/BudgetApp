@@ -1,197 +1,714 @@
 // ============================================================
 // File: src/components/panels/PanelRecurring.jsx
+// Redesigned with:
+//   - Calendar view (monthly grid with expenses on their day)
+//   - List view with sort-by-day, sort-by-amount, sort-by-name
+//   - Filter by: frequency, multi-category, confirmation status
+//   - "Upcoming" highlight — expenses in the next 7 days
 // ============================================================
 
-import { useState, useEffect, useMemo } from "react";
-import { createPortal }    from "react-dom";
-import { useMonthStatus }  from "../../hooks/useMonthStatus";
-import { usePanelLock }    from "../../hooks/usePanelLock";
-import { usePagination }   from "../../hooks/usePagination";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal }          from "react-dom";
+import { useMonthStatus }        from "../../hooks/useMonthStatus";
+import { usePanelLock }          from "../../hooks/usePanelLock";
+import { usePagination }         from "../../hooks/usePagination";
 import { useRecurring, isActiveInMonth, getActiveCost } from "../../hooks/useRecurring";
-import {FREQUENCY_OPTIONS} from  "../../data/constants";
-import { ConfirmModal }    from "../ui/ConfirmModal";
-import { LockBanner }      from "../ui/LockBanner";
-import { Pagination }      from "../ui/Pagination";
-import { RecurringForm }   from "./recurringComponents/RecurringForm";
-import { RecurringRow }    from "./recurringComponents/RecurringRow";
-import { fmt }             from "../../utils/helpers";
-import { theme as s }      from "../../styles/theme";
+import { FREQUENCY_OPTIONS }     from "../../data/constants";
+import { ConfirmModal }          from "../ui/ConfirmModal";
+import { LockBanner }            from "../ui/LockBanner";
+import { Pagination }            from "../ui/Pagination";
+import { ToggleBtn, VIEW_TOGGLE_STYLE } from "../ui/ToggleBtn";
+import { CategoryMultiSelect }   from "../ui/CategoryMultiSelect";
+import { RecurringForm }         from "./recurringComponents/RecurringForm";
+import { RecurringRow }          from "./recurringComponents/RecurringRow";
+import { fmt }                   from "../../utils/helpers";
 
 const PAGE_SIZE = 20;
 
-export default function PanelRecurring() {
-  const { activeBudgetMonth } = useMonthStatus();
-  const { isPastMonth, isMonthClosed, isHistoricalLock } = usePanelLock(activeBudgetMonth);
+// ── Constants ─────────────────────────────────────────────────
 
-  const {
-    recurring, isLoading, isSaving,
-    loadAll, updateRecurring, archiveRecurring,
-  } = useRecurring();
+const DAY_NAMES    = ["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Nie"];
+const WEEKEND_DAYS = new Set(["Sob", "Nie"]);
+const FREQ_LABEL   = Object.fromEntries(FREQUENCY_OPTIONS.map(o => [o.value, o.label]));
 
-  const [showModal,    setShowModal]    = useState(false);
-  const [editTarget,   setEditTarget]   = useState(null);
-  const [archiveModal, setArchiveModal] = useState({ isOpen: false, id: null, name: "" });
-  const [filterFreq,   setFilterFreq]   = useState("");
+const CAT_COLORS = [
+  "#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#06b6d4", "#f97316", "#ec4899", "#84cc16", "#6366f1",
+];
 
-  useEffect(() => { loadAll(); }, []);
+const SORT_OPTIONS = [
+  { id: "day",      label: "📅 Dzień"  },
+  { id: "amount",   label: "💸 Kwota"  },
+  { id: "name",     label: "A–Z"       },
+  { id: "category", label: "Kategoria" },
+];
 
-  // Active this month
-  const activeThisMonth = useMemo(() =>
-    recurring.filter(r => isActiveInMonth(r, activeBudgetMonth)),
-    [recurring, activeBudgetMonth]
-  );
+const STATUS_OPTIONS = [
+  { id: "",          label: "Wszystkie"      },
+  { id: "pending",   label: "⏳ Oczekujące"  },
+  { id: "confirmed", label: "✅ Potwierdzone" },
+];
 
-  // Filter
-  const filtered = useMemo(() =>
-    filterFreq ? activeThisMonth.filter(r => r.frequency === filterFreq) : activeThisMonth,
-    [activeThisMonth, filterFreq]
-  );
+const LEGEND_ITEMS = [
+  { bg: "#10b98118", border: "#10b98144", label: "Potwierdzony" },
+  { bg: "#3b82f618", border: "#3b82f655", label: "Oczekujący"  },
+  { bg: "#10b98110", border: "#10b98155", label: "Dziś"        },
+];
 
-  // Pagination
-  const { page, totalPages, paginated, setPage } = usePagination(filtered, PAGE_SIZE);
+// ── Pure helpers ──────────────────────────────────────────────
 
-  // Summary — sum of active costs in PLN
-  const totalPLN = useMemo(() =>
-    activeThisMonth.reduce((sum, r) => {
-      const cost = getActiveCost(r, activeBudgetMonth);
-      return sum + (cost?.amountPLN ?? cost?.amount ?? 0);
-    }, 0),
-    [activeThisMonth, activeBudgetMonth]
-  );
+/** PLN amount for a doc in a given month, regardless of foreign currency. */
+function getAmountPLN(doc, month) {
+  const cost = getActiveCost(doc, month);
+  if (!cost) return 0;
+  return cost.originalCurrency && cost.originalCurrency !== "PLN"
+    ? (cost.amountPLN ?? cost.amount ?? 0)
+    : (cost.amount ?? 0);
+}
 
-  function openEdit(doc) { setEditTarget(doc); setShowModal(true); }
-  function closeModal()  { setShowModal(false); setEditTarget(null); }
+/** Sum getAmountPLN over an array of docs. */
+function sumAmountPLN(docs, month) {
+  return docs.reduce((sum, doc) => sum + getAmountPLN(doc, month), 0);
+}
 
-  async function handleSubmit(payload) {
-    const { newCostEntry, ...meta } = payload;
-    if (!editTarget) return;
-    const activeCost    = getActiveCost(editTarget, activeBudgetMonth);
-    const amountChanged = parseFloat(newCostEntry.amount) !== parseFloat(activeCost?.amount)
-      || newCostEntry.originalCurrency !== (activeCost?.originalCurrency || "PLN");
-    let updatedCosts = [...(editTarget.costs || [])];
-    if (amountChanged) {
-      updatedCosts = updatedCosts.filter(c => c.validFrom !== newCostEntry.validFrom);
-      updatedCosts.push(newCostEntry);
-      updatedCosts.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
-    }
-    await updateRecurring(editTarget.id, {
-      ...meta,
-      ...(amountChanged ? { costs: updatedCosts } : {}),
-    });
-    closeModal();
+function getDaysInMonth(yearMonth) {
+  const [y, m] = yearMonth.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+function getFirstDayOfWeek(yearMonth) {
+  const [y, m] = yearMonth.split("-").map(Number);
+  return (new Date(y, m - 1, 1).getDay() + 6) % 7; // Monday = 0
+}
+
+function getTodayDay() { return new Date().getDate(); }
+
+function getCurrentYM() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function isCurrentMonth(yearMonth) { return yearMonth === getCurrentYM(); }
+
+/** Clamp doc's plannedDay to actual days in month. */
+function clampDay(doc, daysInMonth) {
+  return Math.min(doc.plannedDay || 1, daysInMonth);
+}
+
+function isConfirmed(doc, month) {
+  return doc.lastConfirmedMonth === month;
+}
+
+/** Deterministic color from category name — stable across renders. */
+function getCatColor(catName) {
+  if (!catName) return CAT_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < catName.length; i++) {
+    hash = (hash * 31 + catName.charCodeAt(i)) >>> 0;
   }
+  return CAT_COLORS[hash % CAT_COLORS.length];
+}
 
-  async function handleArchive() {
-    if (!archiveModal.id) return;
-    await archiveRecurring(archiveModal.id, activeBudgetMonth);
-    setArchiveModal({ isOpen: false, id: null, name: "" });
-  }
+// ── Calendar sub-components ───────────────────────────────────
 
-  // Modal
-  const modalEl = showModal && createPortal(
+function CalPill({ doc, month, isLocked, onEdit }) {
+  const amountPLN = getAmountPLN(doc, month);
+  const confirmed = isConfirmed(doc, month);
+  const color     = getCatColor(doc.categoryName);
+
+  return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
-      onClick={closeModal}
+      title={`${doc.description} — ${fmt(amountPLN)} PLN`}
+      onClick={() => !isLocked && onEdit(doc)}
+      style={{
+        background:   confirmed ? "#10b98118" : `${color}18`,
+        border:       `1px solid ${confirmed ? "#10b98144" : color + "55"}`,
+        borderRadius: 6,
+        padding:      "3px 6px",
+        marginBottom: 3,
+        display:      "flex",
+        alignItems:   "center",
+        gap:          5,
+        cursor:       isLocked ? "default" : "pointer",
+        transition:   "background 0.15s",
+      }}
     >
-      <div
-        style={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 16, padding: 24, width: "100%", maxWidth: 560, maxHeight: "92vh", overflowY: "auto" }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div style={{ fontWeight: 800, color: "#e2e8f0", fontSize: 16, marginBottom: 20 }}>
-          {editTarget ? "✏️ Edytuj wydatek cykliczny" : ""}
+      {confirmed && <span style={{ color: "#10b981", fontSize: 9 }}>✓</span>}
+      <span style={{
+        fontSize: 10, fontWeight: 600,
+        color:        confirmed ? "#10b981" : color,
+        whiteSpace:   "nowrap",
+        overflow:     "hidden",
+        textOverflow: "ellipsis",
+        maxWidth:     90,
+      }}>
+        {doc.description}
+      </span>
+      <span style={{ fontSize: 9, color: "#64748b", marginLeft: "auto", whiteSpace: "nowrap" }}>
+        {fmt(amountPLN)}
+      </span>
+    </div>
+  );
+}
+
+function CalendarLegend() {
+  return (
+    <div style={{ display: "flex", gap: 16, marginTop: 12, flexWrap: "wrap" }}>
+      {LEGEND_ITEMS.map(({ bg, border, label }) => (
+        <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#475569" }}>
+          <div style={{ width: 10, height: 10, background: bg, border: `1px solid ${border}`, borderRadius: 3 }} />
+          {label}
+        </div>
+      ))}
+      <div style={{ marginLeft: "auto", fontSize: 11, color: "#475569" }}>
+        Kliknij kafelek, żeby edytować
+      </div>
+    </div>
+  );
+}
+
+function CalendarView({ items, month, isLocked, onEdit, onArchive }) {
+  const daysCount   = useMemo(() => getDaysInMonth(month),    [month]);
+  const firstOffset = useMemo(() => getFirstDayOfWeek(month), [month]);
+  const todayDay    = isCurrentMonth(month) ? getTodayDay() : null;
+
+  const byDay = useMemo(() => {
+    const map = {};
+    items.forEach(doc => {
+      const day = clampDay(doc, daysCount);
+      if (!map[day]) map[day] = [];
+      map[day].push(doc);
+    });
+    return map;
+  }, [items, daysCount]);
+
+  const cells = useMemo(() => {
+    const result = [];
+    for (let i = 0; i < firstOffset; i++) result.push({ type: "empty", key: `e${i}` });
+    for (let d = 1; d <= daysCount; d++)   result.push({ type: "day",   key: `d${d}`, day: d });
+    const rem = result.length % 7;
+    if (rem !== 0) for (let i = 0; i < 7 - rem; i++) result.push({ type: "empty", key: `t${i}` });
+    return result;
+  }, [daysCount, firstOffset]);
+
+  return (
+    <div>
+      {/* Day-of-week headers */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
+        {DAY_NAMES.map(d => (
+          <div key={d} style={{
+            textAlign: "center", fontSize: 11, fontWeight: 700,
+            color: WEEKEND_DAYS.has(d) ? "#475569" : "#64748b",
+            padding: "6px 0", textTransform: "uppercase", letterSpacing: "0.05em",
+          }}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Day cells */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {cells.map(cell => {
+          if (cell.type === "empty") return <div key={cell.key} style={{ minHeight: 80 }} />;
+
+          const { day } = cell;
+          const docs     = byDay[day] || [];
+          const isToday  = todayDay === day;
+          const isPast   = todayDay !== null && day < todayDay;
+          const totalAmt = sumAmountPLN(docs, month);
+
+          return (
+            <div key={cell.key} style={{
+              minHeight:    80,
+              background:   isToday ? "#10b98110" : docs.length > 0 ? "#0d1424" : "#090e1b",
+              border:       `1px solid ${isToday ? "#10b98155" : docs.length > 0 ? "#1e293b" : "#0f172a"}`,
+              borderRadius: 8,
+              padding:      "6px 6px 4px",
+              opacity:      isPast && docs.length === 0 ? 0.35 : 1,
+            }}>
+              <div style={{
+                fontSize: 11, fontWeight: isToday ? 800 : 600,
+                color:          isToday ? "#10b981" : isPast ? "#334155" : "#475569",
+                marginBottom:   docs.length > 0 ? 5 : 0,
+                display:        "flex",
+                alignItems:     "center",
+                justifyContent: "space-between",
+              }}>
+                <span>{day}</span>
+                {docs.length > 0 && totalAmt > 0 && (
+                  <span style={{ fontSize: 9, color: "#64748b", fontWeight: 500 }}>{fmt(totalAmt)}</span>
+                )}
+              </div>
+              {docs.map(doc => (
+                <CalPill key={doc.id} doc={doc} month={month} isLocked={isLocked} onEdit={onEdit} onArchive={onArchive} />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+
+      <CalendarLegend />
+    </div>
+  );
+}
+
+// ── Upcoming strip ────────────────────────────────────────────
+
+function UpcomingStrip({ items, month }) {
+  if (!isCurrentMonth(month)) return null;
+
+  const todayDay    = getTodayDay();
+  const daysInMonth = getDaysInMonth(month);
+
+  const upcoming = useMemo(() =>
+    items
+      .filter(doc => {
+        const day = clampDay(doc, daysInMonth);
+        return day >= todayDay && day <= todayDay + 7;
+      })
+      .sort((a, b) => (a.plannedDay || 1) - (b.plannedDay || 1)),
+    [items, daysInMonth, todayDay]
+  );
+
+  if (upcoming.length === 0) return null;
+
+  const totalAmt = sumAmountPLN(upcoming, month);
+
+  return (
+    <div style={{
+      background: "#0a0f1e", border: "1px solid #f59e0b44",
+      borderRadius: 10, padding: "12px 14px", marginBottom: 16,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b" }}>⚡ Najbliższe 7 dni</div>
+        <div style={{ fontSize: 12, color: "#64748b" }}>
+          łącznie <strong style={{ color: "#f59e0b" }}>{fmt(totalAmt)} PLN</strong>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {upcoming.map(doc => {
+          const amountPLN = getAmountPLN(doc, month);
+          const confirmed = isConfirmed(doc, month);
+          const day       = clampDay(doc, daysInMonth);
+          const daysLeft  = day - todayDay;
+          const color     = getCatColor(doc.categoryName);
+
+          return (
+            <div key={doc.id} style={{
+              background:   confirmed ? "#10b98112" : `${color}12`,
+              border:       `1px solid ${confirmed ? "#10b98144" : color + "44"}`,
+              borderRadius: 8, padding: "8px 12px", minWidth: 140, flex: "0 0 auto",
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: confirmed ? "#10b981" : color, marginBottom: 2 }}>
+                {confirmed ? "✓ " : ""}{doc.description}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#e2e8f0" }}>{fmt(amountPLN)} PLN</div>
+              <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
+                {daysLeft === 0 ? "🔴 Dziś" : `📅 Za ${daysLeft} ${daysLeft === 1 ? "dzień" : "dni"} (${day}.)`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── KPI bar ───────────────────────────────────────────────────
+
+function KpiBar({ items, month }) {
+  const { confirmedCount, totalPLN, confirmedPLN } = useMemo(() => {
+    let cCount = 0, total = 0, cTotal = 0;
+    items.forEach(doc => {
+      const amt = getAmountPLN(doc, month);
+      total += amt;
+      if (isConfirmed(doc, month)) { cCount++; cTotal += amt; }
+    });
+    return { confirmedCount: cCount, totalPLN: total, confirmedPLN: cTotal };
+  }, [items, month]);
+
+  const pct = totalPLN > 0 ? Math.round((confirmedPLN / totalPLN) * 100) : 0;
+
+  const kpis = [
+    { icon: "🔄", label: "Aktywne",      value: items.length,   unit: "pozycji",           color: "#3b82f6" },
+    { icon: "✅", label: "Potwierdzone", value: confirmedCount, unit: `z ${items.length}`,  color: "#10b981" },
+    { icon: "💸", label: "Łącznie",      value: fmt(totalPLN),  unit: "PLN/mies.",          color: "#e2e8f0" },
+    { icon: "📊", label: "Realizacja",   value: `${pct}%`,      unit: fmt(confirmedPLN),
+      color: pct === 100 ? "#10b981" : pct > 50 ? "#f59e0b" : "#ef4444" },
+  ];
+
+  return (
+    <div style={{
+      display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+      gap: 10, marginBottom: 16,
+    }}>
+      {kpis.map(kpi => (
+        <div key={kpi.label} style={{
+          background: "#0d1424", border: "1px solid #1e293b",
+          borderRadius: 10, padding: "12px 14px",
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <span style={{ fontSize: 18 }}>{kpi.icon}</span>
+          <div>
+            <div style={{ fontSize: 11, color: "#475569", marginBottom: 2 }}>{kpi.label}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
+            <div style={{ fontSize: 10, color: "#334155" }}>{kpi.unit}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Edit modal ────────────────────────────────────────────────
+
+function EditModal({ editTarget, month, isSaving, onSubmit, onClose }) {
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, background: "#000a",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 1000, padding: 16,
+    }}>
+      <div style={{
+        background: "#0a0f1e", border: "1px solid #1e293b",
+        borderRadius: 16, padding: 24,
+        width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto",
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#e2e8f0", marginBottom: 16 }}>
+          ✏️ Edytuj wydatek cykliczny
         </div>
         <RecurringForm
-          key={editTarget ? editTarget.id : "add"}
+          key={editTarget.id}
           initialValues={editTarget}
-          validFrom={activeBudgetMonth}
-          activeBudgetMonth={activeBudgetMonth}
-          onSubmit={handleSubmit}
-          onCancel={closeModal}
+          validFrom={month}
+          activeBudgetMonth={month}
+          onSubmit={onSubmit}
+          onCancel={onClose}
           isSaving={isSaving}
-          mode={editTarget ? "edit" : "add"}
+          mode="edit"
         />
       </div>
     </div>,
     document.body
   );
+}
+
+// ── Toolbar ───────────────────────────────────────────────────
+
+function Toolbar({
+  filterFreq,    setFilterFreq,
+  filterCats,    setFilterCats,   categoryOptions,
+  filterStatus,  setFilterStatus,
+  sortBy,        setSortBy,
+  viewMode,
+  hasFilters,    onClear,
+  onPageReset,
+}) {
+  const handleFreq   = useCallback(e  => { setFilterFreq(e.target.value); onPageReset(); }, [setFilterFreq,   onPageReset]);
+  const handleStatus = useCallback(id => { setFilterStatus(id);           onPageReset(); }, [setFilterStatus, onPageReset]);
+  const handleCats   = useCallback(v  => { setFilterCats(v);              onPageReset(); }, [setFilterCats,   onPageReset]);
+
+  return (
+    <div style={{
+      background: "#090e1b", border: "1px solid #1e293b",
+      borderRadius: 10, padding: "12px 14px", marginBottom: 16,
+      display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
+    }}>
+
+      {/* Frequency */}
+      <select
+        value={filterFreq}
+        onChange={handleFreq}
+        style={{
+          background:   filterFreq ? "#10b98120" : "#0a0f1e",
+          border:       `1px solid ${filterFreq ? "#10b98144" : "#1e293b"}`,
+          borderRadius: 8,
+          color:        filterFreq ? "#10b981" : "#94a3b8",
+          padding:      "6px 10px",
+          fontSize:     12,
+          cursor:       "pointer",
+        }}
+      >
+        <option value="">Wszystkie częstotliwości</option>
+        {FREQUENCY_OPTIONS.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+
+      {/* Multi-category */}
+      <CategoryMultiSelect
+        value={filterCats}
+        onChange={handleCats}
+        categories={categoryOptions}
+        placeholder="Wszystkie kategorie"
+      />
+
+      {/* Status toggle group */}
+      <div style={{ display: "flex", gap: 4 }}>
+        {STATUS_OPTIONS.map(opt => (
+          <ToggleBtn
+            key={opt.id}
+            active={filterStatus === opt.id}
+            onClick={() => handleStatus(opt.id)}
+          >
+            {opt.label}
+          </ToggleBtn>
+        ))}
+      </div>
+
+      {/* Clear all */}
+      {hasFilters && (
+        <button
+          onClick={onClear}
+          style={{
+            background: "transparent", border: "1px solid #334155",
+            borderRadius: 8, color: "#64748b",
+            padding: "5px 10px", cursor: "pointer", fontSize: 12,
+          }}
+        >
+          ✕ Wyczyść
+        </button>
+      )}
+
+      {/* Sort (list view only) */}
+      {viewMode === "list" && (
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "#334155", marginRight: 4 }}>Sortuj:</span>
+          {SORT_OPTIONS.map(opt => (
+            <ToggleBtn
+              key={opt.id}
+              active={sortBy === opt.id}
+              onClick={() => setSortBy(opt.id)}
+            >
+              {opt.label}
+            </ToggleBtn>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main panel ────────────────────────────────────────────────
+
+export default function PanelRecurring() {
+  const { activeBudgetMonth: month } = useMonthStatus();
+  const { isPastMonth, isMonthClosed, isHistoricalLock } = usePanelLock(month);
+  const isLocked = isHistoricalLock || isPastMonth;
+
+  const { recurring, isLoading, isSaving, loadAll, updateRecurring, archiveRecurring } = useRecurring();
+
+  const [showModal,    setShowModal]    = useState(false);
+  const [editTarget,   setEditTarget]   = useState(null);
+  const [archiveModal, setArchiveModal] = useState({ isOpen: false, id: null, name: "" });
+  const [viewMode,     setViewMode]     = useState("calendar");
+  const [filterFreq,   setFilterFreq]   = useState("");
+  const [filterCats,   setFilterCats]   = useState([]);  // string[] — category names
+  const [filterStatus, setFilterStatus] = useState("");
+  const [sortBy,       setSortBy]       = useState("day");
+
+  useEffect(() => { loadAll(); }, []);
+
+  // ── Derived data ──────────────────────────────────────────
+
+  const activeThisMonth = useMemo(
+    () => recurring.filter(r => isActiveInMonth(r, month)),
+    [recurring, month]
+  );
+
+  // Category options for the multi-select — derived from active docs
+  const categoryOptions = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    activeThisMonth.forEach(r => {
+      if (r.categoryName && !seen.has(r.categoryName)) {
+        seen.add(r.categoryName);
+        result.push({ name: r.categoryName, icon: r.categoryIcon || "" });
+      }
+    });
+    return result.sort((a, b) => a.name.localeCompare(b.name, "pl"));
+  }, [activeThisMonth]);
+
+  const filtered = useMemo(() => {
+    let list = activeThisMonth;
+    if (filterFreq)               list = list.filter(r => r.frequency === filterFreq);
+    if (filterCats.length > 0)    list = list.filter(r => filterCats.includes(r.categoryName));
+    if (filterStatus === "confirmed") list = list.filter(r =>  isConfirmed(r, month));
+    if (filterStatus === "pending")   list = list.filter(r => !isConfirmed(r, month));
+    return list;
+  }, [activeThisMonth, filterFreq, filterCats, filterStatus, month]);
+
+  const sorted = useMemo(() => {
+    const copy = [...filtered];
+    switch (sortBy) {
+      case "day":      return copy.sort((a, b) => (a.plannedDay || 1) - (b.plannedDay || 1));
+      case "amount":   return copy.sort((a, b) => getAmountPLN(b, month) - getAmountPLN(a, month));
+      case "name":     return copy.sort((a, b) => (a.description || "").localeCompare(b.description || "", "pl"));
+      case "category": return copy.sort((a, b) => (a.categoryName || "").localeCompare(b.categoryName || "", "pl"));
+      default:         return copy;
+    }
+  }, [filtered, sortBy, month]);
+
+  const { page, totalPages, paginated, setPage } = usePagination(sorted, PAGE_SIZE);
+
+  const totalPLN   = useMemo(() => sumAmountPLN(activeThisMonth, month), [activeThisMonth, month]);
+  const hasFilters = Boolean(filterFreq || filterCats.length > 0 || filterStatus);
+
+  // ── Handlers ─────────────────────────────────────────────
+
+  const openEdit   = useCallback(doc => { setEditTarget(doc); setShowModal(true); },  []);
+  const closeModal = useCallback(()  => { setShowModal(false); setEditTarget(null); }, []);
+
+  const handleSubmit = useCallback(async payload => {
+    await updateRecurring(editTarget?.id, payload);
+    closeModal();
+    loadAll();
+  }, [editTarget, updateRecurring, closeModal, loadAll]);
+
+  const handleArchive = useCallback(async () => {
+    if (!archiveModal.id) return;
+    await archiveRecurring(archiveModal.id, month);
+    setArchiveModal({ isOpen: false, id: null, name: "" });
+    loadAll();
+  }, [archiveModal.id, month, archiveRecurring, loadAll]);
+
+  const openArchive = useCallback(doc =>
+    setArchiveModal({ isOpen: true, id: doc.id, name: doc.description }),
+  []);
+
+  const clearFilters = useCallback(() => {
+    setFilterFreq(""); setFilterCats([]); setFilterStatus(""); setPage(1);
+  }, [setPage]);
+
+  // ── Render ────────────────────────────────────────────────
 
   return (
     <div style={{ padding: "0 0 40px 0" }}>
+
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>
-          🔄 Wydatki cykliczne
+      <div style={{
+        marginBottom: 16, display: "flex", alignItems: "flex-start",
+        justifyContent: "space-between", flexWrap: "wrap", gap: 10,
+      }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>
+            🔄 Wydatki cykliczne
+          </div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>
+            {month} · {activeThisMonth.length} aktywnych ·{" "}
+            <strong style={{ color: "#e2e8f0" }}>~{fmt(totalPLN)} PLN</strong>/miesiąc
+            <span style={{ color: "#334155", marginLeft: 4 }}>(orientacyjnie)</span>
+          </div>
         </div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>
-          {activeBudgetMonth} · {activeThisMonth.length} aktywnych ·{" "}
-          <strong style={{ color: "#e2e8f0" }}>~{fmt(totalPLN)} PLN</strong>/miesiąc
-          <span style={{ color: "#334155", marginLeft: 4 }}>(orientacyjnie)</span>
+
+        {/* View toggle */}
+        <div style={{ display: "flex", gap: 6 }}>
+          {[
+            { id: "list",     icon: "☰",  label: "Lista"     },
+            { id: "calendar", icon: "📅", label: "Kalendarz" },
+          ].map(v => (
+            <ToggleBtn
+              key={v.id}
+              {...VIEW_TOGGLE_STYLE}
+              active={viewMode === v.id}
+              onClick={() => setViewMode(v.id)}
+            >
+              {v.icon} {v.label}
+            </ToggleBtn>
+          ))}
         </div>
       </div>
 
-      <LockBanner isPastMonth={isPastMonth} isMonthClosed={isMonthClosed} selectedMonth={activeBudgetMonth} />
+      <LockBanner isPastMonth={isPastMonth} isMonthClosed={isMonthClosed} selectedMonth={month} />
 
       {isPastMonth && (
-        <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#64748b" }}>
-          📅 Miesiąc {activeBudgetMonth} jest w przeszłości — dane są tylko do odczytu. Edycja dostępna wyłącznie dla bieżącego i przyszłych miesięcy.
+        <div style={{
+          background: "#1e293b", border: "1px solid #334155",
+          borderRadius: 10, padding: "10px 14px", marginBottom: 16,
+          fontSize: 12, color: "#64748b",
+        }}>
+          📅 Miesiąc {month} jest w przeszłości — dane są tylko do odczytu.
         </div>
       )}
 
-      {/* Toolbar */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <select
-          value={filterFreq}
-          onChange={e => { setFilterFreq(e.target.value); setPage(1); }}
-          style={{ background: "#0a0f1e", border: "1px solid #1e293b", borderRadius: 8, color: "#94a3b8", padding: "8px 12px", fontSize: 13, cursor: "pointer" }}
-        >
-          <option value="">Wszystkie cykliczności</option>
-          {FREQUENCY_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-        {filterFreq && (
-          <button
-            onClick={() => setFilterFreq("")}
-            style={{ background: "transparent", border: "1px solid #334155", borderRadius: 8, color: "#64748b", padding: "8px 12px", cursor: "pointer", fontSize: 12 }}
-          >
-            ✕ Wyczyść
-          </button>
-        )}
-      </div>
+      {!isLoading && (
+        <>
+          <KpiBar items={activeThisMonth} month={month} />
+          <UpcomingStrip items={activeThisMonth} month={month} />
+        </>
+      )}
 
-      {isLoading && <div style={{ color: "#475569", textAlign: "center", padding: 40 }}>Ładowanie…</div>}
+      <Toolbar
+        filterFreq={filterFreq}       setFilterFreq={setFilterFreq}
+        filterCats={filterCats}       setFilterCats={setFilterCats}   categoryOptions={categoryOptions}
+        filterStatus={filterStatus}   setFilterStatus={setFilterStatus}
+        sortBy={sortBy}               setSortBy={setSortBy}
+        viewMode={viewMode}
+        hasFilters={hasFilters}       onClear={clearFilters}
+        onPageReset={() => setPage(1)}
+      />
+
+      {!isLoading && hasFilters && (
+        <div style={{ fontSize: 12, color: "#475569", marginBottom: 10 }}>
+          Wyniki: <strong style={{ color: "#94a3b8" }}>{filtered.length}</strong> z {activeThisMonth.length}
+        </div>
+      )}
+
+      {isLoading && (
+        <div style={{ color: "#475569", textAlign: "center", padding: 40 }}>Ładowanie…</div>
+      )}
 
       {!isLoading && filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
-          Brak aktywnych wydatków cyklicznych w {activeBudgetMonth}.
+          {hasFilters
+            ? "Brak wyników dla wybranych filtrów."
+            : `Brak aktywnych wydatków cyklicznych w ${month}.`}
         </div>
       )}
 
-      {!isLoading && paginated.length > 0 && (
+      {!isLoading && filtered.length > 0 && viewMode === "calendar" && (
+        <CalendarView
+          items={filtered}
+          month={month}
+          isLocked={isLocked}
+          onEdit={openEdit}
+          onArchive={openArchive}
+        />
+      )}
+
+      {!isLoading && sorted.length > 0 && viewMode === "list" && (
         <>
           <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
-            {filtered.length} pozycji · strona {page} z {totalPages}
+            {sorted.length} pozycji · strona {page} z {totalPages}
           </div>
           {paginated.map(r => (
             <RecurringRow
               key={r.id}
               doc={r}
-              activeBudgetMonth={activeBudgetMonth}
-              isLocked={isHistoricalLock || isPastMonth}
+              activeBudgetMonth={month}
+              isLocked={isLocked}
               onEdit={openEdit}
-              onArchive={doc => setArchiveModal({ isOpen: true, id: doc.id, name: doc.description })}
+              onArchive={openArchive}
             />
           ))}
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
       )}
 
-      {modalEl}
+      {showModal && editTarget && (
+        <EditModal
+          editTarget={editTarget}
+          month={month}
+          isSaving={isSaving}
+          onSubmit={handleSubmit}
+          onClose={closeModal}
+        />
+      )}
 
       <ConfirmModal
         isOpen={archiveModal.isOpen}
         title="Archiwizuj wydatek cykliczny"
-        message={`"${archiveModal.name}" nie będzie pokazywany od ${activeBudgetMonth} wzwyż.\n\nPoprzednie miesiące pozostają bez zmian.`}
+        message={`"${archiveModal.name}" nie będzie pokazywany od ${month} wzwyż.\n\nPoprzednie miesiące pozostają bez zmian.`}
         onConfirm={handleArchive}
         onCancel={() => setArchiveModal({ isOpen: false, id: null, name: "" })}
       />

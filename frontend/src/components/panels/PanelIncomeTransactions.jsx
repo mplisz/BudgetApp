@@ -19,10 +19,13 @@ import { s }               from "./transactionComponents/txStyles.jsx";
 import { EditIncomeModal }  from "./transactionComponents/EditIncomeModal";
 import { usePagination }   from "../../hooks/usePagination";
 import { Pagination }      from "../ui/Pagination";
+import { CategoryMultiSelect } from "../ui/CategoryMultiSelect";
+import { useFilters }      from "../../hooks/useFilters";
 
 const PAGE_SIZE = 25;
 
 // ── Income transaction row ────────────────────────────────────
+
 function IncomeRow({ tx, isMonthClosed, onDelete, onUpdated }) {
   const [editOpen, setEditOpen] = useState(false);
 
@@ -106,19 +109,21 @@ function IncomeRow({ tx, isMonthClosed, onDelete, onUpdated }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Main panel
-// ─────────────────────────────────────────────────────────────
+// ── Main panel ────────────────────────────────────────────────
+
 export default function PanelIncomeTransactions() {
   const { transactions, setTransactions, tags } = useAppContext();
   const { deleteTransaction, loadTransactions }  = useTransactions();
   const { isActiveMonthClosed, activeBudgetMonth } = useMonthStatus();
 
-  const [filterType,     setFilterType]     = useState("");
-  const [filterCat,      setFilterCat]      = useState("");
-  const [filterDateFrom, setFilterDateFrom] = useState(null);
-  const [filterDateTo,   setFilterDateTo]   = useState(null);
-  const [deleteModal,    setDeleteModal]    = useState({ isOpen: false, txId: null });
+  const { filters, set, clear: clearFilters, hasActive: hasActiveFilters } = useFilters({
+    type:       "",
+    categories: [],
+    dateFrom:   null,
+    dateTo:     null,
+  });
+
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, txId: null });
 
   useEffect(() => {
     loadTransactions(activeBudgetMonth);
@@ -137,38 +142,33 @@ export default function PanelIncomeTransactions() {
     [transactions, tags]
   );
 
-  const filtered = useMemo(() =>
-    enriched.filter(tx => {
-      if (filterType && tx.type !== filterType)              return false;
-      if (filterCat  && tx.categoryId !== filterCat)         return false;
-      if (filterDateFrom && tx.date < toYMD(filterDateFrom)) return false;
-      if (filterDateTo   && tx.date > toYMD(filterDateTo))   return false;
-      return true;
-    }),
-    [enriched, filterType, filterCat, filterDateFrom, filterDateTo]
-  );
-
-  const totalSum = filtered.reduce((acc, tx) => acc + tx.amount, 0);
-
-  const {
-    page,
-    totalPages,
-    paginated,
-    setPage,
-  } = usePagination(filtered, PAGE_SIZE);
-
   const uniqueCats = useMemo(() => {
     const map = {};
     enriched.forEach(tx => { if (tx.categoryId) map[tx.categoryId] = tx.categoryName; });
     return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
   }, [enriched]);
 
-  const hasActiveFilters = filterType || filterCat || filterDateFrom || filterDateTo;
+  const filtered = useMemo(() =>
+    enriched.filter(tx => {
+      if (filters.type                && tx.type !== filters.type)                        return false;
+      if (filters.categories.length > 0 && !filters.categories.includes(tx.categoryName)) return false;
+      if (filters.dateFrom            && tx.date < toYMD(filters.dateFrom))               return false;
+      if (filters.dateTo              && tx.date > toYMD(filters.dateTo))                 return false;
+      return true;
+    }),
+    [enriched, filters]
+  );
 
-  const clearFilters = useCallback(() => {
-    setFilterType(""); setFilterCat("");
-    setFilterDateFrom(null); setFilterDateTo(null);
-  }, []);
+  const totalSum = filtered.reduce((acc, tx) => acc + tx.amount, 0);
+
+  const { page, totalPages, paginated, setPage } = usePagination(filtered, PAGE_SIZE);
+
+  const dateBounds = useMemo(() => {
+    const [y, m] = activeBudgetMonth.split("-").map(Number);
+    const minDate = m === 1 ? new Date(y - 1, 11, 1) : new Date(y, m - 2, 1);
+    const maxDate = new Date(y, m, 0);
+    return { minDate, maxDate };
+  }, [activeBudgetMonth]);
 
   const handleConfirmDelete = useCallback(async () => {
     if (!deleteModal.txId) return;
@@ -180,15 +180,7 @@ export default function PanelIncomeTransactions() {
     setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
   }, [setTransactions]);
 
-  // ── Date bounds for filters ───────────────────────────────
-  // minDate: first day of previous month (wpływy mogą mieć datę z poprzedniego miesiąca)
-  // maxDate: last day of activeBudgetMonth
-  const dateBounds = useMemo(() => {
-    const [y, m] = activeBudgetMonth.split("-").map(Number);
-    const minDate = m === 1 ? new Date(y - 1, 11, 1) : new Date(y, m - 2, 1);
-    const maxDate = new Date(y, m, 0); // day 0 of next month = last day of current month
-    return { minDate, maxDate };
-  }, [activeBudgetMonth]);
+  // ── Render ────────────────────────────────────────────────
 
   return (
     <div style={{ padding: "0 0 40px 0" }}>
@@ -208,49 +200,61 @@ export default function PanelIncomeTransactions() {
       {/* Filters */}
       <div style={{ background: "#090e1b", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
         <div style={s.filterRow}>
+
+          {/* Type */}
           <div style={s.filterBox}>
             <label style={s.filterLabel}>Typ</label>
-            <select value={filterType} onChange={e => setFilterType(e.target.value)} style={s.select}>
+            <select
+              value={filters.type}
+              onChange={e => set("type", e.target.value)}
+              style={s.select}
+            >
               <option value="">Wszystkie</option>
               <option value="INCOME">{typeIcon("INCOME")} {typeLabel("INCOME")}</option>
               <option value="TRANSFER">{typeIcon("TRANSFER")} {typeLabel("TRANSFER")}</option>
             </select>
           </div>
 
+          {/* Category */}
           <div style={s.filterBox}>
             <label style={s.filterLabel}>Kategoria</label>
-            <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={s.select}>
-              <option value="">Wszystkie</option>
-              {uniqueCats.map(([id, name]) => (
-                <option key={id} value={id}>{name}</option>
-              ))}
-            </select>
+            <CategoryMultiSelect
+              value={filters.categories}
+              onChange={v => set("categories", v)}
+              categories={uniqueCats.map(([, name]) => ({ name }))}
+              placeholder="Wszystkie kategorie"
+            />
           </div>
 
+          {/* Date from */}
           <div style={s.filterBox}>
             <label style={s.filterLabel}>Od</label>
             <AppDatePicker
-              value={filterDateFrom}
-              onChange={setFilterDateFrom}
+              value={filters.dateFrom}
+              onChange={d => set("dateFrom", d)}
               minDate={dateBounds.minDate}
-              maxDate={filterDateTo ?? dateBounds.maxDate}
+              maxDate={filters.dateTo ?? dateBounds.maxDate}
               style={s.inp}
             />
           </div>
 
+          {/* Date to */}
           <div style={s.filterBox}>
             <label style={s.filterLabel}>Do</label>
             <AppDatePicker
-              value={filterDateTo}
-              onChange={setFilterDateTo}
-              minDate={filterDateFrom ?? dateBounds.minDate}
+              value={filters.dateTo}
+              onChange={d => set("dateTo", d)}
+              minDate={filters.dateFrom ?? dateBounds.minDate}
               maxDate={dateBounds.maxDate}
               style={s.inp}
             />
           </div>
 
           {hasActiveFilters && (
-            <button onClick={clearFilters} style={{ ...s.actionBtn("#64748b"), fontSize: 11, alignSelf: "flex-end" }}>
+            <button
+              onClick={clearFilters}
+              style={{ ...s.actionBtn("#64748b"), fontSize: 11, alignSelf: "flex-end" }}
+            >
               ✕ Wyczyść
             </button>
           )}
@@ -260,7 +264,7 @@ export default function PanelIncomeTransactions() {
       {/* Table */}
       {filtered.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
-          Brak wpływów dla wybranych filtrów.
+          Brak wpływów{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
         </div>
       ) : (
         <>

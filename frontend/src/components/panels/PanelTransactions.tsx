@@ -17,6 +17,9 @@ import { TransactionRow, ReturnModal, s, PRIO_COLORS } from "./transactionCompon
 import { usePagination }   from "../../hooks/usePagination";
 import { Pagination }      from "../ui/Pagination";
 import { SkeletonListRow } from "../ui/Skeleton";
+import { CategoryMultiSelect }      from "../ui/CategoryMultiSelect";
+import { useFilters }               from "../../hooks/useFilters";
+import { ToggleBtn, VIEW_TOGGLE_STYLE } from "../ui/ToggleBtn";
 
 const PAGE_SIZE = 25;
 
@@ -56,8 +59,8 @@ interface Tag {
   name: string;
 }
 
-interface DeleteModal   { isOpen: boolean; txId: string | null; }
-interface LinkedModal   { isOpen: boolean; txId: string | null; }
+interface DeleteModal { isOpen: boolean; txId: string | null; }
+interface LinkedModal { isOpen: boolean; txId: string | null; }
 
 // ── Component ─────────────────────────────────────────────────
 
@@ -78,26 +81,29 @@ export default function PanelTransactions() {
 
   // ── Filter state ──────────────────────────────────────────
 
-  const [filterCat,      setFilterCat]      = useState("");
-  const [filterSub,      setFilterSub]      = useState("");
-  const [filterDateFrom, setFilterDateFrom] = useState<Date | null>(null);
-  const [filterDateTo,   setFilterDateTo]   = useState<Date | null>(null);
-  const [filterPrio,     setFilterPrio]     = useState<number[]>([]);
-  const [filterTags,     setFilterTags]     = useState<string[]>([]);
-  const [collapsed,      setCollapsed]      = useState<Record<string, boolean>>({});
-  const [deleteModal,    setDeleteModal]    = useState<DeleteModal>({ isOpen: false, txId: null });
-  const [confirmLinkedModal, setConfirmLinkedModal] = useState<LinkedModal>({ isOpen: false, txId: null });
-  const [returnTarget,   setReturnTarget]   = useState<Transaction | null>(null);
-  const [grouped,        setGrouped]        = useState(true);
-  const [loadedMonth,    setLoadedMonth]    = useState<string | null>(null);
+  const { filters, set, clear: clearFilters, hasActive: hasActiveFilters } = useFilters({
+    categories: [] as string[],
+    subs:       [] as string[],
+    dateFrom:   null as Date | null,
+    dateTo:     null as Date | null,
+    prio:       [] as number[],
+    tags:       [] as string[],
+  });
 
+  const [collapsed,          setCollapsed]          = useState<Record<string, boolean>>({});
+  const [deleteModal,        setDeleteModal]        = useState<DeleteModal>({ isOpen: false, txId: null });
+  const [confirmLinkedModal, setConfirmLinkedModal] = useState<LinkedModal>({ isOpen: false, txId: null });
+  const [returnTarget,       setReturnTarget]       = useState<Transaction | null>(null);
+  const [grouped,            setGrouped]            = useState(false);
+  const [loadedMonth,        setLoadedMonth]        = useState<string | null>(null);
 
   useEffect(() => {
     setLoadedMonth(null);
     loadTransactions(activeBudgetMonth).then(() => {
-    setLoadedMonth(activeBudgetMonth);
+      setLoadedMonth(activeBudgetMonth);
     });
   }, [activeBudgetMonth]);
+
   const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
   // ── Enrich transactions ───────────────────────────────────
@@ -123,6 +129,7 @@ export default function PanelTransactions() {
       }),
     [transactions, tags, activeBudgetMonth]
   );
+
   const uniqueCats = useMemo(() => {
     const map: Record<string, string> = {};
     enriched.forEach(tx => { if (tx.categoryId) map[tx.categoryId] = tx.categoryName; });
@@ -130,13 +137,13 @@ export default function PanelTransactions() {
   }, [enriched]);
 
   const uniqueSubs = useMemo(() => {
-    if (!filterCat) return [];
+    if (filters.categories.length === 0) return [];
     const map: Record<string, string> = {};
     enriched
-      .filter(tx => tx.categoryId === filterCat)
+      .filter(tx => filters.categories.includes(tx.categoryName))
       .forEach(tx => { if (tx.subcategoryId) map[tx.subcategoryId] = tx.subcategoryName; });
     return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [enriched, filterCat]);
+  }, [enriched, filters.categories]);
 
   const monthTagIds = useMemo(() => {
     const ids = new Set(enriched.flatMap(tx => tx.tags || []));
@@ -147,15 +154,15 @@ export default function PanelTransactions() {
 
   const filtered = useMemo<Transaction[]>(() =>
     enriched.filter(tx => {
-      if (filterCat      && tx.categoryId    !== filterCat)            return false;
-      if (filterSub      && tx.subcategoryId !== filterSub)            return false;
-      if (filterDateFrom && tx.date < toYMD(filterDateFrom))           return false;
-      if (filterDateTo   && tx.date > toYMD(filterDateTo))             return false;
-      if (filterPrio.length && !filterPrio.includes(tx.priority || 2)) return false;
-      if (filterTags.length && !filterTags.some(t => (tx.tags || []).includes(t))) return false;
+      if (filters.categories.length > 0 && !filters.categories.includes(tx.categoryName)) return false;
+      if (filters.subs.length       > 0 && !filters.subs.includes(tx.subcategoryName))    return false;
+      if (filters.dateFrom && tx.date < toYMD(filters.dateFrom))                           return false;
+      if (filters.dateTo   && tx.date > toYMD(filters.dateTo))                             return false;
+      if (filters.prio.length && !filters.prio.includes(tx.priority || 2))                 return false;
+      if (filters.tags.length && !filters.tags.some(t => (tx.tags || []).includes(t)))     return false;
       return true;
     }),
-    [enriched, filterCat, filterSub, filterDateFrom, filterDateTo, filterPrio, filterTags]
+    [enriched, filters]
   );
 
   // ── Grouping by category ──────────────────────────────────
@@ -194,17 +201,10 @@ export default function PanelTransactions() {
   function toggleGroup(key: string) { setCollapsed(p => ({ ...p, [key]: !p[key] })); }
 
   function togglePrio(p: number) {
-    setFilterPrio(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+    set("prio", filters.prio.includes(p)
+      ? filters.prio.filter(x => x !== p)
+      : [...filters.prio, p]);
   }
-
-  function clearFilters() {
-    setFilterCat(""); setFilterSub("");
-    setFilterDateFrom(null); setFilterDateTo(null);
-    setFilterPrio([]); setFilterTags([]);
-  }
-
-  const hasActiveFilters = !!(filterCat || filterSub || filterDateFrom || filterDateTo
-    || filterPrio.length || filterTags.length);
 
   async function handleConfirmDelete() {
     if (!deleteModal.txId) return;
@@ -245,14 +245,13 @@ export default function PanelTransactions() {
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>🧾 Wydatki</div>
         <div style={{ fontSize: 13, color: "#64748b" }}>
-      {activeBudgetMonth} ·{" "}
-      {isFirstLoad ? (
-        <span style={{ color: "#475569" }}>ładowanie…</span>
-      ) : (
-        <>
+          {activeBudgetMonth} ·{" "}
+          {isFirstLoad ? (
+            <span style={{ color: "#475569" }}>ładowanie…</span>
+          ) : (
+            <>
               {filtered.length} transakcji · łącznie{" "}
               <strong style={{ color: "#e2e8f0" }}>{fmt(totalSum)} PLN</strong>
-
               {totalVoucherSum > 0 && (
                 <span style={{ marginLeft: 8, color: "#a78bfa" }}>voucher: {fmt(totalVoucherSum)}</span>
               )}
@@ -262,56 +261,70 @@ export default function PanelTransactions() {
               {isActiveMonthClosed && (
                 <span style={{ marginLeft: 10, ...(s as any).badge("#ef4444") }}>🔒 zamknięty</span>
               )}
-        </>
-      )}
-      </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
       <div style={{ background: "#090e1b", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
-          <button onClick={() => setGrouped(g => !g)} style={{ ...(s as any).actionBtn("#475569"), fontSize: 11 }}>
-            {grouped ? "📋 Lista" : "📁 Grupy"}
-          </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <ToggleBtn {...VIEW_TOGGLE_STYLE} active={!grouped} onClick={() => setGrouped(false)}>
+              📋 Lista
+            </ToggleBtn>
+            <ToggleBtn {...VIEW_TOGGLE_STYLE} active={grouped} onClick={() => setGrouped(true)}>
+              📁 Grupy
+            </ToggleBtn>
+          </div>
         </div>
         <div style={(s as any).filterRow}>
+
           {/* Category */}
           <div style={(s as any).filterBox}>
             <div style={(s as any).filterLabel}>Kategoria</div>
-            <select style={(s as any).select} value={filterCat} onChange={e => { setFilterCat(e.target.value); setFilterSub(""); }}>
-              <option value="">Wszystkie</option>
-              {uniqueCats.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-            </select>
+            <CategoryMultiSelect
+              value={filters.categories}
+              onChange={v => { set("categories", v); set("subs", []); }}
+              categories={uniqueCats.map(([, name]) => ({ name }))}
+              placeholder="Wszystkie kategorie"
+            />
           </div>
-          {/* Subcategory */}
-          {filterCat && (
+
+          {/* Subcategory — visible only when ≥1 category selected */}
+          {filters.categories.length > 0 && uniqueSubs.length > 0 && (
             <div style={(s as any).filterBox}>
               <div style={(s as any).filterLabel}>Subkategoria</div>
-              <select style={(s as any).select} value={filterSub} onChange={e => setFilterSub(e.target.value)}>
-                <option value="">Wszystkie</option>
-                {uniqueSubs.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-              </select>
+              <CategoryMultiSelect
+                value={filters.subs}
+                onChange={v => set("subs", v)}
+                categories={uniqueSubs.map(([, name]) => ({ name }))}
+                placeholder="Wszystkie subkategorie"
+              />
             </div>
           )}
+
           {/* Date from */}
           <div style={(s as any).filterBox}>
             <div style={(s as any).filterLabel}>Data od</div>
             <AppDatePicker
-              value={filterDateFrom}
-              onChange={(d: Date) => setFilterDateFrom(d)}
-              maxDate={filterDateTo ?? null}
+              value={filters.dateFrom}
+              onChange={(d: Date) => set("dateFrom", d)}
+              maxDate={filters.dateTo ?? null}
             />
           </div>
+
           {/* Date to */}
           <div style={(s as any).filterBox}>
             <div style={(s as any).filterLabel}>Data do</div>
             <AppDatePicker
-              value={filterDateTo}
-              onChange={(d: Date) => setFilterDateTo(d)}
-              minDate={filterDateFrom ?? undefined}
+              value={filters.dateTo}
+              onChange={(d: Date) => set("dateTo", d)}
+              minDate={filters.dateFrom ?? undefined}
             />
           </div>
+
           {/* Priority */}
           <div style={(s as any).filterBox}>
             <div style={(s as any).filterLabel}>Priorytet</div>
@@ -323,8 +336,8 @@ export default function PanelTransactions() {
                   style={{
                     width: 28, height: 28, borderRadius: 6, border: "none",
                     cursor: "pointer", fontWeight: 700, fontSize: 11,
-                    background: filterPrio.includes(p) ? (PRIO_COLORS as Record<number, string>)[p] : "#1e293b",
-                    color:      filterPrio.includes(p) ? "#fff" : "#64748b",
+                    background: filters.prio.includes(p) ? (PRIO_COLORS as Record<number, string>)[p] : "#1e293b",
+                    color:      filters.prio.includes(p) ? "#fff" : "#64748b",
                   }}
                 >
                   P{p}
@@ -332,6 +345,7 @@ export default function PanelTransactions() {
               ))}
             </div>
           </div>
+
           {/* Tags */}
           {monthTagIds.length > 0 && (
             <div style={(s as any).filterBox}>
@@ -340,11 +354,14 @@ export default function PanelTransactions() {
                 {monthTagIds.map(tag => (
                   <button
                     key={tag.id}
-                    onClick={() => setFilterTags(prev => prev.includes(tag.id) ? prev.filter(x => x !== tag.id) : [...prev, tag.id])}
+                    onClick={() => set("tags", filters.tags.includes(tag.id)
+                      ? filters.tags.filter(x => x !== tag.id)
+                      : [...filters.tags, tag.id]
+                    )}
                     style={{
                       padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
-                      background: filterTags.includes(tag.id) ? "#3b82f6" : "#1e293b",
-                      color:      filterTags.includes(tag.id) ? "#fff"    : "#64748b",
+                      background: filters.tags.includes(tag.id) ? "#3b82f6" : "#1e293b",
+                      color:      filters.tags.includes(tag.id) ? "#fff"    : "#64748b",
                     }}
                   >
                     {tag.name}
@@ -353,6 +370,7 @@ export default function PanelTransactions() {
               </div>
             </div>
           )}
+
           {/* Clear */}
           {hasActiveFilters && (
             <button onClick={clearFilters} style={{ ...(s as any).actionBtn("#ef4444"), alignSelf: "flex-end", marginBottom: 4 }}>
@@ -361,11 +379,13 @@ export default function PanelTransactions() {
           )}
         </div>
       </div>
+
       {isFirstLoad && (
         <div style={(s as any).card}>
           <SkeletonListRow columns={6} count={8} height={48} />
         </div>
       )}
+
       {!isFirstLoad && filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
           Brak transakcji{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
