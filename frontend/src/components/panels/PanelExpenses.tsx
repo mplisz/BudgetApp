@@ -3,7 +3,7 @@
 // Add-expense panel with manual form, OCR receipt scan, and cart.
 // ============================================================
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo,useEffect  } from "react";
 import { useAppContext }    from "../../context/AppContext";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
@@ -42,9 +42,11 @@ export default function PanelExpenses() {
     cart:    CartItem[];
     setCart: (v: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
   };
-  const { addTransaction, isSaving } = useTransactions() as {
+  const { addTransaction, isSaving, loadTransactions  } = useTransactions() as {
     addTransaction: (p: TransactionPayload) => Promise<unknown>;
     isSaving:       boolean;
+    loadTransactions: (month: string) => Promise<void>;
+
   };
   const { isActiveMonthClosed, activeBudgetMonth, isFutureMonth } = useMonthStatus() as {
     isActiveMonthClosed: boolean;
@@ -54,6 +56,10 @@ export default function PanelExpenses() {
   // Single source: the URL-derived active month
   const budgetMonth = activeBudgetMonth;
 
+  useEffect(() => {
+    loadTransactions(budgetMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [budgetMonth]);
 
   const fileRef     = useRef<HTMLInputElement>(null);
 
