@@ -12,7 +12,7 @@
 // ============================================================
 
 import { useState, useMemo } from "react";
-import { parseDecimal } from "../utils/helpers";
+import { parseDecimal, round2 } from "../utils/helpers";
 import type { DiscountSummary, DiscountMode } from "../types/transaction";
 
 interface UseDiscountResult {
@@ -83,10 +83,10 @@ export function useDiscount(): UseDiscountResult {
       // No discount: total = unit price × qty
       const unit = parseDecimal(amountOrig) || 0;
       const total = unit * qty;
-      return total > 0 ? String(Math.round(total * 100) / 100) : "";
+      return total > 0 ? String(round2(total)) : "";
     }
     // With discount: use summary net
-    if (summary && summary.net > 0) return String(Math.round(summary.net * 100) / 100);
+    if (summary && summary.net > 0) return String(round2(summary.net));
     return "";
   }
 
@@ -110,10 +110,10 @@ export function useDiscount(): UseDiscountResult {
 
     if (discountMode === "per_unit") {
       // Cap: discount per unit < unit gross
-      setDiscountAmountState(String(gross > 0 ? Math.min(val, gross - 0.01) : val));
+      setDiscountAmountState(String(gross > 0 ? Math.min(val, round2(gross - 0.01)) : val));
     } else {
       // Cap: discount < gross × qty
-      const maxDiscount = gross * qty - 0.01;
+      const maxDiscount = round2(gross * qty - 0.01);
       setDiscountAmountState(String(maxDiscount > 0 ? Math.min(val, maxDiscount) : val));
     }
   }
@@ -126,7 +126,7 @@ export function useDiscount(): UseDiscountResult {
       const gross    = parseDecimal(amountGross) || 0;
       const discount = parseDecimal(discountAmount) || 0;
       if (discountMode === "per_order") {
-        const maxDiscount = gross * clamped - 0.01;
+        const maxDiscount = round2(gross * clamped - 0.01);
         if (discount > maxDiscount) setDiscountAmountState(String(maxDiscount));
       }
     }

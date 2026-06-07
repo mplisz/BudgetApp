@@ -188,6 +188,13 @@ const isProduction = process.env.NODE_ENV === 'production';
 const isDevelopment = process.env.NODE_ENV === 'development'
 const sameSitePolicy = isProduction ? 'none' : 'strict';
 
+
+// Safety rounding to 2 decimal places
+// Standard Math.round(x * 100) / 100 contains IEEE 754 errors for some amounts (np. 1.005, 2.675). Number.EPSILON solves that
+const round2 = (n) => {
+  if (typeof n !== "number" || isNaN(n)) return 0;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+};
 module.exports = {
   generateId,
   readItem,
@@ -203,5 +210,6 @@ module.exports = {
   prevServerMonth,
   isProduction,
   isDevelopment,
-  sameSitePolicy
+  sameSitePolicy,
+  round2
 };

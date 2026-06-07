@@ -177,3 +177,10 @@ export function getActiveLimit(doc, month) {
     ? { amount: bases[0].amount, type: "base", date: bases[0].date }
     : null;
 }
+
+// Safety rounding to 2 decimal places
+// Standard Math.round(x * 100) / 100 contains IEEE 754 errors for some amounts (np. 1.005, 2.675). Number.EPSILON solves that
+export const round2 = (n) => {
+  if (typeof n !== "number" || isNaN(n)) return 0;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+};

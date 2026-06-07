@@ -7,6 +7,7 @@
 // ============================================================
 
 import { useState, useCallback, useRef } from "react";
+import { round2 } from "../utils/helpers";
 
 const LOOKBACK_DAYS = 14;
 
@@ -127,7 +128,7 @@ export function useCurrencyConverter() {
 
   const convertToPln = useCallback((amount) => {
     if (!activeRate || !amount) return 0;
-    return Math.round(parseFloat(amount) * activeRate * 100) / 100;
+    return round2(parseFloat(amount) * activeRate);
   }, [activeRate]);
 
   return {

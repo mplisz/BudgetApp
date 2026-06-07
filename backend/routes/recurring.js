@@ -11,6 +11,9 @@
 //   validTo, isArchived, archivedFrom,
 //   lastConfirmedMonth, notifiedAt,
 //   tags, priority,
+//   createdAt, createdBy, createdById,
+//   updatedAt, updatedBy, updatedById,
+//   archivedAt, archivedBy, archivedById,
 // }
 // ============================================================
 
@@ -20,7 +23,7 @@ const { z }   = require("zod");
 const { recurringContainer, transactionsContainer } = require("../cosmos");
 const { requireAuth }        = require("../middleware/auth");
 const {
-  readItemWithEtag, IdParamSchema, BUDGET_MONTH_REGEX, currentServerMonth,
+  readItemWithEtag, IdParamSchema, BUDGET_MONTH_REGEX, currentServerMonth,round2
 } = require("../utils/helpers");
 
 router.use(requireAuth);
@@ -316,7 +319,7 @@ router.post("/:id/confirm", async (req, res) => {
     const amountPLN = clientAmountPLN != null
       ? clientAmountPLN
       : isForeign
-        ? Math.round(activeCost.amount * fxRate * 100) / 100
+        ? round2(activeCost.amount * fxRate)
         : activeCost.amount;
 
     const txId = `tx_${familyId}_${date.replace(/-/g, "")}_rec_${Date.now()}`;

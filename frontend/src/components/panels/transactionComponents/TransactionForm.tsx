@@ -5,7 +5,6 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useAppContext }     from "../../../context/AppContext";
-import { useAuth }           from "../../../context/AuthContext";
 import { useToast }          from "../../../hooks/useToast";
 import { useVouchers }       from "../../../hooks/useVouchers";
 import { useDiscount }       from "../../../hooks/useDiscount";
@@ -14,15 +13,13 @@ import { SubcategorySelect } from "../../ui/SubcategorySelect";
 import { PriorityPicker }    from "../../ui/PriorityPicker";
 import { CurrencyRateField } from "../../ui/CurrencyRateField";
 import { VoucherSection }    from "./VoucherSection";
-import { fmt, parseDecimal } from "../../../utils/helpers";
+import { fmt, parseDecimal, round2 } from "../../../utils/helpers";
 import { translateError } from "../../../data/constants/errorMessages";
 import { TagMultiSelect } from "../../ui/TagMultiSelect";
 
 import type {
   FormValues, TransactionPayload, TransactionFormProps, RateInfo,
 } from "../../../types/transaction";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // ── Styles ────────────────────────────────────────────────────
 
@@ -108,11 +105,12 @@ export function TransactionForm({
     limits:       Array<{ categoryId: string; limits: Array<{ type: string; date: string; amount: number }> }>;
     settings:     { thresholds?: { warningPercent: number; criticalPercent: number } } | null;
   };
-  const { fetchWithAuth }          = useAuth() as { fetchWithAuth: typeof fetch };
+
   const { showError, showWarning } = useToast() as {
     showError:   (msg: string) => void;
     showWarning: (msg: string) => void;
   };
+  
 
   const [form,     setForm]     = useState<FormValues>(initialValues ?? emptyFormValues());
   const [rateInfo, setRateInfo] = useState<RateInfo>({ activeRate: 1, resolvedCurrency: "PLN" });
@@ -123,13 +121,18 @@ export function TransactionForm({
 
   const dateYMD    = toYMD(form.date);
 
+  //local state string on blur + synchronize it with discount changes
+  const [qtyStr, setQtyStr] = useState(String(discount.qty));
+  useEffect(() => {setQtyStr(String(discount.qty))}, [discount.qty]);
+
+
   // Effective amount — net after discount, or raw if no discount
   const effectiveAmountOrig = discount.effectiveAmount(form.amountOrig);
 
   const amountPLN = useMemo<number>(() => {
     const raw = parseDecimal(effectiveAmountOrig);
     if (!raw || raw <= 0 || !rateInfo.activeRate) return 0;
-    return Math.round(raw * rateInfo.activeRate * 100) / 100;
+     return round2(raw * rateInfo.activeRate);
   }, [effectiveAmountOrig, rateInfo.activeRate]);
 
   // Auto-cap voucherAmount when amountPLN drops
@@ -298,10 +301,24 @@ export function TransactionForm({
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
             Qty
-            <input
-              type="number" min="1" step="1"
-              value={discount.qty}
-              onChange={e => discount.setQty(parseInt(e.target.value) || 1)}
+            {/* Changed to text numeric input mode to mitigate issues on mobile phone with changing the quantity */}
+           <input
+              type="text"
+              inputMode="numeric"
+              value={qtyStr}
+              onChange={e => {
+                const raw = e.target.value.replace(/[^0-9]/g, "");
+                setQtyStr(raw);
+                const n = parseInt(raw);
+                if (n >= 1) discount.setQty(n);
+              }}
+              onBlur={() => {
+                const n = parseInt(qtyStr);
+                const valid = n >= 1 ? n : 1;
+                discount.setQty(valid);
+                setQtyStr(String(valid));
+              }}
+              onFocus={e => e.target.select()} // zaznacza całość — user może od razu nadpisać
               style={{ ...inp, width: 64, padding: "6px 10px", fontSize: 13, textAlign: "center" }}
             />
           </label>
@@ -330,7 +347,7 @@ export function TransactionForm({
             <span style={{ color: "#334155", fontSize: 13, flexShrink: 0 }}>→</span>
             <input
               type="text" readOnly
-              value={discount.summary && discount.summary.grossTotal > 0 ? String(Math.round(discount.summary.net * 100) / 100) : ""}
+              value={discount.summary && discount.summary.grossTotal > 0 ?String(round2(discount.summary.net)) : ""}
               placeholder="net total"
               title="Net total = (unit × qty) − discount"
               style={{ ...inp, flex: 1, minWidth: 80, color: "#10b981", cursor: "not-allowed", opacity: 0.8, borderColor: "#10b98133" }}
@@ -351,7 +368,7 @@ export function TransactionForm({
                 <span style={{ color: "#334155", fontSize: 13, flexShrink: 0 }}>×{discount.qty} =</span>
                 <input
                   type="text" readOnly
-                  value={String(Math.round((parseDecimal(form.amountOrig) || 0) * discount.qty * 100) / 100)}
+                  value={String(round2((parseDecimal(form.amountOrig) || 0) * discount.qty))}
                   style={{ ...inp, flex: 1, color: "#10b981", cursor: "not-allowed", opacity: 0.8, borderColor: "#10b98133" }}
                 />
               </>

@@ -20,7 +20,7 @@ const { z }   = require("zod");
 const { plannedContainer, transactionsContainer } = require("../cosmos");
 const { requireAuth }        = require("../middleware/auth");
 const {
-  readItemWithEtag, IdParamSchema, BUDGET_MONTH_REGEX, currentServerMonth,
+  readItemWithEtag, IdParamSchema, BUDGET_MONTH_REGEX, currentServerMonth,round2
 } = require("../utils/helpers");
 
 router.use(requireAuth);
@@ -94,7 +94,7 @@ function computeSuggestion(doc, currentMonth) {
     v.month >= currentMonth && !v.paidByUser && !v.dismissedByUser
   );
   if (future.length === 0) return Math.max(0, remaining);
-  return Math.max(0, Math.round(remaining / future.length * 100) / 100);
+    return Math.max(0, round2(remaining / future.length));
 }
 
 // Check if purchase is ready (collected >= target)
@@ -188,7 +188,7 @@ router.post("/", async (req, res) => {
         const [ey, em] = d.plannedMonth.split("-").map(Number);
         return Math.max(1, (ey - sy) * 12 + (em - sm) + 1);
       })();
-      const suggestion  = Math.round(d.totalAmount / monthCount * 100) / 100;
+      const suggestion = round2(d.totalAmount / monthCount);
       virtualSavings    = generateSavingsMonths(startMonth, d.plannedMonth, suggestion, d.originalCurrency, d.fxRate);
     }
 
@@ -406,7 +406,7 @@ router.post("/:id/pay", async (req, res) => {
     const future     = updatedSavings.filter(v => !v.paidByUser && !v.dismissedByUser);
 
     const newSuggestion = future.length > 0
-      ? Math.max(0, Math.round(remaining / future.length * 100) / 100)
+      ? Math.max(0, round2(remaining / future.length))
       : 0;
 
     const recomputedSavings = updatedSavings.map(v =>

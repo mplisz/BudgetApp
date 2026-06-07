@@ -20,7 +20,7 @@ import { useCurrencyManager }  from "../../../hooks/useCurrencyManager";
 import { generateSavingsMonths } from "../../../hooks/usePlanned";
 import { AppDatePicker, fromYM, toYM } from "../../ui/AppDatePicker";
 import { theme as s }          from "../../../styles/theme";
-import { fmt }                 from "../../../utils/helpers";
+import { fmt, round2}                 from "../../../utils/helpers";
 import type { PlannedPostPayload, PlannedPatchPayload, PlannedDoc, VirtualSaving } from "../../../hooks/usePlanned";
 
 // ── Types ─────────────────────────────────────────────────────
@@ -137,7 +137,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
       ? parseFloat(form.totalAmount) * (form.fxRate || 1)
       : parseFloat(form.totalAmount);
     const months = monthsBetween(cur, pm);
-    return Math.round(totalPLN / months * 100) / 100;
+    return round2(totalPLN / months);
   }, [form.totalAmount, form.plannedMonth, form.mode, form.fxRate, rateInfo.resolvedCurrency, cur, minPlan]);
 
   // ── Submit ────────────────────────────────────────────────
