@@ -20,6 +20,7 @@
 //     dateTo:      null as Date | null,
 //     prio:        [] as number[],
 //     tags:        [] as string[],
+//     hasReturn:   false,
 //   });
 //
 //   // Read:  filters.categories

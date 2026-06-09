@@ -58,7 +58,8 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }: RecurringBellItemProps
   const isForeign    = !!(activeCost?.originalCurrency && activeCost.originalCurrency !== "PLN");
 
   const [showModal, setShowModal] = useState(false);
-  const [modalDate, setModalDate] = useState(plannedDateYMD(doc));
+  const [modalDate, setModalDate] = useState(todayYMD());
+
 
   const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter() as {
     loadRate:   (currency: string, date: string) => void;

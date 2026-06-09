@@ -25,28 +25,7 @@ const slugify = (text) => {
 
 const generateId = slugify;
 
-// ── Money rounding ───────────────────────────────────────────
 
-/**
- * Round a monetary value to 2 decimal places.
- *
- * Why a helper instead of `Math.round(x * 100) / 100` inline:
- *   1. Single source of truth — if we ever migrate to integer-grosze
- *      storage, only this function needs to change.
- *   2. Defensive: `Number()` coerces strings, falsy values become 0.
- *   3. Documentation: every call site implicitly says "yes, this is money".
- *
- * Trade-offs:
- *   - Floating-point binary representation can still drift on huge sums
- *     (millions of zł). For a family budget that ceiling is irrelevant.
- *   - For absolute precision, switch the whole pipeline to integer
- *     grosze (×100 stored, ÷100 displayed). Out of scope today.
- */
-const roundMoney = (x) => {
-  const n = Number(x);
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(n * 100) / 100;
-};
 
 /** Safe sum of an array of numeric-ish values, rounded once at the end. */
 const sumMoney = (values) =>
@@ -189,12 +168,33 @@ const isDevelopment = process.env.NODE_ENV === 'development'
 const sameSitePolicy = isProduction ? 'none' : 'strict';
 
 
+
+// ── Money rounding ───────────────────────────────────────────
 // Safety rounding to 2 decimal places
 // Standard Math.round(x * 100) / 100 contains IEEE 754 errors for some amounts (np. 1.005, 2.675). Number.EPSILON solves that
+
 const round2 = (n) => {
   if (typeof n !== "number" || isNaN(n)) return 0;
   return Math.round((n + Number.EPSILON) * 100) / 100;
 };
+/**
+ * Round a monetary value to 2 decimal places.
+ *
+ * Delegates to round2() for IEEE 754-safe rounding.
+ * Adds defensive Number() coercion so callers can pass strings or
+ * falsy values without crashing.
+ *
+ * Single source of truth — if storage ever migrates to integer grosze,
+ * only this function needs to change.
+ */
+const roundMoney = (x) => {
+  const n = Number(x);
+  if (!Number.isFinite(n)) return 0;
+  return round2(n); 
+};
+
+
+
 module.exports = {
   generateId,
   readItem,

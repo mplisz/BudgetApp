@@ -88,6 +88,7 @@ export default function PanelTransactions() {
     dateTo:     null as Date | null,
     prio:       [] as number[],
     tags:       [] as string[],
+    hasReturn:   false,
   });
 
   const [collapsed,          setCollapsed]          = useState<Record<string, boolean>>({});
@@ -160,6 +161,7 @@ export default function PanelTransactions() {
       if (filters.dateTo   && tx.date > toYMD(filters.dateTo))                             return false;
       if (filters.prio.length && !filters.prio.includes(tx.priority || 2))                 return false;
       if (filters.tags.length && !filters.tags.some(t => (tx.tags || []).includes(t)))     return false;
+      if (filters.hasReturn && !((tx.sameMonthReturned ?? 0) > 0 || (tx.voucherAmount ?? 0) > 0)) return false;
       return true;
     }),
     [enriched, filters]
@@ -370,7 +372,26 @@ export default function PanelTransactions() {
               </div>
             </div>
           )}
-
+          {/* Returns */}
+          <div style={(s as any).filterBox}>
+            <div style={(s as any).filterLabel}>Zwroty</div>
+            <button
+              onClick={() => set("hasReturn", !filters.hasReturn)}
+              style={{
+                height: 28,
+                padding: "0 10px",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: 11,
+                background: filters.hasReturn ? "#34d399" : "#1e293b",
+                color:      filters.hasReturn ? "#000"    : "#64748b",
+              }}
+            >
+              🔙 Zwroty
+            </button>
+          </div>
           {/* Clear */}
           {hasActiveFilters && (
             <button onClick={clearFilters} style={{ ...(s as any).actionBtn("#ef4444"), alignSelf: "flex-end", marginBottom: 4 }}>
