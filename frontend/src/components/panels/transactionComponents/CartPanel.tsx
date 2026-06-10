@@ -194,9 +194,11 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
 
   if (cart.length === 0) return null;
 
-  const displayItems = aggregateCart(cart.filter(i => statuses[i._cartId] !== STATUS.DONE));
+  //const displayItems = aggregateCart(cart.filter(i => statuses[i._cartId] !== STATUS.DONE));
   // Aggregate done items too — merged items should show as one ✅ row, not N rows
-  const doneItems    = aggregateCart(cart.filter(i => statuses[i._cartId] === STATUS.DONE));
+  //const doneItems    = aggregateCart(cart.filter(i => statuses[i._cartId] === STATUS.DONE));
+  const displayItems = cart.filter(i => statuses[i._cartId] !== STATUS.DONE);
+  const doneItems    = cart.filter(i => statuses[i._cartId] === STATUS.DONE);
   const allDisplay   = [...displayItems, ...doneItems];
 
   // ── Cart content (shared between desktop and mobile) ──────
@@ -286,9 +288,9 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
                       {item.originalAmount} {item.originalCurrency}
                     </span>
                   )}
-                  {(item._mergedCount ?? 1) > 1 && (
+                  {/*{(item._mergedCount ?? 1) > 1 && (
                     <span style={{ fontSize: 10, color: "#475569" }}>×{item._mergedCount}</span>
-                  )}
+                  )}*/}
                 </div>
                 {status !== STATUS.DONE && status !== STATUS.SAVING && (
                   <div style={{ display: "flex", gap: 4 }}>
