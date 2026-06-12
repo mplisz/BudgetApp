@@ -10,7 +10,7 @@
     }
   },
   "globalHeaders": {
-    "Content-Security-Policy": "default-src 'self'; connect-src 'self' https://api.nbp.pl https://accounts.google.com https://budget-api-mms-ccagbvf9hwdqbuhr.polandcentral-01.azurewebsites.net; frame-src 'self' https://accounts.google.com; frame-ancestors 'none'; img-src 'self' data: https://lh3.googleusercontent.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; base-uri 'self'; form-action 'self'; object-src 'none';",
+    "Content-Security-Policy": "default-src 'self'; connect-src 'self' https://api.nbp.pl https://accounts.google.com https://budget-api-mms-ccagbvf9hwdqbuhr.polandcentral-01.azurewebsites.net; frame-src 'self' https://accounts.google.com; frame-ancestors 'none'; img-src 'self' data: blob: https://lh3.googleusercontent.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; script-src 'self' https://accounts.google.com https://apis.google.com; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests;",
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
