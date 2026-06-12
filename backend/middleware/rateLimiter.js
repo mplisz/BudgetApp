@@ -21,7 +21,7 @@ const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = require('express-rate-limit');
 
 const hasDedicatedLimiter = (path) =>
-    path.startsWith('/auth/') || path.startsWith('/limits');
+    path.startsWith('/auth/') || path.startsWith('/limits'|| path.startsWith('/ocr'));
 
 // Factory — keeps limiters DRY
 const createLimiter = (windowMs, maxRequests, baseMessage, extraOptions = {}) => {
@@ -43,6 +43,12 @@ const refreshLimiter = createLimiter(
   parseInt(process.env.RATE_LIMIT_REFRESH_MAX)        || 20,
   "Too many refresh attempts",
 );
+const ocrLimiter = createLimiter(
+  parseInt(process.env.RATE_LIMIT_OCR_WINDOW_MS) || 15 * 60 * 1000,
+  parseInt(process.env.RATE_LIMIT_OCR_MAX)        || 10,
+  "Too many OCR scans",
+);
+ 
 
 const loginLimiter = createLimiter(
   parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MS) || 15 * 60 * 1000,
@@ -85,7 +91,7 @@ function applyRateLimiters(app) {
   app.use('/api/auth/refresh', refreshLimiter);
   app.use('/api/auth/login',   loginLimiter);
   app.use('/api/limits',       limitsLimiter);
-
+  app.use('/api/ocr',          ocrLimiter);
   // 2. Cross-cutting limiters — apply to /api/* but skip paths that
   //    already have a dedicated limiter (to avoid double-counting).
   app.use('/api/', (req, res, next) => {
@@ -97,6 +103,9 @@ function applyRateLimiters(app) {
     if (hasDedicatedLimiter(req.path)) return next();
     return apiLimiter(req, res, next);
   });
+
+
+  
 }
 
 module.exports = { applyRateLimiters };

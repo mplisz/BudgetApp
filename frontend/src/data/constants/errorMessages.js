@@ -88,8 +88,25 @@ export const API_ERRORS = {
   "Too many login attempts, please try again later.":             "Zbyt wiele prób logowania. Spróbuj ponownie później.",
   "Too many requests to limits container, please try again later.": "Zbyt wiele zapytań o limity. Spróbuj ponownie później.",
   "Too many requests from this IP, please try again later.":      "Zbyt wiele zapytań z Twojego adresu IP. Spróbuj ponownie później.",
-  "Too many write operations, please slow down.":                 "Zbyt wiele zapisów do bazy. Zwolnij troszeczkę."
+  "Too many write operations, please slow down.":                 "Zbyt wiele zapisów do bazy. Zwolnij troszeczkę.",
+ 
+  // ── OCR ──────────────────────────────────────────────
+  "OCR service is not configured.":           "Funkcja OCR jest chwilowo niedostępna.",
+  "Image payload too small":                  "Plik zdjęcia jest uszkodzony lub pusty.",
+  "Expected base64 data URL (jpeg/png/webp)": "Nieprawidłowy format pliku. Użyj JPG lub PNG.",
+  "Image too large.":                         "Zdjęcie jest za duże (max 5 MB).",
+  "Unsupported image format.":                "Nieobsługiwany format zdjęcia. Użyj JPG lub PNG.",
+  "No expense categories defined.":           "Brak kategorii wydatków. Dodaj kategorie zanim użyjesz OCR.",
+  "Model returned invalid response.":         "Model zwrócił nieprawidłową odpowiedź. Spróbuj ponownie.",
+  "Failed to parse model response.":          "Nie udało się przetworzyć odpowiedzi modelu. Spróbuj ponownie.",
+  "Model rate limit exceeded.":               "Limit zapytań do AI wyczerpany. Spróbuj za chwilę.",
+  "Analysis timed out.":                      "Analiza trwała zbyt długo. Spróbuj z mniejszym zdjęciem.",
+  "Failed to analyze receipt.":               "Nie udało się przeanalizować paragonu.",
+  "Too many OCR scans":                       "Zbyt wiele skanów. Spróbuj ponownie za kilka minut.",
 };
+
+
+
 
 export function translateError(backendMsg, fallback = "Wystąpił nieoczekiwany błąd.") {
   if (!backendMsg) return fallback;

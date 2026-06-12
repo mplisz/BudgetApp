@@ -24,6 +24,11 @@ export interface CartItem extends TransactionPayload {
   _cartId:       string;
   _allCartIds?:  string[];
   _mergedCount?: number;
+  // ── OCR-only fields (informational, stripped before save) ──
+  _ocrGross?:       number;  // price before receipt discounts
+  _ocrDiscount?:    number;  // merged discount amount
+  _ocrMergeNote?:   string;  // e.g. "2x 6,99 + rabat -6,99"
+  _ocrReceiptPath?: string;  // blob path of the archived receipt photo
 }
 
 interface CartPanelProps {
@@ -143,9 +148,18 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
     // Sequential saves — not parallel — to prevent race conditions
     // on voucher usedInTransactions (last-write-wins would corrupt data)
     for (const item of pending) {
+      // OCR items may arrive without a matched category — backend would
+      // 400 anyway, so fail fast locally with a clear reason.
+      if (!item.subcategoryId || !item.categoryId) {
+        const ids = item._allCartIds || [item._cartId];
+        ids.forEach(id => setStatus(id, STATUS.ERROR));
+        failedIds.push(...ids);
+        showError(`"${item.description || "Pozycja"}" nie ma kategorii — edytuj ją (✏️) przed zapisem.`);
+        continue;
+      }
       setStatus(item._cartId, STATUS.SAVING);
       try {
-        const { _cartId, _allCartIds, _mergedCount, ...payload } = item;
+        const { _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote, _ocrReceiptPath, ...payload } = item;
         const result = await addTransaction(payload);
         if (result) {
           const ids = item._allCartIds || [item._cartId];
@@ -232,8 +246,9 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
         </div>
       </div>
 
-      {/* Item list */}
-      <div style={{ marginBottom: 12 }}>
+      {/* Item list — capped height with scroll on desktop (OCR can add
+          15+ items at once); mobile scrolls the page naturally */}
+      <div className="cart-item-list" style={{ marginBottom: 12 }}>
         {allDisplay.map(item => {
           const status = statuses[item._cartId] || STATUS.PENDING;
           const pColor = (PRIORITY_COLORS as Record<number, string>)[item.priority] || "#64748b";
@@ -253,11 +268,19 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
               {/* Row 1: name + amount + status icon */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.categoryName} › {item.subcategoryName}
+                  <div style={{ color: item.subcategoryId ? "#e2e8f0" : "#ef4444", fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {item.subcategoryId
+                      ? `${item.categoryName} › ${item.subcategoryName}`
+                      : "❓ Wybierz kategorię (✏️)"}
                   </div>
                   {item.description && (
                     <div style={{ color: "#64748b", fontSize: 11, marginTop: 2 }}>{item.description}</div>
+                  )}
+                  {item._ocrDiscount != null && item._ocrDiscount > 0 && (
+                    <div style={{ color: "#f59e0b", fontSize: 10, marginTop: 2 }}>
+                      🏷️ rabat −{fmt(item._ocrDiscount)}
+                      {item._ocrGross != null && <span style={{ color: "#92710a" }}> (z {fmt(item._ocrGross)})</span>}
+                    </div>
                   )}
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
@@ -351,6 +374,11 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       padding: 16,
     }}>
       {cartContent}
+      <style>{`
+        @media (min-width: 701px) {
+          .cart-item-list { max-height: 420px; overflow-y: auto; overflow-x: hidden; }
+        }
+      `}</style>
     </div>
   );
 }

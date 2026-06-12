@@ -4,8 +4,11 @@
 // ============================================================
 
 import { useState, useRef, useCallback, useMemo,useEffect  } from "react";
+import type { ChangeEvent } from "react";
 import { useAppContext }    from "../../context/AppContext";
+import { useAuth }          from "../../context/AuthContext";
 import { useTransactions }  from "../../hooks/useTransactions";
+import { useToast }         from "../../hooks/useToast";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { theme as s }       from "../../styles/theme";
 import { fmt }              from "../../utils/helpers";
@@ -13,27 +16,39 @@ import { TransactionForm, emptyFormValues} from "./transactionComponents/Transac
 import type { TransactionPayload } from "../../types/transaction";
 import { CartPanel } from "./transactionComponents/CartPanel";
 import type { CartItem } from "./transactionComponents/CartPanel";
-
+import { translateError } from "../../data/constants/errorMessages";
 
 // ── Cart ID generator ─────────────────────────────────────────
 
 let cartIdCounter = 0;
 const newCartId = (): string => `cart_${Date.now()}_${++cartIdCounter}`;
 
-// ── OCR line type ─────────────────────────────────────────────
+// ── OCR types — mirror of backend /api/ocr/receipt response ──
 
 interface OcrLine {
-  desc:            string;
-  amount:          number;
-  category?:       string;
-  categoryId?:     string;
-  categoryName?:   string;
-  sub?:            string;
-  subcategoryId?:  string;
-  subcategoryName?: string;
-  priority?:       1 | 2 | 3 | 4;
-  selected:        boolean;
+  description:        string;
+  amount:             number;          // final price after discounts (goes to DB)
+  grossAmount:        number | null;   // before discounts (informational)
+  discountAmount:     number | null;   // merged discount (informational)
+  mergeNote:          string | null;   // e.g. "2x 6,99 + rabat -6,99"
+  categoryId:         string | null;
+  categoryName:       string | null;
+  subcategoryId:      string | null;
+  subcategoryName:    string | null;
+  categoryConfidence: number;
+  selected:           boolean;         // client-side only
 }
+
+interface OcrMeta {
+  merchant:        string | null;
+  date:            string | null;     // YYYY-MM-DD from the receipt
+  totalSum:        number | null;
+  warning:         string | null;
+  receiptBlobPath: string | null;
+}
+
+const OCR_MAX_FILE_BYTES = 5 * 1024 * 1024;
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // ── Component ─────────────────────────────────────────────────
 
@@ -53,6 +68,13 @@ export default function PanelExpenses() {
     activeBudgetMonth:   string;
     isFutureMonth:       boolean;
   };
+  const { fetchWithAuth } = useAuth() as {
+    fetchWithAuth: (url: string, opts?: RequestInit) => Promise<Response>;
+  };
+  const { showError, showWarning } = useToast() as {
+    showError:   (m: string) => void;
+    showWarning: (m: string) => void;
+  };
   // Single source: the URL-derived active month
   const budgetMonth = activeBudgetMonth;
 
@@ -64,6 +86,7 @@ export default function PanelExpenses() {
   const fileRef     = useRef<HTMLInputElement>(null);
 
   const [ocrLines,        setOcrLines]        = useState<OcrLine[]>([]);
+  const [ocrMeta,         setOcrMeta]         = useState<OcrMeta | null>(null);
   const [ocrLoading,      setOcrLoading]      = useState(false);
   const [ocrMode,         setOcrMode]         = useState(false);
   const [formKey,         setFormKey]         = useState(0);
@@ -129,36 +152,115 @@ export default function PanelExpenses() {
 
   // ── OCR ───────────────────────────────────────────────────
 
-  async function handleAddOcrLines() {
+  // File → base64 → POST /api/ocr/receipt → ocrLines
+  const handleFileSelected = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset so the same file can be re-picked after an error
+    e.target.value = "";
+    if (!file) return;
+
+    if (file.size > OCR_MAX_FILE_BYTES) {
+      showError(`Zdjęcie jest za duże (${(file.size / 1024 / 1024).toFixed(1)} MB, max 5 MB).`);
+      return;
+    }
+
+    setOcrLoading(true);
+    setOcrLines([]);
+    setOcrMeta(null);
+
+    try {
+      // Read as data URL (data:image/jpeg;base64,...)
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Nie udało się odczytać pliku."));
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetchWithAuth(`${API_URL}/api/ocr/receipt`, {
+        method: "POST",
+        body:   JSON.stringify({ image: dataUrl }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(translateError(err.error, "Nie udało się przeanalizować paragonu."));
+      }
+
+      const data = await res.json();
+
+      if (!data.items?.length) {
+        showWarning(data.warning || "Nie znaleziono pozycji na zdjęciu. Spróbuj wyraźniejszego ujęcia.");
+        return;
+      }
+
+      setOcrLines(data.items.map((it: Omit<OcrLine, "selected">) => ({ ...it, selected: true })));
+      setOcrMeta({
+        merchant:        data.metadata?.merchant ?? null,
+        date:            data.metadata?.date     ?? null,
+        totalSum:        data.metadata?.totalSum ?? null,
+        warning:         data.warning            ?? null,
+        receiptBlobPath: data.receiptBlobPath    ?? null,
+      });
+      if (data.warning) showWarning(data.warning);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Błąd analizy paragonu.");
+    } finally {
+      setOcrLoading(false);
+    }
+  }, [fetchWithAuth, showError, showWarning]);
+
+  // Selected OCR lines → cart items. Items WITHOUT a matched category
+  // still go in — the user fixes them via the cart's ✏️ edit flow.
+  // Receipt date becomes the item date → cartDate sticky logic picks
+  // it up automatically for subsequent manual entries.
+  const handleAddOcrLines = useCallback(() => {
     const selected = ocrLines.filter(l => l.selected);
     if (!selected.length) return;
-    for (const line of selected) {
-      await addTransaction({
-        date:             new Date().toISOString().slice(0, 10),
+
+    const itemDate = ocrMeta?.date || new Date().toISOString().slice(0, 10);
+    const merchant = ocrMeta?.merchant;
+
+    setCart(prev => [
+      ...prev,
+      ...selected.map((line): CartItem => ({
+        date:             itemDate,
         type:             "EXPENSE",
         budgetMonth,
         subcategoryId:    line.subcategoryId   || "",
-        subcategoryName:  line.sub             || line.subcategoryName || "",
+        subcategoryName:  line.subcategoryName || "",
         categoryId:       line.categoryId      || "",
-        categoryName:     line.category        || line.categoryName    || "",
+        categoryName:     line.categoryName    || "",
         amount:           line.amount,
         originalAmount:   line.amount,
         originalCurrency: "PLN",
         fxRate:           1,
-        description:      line.desc || "",
+        description:      line.description || (merchant ? `${merchant}` : ""),
         tags:             [],
-        priority:         line.priority || 2,
+        priority:         2,
         useVoucher:       false,
         voucherId:        null,
         voucherAmount:    0,
         netAmount:        line.amount,
         isRecurring:      false,
         recurringId:      null,
-      });
+        _cartId:          newCartId(),
+        _ocrGross:        line.grossAmount    ?? undefined,
+        _ocrDiscount:     line.discountAmount ?? undefined,
+        _ocrMergeNote:    line.mergeNote      ?? undefined,
+        _ocrReceiptPath:  ocrMeta?.receiptBlobPath ?? undefined,
+      })),
+    ]);
+
+    const missingCat = selected.filter(l => !l.subcategoryId).length;
+    if (missingCat > 0) {
+      showWarning(`${missingCat} pozycji bez kategorii — uzupełnij je w koszyku (✏️) przed zapisem.`);
     }
+
+    // Reset OCR view — ready for the next receipt
     setOcrLines([]);
-    setOcrMode(false);
-  }
+    setOcrMeta(null);
+  }, [ocrLines, ocrMeta, budgetMonth, setCart, showWarning]);
 
   // ── Form initial values ───────────────────────────────────
     // Cart-aware default date — sticky to first cart item's date.
@@ -273,14 +375,14 @@ export default function PanelExpenses() {
                     accept="image/*"
                     capture="environment"
                     style={{ display: "none" }}
-                    onChange={() => {}}
+                    onChange={handleFileSelected}
                   />
-                  <button onClick={() => fileRef.current?.click()}
-                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8 }}>
+                  <button onClick={() => fileRef.current?.click()} disabled={ocrLoading}
+                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: ocrLoading ? "#064e3b" : "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: ocrLoading ? "not-allowed" : "pointer", marginBottom: 8 }}>
                     📷 Zrób zdjęcie
                   </button>
-                  <button onClick={() => fileRef.current?.click()}
-                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  <button onClick={() => fileRef.current?.click()} disabled={ocrLoading}
+                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: ocrLoading ? "#1e3a8a" : "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 14, cursor: ocrLoading ? "not-allowed" : "pointer" }}>
                     🖼️ Wybierz z galerii
                   </button>
                   {ocrLoading && (
@@ -291,39 +393,84 @@ export default function PanelExpenses() {
                 </div>
               ) : (
                 <>
+                  {/* Metadata bar: merchant / date / receipt total */}
+                  {ocrMeta && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12 }}>
+                      <span style={{ color: "#e2e8f0", fontWeight: 600 }}>🏪 {ocrMeta.merchant || "Nieznany sklep"}</span>
+                      <span style={{ color: "#64748b" }}>{ocrMeta.date || "—"}</span>
+                      {ocrMeta.totalSum != null && (
+                        <span style={{ color: "#10b981", fontWeight: 700 }}>{fmt(ocrMeta.totalSum)}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Backend warning (sum mismatch, unreadable parts, ...) */}
+                  {ocrMeta?.warning && (
+                    <div style={{ background: "#78350f33", border: "1px solid #f59e0b55", borderRadius: 8, padding: "8px 12px", marginBottom: 12, color: "#fbbf24", fontSize: 12 }}>
+                      ⚠️ {ocrMeta.warning}
+                    </div>
+                  )}
+
                   <div style={{ color: "#10b981", fontWeight: 700, marginBottom: 12 }}>✅ Znalezione pozycje:</div>
-                  {ocrLines.map((line, i) => (
-                    <div key={i} style={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8, padding: "10px 14px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <input
-                          type="checkbox"
-                          checked={line.selected}
-                          onChange={e => {
-                            const next = [...ocrLines];
-                            next[i] = { ...next[i], selected: e.target.checked };
-                            setOcrLines(next);
-                          }}
-                          style={{ width: 18, height: 18, accentColor: "#10b981" }}
-                        />
-                        <div>
-                          <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 14 }}>{line.desc}</div>
-                          <div style={{ color: "#64748b", fontSize: 11 }}>{line.category} › {line.sub}</div>
+                  {ocrLines.map((line, i) => {
+                    const lowConf    = line.categoryConfidence < 0.75;
+                    const noCategory = !line.subcategoryId;
+                    return (
+                      <div key={i} style={{
+                        background:   "#0d1424",
+                        border:       noCategory ? "1px solid #ef444455" : lowConf ? "1px solid #f59e0b55" : "1px solid #1e293b",
+                        borderRadius: 8, padding: "10px 14px", marginBottom: 8,
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, minWidth: 0 }}>
+                            <input
+                              type="checkbox"
+                              checked={line.selected}
+                              onChange={e => {
+                                const next = [...ocrLines];
+                                next[i] = { ...next[i], selected: e.target.checked };
+                                setOcrLines(next);
+                              }}
+                              style={{ width: 18, height: 18, accentColor: "#10b981", marginTop: 2, flexShrink: 0 }}
+                            />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 14 }}>{line.description}</div>
+                              <div style={{ color: noCategory ? "#ef4444" : "#64748b", fontSize: 11, marginTop: 2 }}>
+                                {noCategory
+                                  ? "❓ Brak kategorii — uzupełnisz w koszyku"
+                                  : `${line.categoryName} › ${line.subcategoryName}`}
+                                {lowConf && !noCategory && <span style={{ color: "#f59e0b" }}> · sprawdź ⚠️</span>}
+                              </div>
+                              {line.discountAmount != null && line.discountAmount > 0 && (
+                                <div style={{ color: "#f59e0b", fontSize: 11, marginTop: 3 }}>
+                                  🏷️ rabat −{fmt(line.discountAmount)}
+                                  {line.mergeNote && <span style={{ color: "#92710a" }}> · {line.mergeNote}</span>}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                            {line.grossAmount != null && line.discountAmount != null && line.discountAmount > 0 && (
+                              <div style={{ color: "#64748b", fontSize: 11, textDecoration: "line-through" }}>{fmt(line.grossAmount)}</div>
+                            )}
+                            <div style={{ color: "#10b981", fontWeight: 700 }}>{fmt(line.amount)}</div>
+                          </div>
                         </div>
                       </div>
-                      <div style={{ color: "#10b981", fontWeight: 700 }}>{fmt(line.amount)}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid #1e293b", marginBottom: 12 }}>
-                    <span style={{ color: "#64748b" }}>Suma:</span>
+                    <span style={{ color: "#64748b" }}>Suma zaznaczonych:</span>
                     <span style={{ color: "#10b981", fontWeight: 800, fontSize: 18 }}>
                       {fmt(ocrLines.filter(l => l.selected).reduce((sum, l) => sum + l.amount, 0))}
                     </span>
                   </div>
-                  <button onClick={handleAddOcrLines} disabled={isSaving}
-                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8 }}>
-                    {isSaving ? "Zapisuję…" : `✅ Dodaj zaznaczone (${ocrLines.filter(l => l.selected).length})`}
+                  <button onClick={handleAddOcrLines}
+                    disabled={!ocrLines.some(l => l.selected)}
+                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8, opacity: ocrLines.some(l => l.selected) ? 1 : 0.5 }}>
+                    🛒 Dodaj zaznaczone do koszyka ({ocrLines.filter(l => l.selected).length})
                   </button>
-                  <button onClick={() => setOcrLines([])}
+                  <button onClick={() => { setOcrLines([]); setOcrMeta(null); }}
                     style={{ display: "block", width: "100%", padding: 10, borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#64748b", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                     🔄 Skanuj ponownie
                   </button>

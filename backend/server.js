@@ -99,7 +99,7 @@ app.set('trust proxy', 1);
 // ==========================================
 // STANDARD MIDDLEWARE
 // ==========================================
-
+app.use('/api/ocr', express.json({ limit: '8mb' })); // max 8 mb per picture
 app.use(express.json());
 app.use(cookieParser());
 
@@ -129,7 +129,7 @@ app.use('/api/vouchers', vouchersRoutes);
 app.use('/api/limits', limitsRoutes);
 app.use("/api/recurring", recurringRoutes);
 app.use("/api/planned", plannedRoutes);
-
+app.use('/api/ocr', require('./routes/ocr'))
 
 // ------------------------------------------------------------
 // GLOBAL ERROR HANDLER
