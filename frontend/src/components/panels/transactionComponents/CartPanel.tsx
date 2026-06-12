@@ -160,6 +160,9 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       setStatus(item._cartId, STATUS.SAVING);
       try {
         const { _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote, _ocrReceiptPath, ...payload } = item;
+        // Receipt link survives the strip — it's a real (optional) payload
+        // field, unlike the purely-visual _ocr* fields above.
+        if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
         const result = await addTransaction(payload);
         if (result) {
           const ids = item._allCartIds || [item._cartId];

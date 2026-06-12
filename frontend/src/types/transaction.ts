@@ -81,6 +81,8 @@ export interface TransactionPayload {
   netAmount:        number;
   isRecurring:      boolean;
   recurringId:      null;
+  receiptBlobPath?: string | null;
+
 }
 
 export interface TransactionFormProps {

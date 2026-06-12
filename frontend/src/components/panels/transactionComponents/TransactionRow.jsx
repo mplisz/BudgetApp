@@ -13,10 +13,11 @@ import { createPortal }       from "react-dom";
 import { fmt }                from "../../../utils/helpers";
 import { s, PrioBadge, calcReturns } from "./txStyles.jsx";
 import { EditTransactionModal }      from "./EditTransactionModal";
+import { ReceiptModal } from "./ReceiptModal";
 
 export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdated }) {
   const [editOpen, setEditOpen] = useState(false);
-
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const { isFullyReturned, isPartiallyReturned, totalReturnedAmount } = calcReturns(tx);
 
   const hasReturns  = (tx.returns || []).length > 0;
@@ -82,6 +83,16 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
 
         {/* Actions */}
         <td style={{ ...s.td, whiteSpace: "nowrap" }}>
+          {/* Receipt preview — read-only, so visible even in closed months */}
+          {tx.receiptBlobPath && (
+            <button
+              style={{ ...s.actionBtn("#f59e0b"), marginRight: 4 }}
+              onClick={() => setReceiptOpen(true)}
+              title="Pokaż paragon"
+            >
+              📎
+            </button>
+          )}
           {!isMonthClosed && (
             <>
               {/* Edit — hidden for recurring; ⚠ indicator if has returns */}
@@ -126,6 +137,10 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
           onClose={() => setEditOpen(false)}
           onUpdated={updated => { onUpdated(updated); setEditOpen(false); }}
         />,
+        document.body
+      )}
+      {receiptOpen && createPortal(
+        <ReceiptModal txId={tx.id} onClose={() => setReceiptOpen(false)} />,
         document.body
       )}
     </>

@@ -55,6 +55,11 @@ async function archiveReceipt(jpegBuffer, familyId, userId, metadata) {
         totalsum:   String(metadata?.totalSum ?? ""),
         uploadedby: encodeURIComponent(userId || ""),
       },
+      // Two-phase commit: blobs start as "pending" and are promoted to
+      // "committed" when a transaction referencing them is saved. An
+      // Azure lifecycle rule deletes pending blobs after 1 day, so
+      // abandoned scans clean themselves up — no cron needed.
+      tags: { status: "pending" },
     });
 
     console.log(`[RECEIPTS] Archived: ${blobName}`);
@@ -65,4 +70,21 @@ async function archiveReceipt(jpegBuffer, familyId, userId, metadata) {
   }
 }
 
-module.exports = { getReceiptBlobContainer, archiveReceipt };
+// Promote a receipt blob to "committed" so the lifecycle cleanup rule
+// leaves it alone. Idempotent and best-effort: multiple transactions
+// from the same receipt commit the same blob; failures are logged but
+// never block the transaction save.
+async function commitReceipt(blobPath) {
+  try {
+    const container = await getReceiptBlobContainer();
+    if (!container) return false;
+    await container.getBlockBlobClient(blobPath).setTags({ status: "committed" });
+    console.log(`[RECEIPTS] Committed: ${blobPath}`);
+    return true;
+  } catch (err) {
+    console.error(`[RECEIPTS] Commit failed for ${blobPath} (non-fatal):`, err.message);
+    return false;
+  }
+}
+
+module.exports = { getReceiptBlobContainer, archiveReceipt, commitReceipt };

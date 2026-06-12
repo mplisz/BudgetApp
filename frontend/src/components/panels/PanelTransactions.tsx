@@ -48,6 +48,7 @@ interface Transaction {
   tags?:           string[];
   isRecurring?:    boolean;
   returns?:        Return[];
+  receiptBlobPath?: string | null; 
   // Enriched fields added in useMemo
   tagNames?:        string[];
   effectiveAmount?: number;
@@ -89,6 +90,7 @@ export default function PanelTransactions() {
     prio:       [] as number[],
     tags:       [] as string[],
     hasReturn:   false,
+    hasReceipt:  false, 
   });
 
   const [collapsed,          setCollapsed]          = useState<Record<string, boolean>>({});
@@ -162,6 +164,7 @@ export default function PanelTransactions() {
       if (filters.prio.length && !filters.prio.includes(tx.priority || 2))                 return false;
       if (filters.tags.length && !filters.tags.some(t => (tx.tags || []).includes(t)))     return false;
       if (filters.hasReturn && !((tx.sameMonthReturned ?? 0) > 0 || (tx.voucherAmount ?? 0) > 0)) return false;
+      if (filters.hasReceipt && !tx.receiptBlobPath) return false;
       return true;
     }),
     [enriched, filters]
@@ -390,6 +393,26 @@ export default function PanelTransactions() {
               }}
             >
               🔙 Zwroty
+            </button>
+          </div>
+            {/* Receipts */}
+          <div style={(s as any).filterBox}>
+            <div style={(s as any).filterLabel}>Paragony</div>
+            <button
+              onClick={() => set("hasReceipt", !filters.hasReceipt)}
+              style={{
+                height: 28,
+                padding: "0 10px",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: 11,
+                background: filters.hasReceipt ? "#f59e0b" : "#1e293b",
+                color:      filters.hasReceipt ? "#000"    : "#64748b",
+              }}
+            >
+              📎 Z paragonem
             </button>
           </div>
           {/* Clear */}

@@ -18,6 +18,7 @@ import { CartPanel } from "./transactionComponents/CartPanel";
 import type { CartItem } from "./transactionComponents/CartPanel";
 import { translateError } from "../../data/constants/errorMessages";
 
+
 // ── Cart ID generator ─────────────────────────────────────────
 
 let cartIdCounter = 0;
@@ -83,7 +84,8 @@ export default function PanelExpenses() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [budgetMonth]);
 
-  const fileRef     = useRef<HTMLInputElement>(null);
+  const fileRef    = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
   const [ocrLines,        setOcrLines]        = useState<OcrLine[]>([]);
   const [ocrMeta,         setOcrMeta]         = useState<OcrMeta | null>(null);
@@ -335,6 +337,31 @@ export default function PanelExpenses() {
 
   return (
     <>
+      {/* Full-screen blocker while the AI analyzes a receipt. A single
+          overlay guards EVERYTHING (mode toggle, cart, form) — clicking
+          mid-scan caused state races, and per-button disabling doesn't
+          scale. pointer-events are eaten by the fixed layer. */}
+      {ocrLoading && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 2000,
+          background: "rgba(2, 6, 16, 0.7)", backdropFilter: "blur(2px)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 16,
+        }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: "50%",
+            border: "3px solid #1e293b", borderTopColor: "#10b981",
+            animation: "ocr-spin 0.8s linear infinite",
+          }} />
+          <div style={{ color: "#10b981", fontWeight: 700, fontSize: 15 }}>
+            🤖 AI analizuje paragon…
+          </div>
+          <div style={{ color: "#64748b", fontSize: 12 }}>
+            To może potrwać kilkanaście sekund
+          </div>
+        </div>
+      )}
+
       <div className="expenses-layout">
 
         {/* ════ FORM COLUMN ════ */}
@@ -369,6 +396,8 @@ export default function PanelExpenses() {
                   <div style={{ color: "#64748b", marginBottom: 20, fontSize: 14 }}>
                     Zrób zdjęcie paragonu lub wybierz z galerii
                   </div>
+                  {/* Camera input — capture forces the camera app on mobile,
+                      ignored on desktop (regular file picker opens instead) */}
                   <input
                     ref={fileRef}
                     type="file"
@@ -377,19 +406,24 @@ export default function PanelExpenses() {
                     style={{ display: "none" }}
                     onChange={handleFileSelected}
                   />
+                  {/* Gallery input — NO capture, so mobile opens the system
+                      chooser (gallery + files), desktop the file picker */}
+                  <input
+                    ref={galleryRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={handleFileSelected}
+                  />
                   <button onClick={() => fileRef.current?.click()} disabled={ocrLoading}
                     style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: ocrLoading ? "#064e3b" : "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: ocrLoading ? "not-allowed" : "pointer", marginBottom: 8 }}>
                     📷 Zrób zdjęcie
                   </button>
-                  <button onClick={() => fileRef.current?.click()} disabled={ocrLoading}
+                  <button onClick={() => galleryRef.current?.click()} disabled={ocrLoading}
                     style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: ocrLoading ? "#1e3a8a" : "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 14, cursor: ocrLoading ? "not-allowed" : "pointer" }}>
                     🖼️ Wybierz z galerii
                   </button>
-                  {ocrLoading && (
-                    <div style={{ marginTop: 24, color: "#10b981", fontWeight: 700 }}>
-                      🤖 AI analizuje paragon…
-                    </div>
-                  )}
+
                 </div>
               ) : (
                 <>
@@ -518,6 +552,7 @@ export default function PanelExpenses() {
         .expenses-layout   { display: flex; gap: 24px; align-items: flex-start; justify-content: center;}
         .expenses-form-col { flex: 0 0 520px; min-width: 0; }
         .expenses-cart-col { width: 340px; flex-shrink: 0; }
+        @keyframes ocr-spin { to { transform: rotate(360deg); } }
         @media (max-width: 700px) {
           .expenses-layout   { flex-direction: column; gap: 0; }
           .expenses-form-col { flex: 1 1 auto; width: 100%; }

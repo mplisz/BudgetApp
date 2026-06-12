@@ -23,6 +23,11 @@
 //   AZURE_OPENAI_ENDPOINT    e.g. https://budget-openai.openai.azure.com/
 //   AZURE_OPENAI_KEY         API key
 //   AZURE_OPENAI_DEPLOYMENT  e.g. budget-vision-mini
+// Optional but strongly recommended (dedicated OCR engine; vision
+// fallback is used when absent):
+//   MISTRAL_OCR_ENDPOINT     e.g. https://xxx.swedencentral.models.ai.azure.com
+//   MISTRAL_OCR_KEY          serverless deployment API key
+//   MISTRAL_OCR_MODEL        deployment name, e.g. mistral-document-ai-2512
 // Optional (blob archiving silently skipped when missing):
 //   AZURE_STORAGE_CONNECTION_STRING
 //   AZURE_STORAGE_CONTAINER  default: "receipts"
@@ -45,7 +50,10 @@ router.use(requireAuth);
 
 const MAX_IMAGE_BYTES   = 5 * 1024 * 1024;       // 5 MB raw upload
 const MAX_DIMENSION_W   = 1024;                   // px after resize
-const MAX_DIMENSION_H   = 2048;                   // receipts are tall
+const MAX_FULL_HEIGHT   = 8192;                   // archival copy height cap
+const SEGMENT_HEIGHT    = 1536;                   // px per vision segment
+const SEGMENT_OVERLAP   = 120;                    // px overlap between segments
+const MAX_SEGMENTS      = 6;                      // hard cap on vision images
 const JPEG_QUALITY      = 80;
 const ALLOWED_MIME      = ["image/jpeg", "image/png", "image/webp"];
 const OPENAI_TIMEOUT_MS = 60_000;
@@ -109,6 +117,63 @@ const LlmResponseSchema = z.object({
   warning: z.string().max(500).optional().nullable(),
 });
 
+// ── Mistral Document AI (dedicated OCR) ──────────────────────
+// Returns the receipt as markdown text, or null when not configured.
+// Throws on API errors so the route can surface a clear 502.
+
+function isMistralConfigured() {
+  return !!(process.env.MISTRAL_OCR_ENDPOINT && process.env.MISTRAL_OCR_KEY && process.env.MISTRAL_OCR_MODEL);
+}
+
+async function mistralOcrExtract(jpegBuffer) {
+  if (!isMistralConfigured()) return null;
+
+  // MISTRAL_OCR_ENDPOINT accepts either:
+  //   a) the FULL Target URI from the deployment page (contains "/ocr")
+  //      — used verbatim; this is the recommended, zero-guess option
+  //   b) a base endpoint — "/v1/ocr?api-version=2024-05-01-preview" is
+  //      appended (classic serverless .models.ai.azure.com convention)
+  const raw = process.env.MISTRAL_OCR_ENDPOINT.replace(/\/+$/, "");
+  const url = raw.includes("/ocr")
+    ? raw
+    : `${raw}/v1/ocr?api-version=2024-05-01-preview`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      // Both auth header styles — serverless endpoints expect Bearer,
+      // Foundry resource endpoints (services.ai.azure.com) accept api-key.
+      "Authorization": `Bearer ${process.env.MISTRAL_OCR_KEY}`,
+      "api-key":       process.env.MISTRAL_OCR_KEY,
+      "Content-Type":  "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.MISTRAL_OCR_MODEL,
+      document: {
+        type:      "image_url",
+        image_url: `data:image/jpeg;base64,${jpegBuffer.toString("base64")}`,
+      },
+      include_image_base64: false,
+    }),
+    signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw Object.assign(
+      new Error(`Mistral OCR failed: ${res.status} ${body.substring(0, 200)}`),
+      { isOcrEngineError: true },
+    );
+  }
+
+  const data = await res.json();
+  const text = (data.pages || []).map(p => p.markdown || "").join("\n\n").trim();
+  if (!text) {
+    throw Object.assign(new Error("Mistral OCR returned no text"), { isOcrEngineError: true });
+  }
+  return text;
+}
+
 // ── Prompt builder ────────────────────────────────────────────
 
 function buildSystemPrompt(categoryTree) {
@@ -120,6 +185,7 @@ function buildSystemPrompt(categoryTree) {
   return `Jesteś asystentem OCR analizującym zdjęcia polskich paragonów fiskalnych.
 
 ZADANIE: Wyodrębnij pozycje zakupowe z paragonu i zwróć je jako JSON.
+Paragon otrzymasz jako odczytany tekst (markdown z OCR) LUB jako zdjęcie/fragmenty zdjęcia.
 
 ZASADY SCALANIA RABATÓW (KRYTYCZNE):
 1. Linie zaczynające się od "-" lub zawierające słowa "rabat", "zniżka", "opust", "promocja", "upust" to KOREKTY, nie osobne pozycje.
@@ -128,9 +194,23 @@ ZASADY SCALANIA RABATÓW (KRYTYCZNE):
 4. Pole "amount" to ZAWSZE cena finalna po wszystkich rabatach.
 5. Pole "grossAmount" to suma przed rabatem, "discountAmount" to wartość rabatu. Gdy nie było rabatu — pomiń oba pola lub ustaw discountAmount: 0.
 6. W polu "mergeNote" krótko opisz scalenie, np. "2x 6,99 + rabat -6,99 = 6,99 za 2 szt". Gdy nie było scalania — null.
-7. Suma wszystkich "amount" MUSI zgadzać się z sumą paragonu (pole "SUMA"/"RAZEM"). Jeśli się nie zgadza, dodaj wyjaśnienie w polu "warning".
+7. Suma wszystkich "amount" MUSI zgadzać się z kwotą do zapłaty (patrz reguła 17). Jeśli się nie zgadza, dodaj wyjaśnienie w polu "warning".
+8. Niektóre sklepy (np. Auchan) drukują rabaty w OSOBNYM BLOKU na dole paragonu jako "OPUST SK.NAZWA -X,XX" lub "OPUST PROMO NAZWA -X,XX". Dopasuj każdy opust do pozycji o tej samej (skróconej) nazwie/kodzie i odejmij od jej ceny.
+9. Wypisz KAŻDĄ pozycję zakupową — paragon może mieć kilkadziesiąt pozycji. Nie pomijaj żadnej i nie skracaj listy.
+10. Jeśli paragon jest dostarczony jako kilka nakładających się fragmentów: pozycje widoczne na styku dwóch fragmentów potraktuj JEDEN raz (deduplikuj po nazwie i cenie).
+11. Ujemna linia o PEŁNEJ wartości pozycji (np. "BATON X 3,48" oraz osobno "BATON X -3,48") oznacza ZWROT/anulowanie — pomiń tę pozycję całkowicie.
+12. OPISY: usuń kody produktów (ciągi cyfr z literą, np. "298378C") i rozwiń oczywiste skróty na naturalne polskie nazwy: "M#KA PSZEN" → "Mąka pszenna", "JAGODA KAM" → "Jagoda kamczacka", "NAPOJ G NS" → "Napój gazowany". Gdy skrót jest niejednoznaczny, zostaw jak jest.
+13. ARYTMETYKA: dla każdej pozycji ZWERYFIKUJ, że amount = grossAmount − discountAmount oraz że grossAmount = cena_jednostkowa × ilość, dokładnie jak na paragonie. Nie zaokrąglaj, nie szacuj — przepisuj liczby.
+14. KATEGORIE SPECJALNE: piwo, wino, wódka i inne alkohole → kategoria/podkategoria alkoholowa jeśli istnieje na liście użytkownika (NIE "napoje"). Zawsze wybieraj NAJBARDZIEJ szczegółową pasującą podkategorię.
+15. KAUCJE I OPAKOWANIA ZWROTNE (np. "OPAKOWANIA ZWROTNE WYDANIA", "KAUCJA", "Opakowanie zwr."): potraktuj jako JEDNĄ zbiorczą pozycję (description: "Kaucja za opakowania", amount: suma kaucji) i przypisz do kategorii kaucji/opakowań zwrotnych jeśli istnieje u użytkownika. Kaucje ZWRÓCONE (ujemne) nadal pomijaj.
+16. ROZRÓŻNIANIE KATEGORII DOMOWYCH (jeśli użytkownik ma takie kategorie):
+   - PŁYNY I DETERGENTY: środki czystości, płyny do prania/zmywania/podłóg, proszki, kapsułki, udrażniacze, odświeżacze powietrza → "Chemia domowa"
+   - PRZEDMIOTY GOSPODARCZE (nie-chemiczne): gąbki, ścierki, worki na śmieci, ręczniki papierowe, miotły, mopy, folia/papier śniadaniowy, baterie, żarówki → "Artykuły gospodarcze"
+   - HIGIENA OSOBISTA: mydła, żele pod prysznic, szampony, pasty i szczoteczki do zębów, dezodoranty, papier toaletowy, chusteczki, podpaski, golenie → "Higiena"
+   - PIELĘGNACJA I URODA: perfumy, kremy, balsamy, makijaż, pielęgnacja twarzy → "Kosmetyki"
+17. SUMA KOŃCOWA: jako metadata.totalSum przyjmij kwotę FAKTYCZNIE ZAPŁACONĄ ("DO ZAPŁATY" / "RAZEM DO ZAPŁATY"), która zawiera kaucje. Suma wszystkich pozycji (wraz z pozycją kaucji) musi się z nią zgadzać.
 
-POMIJAJ: kaucje zwrócone, linie VAT/PTU, numery NIP, formy płatności, wydaną resztę, punkty lojalnościowe.
+POMIJAJ: linie VAT/PTU, numery NIP, formy płatności, wydaną resztę, punkty lojalnościowe i naklejki, kaucje zwrócone (ujemne).
 
 KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
 
@@ -191,6 +271,12 @@ async function fetchCategoryTree(familyId) {
 
 // ── Image preprocessing ───────────────────────────────────────
 
+// Long receipts are the hard case: a 1:4 receipt squeezed into one
+// frame gets downscaled twice (here + inside the vision API, which
+// caps the short side at ~768px) and fine print becomes illegible.
+// Fix: normalize once at full height, then slice tall receipts into
+// overlapping segments — each is sent as a separate image in ONE
+// model call, so every line is read at native resolution.
 async function preprocessImage(dataUrl) {
   const base64  = dataUrl.substring(dataUrl.indexOf(",") + 1);
   const rawBuf  = Buffer.from(base64, "base64");
@@ -206,15 +292,42 @@ async function preprocessImage(dataUrl) {
     throw Object.assign(new Error("Unsupported image format."), { status: 415 });
   }
 
-  // Resize: receipts are tall & narrow. Keep detail in height, cap width.
-  // rotate() with no args applies EXIF orientation (phone photos!).
-  const processed = await sharp(rawBuf)
+  // Normalize: EXIF rotate (phone photos!), cap width, generous height.
+  // Thermal receipts are low-contrast and often crumpled — grayscale +
+  // histogram normalization + mild sharpening dramatically improves
+  // print legibility for the vision model (and receipts are B&W anyway).
+  const fullJpeg = await sharp(rawBuf)
     .rotate()
-    .resize(MAX_DIMENSION_W, MAX_DIMENSION_H, { fit: "inside", withoutEnlargement: true })
+    .resize(MAX_DIMENSION_W, MAX_FULL_HEIGHT, { fit: "inside", withoutEnlargement: true })
+    .grayscale()
+    .normalize()
+    .sharpen({ sigma: 1 })
     .jpeg({ quality: JPEG_QUALITY })
     .toBuffer();
 
-  return processed; // always JPEG after this point
+  const { width, height } = await sharp(fullJpeg).metadata();
+
+  // Short receipt → single image, no slicing needed.
+  if (height <= SEGMENT_HEIGHT) {
+    return { fullJpeg, segments: [fullJpeg] };
+  }
+
+  // Tall receipt → overlapping vertical slices. Overlap guarantees no
+  // line of print is cut in half; the prompt tells the model to dedupe.
+  const step     = SEGMENT_HEIGHT - SEGMENT_OVERLAP;
+  const segments = [];
+  for (let top = 0; top < height && segments.length < MAX_SEGMENTS; top += step) {
+    const h = Math.min(SEGMENT_HEIGHT, height - top);
+    segments.push(
+      await sharp(fullJpeg)
+        .extract({ left: 0, top, width, height: h })
+        .jpeg({ quality: JPEG_QUALITY })
+        .toBuffer()
+    );
+    if (top + h >= height) break;
+  }
+
+  return { fullJpeg, segments };
 }
 
 // ── Response mapper ───────────────────────────────────────────
@@ -284,9 +397,8 @@ router.post("/receipt", async (req, res) => {
   const t0 = Date.now();
 
   try {
-    // 1. Preprocess image (validate + resize + EXIF rotate)
-    const jpegBuffer = await preprocessImage(parsed.data.image);
-    const imageBase64 = jpegBuffer.toString("base64");
+    // 1. Preprocess image (validate + resize + EXIF rotate + segment)
+    const { fullJpeg, segments } = await preprocessImage(parsed.data.image);
 
     // 2. Fetch user's categories for the prompt
     const categoryTree = await fetchCategoryTree(familyId);
@@ -294,7 +406,32 @@ router.post("/receipt", async (req, res) => {
       return res.status(422).json({ error: "No expense categories defined." });
     }
 
-    // 3. Call Azure OpenAI Vision
+    // 3a. PREFERRED: dedicated OCR engine reads the receipt as text.
+    // Deterministic line reading — no vision-LLM row confusion.
+    let ocrText = null;
+    try {
+      ocrText = await mistralOcrExtract(fullJpeg);
+    } catch (ocrErr) {
+      // OCR engine configured but failing → log and fall back to vision
+      // rather than hard-failing the scan.
+      console.error("[OCR] Mistral engine error, falling back to vision:", ocrErr.message);
+    }
+    const engine = ocrText ? "mistral+text" : "vision";
+
+    // 3b. LLM does discount merging + categorization.
+    // Text mode: cheap, reliable. Vision mode: legacy fallback.
+    const userContent = ocrText
+      ? `Przeanalizuj ten paragon (odczytany tekst poniżej) i zwróć JSON.\n\n--- PARAGON (OCR) ---\n${ocrText}`
+      : [
+          { type: "text", text: segments.length > 1
+              ? `Przeanalizuj ten paragon i zwróć JSON. Paragon jest podzielony na ${segments.length} nakładających się fragmentów (góra → dół).`
+              : "Przeanalizuj ten paragon i zwróć JSON." },
+          ...segments.map(seg => ({
+            type: "image_url",
+            image_url: { url: `data:image/jpeg;base64,${seg.toString("base64")}`, detail: "high" },
+          })),
+        ];
+
     const completion = await client.chat.completions.create({
       model: process.env.AZURE_OPENAI_DEPLOYMENT, // deployment name, required by SDK but routing uses client config
       messages: [
@@ -302,16 +439,13 @@ router.post("/receipt", async (req, res) => {
             name: c.name,
             subcategories: c.subcategories.map(s => s.name),
           }))) },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Przeanalizuj ten paragon i zwróć JSON." },
-            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}`, detail: "high" } },
-          ],
-        },
+        { role: "user", content: userContent },
       ],
-      max_tokens: 4000,
-      temperature: 0.1,                       // deterministic extraction, not creativity
+      // gpt-5.x renamed max_tokens → max_completion_tokens and rejects
+      // custom temperature (reasoning models accept only the default).
+      // max_completion_tokens works for gpt-4.x too on current api-versions,
+      // so this stays backward-compatible with older deployments.
+      max_completion_tokens: 8000,
       response_format: { type: "json_object" }, // hard JSON guarantee
     });
 
@@ -350,11 +484,11 @@ router.post("/receipt", async (req, res) => {
     const mappedItems = mapItemsToCategories(items, categoryTree);
 
     // 7. Archive original (best-effort, non-blocking failure)
-    const receiptBlobPath = await archiveReceipt(jpegBuffer, familyId, req.user.id, metadata);
+    const receiptBlobPath = await archiveReceipt(fullJpeg, familyId, req.user.id, metadata);
 
     const elapsed = Date.now() - t0;
     const usage   = completion.usage || {};
-    console.log(`[OCR] Scan ok: ${mappedItems.length} items, ${elapsed}ms, tokens: ${usage.prompt_tokens || "?"}+${usage.completion_tokens || "?"}, family: ${familyId}`);
+    console.log(`[OCR] Scan ok: ${mappedItems.length} items, engine: ${engine}, ${elapsed}ms, tokens: ${usage.prompt_tokens || "?"}+${usage.completion_tokens || "?"}, family: ${familyId}`);
 
     // 8. Respond
     res.json({

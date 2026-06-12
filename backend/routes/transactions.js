@@ -28,8 +28,9 @@ const {
   IdParamSchema, BUDGET_MONTH_REGEX,
   currentServerMonth, prevServerMonth,
 } = require('../utils/helpers');
-const { getReceiptBlobContainer } = require("../utils/receiptStorage");
+const { getReceiptBlobContainer,commitReceipt } = require("../utils/receiptStorage");
 router.use(requireAuth);
+
 
 // ── Schemas ───────────────────────────────────────────────────
 
@@ -265,7 +266,15 @@ router.post("/", async (req, res) => {
 
       voucherSnap = syncResult.previousState;
     }
-
+        // ── STEP 3: Commit receipt blob (if linked) ───────────────
+    // Promotes the blob from "pending" to "committed" so the daily
+    // lifecycle cleanup leaves it alone. Fire-and-forget — a tag
+    // update must never delay or fail the transaction save. The
+    // startsWith check is defense-in-depth: the path is client-
+    // supplied, so we only ever touch blobs in our own family's tree.
+    if (createdTx.receiptBlobPath && createdTx.receiptBlobPath.startsWith(`${familyId}/`)) {
+      commitReceipt(createdTx.receiptBlobPath);
+    }
     console.log(`[TX POST] Created: ${createdTx.id}${useVoucher ? ` (voucher: ${data.voucherId})` : ""}`);
     res.status(201).json(createdTx);
   } catch (err) {
