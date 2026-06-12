@@ -31,12 +31,12 @@
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const crypto  = require("crypto");
 const sharp   = require("sharp");
 const { AzureOpenAI } = require("openai");
 
 const { categoriesContainer } = require("../cosmos");
 const { requireAuth }         = require("../middleware/auth");
+const { archiveReceipt }      = require("../utils/receiptStorage");
 const { roundMoney }          = require("../utils/helpers");
 
 router.use(requireAuth);
@@ -70,29 +70,6 @@ function getOpenAIClient() {
     timeout: OPENAI_TIMEOUT_MS,
   });
   return _openaiClient;
-}
-
-// ── Blob storage (lazy, optional) ─────────────────────────────
-
-let _blobContainerClient = null;
-let _blobInitFailed      = false;
-async function getBlobContainer() {
-  if (_blobContainerClient) return _blobContainerClient;
-  if (_blobInitFailed) return null;
-  const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
-  if (!conn) { _blobInitFailed = true; return null; }
-  try {
-    const { BlobServiceClient } = require("@azure/storage-blob");
-    const service   = BlobServiceClient.fromConnectionString(conn);
-    const container = service.getContainerClient(process.env.AZURE_STORAGE_CONTAINER || "receipts");
-    await container.createIfNotExists();
-    _blobContainerClient = container;
-    return container;
-  } catch (err) {
-    console.error("[OCR] Blob storage init failed — archiving disabled:", err.message);
-    _blobInitFailed = true;
-    return null;
-  }
 }
 
 // ── Rate limiting ─────────────────────────────────────────────
@@ -238,38 +215,6 @@ async function preprocessImage(dataUrl) {
     .toBuffer();
 
   return processed; // always JPEG after this point
-}
-
-// ── Blob archiving (best-effort, never blocks the response) ───
-
-async function archiveReceipt(jpegBuffer, familyId, userId, metadata) {
-  try {
-    const container = await getBlobContainer();
-    if (!container) return null;
-
-    const now      = new Date();
-    const year     = now.getFullYear();
-    const month    = String(now.getMonth() + 1).padStart(2, "0");
-    const blobName = `${familyId}/${year}/${month}/${crypto.randomUUID()}.jpg`;
-
-    const blockBlob = container.getBlockBlobClient(blobName);
-    await blockBlob.uploadData(jpegBuffer, {
-      blobHTTPHeaders: { blobContentType: "image/jpeg" },
-      metadata: {
-        merchant:   encodeURIComponent(metadata?.merchant || ""),
-        date:       metadata?.date || "",
-        totalsum:   String(metadata?.totalSum ?? ""),
-        uploadedby: encodeURIComponent(userId || ""),
-      },
-    });
-
-    console.log(`[OCR] Receipt archived: ${blobName}`);
-    return blobName; // store the blob PATH, not a full URL — access via backend proxy later
-  } catch (err) {
-    // Archiving is non-critical; the scan result is still returned.
-    console.error("[OCR] Blob archiving failed (non-fatal):", err.message);
-    return null;
-  }
 }
 
 // ── Response mapper ───────────────────────────────────────────

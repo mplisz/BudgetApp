@@ -28,7 +28,7 @@ const {
   IdParamSchema, BUDGET_MONTH_REGEX,
   currentServerMonth, prevServerMonth,
 } = require('../utils/helpers');
-
+const { getReceiptBlobContainer } = require("../utils/receiptStorage");
 router.use(requireAuth);
 
 // ── Schemas ───────────────────────────────────────────────────
@@ -53,6 +53,8 @@ const TransactionPostSchema = z.object({
   voucherAmount:    z.number().min(0).optional().default(0),
   isRecurring:      z.boolean().optional().default(false),
   recurringId:      z.string().nullable().optional().default(null),
+  receiptBlobPath: z.string().max(300).optional().nullable(),
+
 });
 
 const TransactionPatchSchema = z.object({
@@ -792,4 +794,33 @@ async function archiveLinkedItems(transactionsContainer, vouchersContainer, fami
   console.log(`[archiveLinkedItems] ${linkedTransfers.length - failedTransfers}/${linkedTransfers.length} transfers, ${linkedVouchers.length - failedVouchers}/${linkedVouchers.length} vouchers archived for ${txId}`);
 }
 
+
+
+// ── GET /:id/receipt ──────────────────────────────────────
+// Streams the receipt photo through the backend — the blob
+// container is private. familyId scoping comes for free from
+// the Point Read (tx must belong to the user's family).
+router.get("/:id/receipt", async (req, res) => {
+  try {
+    const existing = await readItem(transactionsContainer, req.params.id, req.user.familyId);
+    if (!existing)                  return res.status(404).json({ error: "Transaction not found." });
+    if (!existing.receiptBlobPath) return res.status(404).json({ error: "No receipt attached." });
+    // Defense in depth: the path is client-supplied at POST time, so verify
+    // it belongs to this family before streaming.
+    if (!existing.receiptBlobPath.startsWith(`${req.user.familyId}/`)) {
+      return res.status(404).json({ error: "No receipt attached." });
+    }
+    const container = await getReceiptBlobContainer();
+    if (!container) return res.status(503).json({ error: "Receipt storage is not configured." });
+
+    const download = await container.getBlockBlobClient(existing.receiptBlobPath).download();
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    download.readableStreamBody.pipe(res);
+  } catch (err) {
+    if (err.statusCode === 404) return res.status(404).json({ error: "Receipt file not found." });
+    console.error("[TX RECEIPT]", err);
+    res.status(500).json({ error: "Failed to fetch receipt." });
+  }
+});
 module.exports = router;
