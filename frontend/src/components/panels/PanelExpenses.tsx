@@ -24,6 +24,16 @@ import { translateError } from "../../data/constants/errorMessages";
 let cartIdCounter = 0;
 const newCartId = (): string => `cart_${Date.now()}_${++cartIdCounter}`;
 
+// Guard against the model returning a placeholder instead of null
+// ("nieznany", "brak", "", whitespace) — we'd rather store no merchant
+// than a junk value polluting the per-shop filter.
+const MERCHANT_JUNK = new Set(["nieznany", "nieznany sklep", "brak", "n/a", "-", "unknown"]);
+const cleanMerchant = (m?: string | null): string | undefined => {
+  const t = (m || "").trim();
+  if (!t || MERCHANT_JUNK.has(t.toLowerCase())) return undefined;
+  return t;
+};
+
 // ── OCR types — mirror of backend /api/ocr/receipt response ──
 
 interface OcrLine {
@@ -92,6 +102,8 @@ export default function PanelExpenses() {
 
   const [ocrLines,        setOcrLines]        = useState<OcrLine[]>([]);
   const [ocrMeta,         setOcrMeta]         = useState<OcrMeta | null>(null);
+  const [ocrWarranty,     setOcrWarranty]     = useState(false);  // per-receipt warranty flag
+  const [editingMerchant, setEditingMerchant] = useState(false);  // merchant edit mode (decoupled from value)
   const [ocrLoading,      setOcrLoading]      = useState(false);
   const [ocrMode,         setOcrMode]         = useState(false);
   const [formKey,         setFormKey]         = useState(0);
@@ -142,6 +154,7 @@ export default function PanelExpenses() {
         // fields and has no knowledge of _ocr* metadata. Editing an
         // item's category/amount doesn't change which receipt it came
         // from, so the receipt link must survive the rebuild.
+        _ocrWarranty:    editingCartItem._ocrWarranty,
         _ocrReceiptId:   editingCartItem._ocrReceiptId,
         _ocrReceiptPath: editingCartItem._ocrReceiptPath,
         _ocrMerchant:    editingCartItem._ocrMerchant,
@@ -268,7 +281,8 @@ export default function PanelExpenses() {
         _ocrMergeNote:    line.mergeNote      ?? undefined,
         _ocrReceiptPath:  ocrMeta?.receiptBlobPath ?? undefined,
         _ocrReceiptId:    ocrMeta?.receiptId       ?? undefined,
-        _ocrMerchant:     ocrMeta?.merchant        ?? undefined,
+        _ocrMerchant:     cleanMerchant(ocrMeta?.merchant),
+        _ocrWarranty:     ocrWarranty || undefined,
       })),
     ]);
 
@@ -280,7 +294,9 @@ export default function PanelExpenses() {
     // Reset OCR view — ready for the next receipt
     setOcrLines([]);
     setOcrMeta(null);
-  }, [ocrLines, ocrMeta, budgetMonth, setCart, showWarning]);
+    setOcrWarranty(false);
+    setEditingMerchant(false);
+  }, [ocrLines, ocrMeta, ocrWarranty, budgetMonth, setCart, showWarning]);
 
   // ── Form initial values ───────────────────────────────────
     // Cart-aware default date — sticky to first cart item's date.
@@ -445,13 +461,39 @@ export default function PanelExpenses() {
                 </div>
               ) : (
                 <>
-                  {/* Metadata bar: merchant / date / receipt total */}
+                  {/* Metadata bar: merchant (editable) / date / receipt total */}
                   {ocrMeta && (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12 }}>
-                      <span style={{ color: "#e2e8f0", fontWeight: 600 }}>🏪 {ocrMeta.merchant || "Nieznany sklep"}</span>
-                      <span style={{ color: "#64748b" }}>{ocrMeta.date || "—"}</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, gap: 8 }}>
+                      {!editingMerchant && ocrMeta.merchant ? (
+                        // Known shop — click to correct
+                        <span
+                          onClick={() => setEditingMerchant(true)}
+                          title="Kliknij, by poprawić nazwę sklepu"
+                          style={{ color: "#e2e8f0", fontWeight: 600, cursor: "pointer" }}
+                        >
+                          🏪 {ocrMeta.merchant} <span style={{ color: "#475569", fontSize: 10 }}>✏️</span>
+                        </span>
+                      ) : (
+                        // Editing OR unknown shop — type it. Mount condition depends
+                        // on editingMerchant (a stable flag), NOT on the value, so
+                        // typing the first letter doesn't remount and drop focus.
+                        <span style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+                          <span>🏪</span>
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Wpisz nazwę sklepu…"
+                            value={ocrMeta.merchant || ""}
+                            onChange={e => setOcrMeta(m => m && ({ ...m, merchant: e.target.value || null }))}
+                            onBlur={() => setEditingMerchant(false)}
+                            onKeyDown={e => { if (e.key === "Enter") setEditingMerchant(false); }}
+                            style={{ flex: 1, minWidth: 0, background: "#1e293b", border: "1px solid #334155", borderRadius: 6, padding: "4px 8px", color: "#e2e8f0", fontSize: 12 }}
+                          />
+                        </span>
+                      )}
+                      <span style={{ color: "#64748b", flexShrink: 0 }}>{ocrMeta.date || "—"}</span>
                       {ocrMeta.totalSum != null && (
-                        <span style={{ color: "#10b981", fontWeight: 700 }}>{fmt(ocrMeta.totalSum)}</span>
+                        <span style={{ color: "#10b981", fontWeight: 700, flexShrink: 0 }}>{fmt(ocrMeta.totalSum)}</span>
                       )}
                     </div>
                   )}
@@ -518,6 +560,21 @@ export default function PanelExpenses() {
                       </div>
                     );
                   })}
+                  {/* Per-receipt warranty flag → longer blob retention */}
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", marginBottom: 4, background: ocrWarranty ? "#78350f22" : "#0d1424", border: `1px solid ${ocrWarranty ? "#f59e0b55" : "#1e293b"}`, borderRadius: 8, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={ocrWarranty}
+                      onChange={e => setOcrWarranty(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: "#f59e0b", flexShrink: 0 }}
+                    />
+                    <span style={{ color: ocrWarranty ? "#fbbf24" : "#94a3b8", fontSize: 13, fontWeight: 600 }}>
+                      🛡️ Paragon gwarancyjny
+                    </span>
+                    <span style={{ color: "#64748b", fontSize: 11, marginLeft: "auto" }}>
+                      dłuższe przechowywanie
+                    </span>
+                  </label>
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid #1e293b", marginBottom: 12 }}>
                     <span style={{ color: "#64748b" }}>Suma zaznaczonych:</span>
                     <span style={{ color: "#10b981", fontWeight: 800, fontSize: 18 }}>
@@ -529,7 +586,7 @@ export default function PanelExpenses() {
                     style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8, opacity: ocrLines.some(l => l.selected) ? 1 : 0.5 }}>
                     🛒 Dodaj zaznaczone do koszyka ({ocrLines.filter(l => l.selected).length})
                   </button>
-                  <button onClick={() => { setOcrLines([]); setOcrMeta(null); }}
+                  <button onClick={() => { setOcrLines([]); setOcrMeta(null); setOcrWarranty(false); setEditingMerchant(false); }}
                     style={{ display: "block", width: "100%", padding: 10, borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#64748b", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                     🔄 Skanuj ponownie
                   </button>

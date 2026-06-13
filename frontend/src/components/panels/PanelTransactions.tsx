@@ -48,7 +48,8 @@ interface Transaction {
   tags?:           string[];
   isRecurring?:    boolean;
   returns?:        Return[];
-  receiptBlobPath?: string | null; 
+  receiptBlobPath?: string | null;
+  merchant?:        string | null;
   // Enriched fields added in useMemo
   tagNames?:        string[];
   effectiveAmount?: number;
@@ -90,7 +91,8 @@ export default function PanelTransactions() {
     prio:       [] as number[],
     tags:       [] as string[],
     hasReturn:   false,
-    hasReceipt:  false, 
+    hasReceipt:  false,
+    merchant:    "",
   });
 
   const [collapsed,          setCollapsed]          = useState<Record<string, boolean>>({});
@@ -139,6 +141,12 @@ export default function PanelTransactions() {
     return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
   }, [enriched]);
 
+  const uniqueMerchants = useMemo(() => {
+    const set = new Set<string>();
+    enriched.forEach(tx => { if (tx.merchant) set.add(tx.merchant); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [enriched]);
+
   const uniqueSubs = useMemo(() => {
     if (filters.categories.length === 0) return [];
     const map: Record<string, string> = {};
@@ -165,6 +173,7 @@ export default function PanelTransactions() {
       if (filters.tags.length && !filters.tags.some(t => (tx.tags || []).includes(t)))     return false;
       if (filters.hasReturn && !((tx.sameMonthReturned ?? 0) > 0 || (tx.voucherAmount ?? 0) > 0)) return false;
       if (filters.hasReceipt && !tx.receiptBlobPath) return false;
+      if (filters.merchant && tx.merchant !== filters.merchant) return false;
       return true;
     }),
     [enriched, filters]
@@ -415,6 +424,20 @@ export default function PanelTransactions() {
               📎 Z paragonem
             </button>
           </div>
+          {/* Merchant */}
+          {uniqueMerchants.length > 0 && (
+            <div style={(s as any).filterBox}>
+              <div style={(s as any).filterLabel}>Sklep</div>
+              <select
+                value={filters.merchant}
+                onChange={e => set("merchant", e.target.value)}
+                style={{ height: 28, background: "#1e293b", color: "#94a3b8", border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" }}
+              >
+                <option value="">Wszystkie sklepy</option>
+                {uniqueMerchants.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+          )}
           {/* Clear */}
           {hasActiveFilters && (
             <button onClick={clearFilters} style={{ ...(s as any).actionBtn("#ef4444"), alignSelf: "flex-end", marginBottom: 4 }}>

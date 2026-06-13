@@ -31,6 +31,8 @@ export interface CartItem extends TransactionPayload {
   _ocrReceiptPath?: string;  // blob path of the archived receipt photo
   _ocrReceiptId?:   string;  // Receipt entity id (links tx → receipt)
   _ocrMerchant?:    string;  // shop name (for per-merchant filtering)
+  _ocrWarranty?:    boolean; // receipt flagged as warranty → longer retention
+  _lineItems?:      Array<{ description: string; amount: number }>; // merge breakdown
 }
 
 interface CartPanelProps {
@@ -68,6 +70,11 @@ export function aggregateCart(items: CartItem[]): CartItem[] {
   const groups = new Map<string, CartItem>();
   for (const item of items) {
     const key = aggregationKey(item);
+    // A line item snapshot — what this single cart row contributed.
+    // Captured so the merged transaction can later answer "what's
+    // inside this 13,77?" and feed price tracking. description+amount
+    // per agreed scope.
+    const line = { description: item.description || "", amount: item.amount };
     if (groups.has(key)) {
       const existing = groups.get(key)!;
       existing.amount         = Math.round((existing.amount + item.amount) * 100) / 100;
@@ -86,11 +93,18 @@ export function aggregateCart(items: CartItem[]): CartItem[] {
       if (item.date < existing.date) existing.date = item.date;
       existing._allCartIds  = [...(existing._allCartIds || [existing._cartId]), item._cartId];
       existing._mergedCount = (existing._mergedCount || 1) + 1;
+      existing._lineItems   = [...(existing._lineItems || []), line];
     } else {
-      groups.set(key, { ...item, _mergedCount: 1, _allCartIds: [item._cartId] });
+      // Seed _lineItems with this first contribution — finalized below
+      // (singletons get it stripped, merges keep it).
+      groups.set(key, { ...item, _mergedCount: 1, _allCartIds: [item._cartId], _lineItems: [line] });
     }
   }
-  return Array.from(groups.values());
+  // Singletons don't need lineItems (description+amount of the tx itself
+  // already say everything). Keep the array only for true merges.
+  return Array.from(groups.values()).map(g =>
+    (g._mergedCount || 1) > 1 ? g : (() => { const { _lineItems, ...rest } = g; return rest as CartItem; })()
+  );
 }
 
 // ── Component ─────────────────────────────────────────────────
@@ -161,12 +175,15 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       }
       setStatus(item._cartId, STATUS.SAVING);
       try {
-        const { _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote, _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, ...payload } = item;
+        const { _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote, _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _lineItems, ...payload } = item;
         // Receipt link survives the strip — it's a real (optional) payload
         // field, unlike the purely-visual _ocr* fields above.
         if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
         if (_ocrReceiptId)   payload.receiptId       = _ocrReceiptId;
         if (_ocrMerchant)    payload.merchant         = _ocrMerchant;
+        if (_ocrWarranty)    payload.isWarranty       = true;
+        // Merge breakdown → real payload field (only present for true merges)
+        if (_lineItems && _lineItems.length > 1) payload.lineItems = _lineItems;
         const result = await addTransaction(payload);
         if (result) {
           const ids = item._allCartIds || [item._cartId];

@@ -28,7 +28,7 @@ const {
   IdParamSchema, BUDGET_MONTH_REGEX,
   currentServerMonth, prevServerMonth,
 } = require('../utils/helpers');
-const { getReceiptBlobContainer,commitReceipt } = require("../utils/receiptStorage");
+const { getReceiptBlobContainer,setReceiptRetention  } = require("../utils/receiptStorage");
 router.use(requireAuth);
 
 
@@ -57,6 +57,11 @@ const TransactionPostSchema = z.object({
   receiptBlobPath: z.string().max(300).optional().nullable(),
   receiptId:       z.string().max(120).optional().nullable(),
   merchant:        z.string().max(150).optional().nullable(),
+  isWarranty: z.boolean().optional().default(false),
+  lineItems:  z.array(z.object({
+    description: z.string().max(200),
+    amount:      z.number(),
+  })).max(60).optional(),
 });
 
 const TransactionPatchSchema = z.object({
@@ -210,12 +215,12 @@ router.get("/range", async (req, res) => {
 
 
 // ── Promote a pending Receipt to committed ───────────────────
-// Scan-time createPendingReceipt() left the receipt with ttl=86400
+// Scan-time createPendingReceipt() left the receipt with ttl=7200
 // and empty transactionIds[]. On the first transaction save we append
-// the tx id and set ttl=-1 (永久). Subsequent transactions from the
+// the tx id and set ttl=-1 . Subsequent transactions from the
 // same receipt just append their id. Idempotent, best-effort: a
 // failure here must never break the transaction save.
-async function promoteReceipt(receiptId, familyId, txId) {
+async function promoteReceipt(receiptId, familyId, txId, isWarranty = false) {
   try {
     const existing = await readItem(receiptsContainer, receiptId, familyId);
     if (!existing) {
@@ -228,10 +233,11 @@ async function promoteReceipt(receiptId, familyId, txId) {
       ...existing,
       status:         "committed",
       transactionIds: [...txIds],
-      ttl:            -1,           // never expire
+      isWarranty:     existing.isWarranty || isWarranty,  // once warranty, always warranty
+      ttl:            -1,
       committedAt:    existing.committedAt || new Date().toISOString(),
     });
-    console.log(`[TX POST] Receipt committed: ${receiptId} (+tx ${txId})`);
+    console.log(`[TX POST] Receipt committed: ${receiptId}${isWarranty ? " 🛡️" : ""} (+tx ${txId})`);
   } catch (err) {
     console.error(`[TX POST] Receipt promote failed for ${receiptId} (non-fatal):`, err.message);
   }
@@ -305,7 +311,10 @@ router.post("/", async (req, res) => {
     // startsWith check is defense-in-depth: the path is client-
     // supplied, so we only ever touch blobs in our own family's tree.
     if (createdTx.receiptBlobPath && createdTx.receiptBlobPath.startsWith(`${familyId}/`)) {
-      commitReceipt(createdTx.receiptBlobPath);
+      // Warranty receipts get retention=warranty (longer lifecycle);
+      // setReceiptRetention also sets status=committed, replacing the
+      // plain commitReceipt call.
+      setReceiptRetention(createdTx.receiptBlobPath, !!createdTx.isWarranty);
     }
     if (createdTx.receiptId) {
       promoteReceipt(createdTx.receiptId, familyId, createdTx.id);

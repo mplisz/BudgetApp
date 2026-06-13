@@ -70,21 +70,22 @@ async function archiveReceipt(jpegBuffer, familyId, userId, metadata) {
   }
 }
 
-// Promote a receipt blob to "committed" so the lifecycle cleanup rule
-// leaves it alone. Idempotent and best-effort: multiple transactions
-// from the same receipt commit the same blob; failures are logged but
-// never block the transaction save.
-async function commitReceipt(blobPath) {
+// Set retention class on a receipt blob via tags. Warranty receipts
+// get a longer lifecycle (user configures the rule in the portal on
+// retention=warranty); everything else is retention=normal.
+async function setReceiptRetention(blobPath, isWarranty) {
   try {
     const container = await getReceiptBlobContainer();
     if (!container) return false;
-    await container.getBlockBlobClient(blobPath).setTags({ status: "committed" });
-    console.log(`[RECEIPTS] Committed: ${blobPath}`);
+    await container.getBlockBlobClient(blobPath).setTags({
+      status:    "committed",
+      retention: isWarranty ? "warranty" : "normal",
+    });
     return true;
   } catch (err) {
-    console.error(`[RECEIPTS] Commit failed for ${blobPath} (non-fatal):`, err.message);
+    console.error(`[RECEIPTS] setRetention failed for ${blobPath}:`, err.message);
     return false;
   }
 }
+module.exports = { getReceiptBlobContainer, archiveReceipt, setReceiptRetention };
 
-module.exports = { getReceiptBlobContainer, archiveReceipt, commitReceipt };

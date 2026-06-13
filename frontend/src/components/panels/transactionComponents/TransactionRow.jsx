@@ -18,10 +18,13 @@ import { ReceiptModal } from "./ReceiptModal";
 export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdated }) {
   const [editOpen, setEditOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [lineItemsOpen, setLineItemsOpen] = useState(false);
   const { isFullyReturned, isPartiallyReturned, totalReturnedAmount } = calcReturns(tx);
 
   const hasReturns  = (tx.returns || []).length > 0;
   const isRecurring = !!tx.isRecurring;
+  const lineItems   = Array.isArray(tx.lineItems) ? tx.lineItems : [];
+  const hasLineItems = lineItems.length > 1;
 
   return (
     <>
@@ -43,6 +46,19 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
 
         {/* Description */}
         <td style={{ ...s.td, maxWidth: 200, wordBreak: "break-word", whiteSpace: "normal" }}>
+          {/* Line items toggle — only when this tx merged ≥2 items */}
+          {hasLineItems && (
+            <button
+              onClick={() => setLineItemsOpen(o => !o)}
+              title={lineItemsOpen ? "Zwiń pozycje" : `Pokaż ${lineItems.length} pozycji`}
+              style={{
+                background: "none", border: "none", cursor: "pointer", padding: 0,
+                marginRight: 6, color: "#64748b", fontSize: 11,
+              }}
+            >
+              {lineItemsOpen ? "▾" : "▸"} {lineItems.length}×
+            </button>
+          )}
           <span style={{ color: "#94a3b8" }}>
             {tx.description || <span style={{ color: "#334155" }}>—</span>}
           </span>
@@ -129,6 +145,25 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
           )}
         </td>
       </tr>
+
+      {/* Line items breakdown — second <tr> (a <div> inside <tbody> is invalid DOM) */}
+      {hasLineItems && lineItemsOpen && (
+        <tr>
+          <td colSpan={8} style={{ padding: "0 0 8px 0", background: "#0a0f1e" }}>
+            <div style={{ padding: "6px 16px 8px 32px" }}>
+              <div style={{ color: "#475569", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
+                Pozycje z paragonu ({lineItems.length})
+              </div>
+              {lineItems.map((li, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 12, borderBottom: i < lineItems.length - 1 ? "1px solid #131a2c" : "none" }}>
+                  <span style={{ color: "#94a3b8" }}>{li.description || "—"}</span>
+                  <span style={{ color: "#cbd5e1", fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>{fmt(li.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </td>
+        </tr>
+      )}
 
       {/* Modal via portal — avoids <div> inside <tbody> DOM nesting */}
       {editOpen && createPortal(
