@@ -19,7 +19,7 @@
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const { transactionsContainer, vouchersContainer, monthsContainer } = require("../cosmos");
+const { transactionsContainer, vouchersContainer, monthsContainer, receiptsContainer } = require("../cosmos");
 const { requireAuth }                                                 = require("../middleware/auth");
 const {
   generateId, readItem, readItemWithEtag,
@@ -55,12 +55,14 @@ const TransactionPostSchema = z.object({
   isRecurring:      z.boolean().optional().default(false),
   recurringId:      z.string().nullable().optional().default(null),
   receiptBlobPath: z.string().max(300).optional().nullable(),
-
+  receiptId:       z.string().max(120).optional().nullable(),
+  merchant:        z.string().max(150).optional().nullable(),
 });
 
 const TransactionPatchSchema = z.object({
   date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   type:             z.enum(["EXPENSE", "INCOME", "SAVING", "TRANSFER"]).optional(),
+  merchant: z.string().max(150).optional().nullable(), //not used as of now for future possible reference
   budgetMonth:      z.string().regex(BUDGET_MONTH_REGEX).optional(),
   subcategoryId:    z.string().min(1).optional(),
   subcategoryName:  z.string().min(1).optional(),
@@ -205,6 +207,36 @@ router.get("/range", async (req, res) => {
 // sync succeeds but something AFTER it throws, we revert the voucher
 // AND archive the TX.
 
+
+
+// ── Promote a pending Receipt to committed ───────────────────
+// Scan-time createPendingReceipt() left the receipt with ttl=86400
+// and empty transactionIds[]. On the first transaction save we append
+// the tx id and set ttl=-1 (永久). Subsequent transactions from the
+// same receipt just append their id. Idempotent, best-effort: a
+// failure here must never break the transaction save.
+async function promoteReceipt(receiptId, familyId, txId) {
+  try {
+    const existing = await readItem(receiptsContainer, receiptId, familyId);
+    if (!existing) {
+      console.warn(`[TX POST] Receipt ${receiptId} not found (expired?) — tx ${txId} keeps the link anyway`);
+      return;
+    }
+    const txIds = new Set(existing.transactionIds || []);
+    txIds.add(txId);
+    await receiptsContainer.items.upsert({
+      ...existing,
+      status:         "committed",
+      transactionIds: [...txIds],
+      ttl:            -1,           // never expire
+      committedAt:    existing.committedAt || new Date().toISOString(),
+    });
+    console.log(`[TX POST] Receipt committed: ${receiptId} (+tx ${txId})`);
+  } catch (err) {
+    console.error(`[TX POST] Receipt promote failed for ${receiptId} (non-fatal):`, err.message);
+  }
+}
+
 router.post("/", async (req, res) => {
   const parsed = TransactionPostSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -275,6 +307,9 @@ router.post("/", async (req, res) => {
     if (createdTx.receiptBlobPath && createdTx.receiptBlobPath.startsWith(`${familyId}/`)) {
       commitReceipt(createdTx.receiptBlobPath);
     }
+    if (createdTx.receiptId) {
+      promoteReceipt(createdTx.receiptId, familyId, createdTx.id);
+    }
     console.log(`[TX POST] Created: ${createdTx.id}${useVoucher ? ` (voucher: ${data.voucherId})` : ""}`);
     res.status(201).json(createdTx);
   } catch (err) {
@@ -292,6 +327,7 @@ router.post("/", async (req, res) => {
         console.error(`[TX POST ROLLBACK FAILED] ${createdTx.id}:`, rollbackErr);
       });
     }
+    
     res.status(500).json({ error: "Failed to create transaction." });
   }
 });

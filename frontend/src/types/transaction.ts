@@ -82,7 +82,8 @@ export interface TransactionPayload {
   isRecurring:      boolean;
   recurringId:      null;
   receiptBlobPath?: string | null;
-
+  receiptId?:       string | null;   
+  merchant?:        string | null;  
 }
 
 export interface TransactionFormProps {

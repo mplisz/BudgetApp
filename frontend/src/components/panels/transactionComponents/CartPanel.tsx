@@ -29,6 +29,8 @@ export interface CartItem extends TransactionPayload {
   _ocrDiscount?:    number;  // merged discount amount
   _ocrMergeNote?:   string;  // e.g. "2x 6,99 + rabat -6,99"
   _ocrReceiptPath?: string;  // blob path of the archived receipt photo
+  _ocrReceiptId?:   string;  // Receipt entity id (links tx → receipt)
+  _ocrMerchant?:    string;  // shop name (for per-merchant filtering)
 }
 
 interface CartPanelProps {
@@ -159,10 +161,12 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       }
       setStatus(item._cartId, STATUS.SAVING);
       try {
-        const { _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote, _ocrReceiptPath, ...payload } = item;
+        const { _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote, _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, ...payload } = item;
         // Receipt link survives the strip — it's a real (optional) payload
         // field, unlike the purely-visual _ocr* fields above.
         if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
+        if (_ocrReceiptId)   payload.receiptId       = _ocrReceiptId;
+        if (_ocrMerchant)    payload.merchant         = _ocrMerchant;
         const result = await addTransaction(payload);
         if (result) {
           const ids = item._allCartIds || [item._cartId];

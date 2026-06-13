@@ -39,7 +39,8 @@ const { z }   = require("zod");
 const sharp   = require("sharp");
 const { AzureOpenAI } = require("openai");
 
-const { categoriesContainer } = require("../cosmos");
+const { categoriesContainer, receiptsContainer } = require("../cosmos");
+const crypto                  = require("crypto");
 const { requireAuth }         = require("../middleware/auth");
 const { archiveReceipt }      = require("../utils/receiptStorage");
 const { roundMoney }          = require("../utils/helpers");
@@ -109,10 +110,12 @@ const LlmItemSchema = z.object({
 const LlmResponseSchema = z.object({
   items: z.array(LlmItemSchema).max(MAX_ITEMS),
   metadata: z.object({
-    merchant: z.string().max(150).optional().nullable(),
-    date:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-    totalSum: z.number().min(0).optional().nullable(),
-    currency: z.string().max(5).optional().nullable(),
+    merchant:      z.string().max(150).optional().nullable(),
+    date:          z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+    totalSum:      z.number().min(0).optional().nullable(),
+    currency:      z.string().max(5).optional().nullable(),
+    receiptNumber: z.string().max(60).optional().nullable(),  // nr wydruku/paragonu
+    sellerTaxId:   z.string().max(20).optional().nullable(),  // NIP sprzedawcy (cyfry)
   }).optional().default({}),
   warning: z.string().max(500).optional().nullable(),
 });
@@ -209,6 +212,11 @@ ZASADY SCALANIA RABATÓW (KRYTYCZNE):
    - HIGIENA OSOBISTA: mydła, żele pod prysznic, szampony, pasty i szczoteczki do zębów, dezodoranty, papier toaletowy, chusteczki, podpaski, golenie → "Higiena"
    - PIELĘGNACJA I URODA: perfumy, kremy, balsamy, makijaż, pielęgnacja twarzy → "Kosmetyki"
 17. SUMA KOŃCOWA: jako metadata.totalSum przyjmij kwotę FAKTYCZNIE ZAPŁACONĄ ("DO ZAPŁATY" / "RAZEM DO ZAPŁATY"), która zawiera kaucje. Suma wszystkich pozycji (wraz z pozycją kaucji) musi się z nią zgadzać.
+18. METADANE PARAGONU:
+   - "merchant": krótka, potoczna nazwa sieci (np. "Biedronka", "Auchan", "Lidl", "Żabka", "Rossmann"), NIE pełna nazwa prawna z paragonu ("AUCHAN POLSKA SP. Z O.O." → "Auchan").
+   - "receiptNumber": numer wydruku/paragonu jeśli widoczny (np. przy "nr:", "WYDRUK NR", "PARAGON NR") — same znaki numeru, bez etykiety.
+   - "sellerTaxId": NIP sprzedawcy jeśli widoczny (przy "NIP") — same cyfry, bez spacji i myślników.
+   Gdy któregoś z tych pól nie ma na paragonie, ustaw null.
 
 POMIJAJ: linie VAT/PTU, numery NIP, formy płatności, wydaną resztę, punkty lojalnościowe i naklejki, kaucje zwrócone (ujemne).
 
@@ -233,6 +241,8 @@ FORMAT ODPOWIEDZI — wyłącznie poprawny JSON, bez markdown, bez komentarzy:
   ],
   "metadata": {
     "merchant": "Biedronka",
+    "receiptNumber": "181530",
+    "sellerTaxId": "5260309174",
     "date": "2026-06-09",
     "totalSum": 96.21,
     "currency": "PLN"
@@ -379,6 +389,85 @@ function mapItemsToCategories(items, categoryTree) {
   });
 }
 
+// ── Receipt fingerprint + dedup ──────────────────────────────
+// Primary identity: seller NIP + receipt number + date — practically
+// unique per fiscal receipt in Poland. Fallback when OCR didn't read
+// the number/NIP: merchant + date + total (weaker — same-day identical
+// shops collide, hence a soft warning, never a hard block).
+
+function computeFingerprint(metadata) {
+  const norm = s => (s || "").toString().trim().toLowerCase();
+  const hasStrong = metadata.sellerTaxId && metadata.receiptNumber;
+  const basis = hasStrong
+    ? `nip:${norm(metadata.sellerTaxId)}|nr:${norm(metadata.receiptNumber)}|d:${norm(metadata.date)}`
+    : `m:${norm(metadata.merchant)}|d:${norm(metadata.date)}|t:${metadata.totalSum ?? ""}`;
+  return {
+    fingerprint: crypto.createHash("sha1").update(basis).digest("hex"),
+    strong: !!hasStrong,
+  };
+}
+
+// Look for an existing committed receipt with the same fingerprint.
+// Returns the matching receipt doc or null. Best-effort: a query
+// failure must not break the scan, so it logs and returns null.
+async function findDuplicateReceipt(familyId, fingerprint) {
+  try {
+    const { resources } = await receiptsContainer.items
+      .query({
+        query: `SELECT TOP 1 c.id, c.date, c.merchant, c.transactionIds
+                FROM c
+                WHERE c.userId = @userId
+                  AND c.fingerprint = @fp
+                  AND ARRAY_LENGTH(c.transactionIds) > 0`,
+        parameters: [
+          { name: "@userId", value: familyId },
+          { name: "@fp",     value: fingerprint },
+        ],
+      })
+      .fetchAll();
+    return resources[0] || null;
+  } catch (err) {
+    console.error("[OCR] Dedup query failed (non-fatal):", err.message);
+    return null;
+  }
+}
+
+// Create the Receipt entity at scan time with ttl=7200 (2h). It
+// starts "pending" with an empty transactionIds[]; committing a
+// transaction promotes it (ttl=-1, status=committed). Abandoned scans
+// expire automatically via the container's TTL. Best-effort: returns
+// the receipt id or null, never throws.
+async function createPendingReceipt(familyId, userId, metadata, fingerprint, blobPath) {
+  try {
+    const id = `rcpt_${familyId}_${crypto.randomUUID()}`;
+    const doc = {
+      id,
+      userId:         familyId,           // partition key
+      status:         "pending",
+      blobPath:       blobPath || null,
+      merchant:       metadata.merchant || null,
+      date:           metadata.date || null,
+      totalSum:       metadata.totalSum != null ? roundMoney(metadata.totalSum) : null,
+      currency:       metadata.currency || "PLN",
+      receiptNumber:  metadata.receiptNumber || null,
+      sellerTaxId:    metadata.sellerTaxId || null,
+      fingerprint,
+      transactionIds: [],
+      isWarranty:     false,
+      imageExpired:   false,
+      createdAt:      new Date().toISOString(),
+      createdBy:      userId || null,
+      ttl:            7200,               // 2h; commit sets -1
+    };
+    await receiptsContainer.items.create(doc);
+    console.log(`[OCR] Receipt created (pending): ${id}`);
+    return id;
+  } catch (err) {
+    console.error("[OCR] Receipt create failed (non-fatal):", err.message);
+    return null;
+  }
+}
+
 // ── POST /api/ocr/receipt ─────────────────────────────────────
 
 router.post("/receipt", async (req, res) => {
@@ -483,14 +572,29 @@ router.post("/receipt", async (req, res) => {
     // 6. Map category names → IDs
     const mappedItems = mapItemsToCategories(items, categoryTree);
 
-    // 7. Archive original (best-effort, non-blocking failure)
+    // 7. Fingerprint + duplicate check (soft warning, never blocks).
+    // duplicateWarning is a SEPARATE channel from sumWarning — a receipt
+    // can be both a re-scan AND have OCR quality notes; one must not
+    // suppress the other (they share no slot).
+    const { fingerprint, strong } = computeFingerprint(metadata);
+    const duplicate = await findDuplicateReceipt(familyId, fingerprint);
+    const duplicateWarning = duplicate
+      ? `Ten paragon wygląda na już zeskanowany (${duplicate.merchant || "sklep"}, ${duplicate.date || "wcześniej"}). Sprawdź zanim dodasz, by uniknąć duplikatu.`
+      : null;
+
+    // 8. Archive original image (best-effort, non-blocking failure)
     const receiptBlobPath = await archiveReceipt(fullJpeg, familyId, req.user.id, metadata);
+
+    // 9. Create the pending Receipt entity (ttl=1day until committed)
+    const receiptId = await createPendingReceipt(
+      familyId, req.user.id, metadata, fingerprint, receiptBlobPath,
+    );
 
     const elapsed = Date.now() - t0;
     const usage   = completion.usage || {};
-    console.log(`[OCR] Scan ok: ${mappedItems.length} items, engine: ${engine}, ${elapsed}ms, tokens: ${usage.prompt_tokens || "?"}+${usage.completion_tokens || "?"}, family: ${familyId}`);
+    console.log(`[OCR] Scan ok: ${mappedItems.length} items, engine: ${engine}, fp:${strong ? "strong" : "weak"}${duplicate ? " DUP" : ""}, ${elapsed}ms, tokens: ${usage.prompt_tokens || "?"}+${usage.completion_tokens || "?"}, family: ${familyId}`);
 
-    // 8. Respond
+    // 10. Respond
     res.json({
       items: mappedItems,
       metadata: {
@@ -499,8 +603,11 @@ router.post("/receipt", async (req, res) => {
         totalSum: metadata.totalSum != null ? roundMoney(metadata.totalSum) : null,
         currency: metadata.currency || "PLN",
       },
-      warning: sumWarning,
+      warning:          sumWarning,
+      duplicateWarning,
       receiptBlobPath,
+      receiptId,
+      isDuplicate:      !!duplicate,
     });
 
   } catch (err) {

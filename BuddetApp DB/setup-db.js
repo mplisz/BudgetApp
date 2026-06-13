@@ -23,7 +23,7 @@ const containers = [
   { id: "Settings",              partitionKey: "/userId"  },
   { id: "Months",                partitionKey: "/userId"  },
   { id: "Vouchers",              partitionKey: "/userId"  },
-  
+  {id:  "Receipts",               partitionKey: "/userId" }
 ];
 
 async function setup() {

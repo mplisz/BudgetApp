@@ -46,6 +46,9 @@ interface OcrMeta {
   totalSum:        number | null;
   warning:         string | null;
   receiptBlobPath: string | null;
+  receiptId:        string | null;    // Receipt entity id (for tx linking)
+  isDuplicate:      boolean;          // backend flagged a likely re-scan
+  duplicateWarning: string | null;   // separate from `warning` (OCR quality)
 }
 
 const OCR_MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -135,6 +138,16 @@ export default function PanelExpenses() {
         _cartId:       keepId,
         _mergedCount:  1,
         _allCartIds:   [keepId],
+        // Preserve OCR provenance — the form returns plain transaction
+        // fields and has no knowledge of _ocr* metadata. Editing an
+        // item's category/amount doesn't change which receipt it came
+        // from, so the receipt link must survive the rebuild.
+        _ocrReceiptId:   editingCartItem._ocrReceiptId,
+        _ocrReceiptPath: editingCartItem._ocrReceiptPath,
+        _ocrMerchant:    editingCartItem._ocrMerchant,
+        _ocrGross:       editingCartItem._ocrGross,
+        _ocrDiscount:    editingCartItem._ocrDiscount,
+        _ocrMergeNote:   editingCartItem._ocrMergeNote,
       };
       if (insertAt >= 0) {
         filtered.splice(Math.min(insertAt, filtered.length), 0, newItem);
@@ -203,6 +216,9 @@ export default function PanelExpenses() {
         totalSum:        data.metadata?.totalSum ?? null,
         warning:         data.warning            ?? null,
         receiptBlobPath: data.receiptBlobPath    ?? null,
+        receiptId:        data.receiptId          ?? null,
+        isDuplicate:      !!data.isDuplicate,
+        duplicateWarning: data.duplicateWarning   ?? null,
       });
       if (data.warning) showWarning(data.warning);
     } catch (err) {
@@ -251,6 +267,8 @@ export default function PanelExpenses() {
         _ocrDiscount:     line.discountAmount ?? undefined,
         _ocrMergeNote:    line.mergeNote      ?? undefined,
         _ocrReceiptPath:  ocrMeta?.receiptBlobPath ?? undefined,
+        _ocrReceiptId:    ocrMeta?.receiptId       ?? undefined,
+        _ocrMerchant:     ocrMeta?.merchant        ?? undefined,
       })),
     ]);
 
@@ -438,7 +456,14 @@ export default function PanelExpenses() {
                     </div>
                   )}
 
-                  {/* Backend warning (sum mismatch, unreadable parts, ...) */}
+                  {/* Duplicate — its own red banner, independent of OCR quality notes */}
+                  {ocrMeta?.duplicateWarning && (
+                    <div style={{ background: "#7f1d1d33", border: "1px solid #ef444477", borderRadius: 8, padding: "8px 12px", marginBottom: 12, color: "#fca5a5", fontSize: 12 }}>
+                      🔁 {ocrMeta.duplicateWarning}
+                    </div>
+                  )}
+
+                  {/* OCR quality warning (sum mismatch, unreadable parts, ...) */}
                   {ocrMeta?.warning && (
                     <div style={{ background: "#78350f33", border: "1px solid #f59e0b55", borderRadius: 8, padding: "8px 12px", marginBottom: 12, color: "#fbbf24", fontSize: 12 }}>
                       ⚠️ {ocrMeta.warning}
