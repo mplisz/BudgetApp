@@ -16,6 +16,7 @@ import { TransactionForm, emptyFormValues} from "./transactionComponents/Transac
 import type { TransactionPayload } from "../../types/transaction";
 import { CartPanel } from "./transactionComponents/CartPanel";
 import type { CartItem } from "./transactionComponents/CartPanel";
+import { computeSuggestedPriority } from "../ui/PriorityPicker";
 import { translateError } from "../../data/constants/errorMessages";
 
 
@@ -67,9 +68,10 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelExpenses() {
-  const { cart, setCart } = useAppContext() as {
-    cart:    CartItem[];
-    setCart: (v: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
+  const { cart, setCart, categories } = useAppContext() as {
+    cart:       CartItem[];
+    setCart:    (v: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
+    categories: Array<{ sub?: Array<{ id: string; priority?: number }> }>;
   };
   const { addTransaction, isSaving, loadTransactions  } = useTransactions() as {
     addTransaction: (p: TransactionPayload) => Promise<unknown>;
@@ -155,6 +157,8 @@ export default function PanelExpenses() {
         // item's category/amount doesn't change which receipt it came
         // from, so the receipt link must survive the rebuild.
         _ocrWarranty:    editingCartItem._ocrWarranty,
+        // Editing IS the review — once the user touched it, clear the flag.
+        _ocrNeedsReview: undefined,
         _ocrReceiptId:   editingCartItem._ocrReceiptId,
         _ocrReceiptPath: editingCartItem._ocrReceiptPath,
         _ocrMerchant:    editingCartItem._ocrMerchant,
@@ -268,7 +272,7 @@ export default function PanelExpenses() {
         fxRate:           1,
         description:      line.description || (merchant ? `${merchant}` : ""),
         tags:             [],
-        priority:         2,
+        priority:         computeSuggestedPriority(line.subcategoryId || "", categories) as 1 | 2 | 3 | 4,
         useVoucher:       false,
         voucherId:        null,
         voucherAmount:    0,
@@ -283,6 +287,10 @@ export default function PanelExpenses() {
         _ocrReceiptId:    ocrMeta?.receiptId       ?? undefined,
         _ocrMerchant:     cleanMerchant(ocrMeta?.merchant),
         _ocrWarranty:     ocrWarranty || undefined,
+        // Carry the "needs review" signal into the cart so low-confidence
+        // items stay visibly flagged after adding — on a 28-item receipt
+        // it's impossible to remember which the AI was unsure about.
+        _ocrNeedsReview:  line.categoryConfidence < 0.75 || undefined,
       })),
     ]);
 
@@ -296,7 +304,7 @@ export default function PanelExpenses() {
     setOcrMeta(null);
     setOcrWarranty(false);
     setEditingMerchant(false);
-  }, [ocrLines, ocrMeta, ocrWarranty, budgetMonth, setCart, showWarning]);
+  }, [ocrLines, ocrMeta, ocrWarranty, budgetMonth, categories, setCart, showWarning]);
 
   // ── Form initial values ───────────────────────────────────
     // Cart-aware default date — sticky to first cart item's date.

@@ -32,6 +32,7 @@ export interface CartItem extends TransactionPayload {
   _ocrReceiptId?:   string;  // Receipt entity id (links tx → receipt)
   _ocrMerchant?:    string;  // shop name (for per-merchant filtering)
   _ocrWarranty?:    boolean; // receipt flagged as warranty → longer retention
+  _ocrNeedsReview?: boolean; // AI was unsure — keep flagged in cart until edited
   _lineItems?:      Array<{ description: string; amount: number }>; // merge breakdown
 }
 
@@ -175,7 +176,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       }
       setStatus(item._cartId, STATUS.SAVING);
       try {
-        const { _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote, _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _lineItems, ...payload } = item;
+        const { _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote, _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _ocrNeedsReview, _lineItems, ...payload } = item;
         // Receipt link survives the strip — it's a real (optional) payload
         // field, unlike the purely-visual _ocr* fields above.
         if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
@@ -287,7 +288,9 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
               padding:      "10px 12px",
               marginBottom: 8,
               opacity:      status === STATUS.DONE ? 0.5 : 1,
-              border:       status === STATUS.ERROR ? "1px solid #ef444444" : "1px solid transparent",
+              border:       status === STATUS.ERROR ? "1px solid #ef444444"
+                            : (item._ocrNeedsReview && status !== STATUS.DONE) ? "1px solid #f59e0b66"
+                            : "1px solid transparent",
             }}>
               {/* Row 1: name + amount + status icon */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
@@ -304,6 +307,11 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
                     <div style={{ color: "#f59e0b", fontSize: 10, marginTop: 2 }}>
                       🏷️ rabat −{fmt(item._ocrDiscount)}
                       {item._ocrGross != null && <span style={{ color: "#92710a" }}> (z {fmt(item._ocrGross)})</span>}
+                    </div>
+                  )}
+                  {item._ocrNeedsReview && status !== STATUS.DONE && (
+                    <div style={{ color: "#f59e0b", fontSize: 10, marginTop: 2, fontWeight: 600 }}>
+                      ⚠️ AI niepewne — sprawdź kategorię (✏️)
                     </div>
                   )}
                 </div>
