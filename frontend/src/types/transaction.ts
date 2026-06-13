@@ -84,6 +84,8 @@ export interface TransactionPayload {
   receiptBlobPath?: string | null;
   receiptId?:       string | null;   
   merchant?:        string | null;  
+  isWarranty?:      boolean;                                       
+  lineItems?:       Array<{ description: string; amount: number }>;   
 }
 
 export interface TransactionFormProps {
