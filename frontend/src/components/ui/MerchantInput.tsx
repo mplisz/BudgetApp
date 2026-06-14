@@ -1,5 +1,5 @@
 // ============================================================
-// File: src/components/ui/MerchantInput.jsx
+// File: src/components/ui/MerchantInput.tsx
 // Editable shop-name field with autocomplete from the family's
 // known merchants (AppContext). Free text allowed — typing a new
 // name is fine; it gets POSTed/remembered on save. Used in the OCR
@@ -11,7 +11,18 @@
 // ============================================================
 
 import { useId } from "react";
+import type { CSSProperties } from "react";
 import { useAppContext } from "../../context/AppContext";
+
+interface MerchantInputProps {
+  value:        string;
+  onChange:     (v: string) => void;
+  placeholder?: string;
+  autoFocus?:   boolean;
+  style?:       CSSProperties;
+  onBlur?:      () => void;
+  onEnter?:     () => void;
+}
 
 export function MerchantInput({
   value,
@@ -21,9 +32,9 @@ export function MerchantInput({
   style = {},
   onBlur,
   onEnter,
-}) {
+}: MerchantInputProps) {
   const listId = useId();
-  const { merchants } = useAppContext();
+  const { merchants } = useAppContext() as { merchants?: string[] };
   const options = Array.isArray(merchants) ? merchants : [];
 
   return (
