@@ -5,11 +5,11 @@
 // UI: Polish | Comments: English
 // ============================================================
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useAppContext }   from "../../context/AppContext";
 import { useTransactions } from "../../hooks/useTransactions";
 import { useMonthStatus }  from "../../hooks/useMonthStatus";
-import { AppDatePicker, toYMD } from "../ui/AppDatePicker";
+import { toYMD } from "../ui/AppDatePicker";
 import { ConfirmModal }    from "../ui/ConfirmModal";
 import { fmt }             from "../../utils/helpers";
 import { calculateEffectiveAmount } from "../../utils/returnUtils";

@@ -6,7 +6,7 @@
 // UI: Polish | Comments: English
 // ============================================================
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useAppContext }   from "../../context/AppContext";
 import { useTransactions } from "../../hooks/useTransactions";
