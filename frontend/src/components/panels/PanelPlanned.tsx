@@ -72,24 +72,27 @@ export default function PanelPlanned() {
 
   // ── Filter ────────────────────────────────────────────────
 
-  const filtered = useMemo<PlannedDoc[]>(() => {
-    const filterMonthStr = filterMonth ? toYM(filterMonth) : "";
-    const maxMonth = range.months > 0 && !range.from && !range.to
-      ? addMonths(cur, range.months)
-      : null;
-    const fromMonth = range.from ? toYM(range.from) : null;
-    const toMonth   = range.to   ? toYM(range.to)   : null;
+const filtered = useMemo<PlannedDoc[]>(() => {
+  const filterMonthStr = filterMonth ? toYM(filterMonth) : "";
 
-    return planned.filter(doc => {
-      if (doc.isArchived) return false;
-      if (filterMode !== "all" && doc.mode !== filterMode) return false;
-      if (filterMonthStr && doc.plannedMonth !== filterMonthStr) return false;
-      if (fromMonth && doc.plannedMonth < fromMonth) return false;
-      if (toMonth   && doc.plannedMonth > toMonth)   return false;
-      if (maxMonth && doc.plannedMonth > maxMonth)   return false;
-      return true;
-    }).sort((a, b) => a.plannedMonth.localeCompare(b.plannedMonth));
-  }, [planned, range, filterMode, filterMonth, cur]);
+  // A specific month fully overrides the range pill.
+  const useRange  = !filterMonthStr;
+  const maxMonth  = useRange && range.months > 0 && !range.from && !range.to
+    ? addMonths(cur, range.months)
+    : null;
+  const fromMonth = useRange && range.from ? toYM(range.from) : null;
+  const toMonth   = useRange && range.to   ? toYM(range.to)   : null;
+
+  return planned.filter(doc => {
+    if (doc.isArchived) return false;
+    if (filterMode !== "all" && doc.mode !== filterMode) return false;
+    if (filterMonthStr && doc.plannedMonth !== filterMonthStr) return false;
+    if (fromMonth && doc.plannedMonth < fromMonth) return false;
+    if (toMonth   && doc.plannedMonth > toMonth)   return false;
+    if (maxMonth  && doc.plannedMonth > maxMonth)  return false;
+    return true;
+  }).sort((a, b) => a.plannedMonth.localeCompare(b.plannedMonth));
+}, [planned, range, filterMode, filterMonth, cur]);
 
   // ── Totals ────────────────────────────────────────────────
 
@@ -204,7 +207,7 @@ export default function PanelPlanned() {
         </span>
         <AppDatePicker
           value={filterMonth}
-          onChange={(d: Date) => setFilterMonth(d)}
+          onChange={(d: Date) => { setFilterMonth(d); setRange({ months: 0, from: null, to: null }); }}
           monthPicker
         />
         {filterMonth && (
