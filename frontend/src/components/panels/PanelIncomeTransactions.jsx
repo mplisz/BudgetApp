@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { useAppContext }   from "../../context/AppContext";
 import { useTransactions } from "../../hooks/useTransactions";
 import { useMonthStatus }  from "../../hooks/useMonthStatus";
-import { AppDatePicker, toYMD } from "../ui/AppDatePicker";
+import { toYMD } from "../ui/AppDatePicker";
 import { ConfirmModal }    from "../ui/ConfirmModal";
 import { fmt }             from "../../utils/helpers";
 import { typeColor, typeLabel, typeIcon } from "../../data/constants/categoryTypes";
@@ -21,6 +21,9 @@ import { usePagination }   from "../../hooks/usePagination";
 import { Pagination }      from "../ui/Pagination";
 import { CategoryMultiSelect } from "../ui/CategoryMultiSelect";
 import { useFilters }      from "../../hooks/useFilters";
+import { useMonthLoad } from "../../hooks/useMonthLoad";
+import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
+import { dateBoundsOf } from "./transactionComponents/dateBounds";
 
 const PAGE_SIZE = 25;
 
@@ -125,10 +128,11 @@ export default function PanelIncomeTransactions() {
 
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, txId: null });
 
-  useEffect(() => {
-    loadTransactions(activeBudgetMonth);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeBudgetMonth]);
+  // Per-month load + isFirstLoad; reset month-specific date filters on change.
+  const isFirstLoad = useMonthLoad(activeBudgetMonth, loadTransactions, () => {
+    set("dateFrom", null);
+    set("dateTo", null);
+  });
 
   const enriched = useMemo(() =>
     transactions
@@ -163,12 +167,8 @@ export default function PanelIncomeTransactions() {
 
   const { page, totalPages, paginated, setPage } = usePagination(filtered, PAGE_SIZE);
 
-  const dateBounds = useMemo(() => {
-    const [y, m] = activeBudgetMonth.split("-").map(Number);
-    const minDate = m === 1 ? new Date(y - 1, 11, 1) : new Date(y, m - 2, 1);
-    const maxDate = new Date(y, m, 0);
-    return { minDate, maxDate };
-  }, [activeBudgetMonth]);
+  const dateBounds  = useMemo(() => dateBoundsOf(enriched), [enriched]);
+  const noDateRange = enriched.length === 0;
 
   const handleConfirmDelete = useCallback(async () => {
     if (!deleteModal.txId) return;
@@ -186,81 +186,65 @@ export default function PanelIncomeTransactions() {
     <div style={{ padding: "0 0 40px 0" }}>
 
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>💵 Wpływy</div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>
-          {activeBudgetMonth} · {filtered.length} wpisów · łącznie{" "}
-          <strong style={{ color: "#10b981" }}>{fmt(totalSum)}</strong>
-          {isActiveMonthClosed && (
-            <span style={{ marginLeft: 10, ...s.badge("#ef4444") }}>🔒 zamknięty</span>
-          )}
-        </div>
+      <div style={{ fontSize: 13, color: "#64748b" }}>
+        {activeBudgetMonth} ·{" "}
+        {isFirstLoad ? (
+          <span style={{ color: "#475569" }}>ładowanie…</span>
+        ) : (
+          <>
+            {filtered.length} wpisów · łącznie{" "}
+            <strong style={{ color: "#10b981" }}>{fmt(totalSum)}</strong>
+            {isActiveMonthClosed && (
+              <span style={{ marginLeft: 10, ...s.badge("#ef4444") }}>🔒 zamknięty</span>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Filters */}
-      <div style={{ background: "#090e1b", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
-        <div style={s.filterRow}>
+      {/* Filters — hidden while the month's data is still loading */}
+      {!isFirstLoad && (
+        <div style={{ background: "#090e1b", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+          <div style={s.filterRow}>
 
-          {/* Type */}
-          <div style={s.filterBox}>
-            <label style={s.filterLabel}>Typ</label>
-            <select
-              value={filters.type}
-              onChange={e => set("type", e.target.value)}
-              style={s.select}
-            >
-              <option value="">Wszystkie</option>
-              <option value="INCOME">{typeIcon("INCOME")} {typeLabel("INCOME")}</option>
-              <option value="TRANSFER">{typeIcon("TRANSFER")} {typeLabel("TRANSFER")}</option>
-            </select>
-          </div>
+            {/* Type */}
+            <div style={s.filterBox}>
+              <label style={s.filterLabel}>Typ</label>
+              <select value={filters.type} onChange={e => set("type", e.target.value)} style={s.select}>
+                <option value="">Wszystkie</option>
+                <option value="INCOME">{typeIcon("INCOME")} {typeLabel("INCOME")}</option>
+                <option value="TRANSFER">{typeIcon("TRANSFER")} {typeLabel("TRANSFER")}</option>
+              </select>
+            </div>
 
-          {/* Category */}
-          <div style={s.filterBox}>
-            <label style={s.filterLabel}>Kategoria</label>
-            <CategoryMultiSelect
-              value={filters.categories}
-              onChange={v => set("categories", v)}
-              categories={uniqueCats.map(([, name]) => ({ name }))}
-              placeholder="Wszystkie kategorie"
+            {/* Category */}
+            <div style={s.filterBox}>
+              <label style={s.filterLabel}>Kategoria</label>
+              <CategoryMultiSelect
+                value={filters.categories}
+                onChange={v => set("categories", v)}
+                categories={uniqueCats.map(([, name]) => ({ name }))}
+                placeholder="Wszystkie kategorie"
+              />
+            </div>
+
+            <DateRangeFilter
+              dateFrom={filters.dateFrom}
+              dateTo={filters.dateTo}
+              onFrom={d => set("dateFrom", d)}
+              onTo={d => set("dateTo", d)}
+              bounds={dateBounds}
+              disabled={noDateRange}
+              emptyMessage="Brak wpływów w tym miesiącu — filtr dat niedostępny."
             />
-          </div>
 
-          {/* Date from */}
-          <div style={s.filterBox}>
-            <label style={s.filterLabel}>Od</label>
-            <AppDatePicker
-              value={filters.dateFrom}
-              onChange={d => set("dateFrom", d)}
-              minDate={dateBounds.minDate}
-              maxDate={filters.dateTo ?? dateBounds.maxDate}
-              style={s.inp}
-            />
+            {hasActiveFilters && (
+              <button onClick={clearFilters} style={{ ...s.actionBtn("#64748b"), fontSize: 11, alignSelf: "flex-end" }}>
+                ✕ Wyczyść
+              </button>
+            )}
           </div>
-
-          {/* Date to */}
-          <div style={s.filterBox}>
-            <label style={s.filterLabel}>Do</label>
-            <AppDatePicker
-              value={filters.dateTo}
-              onChange={d => set("dateTo", d)}
-              minDate={filters.dateFrom ?? dateBounds.minDate}
-              maxDate={dateBounds.maxDate}
-              style={s.inp}
-            />
-          </div>
-
-          {hasActiveFilters && (
-            <button
-              onClick={clearFilters}
-              style={{ ...s.actionBtn("#64748b"), fontSize: 11, alignSelf: "flex-end" }}
-            >
-              ✕ Wyczyść
-            </button>
-          )}
         </div>
-      </div>
-
+      )}
       {/* Table */}
       {filtered.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>

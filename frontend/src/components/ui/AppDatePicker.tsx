@@ -28,7 +28,6 @@ export const toYMD = (date: Date | null | undefined): string => {
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 };
-
 export const fromYMD = (ymd: string | null | undefined): Date | null => {
   if (!ymd) return null;
   const [y, m, d] = ymd.split("-").map(Number);

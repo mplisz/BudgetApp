@@ -21,6 +21,9 @@ import { CategoryMultiSelect }      from "../ui/CategoryMultiSelect";
 import { useFilters }               from "../../hooks/useFilters";
 import { ToggleBtn, VIEW_TOGGLE_STYLE } from "../ui/ToggleBtn";
 
+import { useMonthLoad } from "../../hooks/useMonthLoad";
+import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
+import { dateBoundsOf } from "./transactionComponents/dateBounds";
 const PAGE_SIZE = 25;
 
 // ── Types ─────────────────────────────────────────────────────
@@ -102,16 +105,10 @@ export default function PanelTransactions() {
   const [confirmLinkedModal, setConfirmLinkedModal] = useState<LinkedModal>({ isOpen: false, txId: null });
   const [returnTarget,       setReturnTarget]       = useState<Transaction | null>(null);
   const [grouped,            setGrouped]            = useState(false);
-  const [loadedMonth,        setLoadedMonth]        = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoadedMonth(null);
-    loadTransactions(activeBudgetMonth).then(() => {
-      setLoadedMonth(activeBudgetMonth);
-    });
-  }, [activeBudgetMonth]);
-
-  const isFirstLoad = loadedMonth !== activeBudgetMonth;
+  const isFirstLoad                                 = useMonthLoad(activeBudgetMonth, loadTransactions, () => {
+                                                        set("dateFrom", null);
+                                                        set("dateTo", null);
+                                                      });
 
   // ── Enrich transactions ───────────────────────────────────
   // - Resolve tag names
@@ -136,6 +133,9 @@ export default function PanelTransactions() {
       }),
     [transactions, tags, activeBudgetMonth]
   );
+
+  const dateBounds  = useMemo(() => dateBoundsOf(enriched), [enriched]);
+  const noDateRange = enriched.length === 0;
 
   const uniqueCats = useMemo(() => {
     const map: Record<string, string> = {};
@@ -284,186 +284,179 @@ export default function PanelTransactions() {
       </div>
 
       {/* Filters */}
-      <div style={{ background: "#090e1b", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <ToggleBtn {...VIEW_TOGGLE_STYLE} active={!grouped} onClick={() => setGrouped(false)}>
-              📋 Lista
-            </ToggleBtn>
-            <ToggleBtn {...VIEW_TOGGLE_STYLE} active={grouped} onClick={() => setGrouped(true)}>
-              📁 Grupy
-            </ToggleBtn>
+      {!isFirstLoad && (
+        <div style={{ background: "#090e1b", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <ToggleBtn {...VIEW_TOGGLE_STYLE} active={!grouped} onClick={() => setGrouped(false)}>
+                📋 Lista
+              </ToggleBtn>
+              <ToggleBtn {...VIEW_TOGGLE_STYLE} active={grouped} onClick={() => setGrouped(true)}>
+                📁 Grupy
+              </ToggleBtn>
+            </div>
           </div>
-        </div>
-        <div style={(s as any).filterRow}>
+          <div style={(s as any).filterRow}>
 
-          {/* Category */}
-          <div style={(s as any).filterBox}>
-            <div style={(s as any).filterLabel}>Kategoria</div>
-            <CategoryMultiSelect
-              value={filters.categories}
-              onChange={v => { set("categories", v); set("subs", []); }}
-              categories={uniqueCats.map(([, name]) => ({ name }))}
-              placeholder="Wszystkie kategorie"
-            />
-          </div>
-
-          {/* Subcategory — visible only when ≥1 category selected */}
-          {filters.categories.length > 0 && uniqueSubs.length > 0 && (
+            {/* Category */}
             <div style={(s as any).filterBox}>
-              <div style={(s as any).filterLabel}>Subkategoria</div>
+              <div style={(s as any).filterLabel}>Kategoria</div>
               <CategoryMultiSelect
-                value={filters.subs}
-                onChange={v => set("subs", v)}
-                categories={uniqueSubs.map(([, name]) => ({ name }))}
-                placeholder="Wszystkie subkategorie"
+                value={filters.categories}
+                onChange={v => { set("categories", v); set("subs", []); }}
+                categories={uniqueCats.map(([, name]) => ({ name }))}
+                placeholder="Wszystkie kategorie"
               />
             </div>
-          )}
 
-          {/* Date from */}
-          <div style={(s as any).filterBox}>
-            <div style={(s as any).filterLabel}>Data od</div>
-            <AppDatePicker
-              value={filters.dateFrom}
-              onChange={(d: Date) => set("dateFrom", d)}
-              maxDate={filters.dateTo ?? null}
+            {/* Subcategory — visible only when ≥1 category selected */}
+            {filters.categories.length > 0 && uniqueSubs.length > 0 && (
+              <div style={(s as any).filterBox}>
+                <div style={(s as any).filterLabel}>Subkategoria</div>
+                <CategoryMultiSelect
+                  value={filters.subs}
+                  onChange={v => set("subs", v)}
+                  categories={uniqueSubs.map(([, name]) => ({ name }))}
+                  placeholder="Wszystkie subkategorie"
+                />
+              </div>
+            )}
+            {/* Custom date Filters (in the chosen month) */}
+            <DateRangeFilter
+              dateFrom={filters.dateFrom}
+              dateTo={filters.dateTo}
+              onFrom={d => set("dateFrom", d)}
+              onTo={d => set("dateTo", d)}
+              bounds={dateBounds}
+              disabled={noDateRange}
+              emptyMessage="Brak wydatków w tym miesiącu — filtr dat niedostępny."
+              labels={{ from: "Data od", to: "Data do" }}
             />
-          </div>
 
-          {/* Date to */}
-          <div style={(s as any).filterBox}>
-            <div style={(s as any).filterLabel}>Data do</div>
-            <AppDatePicker
-              value={filters.dateTo}
-              onChange={(d: Date) => set("dateTo", d)}
-              minDate={filters.dateFrom ?? undefined}
-            />
-          </div>
-
-          {/* Priority */}
-          <div style={(s as any).filterBox}>
-            <div style={(s as any).filterLabel}>Priorytet</div>
-            <div style={{ display: "flex", gap: 4 }}>
-              {[1, 2, 3, 4].map(p => (
-                <button
-                  key={p}
-                  onClick={() => togglePrio(p)}
-                  style={{
-                    width: 28, height: 28, borderRadius: 6, border: "none",
-                    cursor: "pointer", fontWeight: 700, fontSize: 11,
-                    background: filters.prio.includes(p) ? (PRIO_COLORS as Record<number, string>)[p] : "#1e293b",
-                    color:      filters.prio.includes(p) ? "#fff" : "#64748b",
-                  }}
-                >
-                  P{p}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Tags */}
-          {monthTagIds.length > 0 && (
+            {/* Priority */}
             <div style={(s as any).filterBox}>
-              <div style={(s as any).filterLabel}>Tagi</div>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {monthTagIds.map(tag => (
+              <div style={(s as any).filterLabel}>Priorytet</div>
+              <div style={{ display: "flex", gap: 4 }}>
+                {[1, 2, 3, 4].map(p => (
                   <button
-                    key={tag.id}
-                    onClick={() => set("tags", filters.tags.includes(tag.id)
-                      ? filters.tags.filter(x => x !== tag.id)
-                      : [...filters.tags, tag.id]
-                    )}
+                    key={p}
+                    onClick={() => togglePrio(p)}
                     style={{
-                      padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
-                      background: filters.tags.includes(tag.id) ? "#3b82f6" : "#1e293b",
-                      color:      filters.tags.includes(tag.id) ? "#fff"    : "#64748b",
+                      width: 28, height: 28, borderRadius: 6, border: "none",
+                      cursor: "pointer", fontWeight: 700, fontSize: 11,
+                      background: filters.prio.includes(p) ? (PRIO_COLORS as Record<number, string>)[p] : "#1e293b",
+                      color:      filters.prio.includes(p) ? "#fff" : "#64748b",
                     }}
                   >
-                    {tag.name}
+                    P{p}
                   </button>
                 ))}
               </div>
             </div>
-          )}
-          {/* Returns */}
-          <div style={(s as any).filterBox}>
-            <div style={(s as any).filterLabel}>Zwroty</div>
-            <button
-              onClick={() => set("hasReturn", !filters.hasReturn)}
-              style={{
-                height: 28,
-                padding: "0 10px",
-                borderRadius: 6,
-                border: "none",
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: 11,
-                background: filters.hasReturn ? "#34d399" : "#1e293b",
-                color:      filters.hasReturn ? "#000"    : "#64748b",
-              }}
-            >
-              🔙 Zwroty
-            </button>
-          </div>
-            {/* Receipts */}
-          <div style={(s as any).filterBox}>
-            <div style={(s as any).filterLabel}>Paragony</div>
-            <button
-              onClick={() => set("hasReceipt", !filters.hasReceipt)}
-              style={{
-                height: 28,
-                padding: "0 10px",
-                borderRadius: 6,
-                border: "none",
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: 11,
-                background: filters.hasReceipt ? "#f59e0b" : "#1e293b",
-                color:      filters.hasReceipt ? "#000"    : "#64748b",
-              }}
-            >
-              📎 Z paragonem
-            </button>
-          </div>
-          {/* Merchant */}
-          {uniqueMerchants.length > 0 && (
+
+            {/* Tags */}
+            {monthTagIds.length > 0 && (
+              <div style={(s as any).filterBox}>
+                <div style={(s as any).filterLabel}>Tagi</div>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {monthTagIds.map(tag => (
+                    <button
+                      key={tag.id}
+                      onClick={() => set("tags", filters.tags.includes(tag.id)
+                        ? filters.tags.filter(x => x !== tag.id)
+                        : [...filters.tags, tag.id]
+                      )}
+                      style={{
+                        padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
+                        background: filters.tags.includes(tag.id) ? "#3b82f6" : "#1e293b",
+                        color:      filters.tags.includes(tag.id) ? "#fff"    : "#64748b",
+                      }}
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Returns */}
             <div style={(s as any).filterBox}>
-              <div style={(s as any).filterLabel}>Sklep</div>
-              <select
-                value={filters.merchant}
-                onChange={e => set("merchant", e.target.value)}
-                style={{ height: 28, background: "#1e293b", color: "#94a3b8", border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" }}
+              <div style={(s as any).filterLabel}>Zwroty</div>
+              <button
+                onClick={() => set("hasReturn", !filters.hasReturn)}
+                style={{
+                  height: 28,
+                  padding: "0 10px",
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 11,
+                  background: filters.hasReturn ? "#34d399" : "#1e293b",
+                  color:      filters.hasReturn ? "#000"    : "#64748b",
+                }}
               >
-                <option value="">Wszystkie sklepy</option>
-                {uniqueMerchants.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+                🔙 Zwroty
+              </button>
             </div>
-          )}
-           {/* Warranty */}
-          <div style={(s as any).filterBox}>
-            <div style={(s as any).filterLabel}>Gwarancja</div>
-            <button
-              onClick={() => set("onlyWarranty", !filters.onlyWarranty)}
-              style={{
-                height: 28, padding: "0 10px", borderRadius: 6, border: "none",
-                cursor: "pointer", fontWeight: 700, fontSize: 11,
-                background: filters.onlyWarranty ? "#f59e0b" : "#1e293b",
-                color:      filters.onlyWarranty ? "#000"    : "#64748b",
-              }}
-            >
-              🛡️ Gwarancyjne
-            </button>
+              {/* Receipts */}
+            <div style={(s as any).filterBox}>
+              <div style={(s as any).filterLabel}>Paragony</div>
+              <button
+                onClick={() => set("hasReceipt", !filters.hasReceipt)}
+                style={{
+                  height: 28,
+                  padding: "0 10px",
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 11,
+                  background: filters.hasReceipt ? "#f59e0b" : "#1e293b",
+                  color:      filters.hasReceipt ? "#000"    : "#64748b",
+                }}
+              >
+                📎 Z paragonem
+              </button>
+            </div>
+            {/* Merchant */}
+            {uniqueMerchants.length > 0 && (
+              <div style={(s as any).filterBox}>
+                <div style={(s as any).filterLabel}>Sklep</div>
+                <select
+                  value={filters.merchant}
+                  onChange={e => set("merchant", e.target.value)}
+                  style={{ height: 28, background: "#1e293b", color: "#94a3b8", border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" }}
+                >
+                  <option value="">Wszystkie sklepy</option>
+                  {uniqueMerchants.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            )}
+            {/* Warranty */}
+            <div style={(s as any).filterBox}>
+              <div style={(s as any).filterLabel}>Gwarancja</div>
+              <button
+                onClick={() => set("onlyWarranty", !filters.onlyWarranty)}
+                style={{
+                  height: 28, padding: "0 10px", borderRadius: 6, border: "none",
+                  cursor: "pointer", fontWeight: 700, fontSize: 11,
+                  background: filters.onlyWarranty ? "#f59e0b" : "#1e293b",
+                  color:      filters.onlyWarranty ? "#000"    : "#64748b",
+                }}
+              >
+                🛡️ Gwarancyjne
+              </button>
+            </div>
+            {/* Clear */}
+            {hasActiveFilters && (
+              <button onClick={clearFilters} style={{ ...(s as any).actionBtn("#ef4444"), alignSelf: "flex-end", marginBottom: 4 }}>
+                ✕ Wyczyść
+              </button>
+            )}
           </div>
-          {/* Clear */}
-          {hasActiveFilters && (
-            <button onClick={clearFilters} style={{ ...(s as any).actionBtn("#ef4444"), alignSelf: "flex-end", marginBottom: 4 }}>
-              ✕ Wyczyść
-            </button>
-          )}
         </div>
-      </div>
+      )}
 
       {isFirstLoad && (
         <div style={(s as any).card}>
