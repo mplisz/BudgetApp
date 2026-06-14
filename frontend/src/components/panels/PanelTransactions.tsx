@@ -54,6 +54,7 @@ interface Transaction {
   tagNames?:        string[];
   effectiveAmount?: number;
   sameMonthReturned?: number;
+  isWarranty?:      boolean; 
 }
 
 interface Tag {
@@ -93,6 +94,7 @@ export default function PanelTransactions() {
     hasReturn:   false,
     hasReceipt:  false,
     merchant:    "",
+    onlyWarranty: false, 
   });
 
   const [collapsed,          setCollapsed]          = useState<Record<string, boolean>>({});
@@ -173,6 +175,7 @@ export default function PanelTransactions() {
       if (filters.tags.length && !filters.tags.some(t => (tx.tags || []).includes(t)))     return false;
       if (filters.hasReturn && !((tx.sameMonthReturned ?? 0) > 0 || (tx.voucherAmount ?? 0) > 0)) return false;
       if (filters.hasReceipt && !tx.receiptBlobPath) return false;
+      if (filters.onlyWarranty && !tx.isWarranty) return false;
       if (filters.merchant && tx.merchant !== filters.merchant) return false;
       return true;
     }),
@@ -438,6 +441,21 @@ export default function PanelTransactions() {
               </select>
             </div>
           )}
+           {/* Warranty */}
+          <div style={(s as any).filterBox}>
+            <div style={(s as any).filterLabel}>Gwarancja</div>
+            <button
+              onClick={() => set("onlyWarranty", !filters.onlyWarranty)}
+              style={{
+                height: 28, padding: "0 10px", borderRadius: 6, border: "none",
+                cursor: "pointer", fontWeight: 700, fontSize: 11,
+                background: filters.onlyWarranty ? "#f59e0b" : "#1e293b",
+                color:      filters.onlyWarranty ? "#000"    : "#64748b",
+              }}
+            >
+              🛡️ Gwarancyjne
+            </button>
+          </div>
           {/* Clear */}
           {hasActiveFilters && (
             <button onClick={clearFilters} style={{ ...(s as any).actionBtn("#ef4444"), alignSelf: "flex-end", marginBottom: 4 }}>
