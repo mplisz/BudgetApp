@@ -16,6 +16,7 @@ import { VoucherSection }    from "./VoucherSection";
 import { fmt, parseDecimal, round2 } from "../../../utils/helpers";
 import { translateError } from "../../../data/constants/errorMessages";
 import { TagMultiSelect } from "../../ui/TagMultiSelect";
+import { MerchantInput } from "../../ui/MerchantInput";
 
 import type {
   FormValues, TransactionPayload, TransactionFormProps, RateInfo,
@@ -57,7 +58,8 @@ export function emptyFormValues(): FormValues {
     voucherAmount:   "",
     amountGross:     "",
     discountAmount:  "",
-    qty: 1
+    qty: 1,
+    merchant:        "",
   };
 }
 
@@ -83,7 +85,8 @@ export function txToFormValues(tx: Record<string, unknown>): FormValues {
     voucherAmount:   tx.voucherAmount   ? String(tx.voucherAmount) : "",
     amountGross:     "",
     discountAmount:  "",
-    qty: 1
+    qty: 1,
+    merchant:        (tx.merchant as string) || "",
   };
 }
 
@@ -256,6 +259,10 @@ export function TransactionForm({
       netAmount:        form.useVoucher ? Math.max(0, amountPLN - cappedVoucher) : amountPLN,
       isRecurring:      false,
       recurringId:      null,
+      // Merchant is optional on manual entries — only included when set.
+      // No Receipt entity is created (that's OCR-only); this just tags the
+      // transaction so it shows up in the per-shop filter.
+      ...(form.merchant?.trim() ? { merchant: form.merchant.trim() } : {}),
     };
   }
 
@@ -476,6 +483,17 @@ export function TransactionForm({
           onChange={e => set("description", e.target.value)}
           placeholder="e.g. Grocery run – weekend"
           maxLength={500}
+          style={inp}
+        />
+      </div>
+
+      {/* Merchant (optional) */}
+      <div style={frow}>
+        <label style={lbl}>Sklep (opcjonalnie)</label>
+        <MerchantInput
+          value={form.merchant}
+          onChange={(v: string) => set("merchant", v)}
+          placeholder="np. Biedronka"
           style={inp}
         />
       </div>

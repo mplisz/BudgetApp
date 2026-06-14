@@ -18,9 +18,10 @@ const transactionsRoutes = require ('./routes/transactions')
 const monthsRoutes       = require('./routes/months');
 const vouchersRoutes = require('./routes/vouchers');
 const limitsRoutes = require('./routes/limits');
-const recurringRoutes = require("./routes/recurring");
-const plannedRoutes = require("./routes/planned");
-
+const recurringRoutes = require('./routes/recurring');
+const plannedRoutes = require('./routes/planned');
+const merchants = require('./routes/merchants');
+const ocr = require('./routes/ocr');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -127,10 +128,10 @@ app.use('/api/transactions', transactionsRoutes)
 app.use('/api/months', monthsRoutes)
 app.use('/api/vouchers', vouchersRoutes);
 app.use('/api/limits', limitsRoutes);
-app.use("/api/recurring", recurringRoutes);
-app.use("/api/planned", plannedRoutes);
-app.use('/api/ocr', require('./routes/ocr'))
-
+app.use('/api/recurring', recurringRoutes);
+app.use('/api/planned', plannedRoutes);
+app.use('/api/ocr', ocr);
+app.use('/api/merchants', merchants);
 // ------------------------------------------------------------
 // GLOBAL ERROR HANDLER
 // ------------------------------------------------------------

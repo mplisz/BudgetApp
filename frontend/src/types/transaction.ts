@@ -58,6 +58,7 @@ export interface FormValues {
   amountGross:     string;
   discountAmount:  string;
   qty:             number;
+  merchant:        string;
 }
 
 export interface TransactionPayload {

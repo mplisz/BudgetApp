@@ -19,7 +19,7 @@
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const { transactionsContainer, vouchersContainer, monthsContainer, receiptsContainer } = require("../cosmos");
+const { transactionsContainer, vouchersContainer, monthsContainer, receiptsContainer, settingsContainer } = require("../cosmos");
 const { requireAuth }                                                 = require("../middleware/auth");
 const {
   generateId, readItem, readItemWithEtag,
@@ -30,6 +30,7 @@ const {
 } = require('../utils/helpers');
 const { getReceiptBlobContainer,setReceiptRetention  } = require("../utils/receiptStorage");
 router.use(requireAuth);
+const { cleanMerchant, merchantExists, rememberMerchant } = require("../utils/merchant");
 
 
 // ── Schemas ───────────────────────────────────────────────────
@@ -319,6 +320,12 @@ router.post("/", async (req, res) => {
     if (createdTx.receiptId) {
       promoteReceipt(createdTx.receiptId, familyId, createdTx.id);
     }
+    // Remember the merchant for autocomplete + OCR canonicalization,
+    // whether it came from OCR or was typed manually. Fire-and-forget.
+    if (createdTx.merchant) {
+      rememberMerchant(settingsContainer, familyId, createdTx.merchant);
+    }
+    
     console.log(`[TX POST] Created: ${createdTx.id}${useVoucher ? ` (voucher: ${data.voucherId})` : ""}`);
     res.status(201).json(createdTx);
   } catch (err) {

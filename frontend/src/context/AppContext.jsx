@@ -55,6 +55,7 @@ export function AppProvider({ children }) {
   const [tags,          setTags]         = useState([]);
   const [settings,      setSettings]     = useState(null);
   const [bootstrapDone, setBootstrapDone] = useState(false);
+  const [merchants, setMerchants] = useState([]);
 
   // ── Parse categories from DB format ──────────────────────────
   // DB stores a flat list (parents + children via parentCategoryId).
@@ -115,6 +116,13 @@ export function AppProvider({ children }) {
         if (settingsRes.ok) setSettings(await settingsRes.json());
         if (limitsRes.ok)   setLimits(await limitsRes.json());  
         
+        //fetch current merchants/shops
+        fetchWithAuth(`${API_URL}/api/merchants`)
+        .then(r => r.ok ? r.json() : [])
+        .then(setMerchants)
+        .catch(() => setMerchants([]));
+
+
         // Closed months — the URL/navigator logic reads this set to
         // decide the first open month and to lock closed months.
         const monthsRes = await fetchWithAuth(`${API_URL}/api/months`);
@@ -161,6 +169,9 @@ export function AppProvider({ children }) {
     // Months
     closedMonths, setClosedMonths,
 
+    // Merchants
+    merchants, setMerchants,
+    
     // Categories / tags / settings
     categories, setCategories,
     tags,       setTags,

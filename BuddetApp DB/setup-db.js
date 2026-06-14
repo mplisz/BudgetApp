@@ -14,7 +14,7 @@ const databaseDefinition = { id: "BudgetDB" };
 
 const containers = [
   { id: "Categories",            partitionKey: "/userId"  },
-  { id: "Tags",                  partitionKey: "/userId"  },
+ // { id: "Tags",                  partitionKey: "/userId"  },
   { id: "Limits",                partitionKey: "/userId"  }, 
   { id: "RecurringTransactions", partitionKey: "/userId"  },
   { id: "Transactions",          partitionKey: "/userId"  },

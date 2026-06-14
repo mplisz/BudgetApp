@@ -39,7 +39,8 @@ const { z }   = require("zod");
 const sharp   = require("sharp");
 const { AzureOpenAI } = require("openai");
 
-const { categoriesContainer, receiptsContainer } = require("../cosmos");
+const { categoriesContainer, receiptsContainer, settingsContainer } = require("../cosmos");
+const { cleanMerchant, merchantExists, rememberMerchant } = require("../utils/merchant");
 const crypto                  = require("crypto");
 const { requireAuth }         = require("../middleware/auth");
 const { archiveReceipt }      = require("../utils/receiptStorage");
@@ -179,11 +180,14 @@ async function mistralOcrExtract(jpegBuffer) {
 
 // ── Prompt builder ────────────────────────────────────────────
 
-function buildSystemPrompt(categoryTree) {
+function buildSystemPrompt(categoryTree, knownMerchants = []) {
   // categoryTree: [{ name, subcategories: [name, ...] }, ...]
   const catLines = categoryTree
     .map(c => `- ${c.name}: ${c.subcategories.join(", ") || "(brak podkategorii)"}`)
     .join("\n");
+  const merchantLine = knownMerchants.length
+    ? knownMerchants.join(", ")
+    : "(brak zapisanych sklepów)";
 
   return `Jesteś asystentem OCR analizującym zdjęcia polskich paragonów fiskalnych.
 
@@ -213,7 +217,7 @@ ZASADY SCALANIA RABATÓW (KRYTYCZNE):
    - PIELĘGNACJA I URODA: perfumy, kremy, balsamy, makijaż, pielęgnacja twarzy → "Kosmetyki"
 17. SUMA KOŃCOWA: jako metadata.totalSum przyjmij kwotę FAKTYCZNIE ZAPŁACONĄ ("DO ZAPŁATY" / "RAZEM DO ZAPŁATY"), która zawiera kaucje. Suma wszystkich pozycji (wraz z pozycją kaucji) musi się z nią zgadzać.
 18. METADANE PARAGONU:
-   - "merchant": krótka, potoczna nazwa sieci (np. "Biedronka", "Auchan", "Lidl", "Żabka", "Rossmann"), NIE pełna nazwa prawna z paragonu ("AUCHAN POLSKA SP. Z O.O." → "Auchan").
+   - "merchant": krótka, potoczna nazwa sieci. ZNANE SKLEPY UŻYTKOWNIKA: ${merchantLine}. Jeśli sklep z paragonu pasuje do któregoś ze znanych — użyj DOKŁADNIE tej nazwy z listy (kanonizacja). Jeśli nie pasuje do żadnego — zwróć nową krótką, potoczną nazwę sieci (np. "AUCHAN POLSKA SP. Z O.O." → "Auchan"), NIE pełną nazwę prawną.
    - "receiptNumber": numer wydruku/paragonu jeśli widoczny (np. przy "nr:", "WYDRUK NR", "PARAGON NR") — same znaki numeru, bez etykiety.
    - "sellerTaxId": NIP sprzedawcy jeśli widoczny (przy "NIP") — same cyfry, bez spacji i myślników.
    Gdy któregoś z tych pól nie ma na paragonie, ustaw null.
@@ -256,6 +260,15 @@ Jeśli zdjęcie NIE jest paragonem lub jest nieczytelne, zwróć: {"items": [], 
 // ── Category tree fetch ───────────────────────────────────────
 // Builds [{ name, subcategories: [...] }] from the flat Cosmos
 // Categories container. Only EXPENSE, only non-archived.
+
+async function fetchKnownMerchants(familyId) {
+  try {
+    const { resource } = await settingsContainer.item(`merchants_${familyId}`, familyId).read();
+    return Array.isArray(resource?.merchants) ? resource.merchants : [];
+  } catch {
+    return [];  // no doc yet → empty list, scan proceeds normally
+  }
+}
 
 async function fetchCategoryTree(familyId) {
   const { resources } = await categoriesContainer.items
@@ -489,11 +502,12 @@ router.post("/receipt", async (req, res) => {
     // 1. Preprocess image (validate + resize + EXIF rotate + segment)
     const { fullJpeg, segments } = await preprocessImage(parsed.data.image);
 
-    // 2. Fetch user's categories for the prompt
+    // 2. Fetch user's categories + known merchants for the prompt
     const categoryTree = await fetchCategoryTree(familyId);
     if (categoryTree.length === 0) {
       return res.status(422).json({ error: "No expense categories defined." });
     }
+    const knownMerchants = await fetchKnownMerchants(familyId);
 
     // 3a. PREFERRED: dedicated OCR engine reads the receipt as text.
     // Deterministic line reading — no vision-LLM row confusion.
@@ -527,7 +541,7 @@ router.post("/receipt", async (req, res) => {
         { role: "system", content: buildSystemPrompt(categoryTree.map(c => ({
             name: c.name,
             subcategories: c.subcategories.map(s => s.name),
-          }))) },
+          })), knownMerchants) },
         { role: "user", content: userContent },
       ],
       // gpt-5.x renamed max_tokens → max_completion_tokens and rejects
@@ -589,6 +603,10 @@ router.post("/receipt", async (req, res) => {
     const receiptId = await createPendingReceipt(
       familyId, req.user.id, metadata, fingerprint, receiptBlobPath,
     );
+
+    // 9b. Remember the merchant if it's new (guard A: AI got the list,
+    // so a name here that isn't on it is genuinely new). Fire-and-forget.
+    if (metadata.merchant) rememberMerchant(settingsContainer, familyId, metadata.merchant);
 
     const elapsed = Date.now() - t0;
     const usage   = completion.usage || {};

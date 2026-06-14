@@ -17,6 +17,7 @@ import type { TransactionPayload } from "../../types/transaction";
 import { CartPanel } from "./transactionComponents/CartPanel";
 import type { CartItem } from "./transactionComponents/CartPanel";
 import { computeSuggestedPriority } from "../ui/PriorityPicker";
+import { MerchantInput } from "../ui/MerchantInput";
 import { translateError } from "../../data/constants/errorMessages";
 
 
@@ -342,6 +343,7 @@ export default function PanelExpenses() {
             amountGross:     "",
             discountAmount:  "",
             qty:             1,
+            merchant:        editingCartItem._ocrMerchant || "",
           };
         })() 
       : cartDate
@@ -396,7 +398,7 @@ export default function PanelExpenses() {
             animation: "ocr-spin 0.8s linear infinite",
           }} />
           <div style={{ color: "#10b981", fontWeight: 700, fontSize: 15 }}>
-            🤖 AI analizuje paragon…
+            🤖 Analiza paragonu w toku…
           </div>
           <div style={{ color: "#64748b", fontSize: 12 }}>
             To może potrwać kilkanaście sekund
@@ -482,19 +484,18 @@ export default function PanelExpenses() {
                           🏪 {ocrMeta.merchant} <span style={{ color: "#475569", fontSize: 10 }}>✏️</span>
                         </span>
                       ) : (
-                        // Editing OR unknown shop — type it. Mount condition depends
-                        // on editingMerchant (a stable flag), NOT on the value, so
-                        // typing the first letter doesn't remount and drop focus.
+                        // Editing OR unknown shop — type it with autocomplete.
+                        // MerchantInput mounts on editingMerchant (stable flag),
+                        // not on the value, so the first letter doesn't drop focus.
                         <span style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
                           <span>🏪</span>
-                          <input
-                            type="text"
+                          <MerchantInput
+                            value={ocrMeta.merchant || ""}
                             autoFocus
                             placeholder="Wpisz nazwę sklepu…"
-                            value={ocrMeta.merchant || ""}
-                            onChange={e => setOcrMeta(m => m && ({ ...m, merchant: e.target.value || null }))}
+                            onChange={(v: string) => setOcrMeta(m => m && ({ ...m, merchant: v || null }))}
                             onBlur={() => setEditingMerchant(false)}
-                            onKeyDown={e => { if (e.key === "Enter") setEditingMerchant(false); }}
+                            onEnter={() => setEditingMerchant(false)}
                             style={{ flex: 1, minWidth: 0, background: "#1e293b", border: "1px solid #334155", borderRadius: 6, padding: "4px 8px", color: "#e2e8f0", fontSize: 12 }}
                           />
                         </span>
