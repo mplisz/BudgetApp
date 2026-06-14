@@ -21,7 +21,20 @@ function todayYMD(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
-
+function safeHttpUrl(raw: string): string | null {
+  const trimmed = (raw || "").trim();
+  if (!trimmed) return null;
+  // must be  http(s) — blocks  javascript:, data:, vbscript etc.,
+  const scheme = trimmed.match(/^([a-z][a-z0-9+.-]*):/i);
+  if (scheme && !/^https?$/i.test(scheme[1])) return null;
+  const candidate = scheme ? trimmed : `https://${trimmed}`;
+  try {
+    const u = new URL(candidate);
+    return (u.protocol === "http:" || u.protocol === "https:") ? u.href : null;
+  } catch {
+    return null;
+  }
+}
 export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardProps) {
   const currentMonth = todayYMD().slice(0, 7);
   const isForeign    = doc.originalCurrency && doc.originalCurrency !== "PLN";
@@ -51,6 +64,10 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
     ? (doc.virtualSavings || []).find(v => v.month === currentMonth)
     : null;
 
+  //safe url - make sure only https/http links are actually rendered
+  const safeUrl = doc.url ? safeHttpUrl(doc.url) : null;
+
+
   return (
     <div style={{
       background:   "#0d1424",
@@ -64,6 +81,18 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
             <span style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{doc.description}</span>
+            {safeUrl && (
+               <a
+                href={safeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                title={doc.url}
+                style={{ fontSize: 12, color: "#3b82f6", textDecoration: "none" }}
+              >
+                🔗 link
+              </a>
+            )}
             <span style={{
               fontSize: 10, padding: "2px 8px", borderRadius: 20,
               background: doc.mode === "envelope" ? "#3b82f622" : "#f59e0b22",

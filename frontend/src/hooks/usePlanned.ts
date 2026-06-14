@@ -44,6 +44,7 @@ export interface PlannedDoc {
   isArchived:           boolean;
   createdAt?:           string;
   updatedAt?:           string;
+  url?: string;
 }
 
 export interface PlannedPostPayload {
@@ -62,6 +63,7 @@ export interface PlannedPostPayload {
   plannedMonth:         string;
   monthlySavingDay:     number;
   virtualSavings:       VirtualSaving[];
+  url?: string;
 }
 
 export interface PlannedPatchPayload {
@@ -79,6 +81,7 @@ export interface PlannedPatchPayload {
   mode?:                "oneoff" | "envelope";
   plannedMonth?:        string;
   monthlySavingDay?:    number;
+  url?: string;
   // Note: virtualSavings is intentionally NOT in patch payload —
   // backend recomputes it from totalAmountPLN / plannedMonth changes.
   // Sending it from frontend would bypass backend recalculation logic.

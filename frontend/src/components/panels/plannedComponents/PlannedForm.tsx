@@ -49,6 +49,7 @@ interface FormState {
   mode:                 "oneoff" | "envelope";
   plannedMonth:         Date | null;
   monthlySavingDay:     number | string;
+  url: string;
 }
 
 interface RateInfo {
@@ -111,6 +112,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
     mode:                  initialValues?.mode                 ?? "oneoff",
     plannedMonth:          initialValues?.plannedMonth ? fromYM(initialValues.plannedMonth) : fromYM(minPlan),
     monthlySavingDay:      initialValues?.monthlySavingDay     ?? 1,
+    url: initialValues?.url ?? ""
   }));
 
   const [rateInfo,  setRateInfo]  = useState<RateInfo>({ activeRate: 1, resolvedCurrency: "PLN" });
@@ -188,7 +190,8 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
         // If sent unchanged, backend rebuilds virtualSavings unnecessarily
         // and may compute wrong suggestion when no new months exist.
         ...(plannedMonthChanged ? { plannedMonth: plannedMonthStr } : {}),
-        // virtualSavings intentionally omitted — backend recomputes
+        // virtualSavings intentionally omitted — backend recomputes,
+        url: form.url.trim()
       };
       onSubmit(patch);
       return;
@@ -218,6 +221,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
       plannedMonth:         plannedMonthStr,
       monthlySavingDay:     parseInt(String(form.monthlySavingDay)) || 1,
       virtualSavings,
+      url: form.url.trim()
     };
     onSubmit(payload);
   }
@@ -273,7 +277,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
 
       {/* Target subcategory */}
       <div style={frow}>
-        <label style={(s as any).label}>Subkategoria zakupu</label>
+        <label style={(s as any).label}>Kategoria zakupu</label>
         <SubcategorySelect
           value={form.targetSubcategoryId}
           onChange={({ subcategoryId, subcategoryName, categoryId, categoryName }: {
@@ -288,13 +292,28 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
             }))
           }
           allowedTypes={["EXPENSE", "SAVING"]}
-          placeholder="— gdzie trafi wydatek? —"
+          placeholder="— Kategoria zakupu - gdzie trafi wydatek? —"
         />
         {form.targetCategoryName && (
           <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>{form.targetCategoryName}</div>
         )}
       </div>
-
+      {/* URL (optional) */}
+      <div style={frow}>
+        <label style={(s as any).label}>
+          Link{" "}
+          <span style={{ color: "#475569", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+            (opcjonalnie — np. strona produktu)
+          </span>
+        </label>
+        <input
+          type="url" maxLength={2000}
+          value={form.url}
+          onChange={e => set("url", e.target.value)}
+          placeholder="https://..."
+          style={(s as any).input}
+        />
+      </div>
       {/* Currency + amount */}
       <div style={frow}>
         <CurrencyRateField
