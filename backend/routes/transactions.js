@@ -35,7 +35,9 @@ const { cleanMerchant, merchantExists, rememberMerchant } = require("../utils/me
 
 // ── Schemas ───────────────────────────────────────────────────
 
-const TransactionPostSchema = z.object({
+// Fields shared by POST and PATCH. Required/defaulted here as for POST;
+// PATCH derives via .partial(), which turns every field optional.
+const TransactionBaseSchema = z.object({
   date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   type:             z.enum(["EXPENSE", "INCOME", "SAVING", "TRANSFER"]).optional(),
   budgetMonth:      z.string().regex(BUDGET_MONTH_REGEX),
@@ -53,49 +55,42 @@ const TransactionPostSchema = z.object({
   useVoucher:       z.boolean().optional().default(false),
   voucherId:        z.string().nullable().optional().default(null),
   voucherAmount:    z.number().min(0).optional().default(0),
-  isRecurring:      z.boolean().optional().default(false),
-  recurringId:      z.string().nullable().optional().default(null),
+  merchant:         z.string().max(150).optional().nullable(), // future reference, unused for now
+});
+
+// POST = base + create-only fields (receipt/recurring/line items).
+const TransactionPostSchema = TransactionBaseSchema.extend({
+  isRecurring:     z.boolean().optional().default(false),
+  recurringId:     z.string().nullable().optional().default(null),
   receiptBlobPath: z.string().max(300).optional().nullable(),
   receiptId:       z.string().max(120).optional().nullable(),
-  merchant:        z.string().max(150).optional().nullable(),
-  isWarranty: z.boolean().optional().default(false),
-  lineItems:  z.array(z.object({
+  isWarranty:      z.boolean().optional().default(false),
+  lineItems:       z.array(z.object({
     description: z.string().max(200),
     amount:      z.number(),
   })).max(60).optional(),
 });
 
-const TransactionPatchSchema = z.object({
-  date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  type:             z.enum(["EXPENSE", "INCOME", "SAVING", "TRANSFER"]).optional(),
-  merchant: z.string().max(150).optional().nullable(), //not used as of now for future possible reference
-  budgetMonth:      z.string().regex(BUDGET_MONTH_REGEX).optional(),
-  subcategoryId:    z.string().min(1).optional(),
-  subcategoryName:  z.string().min(1).optional(),
-  categoryId:       z.string().min(1).optional(),
-  categoryName:     z.string().min(1).optional(),
-  amount:           z.number().positive().optional(),
-  originalAmount:   z.number().positive().optional(),
-  originalCurrency: z.string().length(3).optional(),
-  fxRate:           z.number().positive().optional(),
-  description:      z.string().max(500).optional().transform(v => v?.trim() ?? ""),
-  tags:             z.array(z.string()).optional(),
-  priority:         z.number().int().min(1).max(4).optional(),
-  useVoucher:       z.boolean().optional(),
-  voucherId:        z.string().nullable().optional(),
-  voucherAmount:    z.number().min(0).optional(),
-  returns:          z.array(z.object({
-    amount:               z.number().positive(),
-    currency:             z.string().length(3).default("PLN"),
-    voucherAmount:        z.number().min(0).default(0),
-    cashAmount:           z.number().min(0),
-    moneyReturnedInMonth: z.string().regex(BUDGET_MONTH_REGEX),
-    returnedAt:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    reason:               z.string().max(500).optional().default("").transform(v => v?.trim() ?? ""),
-    returnedBy:           z.string().optional().default(""),
-    returnedById:         z.string().optional().default(""),
-  })).optional(),
-}).refine(d => Object.keys(d).length > 0, { message: "No fields to update." })
+// PATCH = base made fully optional, plus the patch-only `returns` array.
+// Omitted fields resolve to `undefined` (defaults don't fire under
+// .partial()), so the route's `v !== undefined` filter leaves existing
+// values untouched. .extend() must run before the refines — you can't
+// .extend() a refined schema.
+const TransactionPatchSchema = TransactionBaseSchema.partial()
+  .extend({
+    returns: z.array(z.object({
+      amount:               z.number().positive(),
+      currency:             z.string().length(3).default("PLN"),
+      voucherAmount:        z.number().min(0).default(0),
+      cashAmount:           z.number().min(0),
+      moneyReturnedInMonth: z.string().regex(BUDGET_MONTH_REGEX),
+      returnedAt:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      reason:               z.string().max(500).optional().default("").transform(v => v?.trim() ?? ""),
+      returnedBy:           z.string().optional().default(""),
+      returnedById:         z.string().optional().default(""),
+    })).optional(),
+  })
+  .refine(d => Object.keys(d).length > 0, { message: "No fields to update." })
   .refine(d => {
     if (d.useVoucher === true && d.voucherId !== undefined && !d.voucherId) return false;
     return true;

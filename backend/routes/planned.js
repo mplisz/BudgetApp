@@ -27,7 +27,18 @@ router.use(requireAuth);
 
 // ── Schemas ───────────────────────────────────────────────────
 
-const PlannedPostSchema = z.object({
+// URL rule is shared by POST and PATCH — define it once.
+const urlSchema = z.string().max(2000).trim()
+  .refine(v => {
+    if (v === "") return true;
+    const m = v.match(/^([a-z][a-z0-9+.-]*):/i);
+    return !m || /^https?$/i.test(m[1]);   // no scheme, or http(s) only
+  }, { message: "URL has to start with http(s) or be a bare domain." })
+  .optional().default("");
+
+// Shared shape for every patchable field. `mode` lives only on POST —
+// the expense type must not change after creation.
+const PlannedBaseSchema = z.object({
   description:          z.string().min(1).max(500).transform(v => v.trim()),
   totalAmount:          z.number().positive(),
   originalCurrency:     z.string().length(3).default("PLN"),
@@ -39,9 +50,9 @@ const PlannedPostSchema = z.object({
   targetSubcategoryName:z.string().min(1),
   tags:                 z.array(z.string()).optional().default([]),
   priority:             z.number().int().min(1).max(4).optional().default(2),
-  mode:                 z.enum(["oneoff", "envelope"]),
   plannedMonth:         z.string().regex(BUDGET_MONTH_REGEX),
   monthlySavingDay:     z.number().int().min(1).max(31).optional().default(1),
+  url:                  urlSchema,
   virtualSavings:       z.array(z.object({
     month:            z.string().regex(BUDGET_MONTH_REGEX),
     amount:           z.number().min(0),    // in original currency
@@ -52,29 +63,16 @@ const PlannedPostSchema = z.object({
   })).optional().default([]),
 });
 
-const PlannedPatchSchema = z.object({
-  description:          z.string().min(1).max(500).optional().transform(v => v?.trim()),
-  totalAmount:          z.number().positive().optional(),
-  originalCurrency:     z.string().length(3).optional(),
-  fxRate:               z.number().positive().optional(),
-  totalAmountPLN:       z.number().positive().optional(),
-  targetCategoryId:     z.string().min(1).optional(),
-  targetCategoryName:   z.string().min(1).optional(),
-  targetSubcategoryId:  z.string().min(1).optional(),
-  targetSubcategoryName:z.string().min(1).optional(),
-  tags:                 z.array(z.string()).optional(),
-  priority:             z.number().int().min(1).max(4).optional(),
-  plannedMonth:         z.string().regex(BUDGET_MONTH_REGEX).optional(),
-  monthlySavingDay:     z.number().int().min(1).max(31).optional(),
-  virtualSavings:       z.array(z.object({
-    month:           z.string().regex(BUDGET_MONTH_REGEX),
-    amount:          z.number().min(0),
-    amountPLN:       z.number().min(0),
-    fxRate:          z.number().positive().default(1),
-    paidByUser:      z.boolean().default(false),
-    dismissedByUser: z.boolean().default(false),
-  })).optional(),
-}).refine(d => Object.keys(d).length > 0, { message: "No fields to update." });
+// POST: base plus the required mode. Defaults fire for omitted fields.
+const PlannedPostSchema = PlannedBaseSchema.extend({
+  mode: z.enum(["oneoff", "envelope"]),
+});
+
+// PATCH: every field optional. Omitted fields resolve to `undefined`
+// (not their default), so the route's `v !== undefined` filter skips
+// them and never clobbers existing values. At least one field required.
+const PlannedPatchSchema = PlannedBaseSchema.partial()
+  .refine(d => Object.keys(d).length > 0, { message: "No fields to update." });
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -219,6 +217,8 @@ router.post("/", async (req, res) => {
       createdAt:            new Date().toISOString(),
       createdBy:            req.user.name || req.user.email,
       createdById:          req.user.id,
+      url: d.url || "",
+
     };
 
     const { resource } = await plannedContainer.items.create(doc);
