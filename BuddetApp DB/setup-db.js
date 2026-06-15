@@ -22,7 +22,7 @@ const containers = [
   { id: "RefreshTokens",         partitionKey: "/email"   },
   { id: "Settings",              partitionKey: "/userId"  },
   { id: "Months",                partitionKey: "/userId"  },
-  { id: "Vouchers",              partitionKey: "/userId"  },
+  { id: "Tags",              partitionKey: "/userId"  },
   {id:  "Receipts",               partitionKey: "/userId" }
 ];
 

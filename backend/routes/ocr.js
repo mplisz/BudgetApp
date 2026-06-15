@@ -189,20 +189,37 @@ function buildSystemPrompt(categoryTree, knownMerchants = []) {
     ? knownMerchants.join(", ")
     : "(brak zapisanych sklepów)";
 
-  return `Jesteś asystentem OCR analizującym zdjęcia polskich paragonów fiskalnych.
+  return `Jesteś asystentem OCR analizującym zdjęcia paragonów fiskalnych (zwykle polskich, ale możliwe też zagraniczne).
+
 
 ZADANIE: Wyodrębnij pozycje zakupowe z paragonu i zwróć je jako JSON.
 Paragon otrzymasz jako odczytany tekst (markdown z OCR) LUB jako zdjęcie/fragmenty zdjęcia.
 
 ZASADY SCALANIA RABATÓW (KRYTYCZNE):
-1. Linie zaczynające się od "-" lub zawierające słowa "rabat", "zniżka", "opust", "promocja", "upust" to KOREKTY, nie osobne pozycje.
-2. Dopasuj każdą korektę do pozycji której dotyczy (zwykle ta sama lub podobna nazwa, linia bezpośrednio powyżej/poniżej).
-3. Identyczne pozycje występujące wielokrotnie (np. 2x "Coca-Cola 6,99") POŁĄCZ w jedną pozycję z sumą ilości w opisie (np. "Coca-Cola 1.5L x2").
+1. Korekta to linia, która OBNIŻA cenę innej pozycji — rozpoznawaj ją po FUNKCJI, nie po
+   konkretnym słowie: ujemna kwota, znak "-" na początku, lub wiersz odnoszący się do
+   pozycji powyżej/poniżej. Słowa-klucze (lista PRZYKŁADOWA, nie wyczerpująca, różne języki):
+   PL: rabat, zniżka, opust, upust, promocja
+   CZ/SK: sleva, zľava, akce, akcia
+   DE: Rabatt, Nachlass, Aktion
+   EN: discount, rebate, promo, "off"
+   FR/IT/ES/NL: remise, réduction, sconto, descuento, korting
+   Jeśli linia pełni funkcję korekty w JAKIMKOLWIEK języku — potraktuj ją jak rabat,
+   nawet gdy słowo nie jest na liście.
+2. Dopasuj każdą korektę do pozycji której dotyczy (zwykle ta sama lub podobna nazwa, linia
+   bezpośrednio powyżej/poniżej).
+3. Identyczne pozycje występujące wielokrotnie (np. 2x "Coca-Cola 6,99") POŁĄCZ w jedną
+   pozycję z sumą ilości w opisie (np. "Coca-Cola 1.5L x2").
 4. Pole "amount" to ZAWSZE cena finalna po wszystkich rabatach.
-5. Pole "grossAmount" to suma przed rabatem, "discountAmount" to wartość rabatu. Gdy nie było rabatu — pomiń oba pola lub ustaw discountAmount: 0.
-6. W polu "mergeNote" krótko opisz scalenie, np. "2x 6,99 + rabat -6,99 = 6,99 za 2 szt". Gdy nie było scalania — null.
-7. Suma wszystkich "amount" MUSI zgadzać się z kwotą do zapłaty (patrz reguła 17). Jeśli się nie zgadza, dodaj wyjaśnienie w polu "warning".
-8. Niektóre sklepy (np. Auchan) drukują rabaty w OSOBNYM BLOKU na dole paragonu jako "OPUST SK.NAZWA -X,XX" lub "OPUST PROMO NAZWA -X,XX". Dopasuj każdy opust do pozycji o tej samej (skróconej) nazwie/kodzie i odejmij od jej ceny.
+5. Pole "grossAmount" to suma przed rabatem, "discountAmount" to wartość rabatu.
+   Gdy nie było rabatu — pomiń oba pola lub ustaw discountAmount: 0.
+6. W polu "mergeNote" krótko opisz scalenie. Gdy nie było scalania — null.
+7. Suma wszystkich "amount" MUSI zgadzać się z finalnym totalem paragonu, niezależnie od
+   tego, jak jest podpisany ("Do zapłaty", "Suma", "Celkem", "K úhradě", "Gesamt",
+   "Summe", "Total", "À payer", ...). Jeśli się nie zgadza, dodaj wyjaśnienie w "warning".
+8. Niektóre sklepy drukują rabaty w OSOBNYM BLOKU na dole paragonu (np. polskie
+   "OPUST SK. NAZWA -X,XX", ale też analogiczne bloki w innych sieciach/krajach).
+   Przypisz je do właściwych pozycji tak samo jak rabaty inline.
 9. Wypisz KAŻDĄ pozycję zakupową — paragon może mieć kilkadziesiąt pozycji. Nie pomijaj żadnej i nie skracaj listy.
 10. Jeśli paragon jest dostarczony jako kilka nakładających się fragmentów: pozycje widoczne na styku dwóch fragmentów potraktuj JEDEN raz (deduplikuj po nazwie i cenie).
 11. Ujemna linia o PEŁNEJ wartości pozycji (np. "BATON X 3,48" oraz osobno "BATON X -3,48") oznacza ZWROT/anulowanie — pomiń tę pozycję całkowicie.
@@ -220,8 +237,27 @@ ZASADY SCALANIA RABATÓW (KRYTYCZNE):
    - "merchant": krótka, potoczna nazwa sieci. ZNANE SKLEPY UŻYTKOWNIKA: ${merchantLine}. Jeśli sklep z paragonu pasuje do któregoś ze znanych — użyj DOKŁADNIE tej nazwy z listy (kanonizacja). Jeśli nie pasuje do żadnego — zwróć nową krótką, potoczną nazwę sieci (np. "AUCHAN POLSKA SP. Z O.O." → "Auchan"), NIE pełną nazwę prawną.
    - "receiptNumber": numer wydruku/paragonu jeśli widoczny (np. przy "nr:", "WYDRUK NR", "PARAGON NR") — same znaki numeru, bez etykiety.
    - "sellerTaxId": NIP sprzedawcy jeśli widoczny (przy "NIP") — same cyfry, bez spacji i myślników.
+19. WALUTA (metadata.currency):
+- Rozpoznaj walutę paragonu po symbolach/kodach: "zł"/"PLN" → PLN, "Kč"/"CZK" → CZK,
+  "€"/"EUR" → EUR, "$"/"USD" → USD, "£"/"GBP" → GBP, "kr" → SEK/NOK/DKK wg kraju sklepu.
+- W metadata.currency zwróć ZAWSZE kod ISO 4217 (3 wielkie litery), nigdy symbol.
+- Gdy symbol jest niejednoznaczny ($, kr, £, ¥, Rs), ustal walutę na podstawie
+  kraju/adresu sklepu, języka paragonu i formatu podatku (np. "$" + adres w Kanadzie
+  lub "GST/HST" → CAD; "$" + "MwSt"/Austria nie dotyczy; "kr" + ".se"/szwedzki → SEK).
+  Dopiero gdy brak jakichkolwiek wskazówek — przyjmij walutę domyślną regionu.
+- Jeśli paragon nie wskazuje waluty jednoznacznie i wygląda na polski → "PLN".
    Gdy któregoś z tych pól nie ma na paragonie, ustaw null.
-
+20. TŁUMACZENIE NAZW: Jeśli paragon jest w obcym języku, w "description" podaj polski rodzaj
+produktu, a oryginalną nazwę rodzajową dodaj w nawiasie. Nazwy własne/marki ZOSTAW w oryginale
+w cudzysłowie. NIE tłumacz marek, kodów produktów ani jednostek.
+Format:  <polski rodzaj> (<oryginał rodzajowy>) ['marka']
+Przykłady:
+  "Non" (uzb.)              → "Chleb (Non)"
+  "Sūris" (lt.)             → "Ser (Sūris)"
+  "Mléko Pribináček" (cz.)  → "Mleko (Mléko) 'Pribináček'"
+21. ŻADNA pozycja w "items" nie może mieć ujemnego "amount". Ujemne wartości na paragonie to
+rabaty (reguła 1 — scal z odpowiednią pozycją) albo zwroty/anulowania (reguła 11 — pomiń
+całkowicie). Nigdy nie zwracaj korekty jako osobnej pozycji.
 POMIJAJ: linie VAT/PTU, numery NIP, formy płatności, wydaną resztę, punkty lojalnościowe i naklejki, kaucje zwrócone (ujemne).
 
 KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
@@ -566,6 +602,14 @@ router.post("/receipt", async (req, res) => {
       return res.status(502).json({ error: "Model returned invalid response." });
     }
 
+    // Defensive: in case LLM pushes the negative line item delete this LI to avoid the crash
+    // Step 5 below will handle the difference between sum and sum of line items
+    let droppedNeg = 0;
+    if (Array.isArray(llmJson?.items)) {
+      const n = llmJson.items.length;
+      llmJson.items = llmJson.items.filter(it => !(typeof it?.amount === "number" && it.amount < 0));
+      droppedNeg = n - llmJson.items.length;
+    }
     const validated = LlmResponseSchema.safeParse(llmJson);
     if (!validated.success) {
       console.error("[OCR] Model response failed schema:", validated.error.issues[0]);
@@ -576,12 +620,16 @@ router.post("/receipt", async (req, res) => {
 
     // 5. Sanity check: items sum vs receipt total (tolerance 0.05 zł)
     let sumWarning = warning || null;
+    if (droppedNeg > 0 && !sumWarning) {
+      sumWarning = `Pominięto ${droppedNeg} ujemną pozycję (rabat/zwrot jako osobna linia). Sprawdź, czy suma się zgadza.`;
+    }
     if (items.length > 0 && metadata.totalSum != null) {
       const itemsSum = roundMoney(items.reduce((s, i) => s + i.amount, 0));
       if (Math.abs(itemsSum - metadata.totalSum) > 0.05 && !sumWarning) {
         sumWarning = `Suma pozycji (${itemsSum.toFixed(2)}) różni się od sumy paragonu (${metadata.totalSum.toFixed(2)}). Sprawdź pozycje.`;
       }
     }
+    
 
     // 6. Map category names → IDs
     const mappedItems = mapItemsToCategories(items, categoryTree);

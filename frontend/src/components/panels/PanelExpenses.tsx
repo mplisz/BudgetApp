@@ -11,15 +11,18 @@ import { useTransactions }  from "../../hooks/useTransactions";
 import { useToast }         from "../../hooks/useToast";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { theme as s }       from "../../styles/theme";
-import { fmt }              from "../../utils/helpers";
 import { TransactionForm, emptyFormValues} from "./transactionComponents/TransactionForm";
 import type { TransactionPayload } from "../../types/transaction";
 import { CartPanel } from "./transactionComponents/CartPanel";
 import type { CartItem } from "./transactionComponents/CartPanel";
 import { computeSuggestedPriority } from "../ui/PriorityPicker";
 import { MerchantInput } from "../ui/MerchantInput";
-import { translateError } from "../../data/constants/errorMessages";
-
+import { translateError } from "../../data/constants";
+import { fmt, round2,fmtAmount  }      from "../../utils/helpers";
+import { normalizeCurrency } from "../../utils/currencies";
+import { useCurrencyConverter } from "../../hooks/useCurrencyConverter";
+import { useCurrencyManager }   from "../../hooks/useCurrencyManager";
+import { TagMultiSelect } from "../ui/TagMultiSelect";
 
 // ── Cart ID generator ─────────────────────────────────────────
 
@@ -61,10 +64,13 @@ interface OcrMeta {
   receiptId:        string | null;    // Receipt entity id (for tx linking)
   isDuplicate:      boolean;          // backend flagged a likely re-scan
   duplicateWarning: string | null;   // separate from `warning` (OCR quality)
+  currency:        string | null;   // ISO fromt the recipt null/"PLN" ⇒ base
+
 }
 
 const OCR_MAX_FILE_BYTES = 5 * 1024 * 1024;
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 
 // ── Component ─────────────────────────────────────────────────
 
@@ -106,12 +112,35 @@ export default function PanelExpenses() {
   const [ocrLines,        setOcrLines]        = useState<OcrLine[]>([]);
   const [ocrMeta,         setOcrMeta]         = useState<OcrMeta | null>(null);
   const [ocrWarranty,     setOcrWarranty]     = useState(false);  // per-receipt warranty flag
+  const [ocrTags, setOcrTags]                 = useState<string[]>([]);
   const [editingMerchant, setEditingMerchant] = useState(false);  // merchant edit mode (decoupled from value)
   const [ocrLoading,      setOcrLoading]      = useState(false);
   const [ocrMode,         setOcrMode]         = useState(false);
   const [formKey,         setFormKey]         = useState(0);
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
+  const { baseCurrency, dropdownCurrencies  } = useCurrencyManager() as { baseCurrency: { code: string };dropdownCurrencies: Array<{ code: string }>;};
+  const {
+    loadRate, activeRate, rate, isLoading: rateLoading,
+    error: rateError, manualRate, setManualRate, effectiveDate,
+  } = useCurrencyConverter() as {
+    loadRate: (c: string, d: string) => void;
+    activeRate: number | null; rate: number | null; isLoading: boolean;
+    error: string | null; manualRate: string;
+    setManualRate: (v: string) => void; effectiveDate: string | null;
+  };
 
+  const ocrIsForeign = !!(ocrMeta?.currency && ocrMeta.currency !== baseCurrency.code);
+  const fmtOcr = (amt: number, withPln = false) => {
+    if (!ocrIsForeign) return fmt(amt);
+    const cur = ocrMeta!.currency!;
+    const pln = withPln && activeRate ? ` (≈ ${fmt(round2(amt * activeRate))} zł)` : "";
+    return `${fmtAmount(amt, cur)} ${cur}${pln}`;
+  };
+  useEffect(() => {
+    if (ocrIsForeign && ocrMeta?.currency && ocrMeta?.date) {
+      loadRate(ocrMeta.currency, ocrMeta.date);
+    }
+  }, [ocrIsForeign, ocrMeta?.currency, ocrMeta?.date, loadRate]);
   const hasCart = cart.length > 0;
 
   const resetForm = useCallback(() => {
@@ -236,6 +265,7 @@ export default function PanelExpenses() {
         receiptBlobPath: data.receiptBlobPath    ?? null,
         receiptId:        data.receiptId          ?? null,
         isDuplicate:      !!data.isDuplicate,
+        currency:        normalizeCurrency(data.metadata?.currency), 
         duplicateWarning: data.duplicateWarning   ?? null,
       });
       if (data.warning) showWarning(data.warning);
@@ -256,6 +286,15 @@ export default function PanelExpenses() {
 
     const itemDate = ocrMeta?.date || new Date().toISOString().slice(0, 10);
     const merchant = ocrMeta?.merchant;
+    const oc     = ocrMeta?.currency || "PLN";
+    const isBase = oc === baseCurrency.code;
+
+    // Guard: no-PLN with no rate fetched from NBP
+    if (!isBase && (!activeRate || activeRate <= 0)) {
+      showError(`Brak kursu dla ${oc} — wpisz kurs ręcznie przed dodaniem pozycji.`);
+      return;
+    }
+    const fx: number = isBase ? 1 : activeRate!;   //
 
     setCart(prev => [
       ...prev,
@@ -267,17 +306,17 @@ export default function PanelExpenses() {
         subcategoryName:  line.subcategoryName || "",
         categoryId:       line.categoryId      || "",
         categoryName:     line.categoryName    || "",
-        amount:           line.amount,
+        amount:           isBase ? line.amount : round2(line.amount * fx),
         originalAmount:   line.amount,
-        originalCurrency: "PLN",
-        fxRate:           1,
+        originalCurrency: oc,
+        fxRate:           fx,
         description:      line.description || (merchant ? `${merchant}` : ""),
-        tags:             [],
+        tags:             ocrTags,
         priority:         computeSuggestedPriority(line.subcategoryId || "", categories) as 1 | 2 | 3 | 4,
         useVoucher:       false,
         voucherId:        null,
         voucherAmount:    0,
-        netAmount:        line.amount,
+        netAmount:        isBase ? line.amount : round2(line.amount * fx),
         isRecurring:      false,
         recurringId:      null,
         _cartId:          newCartId(),
@@ -305,7 +344,8 @@ export default function PanelExpenses() {
     setOcrMeta(null);
     setOcrWarranty(false);
     setEditingMerchant(false);
-  }, [ocrLines, ocrMeta, ocrWarranty, budgetMonth, categories, setCart, showWarning]);
+    setOcrTags([]);
+  }, [ocrLines, ocrMeta, ocrWarranty, budgetMonth, categories, setCart, showWarning, activeRate, baseCurrency.code, showError,ocrTags]);
 
   // ── Form initial values ───────────────────────────────────
     // Cart-aware default date — sticky to first cart item's date.
@@ -321,13 +361,30 @@ export default function PanelExpenses() {
       return new Date(y, m - 1, d);
     }, [cart]);
 
+  // Sticky currency — last currency chosen is the default for next transaction,
+  // Currency in rhe dropdown → show code; currency not in the dropdown (eg., UZS) → "INNE" + customCurrency.
+    const cartCurrency = useMemo(() => {
+      if (cart.length === 0) return null;
+      const code = cart[cart.length - 1].originalCurrency;
+      if (!code || code === baseCurrency.code) return null;        // PLN/baza → bez nadpisania
+      const inDropdown = dropdownCurrencies.some(c => c.code === code);
+      return inDropdown
+        ? { currency: code,   customCurrency: "" }
+        : { currency: "INNE", customCurrency: code };
+    }, [cart, baseCurrency.code, dropdownCurrencies]);
+
     const formInitialValues = editingCartItem
       ? (() => {
           const [y, m, d] = editingCartItem.date.split("-").map(Number);
           return {
             date:            new Date(y, m - 1, d),
-            currency:        editingCartItem.originalCurrency,
-            customCurrency:  "",
+            ...(() => {
+                        const code = editingCartItem.originalCurrency;
+                        const inDd = dropdownCurrencies.some(c => c.code === code);
+                        return code && code !== baseCurrency.code && !inDd
+                          ? { currency: "INNE", customCurrency: code }
+                          : { currency: code, customCurrency: "" };
+                      })(),
             amountOrig:      String(editingCartItem.originalAmount),
             subcategoryId:   editingCartItem.subcategoryId,
             subcategoryName: editingCartItem.subcategoryName,
@@ -347,7 +404,11 @@ export default function PanelExpenses() {
           };
         })() 
       : cartDate
-      ? { ...emptyFormValues(), date: cartDate }
+      ? 
+      { 
+      ...emptyFormValues(), date: cartDate ,
+      ...(cartCurrency ? { currency: cartCurrency.currency, customCurrency: cartCurrency.customCurrency } : {})
+      }
       : undefined;
 
   // ── Guards ────────────────────────────────────────────────
@@ -502,7 +563,7 @@ export default function PanelExpenses() {
                       )}
                       <span style={{ color: "#64748b", flexShrink: 0 }}>{ocrMeta.date || "—"}</span>
                       {ocrMeta.totalSum != null && (
-                        <span style={{ color: "#10b981", fontWeight: 700, flexShrink: 0 }}>{fmt(ocrMeta.totalSum)}</span>
+                        <span style={{ color: "#10b981", fontWeight: 700, flexShrink: 0 }}>{fmtOcr(ocrMeta.totalSum,true)}</span>
                       )}
                     </div>
                   )}
@@ -520,7 +581,28 @@ export default function PanelExpenses() {
                       ⚠️ {ocrMeta.warning}
                     </div>
                   )}
-
+                  {ocrIsForeign && (
+                    <div style={{ background: "#1e3a5f33", border: "1px solid #3b82f655", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#93c5fd" }}>
+                      <div>
+                        💱 Paragon w <strong>{ocrMeta!.currency}</strong> — pozycje zostaną przeliczone na PLN.
+                        {rateLoading && <span> · ⏳ pobieranie kursu…</span>}
+                        {!rateLoading && rate && !rateError && (
+                          <span> · 1 {ocrMeta!.currency} = <strong>{rate.toFixed(4)}</strong> {baseCurrency.code}
+                            {effectiveDate === ocrMeta!.date
+                              ? ` (NBP z ${effectiveDate})`
+                              : ` (NBP z ${effectiveDate} — brak kursu z dnia paragonu)`}</span>
+                        )}
+                        {rateError && <span style={{ color: "#fca5a5" }}> · ⚠️ brak kursu NBP — wpisz ręcznie</span>}
+                      </div>
+                      <input
+                        type="number" step="0.0001" min="0"
+                        value={manualRate}
+                        onChange={e => setManualRate(e.target.value)}
+                        placeholder={rate ? rate.toFixed(4) : `kurs PLN/${ocrMeta!.currency}`}
+                        style={{ width: "100%", marginTop: 8, background: "#0a0f1e", border: `1px solid ${rateError ? "#f59e0b" : "#1e293b"}`, borderRadius: 6, color: "#e2e8f0", padding: "6px 10px", fontSize: 13 }}
+                      />
+                    </div>
+                  )}
                   <div style={{ color: "#10b981", fontWeight: 700, marginBottom: 12 }}>✅ Znalezione pozycje:</div>
                   {ocrLines.map((line, i) => {
                     const lowConf    = line.categoryConfidence < 0.75;
@@ -553,7 +635,7 @@ export default function PanelExpenses() {
                               </div>
                               {line.discountAmount != null && line.discountAmount > 0 && (
                                 <div style={{ color: "#f59e0b", fontSize: 11, marginTop: 3 }}>
-                                  🏷️ rabat −{fmt(line.discountAmount)}
+                                  🏷️ rabat −{fmtOcr(line.discountAmount)}
                                   {line.mergeNote && <span style={{ color: "#92710a" }}> · {line.mergeNote}</span>}
                                 </div>
                               )}
@@ -561,9 +643,9 @@ export default function PanelExpenses() {
                           </div>
                           <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
                             {line.grossAmount != null && line.discountAmount != null && line.discountAmount > 0 && (
-                              <div style={{ color: "#64748b", fontSize: 11, textDecoration: "line-through" }}>{fmt(line.grossAmount)}</div>
+                              <div style={{ color: "#64748b", fontSize: 11, textDecoration: "line-through" }}>{fmtOcr(line.grossAmount)}</div>
                             )}
-                            <div style={{ color: "#10b981", fontWeight: 700 }}>{fmt(line.amount)}</div>
+                            <div style={{ color: "#10b981", fontWeight: 700 }}>{fmtOcr(line.amount,true)}</div>
                           </div>
                         </div>
                       </div>
@@ -584,10 +666,20 @@ export default function PanelExpenses() {
                       dłuższe przechowywanie
                     </span>
                   </label>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: "block", fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 }}>
+                      🏷️ Tagi dla całego paragonu
+                    </label>
+                    <TagMultiSelect
+                      value={ocrTags}
+                      onChange={setOcrTags}
+                      placeholder="Dodaj tag do wszystkich pozycji…"
+                    />
+                  </div>                  
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid #1e293b", marginBottom: 12 }}>
                     <span style={{ color: "#64748b" }}>Suma zaznaczonych:</span>
                     <span style={{ color: "#10b981", fontWeight: 800, fontSize: 18 }}>
-                      {fmt(ocrLines.filter(l => l.selected).reduce((sum, l) => sum + l.amount, 0))}
+                      {fmtOcr(ocrLines.filter(l => l.selected).reduce((sum, l) => sum + l.amount, 0),true)}
                     </span>
                   </div>
                   <button onClick={handleAddOcrLines}
@@ -595,7 +687,7 @@ export default function PanelExpenses() {
                     style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8, opacity: ocrLines.some(l => l.selected) ? 1 : 0.5 }}>
                     🛒 Dodaj zaznaczone do koszyka ({ocrLines.filter(l => l.selected).length})
                   </button>
-                  <button onClick={() => { setOcrLines([]); setOcrMeta(null); setOcrWarranty(false); setEditingMerchant(false); }}
+                  <button onClick={() => { setOcrLines([]); setOcrMeta(null); setOcrWarranty(false); setOcrTags([]);setEditingMerchant(false); }}
                     style={{ display: "block", width: "100%", padding: 10, borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#64748b", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                     🔄 Skanuj ponownie
                   </button>
