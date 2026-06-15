@@ -86,7 +86,12 @@ export interface TransactionPayload {
   receiptId?:       string | null;   
   merchant?:        string | null;  
   isWarranty?:      boolean;                                       
-  lineItems?:       Array<{ description: string; amount: number }>;   
+  lineItems?:       Array<{
+                      description:       string;
+                      amount:            number;          // PLN — always
+                      originalAmount?:   number;          // Original amount
+                      originalCurrency?: string;          // for example "CZK"; if absent ⇒ PLN
+                    }>;
 }
 
 export interface TransactionFormProps {

@@ -56,6 +56,13 @@ const TransactionBaseSchema = z.object({
   voucherId:        z.string().nullable().optional().default(null),
   voucherAmount:    z.number().min(0).optional().default(0),
   merchant:         z.string().max(150).optional().nullable(), // future reference, unused for now
+  lineItems:        z.array(z.object({
+                      description:      z.string().max(200),
+                      amount:          z.number(),
+                      originalAmount:  z.number().optional(),
+                      originalCurrency: z.string().max(5).optional(),
+                    })).max(60).optional(),
+
 });
 
 // POST = base + create-only fields (receipt/recurring/line items).
@@ -65,10 +72,6 @@ const TransactionPostSchema = TransactionBaseSchema.extend({
   receiptBlobPath: z.string().max(300).optional().nullable(),
   receiptId:       z.string().max(120).optional().nullable(),
   isWarranty:      z.boolean().optional().default(false),
-  lineItems:       z.array(z.object({
-    description: z.string().max(200),
-    amount:      z.number(),
-  })).max(60).optional(),
 });
 
 // PATCH = base made fully optional, plus the patch-only `returns` array.

@@ -10,7 +10,7 @@
 
 import { useState }           from "react";
 import { createPortal }       from "react-dom";
-import { fmt }                from "../../../utils/helpers";
+import { fmt,fmtAmount  }                from "../../../utils/helpers";
 import { s, PrioBadge, calcReturns } from "./txStyles.jsx";
 import { EditTransactionModal }      from "./EditTransactionModal";
 import { ReceiptModal } from "./ReceiptModal";
@@ -157,7 +157,11 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
               {lineItems.map((li, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 12, borderBottom: i < lineItems.length - 1 ? "1px solid #131a2c" : "none" }}>
                   <span style={{ color: "#94a3b8" }}>{li.description || "—"}</span>
-                  <span style={{ color: "#cbd5e1", fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>{fmt(li.amount)}</span>
+                  <span style={{ color: "#cbd5e1", fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>
+                    {li.originalCurrency && li.originalCurrency !== "PLN"
+                      ? `${fmtAmount(li.originalAmount, li.originalCurrency)} ${li.originalCurrency} (${fmt(li.amount)})`
+                      : fmt(li.amount)}
+                  </span>
                 </div>
               ))}
             </div>

@@ -33,7 +33,7 @@ export interface CartItem extends TransactionPayload {
   _ocrMerchant?:    string;  // shop name (for per-merchant filtering)
   _ocrWarranty?:    boolean; // receipt flagged as warranty → longer retention
   _ocrNeedsReview?: boolean; // AI was unsure — keep flagged in cart until edited
-  _lineItems?:      Array<{ description: string; amount: number }>; // merge breakdown
+  _lineItems?:      Array<{ description: string; amount: number; originalAmount?: number; originalCurrency?: string }>;
 }
 
 interface CartPanelProps {
@@ -71,11 +71,12 @@ export function aggregateCart(items: CartItem[]): CartItem[] {
   const groups = new Map<string, CartItem>();
   for (const item of items) {
     const key = aggregationKey(item);
-    // A line item snapshot — what this single cart row contributed.
-    // Captured so the merged transaction can later answer "what's
-    // inside this 13,77?" and feed price tracking. description+amount
-    // per agreed scope.
-    const line = { description: item.description || "", amount: item.amount };
+    const line = {
+      description:      item.description || "",
+      amount:          item.amount,                       // PLN
+      originalAmount:  item.originalAmount ?? item.amount,
+      originalCurrency: item.originalCurrency || "PLN",
+    };
     if (groups.has(key)) {
       const existing = groups.get(key)!;
       existing.amount         = Math.round((existing.amount + item.amount) * 100) / 100;
