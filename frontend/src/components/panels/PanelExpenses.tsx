@@ -118,7 +118,7 @@ export default function PanelExpenses() {
   const [ocrMode,         setOcrMode]         = useState(false);
   const [formKey,         setFormKey]         = useState(0);
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
-  const { baseCurrency, dropdownCurrencies  } = useCurrencyManager() as { baseCurrency: { code: string };dropdownCurrencies: Array<{ code: string }>;};
+  const { baseCurrency  } = useCurrencyManager() as { baseCurrency: { code: string }};
   const {
     loadRate, activeRate, rate, isLoading: rateLoading,
     error: rateError, manualRate, setManualRate, effectiveDate,
@@ -361,30 +361,19 @@ export default function PanelExpenses() {
       return new Date(y, m - 1, d);
     }, [cart]);
 
-  // Sticky currency — last currency chosen is the default for next transaction,
-  // Currency in rhe dropdown → show code; currency not in the dropdown (eg., UZS) → "INNE" + customCurrency.
-    const cartCurrency = useMemo(() => {
-      if (cart.length === 0) return null;
-      const code = cart[cart.length - 1].originalCurrency;
-      if (!code || code === baseCurrency.code) return null;        // PLN/baza → bez nadpisania
-      const inDropdown = dropdownCurrencies.some(c => c.code === code);
-      return inDropdown
-        ? { currency: code,   customCurrency: "" }
-        : { currency: "INNE", customCurrency: code };
-    }, [cart, baseCurrency.code, dropdownCurrencies]);
+  const cartCurrency = useMemo(() => {
+    if (cart.length === 0) return null;
+    const code = cart[cart.length - 1].originalCurrency;
+    return (!code || code === baseCurrency.code) ? null : code;
+  }, [cart, baseCurrency.code]);
 
     const formInitialValues = editingCartItem
       ? (() => {
           const [y, m, d] = editingCartItem.date.split("-").map(Number);
           return {
             date:            new Date(y, m - 1, d),
-            ...(() => {
-                        const code = editingCartItem.originalCurrency;
-                        const inDd = dropdownCurrencies.some(c => c.code === code);
-                        return code && code !== baseCurrency.code && !inDd
-                          ? { currency: "INNE", customCurrency: code }
-                          : { currency: code, customCurrency: "" };
-                      })(),
+            currency:        editingCartItem.originalCurrency,
+            customCurrency:  "",
             amountOrig:      String(editingCartItem.originalAmount),
             subcategoryId:   editingCartItem.subcategoryId,
             subcategoryName: editingCartItem.subcategoryName,
@@ -401,13 +390,14 @@ export default function PanelExpenses() {
             discountAmount:  "",
             qty:             1,
             merchant:        editingCartItem._ocrMerchant || "",
+            lineItems:       [],
           };
         })() 
       : cartDate
       ? 
       { 
       ...emptyFormValues(), date: cartDate ,
-      ...(cartCurrency ? { currency: cartCurrency.currency, customCurrency: cartCurrency.customCurrency } : {})
+      ...(cartCurrency ? { currency: cartCurrency, customCurrency: "" } : {})
       }
       : undefined;
 

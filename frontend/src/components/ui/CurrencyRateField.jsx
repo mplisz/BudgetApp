@@ -57,7 +57,20 @@ export function CurrencyRateField({
       resolvedCurrency,
     });
   }, [activeRate, resolvedCurrency, isBaseCurrency, onRateReady]);
-
+  
+  // For unkown currency encure this is normalized to "Inna waluta" to avoid <select> being reverted back to PLN
+  useEffect(() => {
+    if (
+      currency &&
+      currency !== "INNE" &&
+      currency.length === 3 &&
+      !dropdownCurrencies.some(c => c.code === currency)
+    ) {
+      onCurrencyChange("INNE");
+      onCustomChange(currency);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [currency, dropdownCurrencies]);
   // ── Styles ─────────────────────────────────────────────────────
   const inp = {
     width: "100%", background: "#0a0f1e", border: "1px solid #1e293b",

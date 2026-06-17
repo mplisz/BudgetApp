@@ -59,6 +59,7 @@ export interface FormValues {
   discountAmount:  string;
   qty:             number;
   merchant:        string;
+  lineItems:       FormLineItem[];
 }
 
 export interface TransactionPayload {
@@ -103,4 +104,9 @@ export interface TransactionFormProps {
   isSaving?:      boolean;
   mode?:          "add" | "edit";
   cart?:          CartItem[];
+}
+
+export interface FormLineItem {
+  description:    string;
+  originalAmount: string;   // editable
 }
