@@ -52,9 +52,9 @@ const TransactionBaseSchema = z.object({
   description:      z.string().max(500).optional().default("").transform(v => v?.trim() ?? ""),
   tags:             z.array(z.string()).optional().default([]),
   priority:         z.number().int().min(1).max(4).optional().default(2),
-  useVoucher:       z.boolean().optional().default(false),
-  voucherId:        z.string().nullable().optional().default(null),
-  voucherAmount:    z.number().min(0).optional().default(0),
+  useVoucher:       z.boolean().optional().default(false), //fallback for old docs
+  voucherId:        z.string().nullable().optional().default(null),//fallback for old docs
+  voucherAmount:    z.number().min(0).optional().default(0),//fallback for old docs
   merchant:         z.string().max(150).optional().nullable(), // future reference, unused for now
   lineItems:        z.array(z.object({
                       description:      z.string().max(200),
@@ -62,6 +62,10 @@ const TransactionBaseSchema = z.object({
                       originalAmount:  z.number().optional(),
                       originalCurrency: z.string().max(5).optional(),
                     })).max(60).optional(),
+  voucherAllocations: z.array(z.object({
+                      voucherId: z.string().min(1),
+                      amount:    z.number().min(0),
+                    })).max(20).optional(),
 
 });
 

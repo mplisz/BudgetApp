@@ -8,6 +8,10 @@
 // Changes vs previous version:
 //   - readItemWithEtag + If-Match for PATCH and DELETE
 //   - All error messages in English (translateError on frontend)
+//   - store is now REQUIRED (a voucher is always tied to a shop)
+//   - valueType: "amount" | "percent"
+//       amount  → initialValue (PLN), depleting balance
+//       percent → percentValue (1–100), one-shot
 // ============================================================
 
 const express = require("express");
@@ -24,18 +28,47 @@ router.use(requireAuth);
 const VoucherPostSchema = z.object({
   code:         z.string().min(1, "Voucher code is required.").max(100).transform(v => v.trim()),
   description:  z.string().min(1).max(200).transform(v => v.trim()),
-  initialValue: z.number().positive("Initial value must be > 0."),
+
+  // Value type — drives which value field is required below.
+  valueType:    z.enum(["amount", "percent"]).default("amount"),
+  initialValue: z.number().positive("Initial value must be > 0.").optional(),       // amount-type
+  percentValue: z.number().int().min(1).max(100).optional(),                        // percent-type
+
   currency:     z.string().length(3).default("PLN"),
   expiresAt:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().default(null),
-  store:        z.string().max(100).optional().default("").transform(v => v.trim()),
-  notes:        z.string().max(500).optional().default(""),
-});
 
+  // Store is mandatory now — a voucher is always assigned to a shop.
+  store:        z.string({
+                  required_error:     "Sklep / wystawca jest wymagany.",
+                  invalid_type_error: "Sklep / wystawca jest wymagany.",
+                })
+                  .max(100)
+                  .transform(v => v.trim())
+                  .refine(v => v.length > 0, "Sklep / wystawca jest wymagany."),
+
+  notes:        z.string().max(500).optional().default(""),
+})
+  // amount voucher must carry a PLN value
+  .refine(d => d.valueType !== "amount" || typeof d.initialValue === "number", {
+    message: "Wartość PLN jest wymagana dla vouchera kwotowego.",
+    path:    ["initialValue"],
+  })
+  // percent voucher must carry a percentage
+  .refine(d => d.valueType !== "percent" || typeof d.percentValue === "number", {
+    message: "Procent jest wymagany dla vouchera procentowego.",
+    path:    ["percentValue"],
+  });
+
+// PATCH never changes the value (consistent with the old behaviour where
+// initialValue was not patchable) or the valueType. Store stays editable
+// but, if provided, must be non-empty.
 const VoucherPatchSchema = z.object({
   code:         z.string().max(100).optional().transform(v => v?.trim()),
   description:  z.string().min(1).max(200).optional().transform(v => v?.trim()),
   expiresAt:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  store:        z.string().max(100).optional().transform(v => v?.trim()),
+  store:        z.string().max(100).optional()
+                  .transform(v => v?.trim())
+                  .refine(v => v === undefined || v.length > 0, "Sklep / wystawca nie może być pusty."),
   notes:        z.string().max(500).optional(),
 }).refine(d => Object.keys(d).length > 0, { message: "No fields to update." });
 
@@ -84,7 +117,10 @@ router.post("/", async (req, res) => {
       userId:             familyId,
       code:               d.code,
       description:        d.description,
-      initialValue:       d.initialValue,
+      valueType:          d.valueType,
+      // Only the field relevant to the type is stored; the other stays null.
+      initialValue:       d.valueType === "amount"  ? d.initialValue : null,
+      percentValue:       d.valueType === "percent" ? d.percentValue : null,
       currency:           d.currency,
       expiresAt:          d.expiresAt,
       store:              d.store,
@@ -98,7 +134,7 @@ router.post("/", async (req, res) => {
     };
 
     const { resource } = await vouchersContainer.items.create(doc);
-    console.log(`[VOUCHERS POST] Created: ${resource.id}`);
+    console.log(`[VOUCHERS POST] Created: ${resource.id} (${resource.valueType})`);
     res.status(201).json(resource);
   } catch (err) {
     console.error("[VOUCHERS POST] Failed:", err);

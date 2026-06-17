@@ -3,6 +3,7 @@
 // ============================================================
 
 const { z } = require('zod');
+const { cleanMerchant } = require("./merchant");
 
 // ── Shared validators ─────────────────────────────────────────
 
@@ -147,6 +148,106 @@ const revertVoucherSync = async (vouchersContainer, previousState) => {
   }
 };
 
+// ── Voucher model helpers ─────────────────────────────────────
+//
+// Pure (no I/O) helpers describing voucher semantics. Used by the
+// transaction saga, the batch endpoint, and validation.
+//
+// valueType:
+//   "amount"  — depleting PLN balance (initialValue − Σ used).
+//   "percent" — ONE-SHOT percentage discount (percentValue). No balance;
+//               "used up" the moment usedInTransactions is non-empty.
+
+const isPercentVoucher = (v) => (v?.valueType ?? "amount") === "percent";
+
+/**
+ * Read-time fallback for transactions (no migration — decyzja 3):
+ * the new array shape wins; otherwise synthesize a single-element array
+ * from the legacy scalar fields; otherwise empty.
+ */
+const getVoucherAllocations = (tx) => {
+  if (Array.isArray(tx?.voucherAllocations)) return tx.voucherAllocations;
+  if (tx?.voucherId) {
+    return [{ voucherId: tx.voucherId, amount: roundMoney(tx.voucherAmount || 0) }];
+  }
+  return [];
+};
+
+/** Remaining PLN balance — meaningful only for amount-type vouchers. */
+const voucherRemaining = (v) => {
+  const used = (v.usedInTransactions || []).reduce((s, u) => s + (u.amount || 0), 0);
+  return roundMoney(Math.max(0, (v.initialValue || 0) - used));
+};
+
+/**
+ * Can this voucher still be applied?
+ *   amount  → has remaining balance
+ *   percent → one-shot, so usable only while never used
+ */
+const isVoucherUsable = (v) => {
+  if (!v || v.isArchived) return false;
+  return isPercentVoucher(v)
+    ? (v.usedInTransactions || []).length === 0
+    : voucherRemaining(v) > 0;
+};
+
+/**
+ * PLN discount this voucher yields against a given gross base amount.
+ *   percent → round(base × percentValue / 100)
+ *   amount  → min(remaining, base)
+ */
+const computeVoucherValue = (v, baseAmount) => {
+  const base = roundMoney(baseAmount);
+  if (isPercentVoucher(v)) return roundMoney(base * (v.percentValue || 0) / 100);
+  return roundMoney(Math.min(voucherRemaining(v), base));
+};
+
+// Store matching (feature d). Store is now ALWAYS present on new vouchers,
+// so a non-empty merchant match is required. Canonicalized via cleanMerchant
+// so "Medicover" / "medicover " / "MEDICOVER" all compare equal.
+const normStore = (s) => (cleanMerchant(s) || "").toLowerCase();
+
+const voucherMatchesMerchant = (v, merchant) => {
+  const m = normStore(merchant);
+  return m !== "" && normStore(v.store) === m;
+};
+
+// ── Voucher batch sync (multiple vouchers per transaction) ────
+//
+// Thin wrappers over syncVoucherUsage / revertVoucherSync so the
+// transaction saga can apply N voucher mutations atomically: if any
+// one fails, every successful one applied so far is rolled back.
+
+/**
+ * ops: [{ voucherId, op }]  where op is the { type, transactionId, ... }
+ *      shape accepted by syncVoucherUsage.
+ *
+ * Returns:
+ *   { ok: true,  snapshots: [...] }   — caller keeps snapshots for its own
+ *                                        rollback if a LATER step (tx upsert) fails.
+ *   { ok: false, failedVoucherId }    — nothing left applied; already rolled back.
+ */
+const syncVoucherBatch = async (vouchersContainer, familyId, ops) => {
+  const snapshots = [];
+  for (const { voucherId, op } of (ops || [])) {
+    const result = await syncVoucherUsage(vouchersContainer, voucherId, familyId, op);
+    if (!result) {
+      // Missing / archived voucher → unwind everything applied so far.
+      await revertVoucherBatch(vouchersContainer, snapshots);
+      return { ok: false, failedVoucherId: voucherId, snapshots: [] };
+    }
+    snapshots.push(result.previousState);
+  }
+  return { ok: true, snapshots };
+};
+
+/** Revert a batch (reverse order, best-effort). */
+const revertVoucherBatch = async (vouchersContainer, snapshots) => {
+  for (const snap of [...(snapshots || [])].reverse()) {
+    await revertVoucherSync(vouchersContainer, snap);
+  }
+};
+
 // ── Server-side month helpers ─────────────────────────────────
 
 const currentServerMonth = () => {
@@ -201,6 +302,16 @@ module.exports = {
   readItemWithEtag,
   syncVoucherUsage,
   revertVoucherSync,
+  // Voucher model helpers
+  isPercentVoucher,
+  getVoucherAllocations,
+  voucherRemaining,
+  isVoucherUsable,
+  computeVoucherValue,
+  voucherMatchesMerchant,
+  // Voucher batch sync
+  syncVoucherBatch,
+  revertVoucherBatch,
   roundMoney,
   sumMoney,
   IdParamSchema,
