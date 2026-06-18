@@ -100,12 +100,6 @@ const SAVE_DEBOUNCE_MS = 800;
 // ── Component ───────────────────────────────────────────────
 
 export default function PanelSafetyNet() {
-  // ── Mobile guard ──────────────────────────────────────────
-  // This panel is desktop-only by design. Mobile users see a friendly
-  // message instead of a broken layout.
-  const isMobile = useIsMobile();
-  if (isMobile) return <MobileBlocker />;
-
   return <PanelSafetyNetDesktop />;
 }
 
@@ -387,7 +381,7 @@ function PanelSafetyNetDesktop() {
   // kicks in.
   if (hydrated && !hasHistory) {
     return (
-      <div style={{ padding: "0 0 60px 0", maxWidth: 1200 }}>
+    <div style={{ padding: "0 0 60px 0", maxWidth: 1400, margin: "0 auto" }}>
         <div style={{ marginBottom: 20, marginTop: 8 }}>
           <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>
@@ -434,7 +428,7 @@ function PanelSafetyNetDesktop() {
   // ── Branch 2: Loading skeleton (have history, awaiting fetch) ──
   if (isLoading && transactions.length === 0) {
     return (
-      <div style={{ padding: "0 0 40px 0", maxWidth: 1200 }}>
+      <div style={{ padding: "0 0 40px 0", maxWidth: 1400, margin: "0 auto" }}>
         <div style={{ marginBottom: 20, marginTop: 8 }}>
           <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>
@@ -454,7 +448,7 @@ function PanelSafetyNetDesktop() {
           <SkeletonListRow columns={5} count={4} />
         </SkeletonCard>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} data-sn-row>
           <SkeletonCard title style={{ minHeight: 200 }}>
             <SkeletonListRow columns={3} count={3} />
           </SkeletonCard>
@@ -468,7 +462,7 @@ function PanelSafetyNetDesktop() {
 
   // ── Branch 3: Full panel with data ──
   return (
-    <div style={{ padding: "0 0 60px 0", maxWidth: 1200 }}>
+    <div style={{ padding: "0 0 60px 0", maxWidth: 1400, margin: "0 auto" }}>
 
       {/* Header */}
       <div style={{ marginBottom: 20, marginTop: 8 }}>
@@ -515,7 +509,7 @@ function PanelSafetyNetDesktop() {
 
       {/* Controls */}
       <Card style={{ marginBottom: 16, padding: 14 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}  data-sn-row>
           <div>
             <div style={{
               fontSize: 11, color: "#475569", fontWeight: 700,
@@ -643,20 +637,6 @@ function stripSelected(full: SafetyNetSettings): PersistedSafetyNet {
 
 
 
-function MobileBlocker() {
-  return (
-    <div style={{ padding: "40px 20px", textAlign: "center", maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ fontSize: 56, marginBottom: 16 }}>🖥️</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 8 }}>
-        Panel poduszki finansowej dostępny tylko na desktopie
-      </div>
-      <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
-        Ten panel zawiera złożone tabele i wykresy zaprojektowane pod większy ekran.
-        Otwórz aplikację na komputerze lub tablecie, aby z niego skorzystać.
-      </div>
-    </div>
-  );
-}
 
 // ── FX rate refresher ───────────────────────────────────────
 
