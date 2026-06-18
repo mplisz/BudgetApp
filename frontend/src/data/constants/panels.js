@@ -35,9 +35,7 @@ export const PANEL_META = {
   // Tools (month-independent)
   vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia",        mobile:true },
   safetynet:          { icon: "🛡️", label: "Poduszka",         section: "Narzędzia",        mobile: true },
-
-  // Multi-month
-  analytics:          { icon: "📊", label: "Analiza",           section: "Analiza trendów"   },
+  analytics:          { icon: "📊", label: "Analiza",           section: "Narzędzia"   },
 
   // Admin
   settings:           { icon: "⚙️", label: "Ustawienia",        section: "Administracja"    },
