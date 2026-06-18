@@ -111,7 +111,7 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }} data-vform-cols>
         <div style={s.formRow}>
           {mode === "edit" ? (
             isPercent ? (
@@ -162,7 +162,7 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
           <input style={s.inp} value={form.code} onChange={e => set("code", e.target.value)} placeholder="np. MED2026ABC" />
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }} data-vform-cols>
         <div style={s.formRow}>
           <label style={s.lbl}>Sklep / wystawca *</label>
           <MerchantInput
@@ -223,6 +223,11 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
           {isSaving ? "Zapisuję…" : mode === "edit" ? "💾 Zapisz" : "🎫 Dodaj voucher"}
         </button>
       </div>
+       <style>{`
+        @media (max-width: 700px) {
+          [data-vform-cols] { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }
