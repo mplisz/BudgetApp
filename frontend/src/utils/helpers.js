@@ -184,3 +184,13 @@ export const round2 = (n) => {
   if (typeof n !== "number" || isNaN(n)) return 0;
   return Math.round((n + Number.EPSILON) * 100) / 100;
 };
+
+// Shared style for quick-action pills (vouchers, filters, …).
+export function pillStyle(active) {
+  return {
+    padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer",
+    border:     `1px solid ${active ? "#10b981" : "#1e293b"}`,
+    background: active ? "#10b98122" : "transparent",
+    color:      active ? "#10b981"   : "#94a3b8",
+  };
+}

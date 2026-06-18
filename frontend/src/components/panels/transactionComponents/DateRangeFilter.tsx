@@ -1,6 +1,7 @@
-import { AppDatePicker } from "../../ui/AppDatePicker";
+import { AppDatePicker, toYMD, todayLocal } from "../../ui/AppDatePicker";
 import { s } from "./txStyles";
 import type { DateBounds } from "./dateBounds";
+import { QuickPills } from "../../ui/QuickPills";
 
 // txStyles is loosely typed (string-valued CSS props) — cast like the panels do.
 const sx = s as any;
@@ -14,6 +15,8 @@ interface DateRangeFilterProps {
   disabled?:     boolean;        // e.g. no transactions this month
   emptyMessage?: string;
   labels?:       { from: string; to: string };
+  showToday?: boolean;   // filter-only quick "Dzisiaj" pill (sets from=to=today)
+
 }
 
 export function DateRangeFilter({
@@ -21,44 +24,42 @@ export function DateRangeFilter({
   disabled = false,
   emptyMessage = "Brak danych w tym miesiącu — filtr dat niedostępny.",
   labels = { from: "Od", to: "Do" },
+  showToday = false,
 }: DateRangeFilterProps) {
-  // No data → block the inputs, show a warning instead.
+  const today = todayLocal();
+  const todayActive =
+    toYMD(dateFrom) === toYMD(today) && toYMD(dateTo) === toYMD(today);
+
   if (disabled) {
     return (
       <div style={{ ...sx.filterBox, flexBasis: "100%" }}>
-        <div style={{
-          fontSize: 12, color: "#f59e0b",
-          background: "#f59e0b11", border: "1px solid #f59e0b44",
-          borderRadius: 8, padding: "8px 12px",
-        }}>
+        <div style={{ fontSize: 12, color: "#f59e0b", background: "#f59e0b11", border: "1px solid #f59e0b44", borderRadius: 8, padding: "8px 12px" }}>
           ⚠️ {emptyMessage}
         </div>
       </div>
     );
   }
-
   return (
     <>
       <div style={sx.filterBox}>
         <label style={sx.filterLabel}>{labels.from}</label>
-        <AppDatePicker
-          value={dateFrom}
-          onChange={onFrom}
-          minDate={bounds.minDate}
-          maxDate={dateTo ?? bounds.maxDate}
-          style={sx.inp}
-        />
+        <AppDatePicker value={dateFrom} onChange={onFrom} minDate={bounds.minDate} maxDate={dateTo ?? bounds.maxDate} style={sx.inp} />
       </div>
       <div style={sx.filterBox}>
         <label style={sx.filterLabel}>{labels.to}</label>
-        <AppDatePicker
-          value={dateTo}
-          onChange={onTo}
-          minDate={dateFrom ?? bounds.minDate}
-          maxDate={bounds.maxDate}
-          style={sx.inp}
-        />
+        <AppDatePicker value={dateTo} onChange={onTo} minDate={dateFrom ?? bounds.minDate} maxDate={bounds.maxDate} style={sx.inp} />
       </div>
+
+      {showToday && (
+        <div style={sx.filterBox}>
+        {/* <label style={sx.filterLabel}>Szybko</label> */}
+          <QuickPills pills={[{
+            label:   "Dzisiaj",
+            active:  todayActive,
+            onClick: () => { onFrom(today); onTo(today); },
+          }]} />
+        </div>
+      )}
     </>
   );
 }

@@ -324,6 +324,7 @@ export default function PanelTransactions() {
             )}
             {/* Custom date Filters (in the chosen month) */}
             <DateRangeFilter
+              showToday
               dateFrom={filters.dateFrom}
               dateTo={filters.dateTo}
               onFrom={d => set("dateFrom", d)}
@@ -332,6 +333,7 @@ export default function PanelTransactions() {
               disabled={noDateRange}
               emptyMessage="Brak wydatków w tym miesiącu — filtr dat niedostępny."
               labels={{ from: "Data od", to: "Data do" }}
+              
             />
 
             {/* Priority */}

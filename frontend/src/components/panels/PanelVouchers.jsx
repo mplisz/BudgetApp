@@ -11,10 +11,10 @@ import { useToast }           from "../../hooks/useToast";
 import { AppDatePicker, toYMD, fromYMD, todayLocal } from "../ui/AppDatePicker";
 import { BudgetInput }        from "../ui/BudgetInput";
 import { ConfirmModal }              from "../ui/ConfirmModal";
-import { ExpiringVouchersBanner } from "../ui/ExpiringVouchersBanner";
+
 import { MerchantInput }      from "../ui/MerchantInput";
 import { fmt }                from "../../utils/helpers";
-
+import { QuickPills } from "../ui/QuickPills";
 // ── Styles ────────────────────────────────────────────────────
 const s = {
   panel:      { padding: "0 0 40px 0", maxWidth: 860 },
@@ -192,23 +192,13 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
             ];
             return (
               <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                {opts.map(o => {
-                  const active = curYMD !== "" && curYMD === toYMD(inMonths(o.n));
-                  return (
-                    <button
-                      key={o.n}
-                      type="button"
-                      onClick={() => set("expiresAt", inMonths(o.n))}
-                      style={{
-                        padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600,
-                        cursor: "pointer",
-                        border:     `1px solid ${active ? "#10b981" : "#1e293b"}`,
-                        background: active ? "#10b98122" : "transparent",
-                        color:      active ? "#10b981"   : "#94a3b8",
-                      }}
-                    >+{o.label}</button>
-                  );
-                })}
+                  <QuickPills
+                    pills={opts.map(o => ({
+                      label:   `+${o.label}`,
+                      active:  curYMD !== "" && curYMD === toYMD(inMonths(o.n)),
+                      onClick: () => set("expiresAt", inMonths(o.n)),
+                    }))}
+                  />
                 {form.expiresAt && (
                   <button
                     type="button"
