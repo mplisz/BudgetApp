@@ -30,7 +30,7 @@ export interface Voucher {
 export interface CartItem {
   _cartId:        string;
   useVoucher?:    boolean;
-  voucherId?:     string;
+  voucherId?:     string | null;
   voucherAmount?: number;
   voucherAllocations?: VoucherAllocation[];
 }
