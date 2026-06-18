@@ -182,6 +182,46 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
             maxDate={null}
             placeholder="bezterminowy"
           />
+          {(() => {
+            const base = todayLocal();
+            const inMonths = (n) => new Date(base.getFullYear(), base.getMonth() + n, base.getDate());
+            const curYMD = form.expiresAt ? toYMD(form.expiresAt) : "";
+            const opts = [
+              { n: 1, label: "1 mies." }, { n: 3, label: "3 mies." },
+              { n: 6, label: "6 mies." }, { n: 12, label: "12 mies." },
+            ];
+            return (
+              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                {opts.map(o => {
+                  const active = curYMD !== "" && curYMD === toYMD(inMonths(o.n));
+                  return (
+                    <button
+                      key={o.n}
+                      type="button"
+                      onClick={() => set("expiresAt", inMonths(o.n))}
+                      style={{
+                        padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                        cursor: "pointer",
+                        border:     `1px solid ${active ? "#10b981" : "#1e293b"}`,
+                        background: active ? "#10b98122" : "transparent",
+                        color:      active ? "#10b981"   : "#94a3b8",
+                      }}
+                    >+{o.label}</button>
+                  );
+                })}
+                {form.expiresAt && (
+                  <button
+                    type="button"
+                    onClick={() => set("expiresAt", null)}
+                    style={{
+                      padding: "4px 10px", borderRadius: 6, fontSize: 12, cursor: "pointer",
+                      border: "1px solid #1e293b", background: "transparent", color: "#64748b",
+                    }}
+                  >bezterminowy</button>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
       <div style={s.formRow}>
