@@ -7,9 +7,17 @@
 // DELETE /api/transactions/:id              (soft archive)
 // POST   /api/transactions/:id/returns
 //
+// POST   /api/transactions/batch          (OCR / cart — split vouchers across txs)
+//
 // Changes from previous version:
-//   - All voucher operations now use compensation (saga pattern):
-//     if a downstream operation fails, we revert the voucher mutation.
+//   - Multi-voucher per transaction: vouchers live in voucherAllocations[]
+//     ([{voucherId, amount}]); voucherAmount/useVoucher/voucherId are kept
+//     as derived/legacy mirrors for read-time fallback on old docs.
+//   - All voucher operations use compensation (saga pattern) via the
+//     batch helpers: if a downstream operation fails, we revert every
+//     voucher mutation applied so far.
+//   - Store-match rule (a voucher tied to a shop is only usable on a
+//     transaction with that merchant) is enforced in resolveAllocations.
 //   - All money rounding goes through roundMoney() helper.
 //   - DELETE archives transaction first, then attempts side-effects.
 //   - POST /returns isolates each side-effect (transfer, voucher)
@@ -23,12 +31,17 @@ const { transactionsContainer, vouchersContainer, monthsContainer, receiptsConta
 const { requireAuth }                                                 = require("../middleware/auth");
 const {
   generateId, readItem, readItemWithEtag,
-  syncVoucherUsage, revertVoucherSync,
+  syncVoucherBatch, revertVoucherBatch,
+  getVoucherAllocations, isVoucherUsable, voucherMatchesMerchant,
   roundMoney, sumMoney,
   IdParamSchema, BUDGET_MONTH_REGEX,
   currentServerMonth, prevServerMonth,
 } = require('../utils/helpers');
-const { getReceiptBlobContainer,setReceiptRetention  } = require("../utils/receiptStorage");
+const {
+  resolveAllocations, buildAllocationOps, buildRemovalOps,
+  diffAllocationOps, splitVouchersAcrossTxs,
+} = require("../utils/voucherAllocations");
+const { getReceiptBlobContainer, setReceiptRetention } = require("../utils/receiptStorage");
 router.use(requireAuth);
 const { cleanMerchant, merchantExists, rememberMerchant } = require("../utils/merchant");
 
@@ -55,7 +68,7 @@ const TransactionBaseSchema = z.object({
   useVoucher:       z.boolean().optional().default(false), //fallback for old docs
   voucherId:        z.string().nullable().optional().default(null),//fallback for old docs
   voucherAmount:    z.number().min(0).optional().default(0),//fallback for old docs
-  merchant:         z.string().max(150).optional().nullable(), // future reference, unused for now
+  merchant:         z.string().max(150).optional().nullable(), // shop; drives voucher store-match
   lineItems:        z.array(z.object({
                       description:      z.string().max(200),
                       amount:          z.number(),
@@ -246,66 +259,97 @@ async function promoteReceipt(receiptId, familyId, txId, isWarranty = false) {
   }
 }
 
+// ── Shared tx builders (DRY across POST / batch / rollback) ───
+
+// Scaffolding common to every freshly-created transaction.
+function scaffoldTx(data, id, familyId, req) {
+  return {
+    id,
+    userId:       familyId,
+    ...data,
+    returns:      [],
+    author:       req.user.name || req.user.email,
+    authorId:     req.user.id,
+    isArchived:   false,
+    archivedAt:   null,
+    archivedBy:   null,
+    archivedById: null,
+    createdAt:    new Date().toISOString(),
+  };
+}
+
+// Apply resolved voucher allocations to a tx doc: writes the array as the
+// source of truth, plus derived aggregates and a legacy scalar mirror
+// (voucherId/voucherAmount/useVoucher) so read-time fallback keeps working
+// on consumers that haven't moved to voucherAllocations yet.
+function withVoucherFields(doc, amount, allocations) {
+  const voucherAmount = sumMoney((allocations || []).map(a => a.amount));
+  const useVoucher    = (allocations || []).length > 0;
+  return {
+    ...doc,
+    amount,
+    voucherAllocations: allocations || [],
+    voucherAmount,
+    useVoucher,
+    voucherId: allocations?.[0]?.voucherId ?? null,
+    netAmount: useVoucher ? roundMoney(Math.max(0, amount - voucherAmount)) : amount,
+  };
+}
+
+// Best-effort archive used by saga rollbacks (voucher sync / tx upsert fail).
+async function archiveForRollback(tx) {
+  return transactionsContainer.items.upsert({
+    ...tx,
+    isArchived: true,
+    archivedAt: new Date().toISOString(),
+    archivedBy: "system_rollback",
+  }).catch(rollbackErr => console.error(`[TX ROLLBACK FAILED] ${tx.id}:`, rollbackErr));
+}
+
 router.post("/", async (req, res) => {
   const parsed = TransactionPostSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
   const data     = parsed.data;
   const familyId = req.user.familyId;
-  let createdTx   = null;   // for rollback if voucher sync fails
-  let voucherSnap = null;   // for rollback if anything fails after voucher sync
+  let createdTx    = null;   // for rollback if voucher sync fails
+  let voucherSnaps = [];     // for rollback if anything fails after voucher sync
 
   try {
-    const newId = `tx_${familyId}_${data.date.replace(/-/g,"")}_${generateId(data.subcategoryName)}_${Date.now()}`;
-    const useVoucher    = !!data.useVoucher;
-    const voucherAmount = roundMoney(data.voucherAmount || 0);
-    const amount        = roundMoney(data.amount);
+    const newId  = `tx_${familyId}_${data.date.replace(/-/g,"")}_${generateId(data.subcategoryName)}_${Date.now()}`;
+    const amount = roundMoney(data.amount);
 
-    const newTx = {
-      id:           newId,
-      userId:       familyId,
-      ...data,
-      amount,
-      voucherAmount,
-      netAmount:    useVoucher ? roundMoney(Math.max(0, amount - voucherAmount)) : amount,
-      returns:      [],
-      author:       req.user.name || req.user.email,
-      authorId:     req.user.id,
-      isArchived:   false,
-      archivedAt:   null,
-      archivedBy:   null,
-      archivedById: null,
-      createdAt:    new Date().toISOString(),
-    };
+    // Resolve voucher allocations: server-trusts amounts, recomputes percent
+    // vouchers against the gross amount, and enforces the store-match rule.
+    // getVoucherAllocations reads the new array OR falls back to legacy scalars.
+    const resolved = await resolveAllocations(
+      vouchersContainer, familyId, getVoucherAllocations(data), amount, data.merchant,
+    );
+    if (!resolved.ok) return res.status(400).json({ error: resolved.error });
+
+    const newTx = withVoucherFields(
+      scaffoldTx(data, newId, familyId, req), amount, resolved.allocations,
+    );
 
     // ── STEP 1: Create the transaction ────────────────────────
     const { resource } = await transactionsContainer.items.create(newTx);
     createdTx = resource;
 
-    // ── STEP 2: Sync voucher usage (if applicable) ────────────
-    if (useVoucher && data.voucherId && voucherAmount > 0) {
-      const syncResult = await syncVoucherUsage(vouchersContainer, data.voucherId, familyId, {
-        type:          "add",
+    // ── STEP 2: Sync voucher usage (batch) ────────────────────
+    if (createdTx.useVoucher) {
+      const ops = buildAllocationOps(createdTx.voucherAllocations, {
         transactionId: createdTx.id,
-        amount:        voucherAmount,
         usedAt:        data.date,
         description:   data.description || "",
       });
+      const batch = await syncVoucherBatch(vouchersContainer, familyId, ops);
 
-      if (!syncResult) {
-        // Voucher missing/archived. Roll the TX back (best effort).
-        await transactionsContainer.items.upsert({
-          ...createdTx,
-          isArchived: true,
-          archivedAt: new Date().toISOString(),
-          archivedBy: "system_rollback",
-        }).catch(rollbackErr => {
-          console.error(`[TX POST ROLLBACK FAILED] ${createdTx.id}:`, rollbackErr);
-        });
+      if (!batch.ok) {
+        // A voucher is missing/archived. Roll the TX back (best effort).
+        await archiveForRollback(createdTx);
         return res.status(400).json({ error: "Voucher not found or is archived." });
       }
-
-      voucherSnap = syncResult.previousState;
+      voucherSnaps = batch.snapshots;
     }
         // ── STEP 3: Commit receipt blob (if linked) ───────────────
     // Promotes the blob from "pending" to "committed" so the daily
@@ -328,39 +372,110 @@ router.post("/", async (req, res) => {
       rememberMerchant(settingsContainer, familyId, createdTx.merchant);
     }
     
-    console.log(`[TX POST] Created: ${createdTx.id}${useVoucher ? ` (voucher: ${data.voucherId})` : ""}`);
+    console.log(`[TX POST] Created: ${createdTx.id}${createdTx.useVoucher ? ` (${createdTx.voucherAllocations.length} voucher[s])` : ""}`);
     res.status(201).json(createdTx);
   } catch (err) {
-    // Full saga rollback — voucher first (more important to keep clean),
+    // Full saga rollback — vouchers first (more important to keep clean),
     // then the transaction.
     console.error("[TX POST] Saga error:", err);
-    await revertVoucherSync(vouchersContainer, voucherSnap);
-    if (createdTx) {
-      await transactionsContainer.items.upsert({
-        ...createdTx,
-        isArchived: true,
-        archivedAt: new Date().toISOString(),
-        archivedBy: "system_rollback",
-      }).catch(rollbackErr => {
-        console.error(`[TX POST ROLLBACK FAILED] ${createdTx.id}:`, rollbackErr);
-      });
-    }
-    
+    await revertVoucherBatch(vouchersContainer, voucherSnaps);
+    if (createdTx) await archiveForRollback(createdTx);
+
     res.status(500).json({ error: "Failed to create transaction." });
+  }
+});
+
+// ── POST /batch ───────────────────────────────────────────────
+//
+// OCR / cart path. The selected vouchers apply to the WHOLE cart gross
+// total and are split proportionally across the resulting transactions
+// (decyzja 2). The whole thing runs as one saga: create every tx, then
+// apply every (voucher × tx) usage op; on any failure we revert the
+// voucher batch and archive every created tx.
+
+const TransactionBatchSchema = z.object({
+  transactions: z.array(TransactionPostSchema).min(1).max(60),
+  voucherIds:   z.array(z.string().min(1)).max(10).optional().default([]),
+});
+
+router.post("/batch", async (req, res) => {
+  const parsed = TransactionBatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const familyId = req.user.familyId;
+  const { transactions: items, voucherIds } = parsed.data;
+
+  const created = [];
+  let voucherSnaps = [];
+
+  try {
+    // 1. Validate selected vouchers. A store-tied voucher must match the
+    //    merchant of EVERY line it would touch (rule d across the batch).
+    const vouchers = [];
+    for (const vid of voucherIds) {
+      const v = await readItem(vouchersContainer, vid, familyId);
+      if (!isVoucherUsable(v)) {
+        return res.status(400).json({ error: "Voucher nie istnieje lub jest niedostępny." });
+      }
+      const mismatch = items.find(t => !voucherMatchesMerchant(v, t.merchant));
+      if (mismatch) {
+        return res.status(400).json({ error: `Voucher „${v.description}" nie pasuje do sklepu wszystkich pozycji paragonu.` });
+      }
+      vouchers.push(v);
+    }
+
+    // 2. Proportional split across the resulting txs.
+    const perTx = splitVouchersAcrossTxs(vouchers, items.map(t => ({ amount: roundMoney(t.amount) })));
+
+    // 3. Build + create tx docs.
+    const stamp = Date.now();
+    const docs = items.map((data, i) => withVoucherFields(
+      scaffoldTx(data, `tx_${familyId}_${data.budgetMonth.replace("-","")}_${stamp}_${i}`, familyId, req),
+      roundMoney(data.amount),
+      perTx[i] || [],
+    ));
+
+    for (const doc of docs) {
+      const { resource } = await transactionsContainer.items.create(doc);
+      created.push(resource);
+    }
+
+    // 4. Apply voucher usage for every (voucher × tx) allocation.
+    const ops = created.flatMap((tx, i) => buildAllocationOps(perTx[i] || [], {
+      transactionId: tx.id, usedAt: tx.date, description: tx.description || "",
+    }));
+    const batch = await syncVoucherBatch(vouchersContainer, familyId, ops);
+    if (!batch.ok) {
+      await Promise.all(created.map(archiveForRollback));
+      return res.status(400).json({ error: "Voucher not found or is archived." });
+    }
+    voucherSnaps = batch.snapshots;
+
+    // 5. Side-effects (receipt commit, merchant memory) — best effort.
+    for (const tx of created) {
+      if (tx.receiptBlobPath && tx.receiptBlobPath.startsWith(`${familyId}/`)) {
+        setReceiptRetention(tx.receiptBlobPath, !!tx.isWarranty);
+      }
+      if (tx.receiptId) promoteReceipt(tx.receiptId, familyId, tx.id);
+      if (tx.merchant)  rememberMerchant(settingsContainer, familyId, tx.merchant);
+    }
+
+    console.log(`[TX BATCH] Created ${created.length} tx, split ${voucherIds.length} voucher(s).`);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("[TX BATCH] Saga error:", err);
+    await revertVoucherBatch(vouchersContainer, voucherSnaps);
+    await Promise.all(created.map(archiveForRollback));
+    res.status(500).json({ error: "Failed to create transactions." });
   }
 });
 
 // ── PATCH ─────────────────────────────────────────────────────
 //
-// PATCH is the most complex case because we may need to:
-//   1. Remove voucher usage from OLD voucher (if voucher changed)
-//   2. Add/update voucher usage on NEW voucher
-//   3. Save the transaction itself
-//
-// Order matters: we touch vouchers BEFORE the tx upsert, then if the
-// tx upsert fails, we revert both voucher mutations. If only one of
-// the two voucher ops succeeds and the other fails, we revert the
-// successful one immediately and bail.
+// Voucher handling is a diff: compute the new allocation set (re-resolved
+// against the possibly-changed amount/merchant) and emit the minimal
+// add/remove/update ops vs the existing set. Vouchers are touched BEFORE
+// the tx upsert; if the upsert fails we revert the whole voucher batch.
 
 router.patch("/:id", async (req, res) => {
   const idParsed = IdParamSchema.safeParse(req.params.id);
@@ -371,10 +486,6 @@ router.patch("/:id", async (req, res) => {
 
   const id       = idParsed.data;
   const familyId = req.user.familyId;
-
-  // Snapshots for rollback — each is non-null only after a successful mutation.
-  let oldVoucherSnap = null;
-  let newVoucherSnap = null;
 
   try {
     const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
@@ -394,67 +505,34 @@ router.patch("/:id", async (req, res) => {
       updatedById: req.user.id,
     };
 
-    // Recompute netAmount with rounded values
-    const useVoucher    = patchFields.useVoucher    ?? existing.useVoucher;
-    const voucherAmount = roundMoney(patchFields.voucherAmount ?? existing.voucherAmount ?? 0);
-    const amount        = roundMoney(patchFields.amount        ?? existing.amount);
-    updated.amount       = amount;
-    updated.voucherAmount = voucherAmount;
-    updated.netAmount    = useVoucher
-      ? roundMoney(Math.max(0, amount - voucherAmount))
-      : amount;
+    // ── Voucher allocations (diff) ────────────────────────────
+    const amount         = roundMoney(patchFields.amount ?? existing.amount);
+    const merchant       = patchFields.merchant ?? existing.merchant;
+    const oldAllocations = getVoucherAllocations(existing);
 
-    const oldVoucherId  = existing.voucherId;
-    const newVoucherId  = updated.voucherId;
-    const newUseVoucher = updated.useVoucher;
-    const newVoucherAmt = updated.voucherAmount || 0;
+    // New raw set: explicit from the patch, else carry the existing ones.
+    // Either way we re-resolve against the (possibly new) amount/merchant,
+    // so percent vouchers recompute and the store-match rule re-applies.
+    const rawNew = (patchFields.voucherAllocations ?? oldAllocations)
+      .map(a => ({ voucherId: a.voucherId, amount: a.amount }));
 
-    // ── STEP 1a: Remove usage from old voucher if it changed ──
-    if (oldVoucherId && oldVoucherId !== newVoucherId) {
-      const removeResult = await syncVoucherUsage(vouchersContainer, oldVoucherId, familyId, {
-        type: "remove", transactionId: id,
-      });
-      // null is OK here — voucher might have been archived in the meantime
-      if (removeResult) oldVoucherSnap = removeResult.previousState;
-    }
+    const resolved = await resolveAllocations(vouchersContainer, familyId, rawNew, amount, merchant, id);
+    if (!resolved.ok) return res.status(400).json({ error: resolved.error });
+    const newAllocations = resolved.allocations;
 
-    // ── STEP 1b: Add/update usage on new voucher ──────────────
-    if (newUseVoucher && newVoucherId && newVoucherAmt > 0) {
-      const opType = (oldVoucherId === newVoucherId) ? "update" : "add";
-      try {
-        const addResult = await syncVoucherUsage(vouchersContainer, newVoucherId, familyId, {
-          type:          opType,
-          transactionId: id,
-          amount:        newVoucherAmt,
-          usedAt:        updated.date      ?? existing.date,
-          description:   updated.description ?? existing.description ?? "",
-        });
+    const ops = diffAllocationOps(oldAllocations, newAllocations, {
+      transactionId: id,
+      usedAt:        patchFields.date        ?? existing.date,
+      description:   patchFields.description  ?? existing.description ?? "",
+    });
+    const batch = await syncVoucherBatch(vouchersContainer, familyId, ops);
+    if (!batch.ok) return res.status(400).json({ error: "Voucher not found or is archived." });
+    const voucherSnaps = batch.snapshots;
 
-        if (!addResult) {
-          // New voucher missing/archived → roll the old voucher's removal back
-          await revertVoucherSync(vouchersContainer, oldVoucherSnap);
-          return res.status(400).json({ error: "Voucher not found or is archived." });
-        }
-        newVoucherSnap = addResult.previousState;
-      } catch (voucherErr) {
-        // Roll the old voucher removal back, then surface the error
-        await revertVoucherSync(vouchersContainer, oldVoucherSnap);
-        throw voucherErr;
-      }
-    } else if (!newUseVoucher && oldVoucherId) {
-      // Voucher disabled — clean up the old reference
-      const removeResult = await syncVoucherUsage(vouchersContainer, oldVoucherId, familyId, {
-        type: "remove", transactionId: id,
-      });
-      if (removeResult) oldVoucherSnap = removeResult.previousState;
-    }
-    // EDGE CASE: useVoucher=true && voucherAmount=0 leaves the voucher's
-    // usedInTransactions[].amount untouched. This is accepted behaviour —
-    // if the user wants to clear the voucher usage they should explicitly
-    // set useVoucher=false. Treating 0 amount as "implicit disable" would
-    // surprise users who briefly clear the field while editing.
+    // Write derived voucher fields + recomputed netAmount onto the doc.
+    Object.assign(updated, withVoucherFields({}, amount, newAllocations));
 
-    // ── STEP 2: Update transaction with optimistic lock ───────
+    // ── Update transaction with optimistic lock ───────────────
     try {
       const { resource } = await transactionsContainer.items.upsert(updated, {
         accessCondition: { type: "IfMatch", condition: etag },
@@ -462,11 +540,9 @@ router.patch("/:id", async (req, res) => {
       console.log(`[TX PATCH] Updated: ${resource.id}`);
       res.json(resource);
     } catch (txErr) {
-      // Transaction save failed AFTER vouchers were already mutated.
-      // Revert both voucher mutations to keep state consistent.
+      // Tx save failed AFTER vouchers were mutated — revert the batch.
       console.error(`[TX PATCH] Tx save failed for ${id}, rolling back vouchers`);
-      await revertVoucherSync(vouchersContainer, oldVoucherSnap);
-      await revertVoucherSync(vouchersContainer, newVoucherSnap);
+      await revertVoucherBatch(vouchersContainer, voucherSnaps);
       throw txErr;   // re-throw to outer catch for proper HTTP response
     }
   } catch (err) {
@@ -494,7 +570,6 @@ router.delete("/:id", async (req, res) => {
 
   const id       = idParsed.data;
   const familyId = req.user.familyId;
-  let voucherSnap = null;
 
   try {
     const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
@@ -525,20 +600,17 @@ router.delete("/:id", async (req, res) => {
       accessCondition: { type: "IfMatch", condition: etag },
     });
 
-    // ── STEP 2: Sync voucher usage (free up the spent amount) ─
-    if (existing.useVoucher && existing.voucherId) {
+    // ── STEP 2: Free up voucher usage across ALL allocations ──
+    const allocations = getVoucherAllocations(existing);
+    if (allocations.length > 0) {
       try {
-        const syncResult = await syncVoucherUsage(vouchersContainer, existing.voucherId, familyId, {
-          type: "remove", transactionId: id,
-        });
-        if (syncResult) voucherSnap = syncResult.previousState;
+        await syncVoucherBatch(vouchersContainer, familyId, buildRemovalOps(allocations, id));
       } catch (voucherErr) {
-        // Voucher sync failed but tx is already archived — log loudly,
-        // user can re-archive via manual cleanup. We do NOT undo the
-        // archive because the user's intent was "delete this".
+        // Tx is already archived — log loudly; the user can re-run cleanup.
+        // We do NOT undo the archive: the intent was "delete this".
         console.error(
-          `[TX DELETE] Voucher sync failed for archived tx ${id}, ` +
-          `voucher ${existing.voucherId} may show stale usage. Error:`,
+          `[TX DELETE] Voucher release failed for archived tx ${id}; ` +
+          `voucher(s) may show stale usage. Error:`,
           voucherErr,
         );
       }
@@ -565,9 +637,8 @@ router.delete("/:id", async (req, res) => {
         error: "Data was modified by another user. Please refresh and try again.",
       });
     }
-    // Outer catch — primary archive failed, voucher untouched
+    // Outer catch — primary archive failed; vouchers untouched.
     console.error("[TX DELETE]", err);
-    await revertVoucherSync(vouchersContainer, voucherSnap);
     res.status(500).json({ error: "Failed to archive transaction." });
   }
 });
@@ -752,7 +823,15 @@ router.post("/:id/returns", async (req, res) => {
           id:           voucherId,
           userId:       familyId,
           code:         data.voucherCode || `ZWROT-${Date.now()}`,
+          valueType:    "amount",                 // returns always yield a fixed-value voucher
           initialValue: voucherAmount,
+          percentValue: null,
+          currency:     "PLN",
+          // Store credit is tied to the original purchase's shop, so the
+          // voucher is usable under the store-match rule. If the source tx
+          // had no merchant the store is "" and the voucher won't attach to
+          // anything until edited — surfaced to the user as a warning.
+          store:        existing.merchant || "",
           usedInTransactions: [],
           isArchived:   false,
           expiresAt:    data.voucherExpiresAt ?? null,

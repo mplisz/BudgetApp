@@ -17,7 +17,8 @@
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const { vouchersContainer } = require("../cosmos");
+const { vouchersContainer, settingsContainer } = require("../cosmos");
+const { rememberMerchant }  = require("../utils/merchant");
 const { requireAuth }       = require("../middleware/auth");
 const { readItem, readItemWithEtag, IdParamSchema } = require('../utils/helpers');
 
@@ -134,6 +135,9 @@ router.post("/", async (req, res) => {
     };
 
     const { resource } = await vouchersContainer.items.create(doc);
+    // Keep the store in the merchant list so it autocompletes on expenses
+    // and the store-match stays consistent. Best-effort, never throws.
+    rememberMerchant(settingsContainer, familyId, d.store);
     console.log(`[VOUCHERS POST] Created: ${resource.id} (${resource.valueType})`);
     res.status(201).json(resource);
   } catch (err) {
@@ -175,6 +179,8 @@ router.patch("/:id", async (req, res) => {
     const { resource } = await vouchersContainer.items.upsert(updated, {
       accessCondition: { type: "IfMatch", condition: etag },
     });
+
+    if (patchFields.store) rememberMerchant(settingsContainer, familyId, patchFields.store);
 
     console.log(`[VOUCHERS PATCH] Updated: ${resource.id}`);
     res.json(resource);
