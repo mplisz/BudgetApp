@@ -23,3 +23,4 @@ export * from "./panels";
 export * from "./categoryTypes";
 export * from "./errorMessages";
 export * from "./currencies";
+export * from "./breakpoints";

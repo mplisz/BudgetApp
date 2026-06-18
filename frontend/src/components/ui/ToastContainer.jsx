@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ToastContext, useToastState, useToast } from "../../hooks/useToast";
+import { useIsMobile } from "../../hooks/useIsMobile";
 
 const STYLES = {
   error: {
@@ -36,17 +37,7 @@ const STYLES = {
   },
 }
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(
-    () => typeof window !== "undefined" && window.innerWidth <= 700
-  );
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 700);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
-  return isMobile;
-}
+
 
 // ── Provider ──────────────────────────────────────────────────
 export function ToastProvider({ children }) {

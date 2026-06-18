@@ -40,6 +40,7 @@ import { theme as s }             from "../../styles/theme";
 import { Card }                   from "../ui/summaryUi";
 import { useCurrencyManager }     from "../../hooks/useCurrencyManager";
 import { toYMD, todayLocal }      from "../ui/AppDatePicker";
+import { useIsMobile }            from "../../hooks/useIsMobile";
 
 import {
   lastNMonths,
@@ -95,7 +96,6 @@ const HORIZON_OPTIONS = [
 ];
 
 const SAVE_DEBOUNCE_MS = 800;
-const MOBILE_BREAKPOINT_PX = 700;
 
 // ── Component ───────────────────────────────────────────────
 
@@ -641,19 +641,7 @@ function stripSelected(full: SafetyNetSettings): PersistedSafetyNet {
   return rest;
 }
 
-// ── Mobile detection ────────────────────────────────────────
 
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT_PX,
-  );
-  useEffect(() => {
-    function handle() { setIsMobile(window.innerWidth < MOBILE_BREAKPOINT_PX); }
-    window.addEventListener("resize", handle);
-    return () => window.removeEventListener("resize", handle);
-  }, []);
-  return isMobile;
-}
 
 function MobileBlocker() {
   return (

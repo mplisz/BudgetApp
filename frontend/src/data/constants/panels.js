@@ -6,8 +6,15 @@
 //
 // Consumed by:
 //   - Sidebar.tsx, MobileNav.tsx   — navigation rendering
+//   - MoreSheet.tsx                 — mobile "Więcej" bottom sheet
 //   - App.tsx                       — header chrome decisions
 //   - data/routes.ts                — PANEL_PATHS map (panel id → URL)
+//
+// `mobile: true` — panel appears in the mobile "Więcej" bottom
+// sheet. Quick-add panels (section "Główne") never need the flag:
+// they live directly in the MobileNav bottom bar. Flip the flag
+// as panels become mobile-ready; MoreSheet picks them up
+// automatically (single source of truth, no separate list).
 // ============================================================
 
 export const PANEL_META = {
@@ -18,16 +25,16 @@ export const PANEL_META = {
   addplanned:         { icon: "📅", label: "Dodaj planowany",   section: "Główne"            },
 
   // Per-month analysis
-  transactions:       { icon: "🧾", label: "Wydatki",           section: "Analiza miesiąca"  },
-  incometransactions: { icon: "💵", label: "Wpływy",            section: "Analiza miesiąca"  },
-  planned:            { icon: "📅", label: "Planowane",         section: "Analiza miesiąca"  },
-  recurring:          { icon: "🔄", label: "Cykliczne",         section: "Analiza miesiąca"  },
-  summary:            { icon: "📊", label: "Podsumowanie",      section: "Analiza miesiąca"  },
+  transactions:       { icon: "🧾", label: "Wydatki",           section: "Analiza miesiąca", mobile: true },
+  incometransactions: { icon: "💵", label: "Wpływy",            section: "Analiza miesiąca", mobile: true },
+  planned:            { icon: "📅", label: "Planowane",         section: "Analiza miesiąca", mobile: true },
+  recurring:          { icon: "🔄", label: "Cykliczne",         section: "Analiza miesiąca", mobile: true },
+  summary:            { icon: "📊", label: "Podsumowanie",      section: "Analiza miesiąca", mobile: true },
   basebudget:         { icon: "🏦", label: "Baza budżetu",      section: "Narzędzia"         },
 
   // Tools (month-independent)
   vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia"         },
-  safetynet:          { icon: "🛡️", label: "Poduszka",         section: "Narzędzia"         },
+  safetynet:          { icon: "🛡️", label: "Poduszka",         section: "Narzędzia",        mobile: true },
 
   // Multi-month
   analytics:          { icon: "📊", label: "Analiza",           section: "Analiza trendów"   },
