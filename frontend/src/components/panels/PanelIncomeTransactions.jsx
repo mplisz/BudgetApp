@@ -24,6 +24,7 @@ import { useFilters }      from "../../hooks/useFilters";
 import { useMonthLoad } from "../../hooks/useMonthLoad";
 import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
+import { useIsMobile } from "../../hooks/useIsMobile";
 
 const PAGE_SIZE = 25;
 
@@ -111,13 +112,111 @@ function IncomeRow({ tx, isMonthClosed, onDelete, onUpdated }) {
     </>
   );
 }
+// ── Income transaction card (mobile) ──────────────────────────
+// Mobile counterpart of IncomeRow: same data, laid out as a
+// tap-friendly card instead of a table row. Rendered by the panel
+// when useIsMobile() is true. Reuses s.badge / s.actionBtn / fmt /
+// typeColor / typeLabel — all already imported in this file.
+//
 
+function IncomeCard({ tx, isMonthClosed, onDelete, onUpdated }) {
+  const [editOpen, setEditOpen] = useState(false);
+
+  const tColor    = typeColor(tx.type);
+  const tLabel    = typeLabel(tx.type);
+  const isForeign = tx.originalCurrency && tx.originalCurrency !== "PLN";
+
+  return (
+    <div style={{
+      background:   "#0d1424",
+      border:       "1px solid #1e293b",
+      borderRadius: 12,
+      padding:      "12px 14px",
+      marginBottom: 8,
+    }}>
+      {/* Top row: category + amount */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{
+            fontWeight: 600, color: "#e2e8f0", fontSize: 14,
+            overflow: "hidden", textOverflow: "ellipsis",
+          }}>
+            {tx.categoryName}
+          </div>
+          {tx.subcategoryName && (
+            <div style={{ color: "#64748b", fontSize: 12 }}>› {tx.subcategoryName}</div>
+          )}
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontWeight: 700, color: "#10b981", fontSize: 15, whiteSpace: "nowrap" }}>
+            {fmt(tx.amount)} PLN
+          </div>
+          {isForeign && (
+            <div style={{ fontSize: 11, color: "#64748b", whiteSpace: "nowrap" }}>
+              {tx.originalAmount} {tx.originalCurrency} @ {tx.fxRate}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Meta row: date + type + tags + author */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
+        <span style={{ color: "#94a3b8", fontSize: 12 }}>{tx.date}</span>
+        <span style={{
+          background: tColor + "22", color: tColor,
+          border: `1px solid ${tColor}44`,
+          borderRadius: 20, padding: "2px 8px", fontSize: 10, fontWeight: 700,
+        }}>
+          {tLabel}
+        </span>
+        {(tx.tagNames || []).map((name, i) => (
+          <span key={i} style={s.badge("#3b82f6")}>{name}</span>
+        ))}
+        {tx.author && (
+          <span style={{ color: "#475569", fontSize: 11, marginLeft: "auto" }}>{tx.author}</span>
+        )}
+      </div>
+
+      {/* Description */}
+      {tx.description && (
+        <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 8, wordBreak: "break-word" }}>
+          {tx.description}
+        </div>
+      )}
+
+      {/* Actions */}
+      {!isMonthClosed && (
+        <div style={{
+          display: "flex", gap: 8, justifyContent: "flex-end",
+          marginTop: 12, paddingTop: 10, borderTop: "1px solid #0f172a",
+        }}>
+          <button style={{ ...s.actionBtn("#3b82f6"), padding: "6px 14px" }} onClick={() => setEditOpen(true)}>
+            ✏️ Edytuj
+          </button>
+          <button style={{ ...s.actionBtn("#ef4444"), padding: "6px 14px" }} onClick={onDelete}>
+            🗑 Usuń
+          </button>
+        </div>
+      )}
+
+      {editOpen && createPortal(
+        <EditIncomeModal
+          tx={tx}
+          onClose={() => setEditOpen(false)}
+          onUpdated={updated => { onUpdated(updated); setEditOpen(false); }}
+        />,
+        document.body
+      )}
+    </div>
+  );
+}
 // ── Main panel ────────────────────────────────────────────────
 
 export default function PanelIncomeTransactions() {
   const { transactions, setTransactions, tags } = useAppContext();
   const { deleteTransaction, loadTransactions }  = useTransactions();
   const { isActiveMonthClosed, activeBudgetMonth } = useMonthStatus();
+  const isMobile = useIsMobile();
 
   const { filters, set, clear: clearFilters, hasActive: hasActiveFilters } = useFilters({
     type:       "",
@@ -255,7 +354,20 @@ export default function PanelIncomeTransactions() {
           <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {page} z {totalPages}
           </div>
-          <div style={s.card}>
+        {isMobile ? (
+                    <div>
+                      {paginated.map(tx => (
+                        <IncomeCard
+                          key={tx.id}
+                          tx={tx}
+                          isMonthClosed={isActiveMonthClosed}
+                          onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
+                          onUpdated={handleUpdated}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                  <div style={s.card}>
             <table style={s.table}>
               <thead>
                 <tr>
@@ -282,6 +394,7 @@ export default function PanelIncomeTransactions() {
               </tbody>
             </table>
           </div>
+          )}
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
       )}
