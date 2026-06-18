@@ -137,7 +137,7 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
             <div style={{ height: "100%", width: `${progressPct}%`, background: progressColor, borderRadius: 99, transition: "width 0.4s ease" }} />
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 4, fontSize: 12, marginBottom: 8 }}>
             <span style={{ color: "#64748b" }}>
               Zebrano: <strong style={{ color: progressColor }}>{fmt(paid)} PLN</strong>
             </span>
