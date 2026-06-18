@@ -22,6 +22,7 @@ import { CategoryMultiSelect }   from "../ui/CategoryMultiSelect";
 import { RecurringForm }         from "./recurringComponents/RecurringForm";
 import { RecurringRow }          from "./recurringComponents/RecurringRow";
 import { fmt }                   from "../../utils/helpers";
+import { useIsMobile } from "../../hooks/useIsMobile";
 
 const PAGE_SIZE = 20;
 
@@ -166,7 +167,115 @@ function CalendarLegend() {
     </div>
   );
 }
-
+// ── Mobile calendar: vertical agenda ──────────────────────────
+// On phones the 7-column grid is unreadable (~48px columns). Instead
+// we render an agenda: only days that have recurring items, in date
+// order, each as a section (day + weekday + day total) with its
+// items below. Reuses the same module-level helpers as the grid
+// (getAmountPLN, isConfirmed, getCatColor, sumAmountPLN, DAY_NAMES,
+// WEEKEND_DAYS, CalendarLegend, fmt).
+ 
+function AgendaItem({ doc, month, isLocked, onEdit }) {
+  const amountPLN = getAmountPLN(doc, month);
+  const confirmed = isConfirmed(doc, month);
+  const color     = getCatColor(doc.categoryName);
+ 
+  return (
+    <div
+      title={`${doc.description} — ${fmt(amountPLN)} PLN`}
+      onClick={() => !isLocked && onEdit(doc)}
+      style={{
+        background:   confirmed ? "#10b98118" : `${color}18`,
+        border:       `1px solid ${confirmed ? "#10b98144" : color + "55"}`,
+        borderRadius: 8,
+        padding:      "8px 10px",
+        marginBottom: 6,
+        display:      "flex",
+        alignItems:   "center",
+        gap:          8,
+        cursor:       isLocked ? "default" : "pointer",
+      }}
+    >
+      {confirmed && <span style={{ color: "#10b981", fontSize: 11 }}>✓</span>}
+      <span style={{
+        flex: 1, minWidth: 0,
+        fontSize: 13, fontWeight: 600,
+        color:        confirmed ? "#10b981" : "#e2e8f0",
+        overflow:     "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace:   "nowrap",
+      }}>
+        {doc.description}
+      </span>
+      <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700, whiteSpace: "nowrap" }}>
+        {fmt(amountPLN)} PLN
+      </span>
+    </div>
+  );
+}
+ 
+function CalendarAgenda({ byDay, daysCount, month, todayDay, isLocked, onEdit }) {
+  const [y, m] = month.split("-").map(Number);
+ 
+  const days = [];
+  for (let d = 1; d <= daysCount; d++) {
+    if ((byDay[d] || []).length > 0) days.push(d);
+  }
+ 
+  if (days.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "30px 0", color: "#334155" }}>
+        Brak pozycji w tym miesiącu.
+      </div>
+    );
+  }
+ 
+  return (
+    <div>
+      {days.map(day => {
+        const docs      = byDay[day];
+        const isToday   = todayDay === day;
+        const dow       = DAY_NAMES[(new Date(y, m - 1, day).getDay() + 6) % 7];
+        const isWeekend = WEEKEND_DAYS.has(dow);
+        const totalAmt  = sumAmountPLN(docs, month);
+ 
+        return (
+          <div key={day} style={{ marginBottom: 12 }}>
+            {/* Day header */}
+            <div style={{
+              display: "flex", alignItems: "baseline", gap: 8,
+              marginBottom: 6, paddingBottom: 4, borderBottom: "1px solid #1e293b",
+            }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: isToday ? "#10b981" : "#e2e8f0" }}>
+                {day}
+              </span>
+              <span style={{ fontSize: 12, color: isWeekend ? "#475569" : "#64748b" }}>{dow}</span>
+              {isToday && (
+                <span style={{
+                  fontSize: 9, fontWeight: 800, color: "#10b981",
+                  background: "#10b98118", border: "1px solid #10b98144",
+                  borderRadius: 20, padding: "1px 7px",
+                }}>
+                  dziś
+                </span>
+              )}
+              <span style={{ marginLeft: "auto", fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>
+                {fmt(totalAmt)} PLN
+              </span>
+            </div>
+ 
+            {/* Items */}
+            {docs.map(doc => (
+              <AgendaItem key={doc.id} doc={doc} month={month} isLocked={isLocked} onEdit={onEdit} />
+            ))}
+          </div>
+        );
+      })}
+ 
+      <CalendarLegend />
+    </div>
+  );
+}
 function CalendarView({ items, month, isLocked, onEdit, onArchive }) {
   const daysCount   = useMemo(() => getDaysInMonth(month),    [month]);
   const firstOffset = useMemo(() => getFirstDayOfWeek(month), [month]);
@@ -188,8 +297,22 @@ function CalendarView({ items, month, isLocked, onEdit, onArchive }) {
     for (let d = 1; d <= daysCount; d++)   result.push({ type: "day",   key: `d${d}`, day: d });
     const rem = result.length % 7;
     if (rem !== 0) for (let i = 0; i < 7 - rem; i++) result.push({ type: "empty", key: `t${i}` });
-    return result;
-  }, [daysCount, firstOffset]);
+      return result;
+    }, [daysCount, firstOffset]);
+
+    const isMobile = useIsMobile();
+    if (isMobile) {
+      return (
+        <CalendarAgenda
+          byDay={byDay}
+          daysCount={daysCount}
+          month={month}
+          todayDay={todayDay}
+          isLocked={isLocked}
+          onEdit={onEdit}
+        />
+      );
+    }
 
   return (
     <div>
