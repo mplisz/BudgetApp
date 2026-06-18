@@ -30,7 +30,7 @@ export const PANEL_META = {
   planned:            { icon: "📅", label: "Planowane",         section: "Analiza miesiąca", mobile: true },
   recurring:          { icon: "🔄", label: "Cykliczne",         section: "Analiza miesiąca", mobile: true },
   summary:            { icon: "📊", label: "Podsumowanie",      section: "Analiza miesiąca", mobile: true },
-  basebudget:         { icon: "🏦", label: "Baza budżetu",      section: "Narzędzia"         },
+  basebudget:         { icon: "🏦", label: "Baza budżetu",      section: "Analiza miesiąca", mobile: true },
 
   // Tools (month-independent)
   vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia",        mobile:true },
