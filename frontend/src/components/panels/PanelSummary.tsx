@@ -419,7 +419,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                   gap: 16,
                   marginBottom: 16,
                   alignItems: "stretch",
-                }}>
+                }} data-sum-row1>
                 <Card title="📋 Limity kategorii"
                 style={{
                     flex: 1,
@@ -454,9 +454,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                 <Card title="🥧 Struktura wydatków" 
                 style={{
                     flex: 1,
-                    minWidth: 0,
-                    display: "flex",        
-                    flexDirection: "column",
+                    minWidth: 0
                   }}>
                   <SpendingPieChart
                     categories={expenseCategories}
@@ -501,7 +499,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
               </Card>
 
               {/* ROW 3: Prio/Top 5/Savings*/}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }} data-sum-cols3>
                 <Card title="🎖️ Rozkład priorytetów">
                   <PriorityBreakdown monthTx={monthTx} totalExpenses={totalExpenses} />
                 </Card>
@@ -528,7 +526,12 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
           )}
         </>
       )}
-
+      <style>{`
+        @media (max-width: 900px) {
+          [data-sum-row1]  { flex-direction: column; }
+          [data-sum-cols3] { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -95,11 +95,11 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
     };
 
     return (
-      <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div>
         <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 12 }}>
           Kliknij wycinek → podgląd subkategorii
         </div>
-        <div style={{ flex: 1, minHeight: 260 }}>
+        <div style={{ flex: 1, height: 260, width: "100%"}}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -139,7 +139,7 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
   }));
 
  return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div>
       {/* Back button + title */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <button
@@ -167,7 +167,7 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
         </div>
       ) : (
         <>
-          <div style={{ flex: 1, minHeight: 200 }}>
+          <div style={{ flex: 1, height: 200, width: "100%"}}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={subData} cx="50%" cy="50%" outerRadius="75%" dataKey="value">
