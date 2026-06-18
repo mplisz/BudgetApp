@@ -33,7 +33,7 @@ export const PANEL_META = {
   basebudget:         { icon: "🏦", label: "Baza budżetu",      section: "Narzędzia"         },
 
   // Tools (month-independent)
-  vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia"         },
+  vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia",        mobile:true },
   safetynet:          { icon: "🛡️", label: "Poduszka",         section: "Narzędzia",        mobile: true },
 
   // Multi-month

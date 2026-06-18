@@ -17,7 +17,7 @@ import { fmt }                from "../../utils/helpers";
 import { QuickPills } from "../ui/QuickPills";
 // ── Styles ────────────────────────────────────────────────────
 const s = {
-  panel:      { padding: "0 0 40px 0", maxWidth: 860 },
+  panel:      { padding: "0 0 40px 0", maxWidth: 1280, margin: "0 auto", width: "100%" },
   title:      { fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 },
   sub:        { fontSize: 13, color: "#64748b", marginBottom: 20 },
   card:       { background: "#0d1424", border: "1px solid #1e293b", borderRadius: 12, padding: "16px 20px", marginBottom: 10 },
@@ -28,7 +28,6 @@ const s = {
   formRow:    { marginBottom: 14 },
   modal:      { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center" },
   modalBox:   { background: "#0d1424", border: "1px solid #1e293b", borderRadius: 14, padding: "24px 28px", maxWidth: 480, width: "90vw", maxHeight: "85vh", overflowY: "auto" },
-  progress:   (pct, color) => ({ height: 6, borderRadius: 99, background: "#1e293b", overflow: "hidden", marginTop: 8, children: null }),
 };
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -443,7 +442,7 @@ export default function PanelVouchers() {
       )}
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <div style={s.title}>🎫 Vouchery i bony</div>
           <div style={s.sub}>
@@ -492,16 +491,22 @@ export default function PanelVouchers() {
           {filter === "active" ? "Brak aktywnych voucherów." : "Brak voucherów."}
         </div>
       )}
-
-      {displayed.map(v => (
-        <VoucherCard
-          key={v.id}
-          v={v}
-          warnDays={warnDays}
-          onEdit={setEditTarget}
-          onArchive={setArchiveTarget}
-        />
-      ))}
+      <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+          gap: 12,
+          alignItems: "start",
+        }}>
+          {displayed.map(v => (
+            <VoucherCard
+              key={v.id}
+              v={v}
+              warnDays={warnDays}
+              onEdit={setEditTarget}
+              onArchive={setArchiveTarget}
+            />
+          ))}
+        </div>
 
       {/* Edit modal */}
       {editTarget && (
