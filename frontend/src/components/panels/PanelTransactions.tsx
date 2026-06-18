@@ -13,7 +13,9 @@ import { toYMD } from "../ui/AppDatePicker";
 import { ConfirmModal }    from "../ui/ConfirmModal";
 import { fmt }             from "../../utils/helpers";
 import { calculateEffectiveAmount } from "../../utils/returnUtils";
-import { TransactionRow, ReturnModal, s, PRIO_COLORS } from "./transactionComponents";
+import { TransactionRow, ReturnModal, s, PRIO_COLORS, TransactionCard  } from "./transactionComponents";
+import { useIsMobile } from "../../hooks/useIsMobile";
+
 import { usePagination }   from "../../hooks/usePagination";
 import { Pagination }      from "../ui/Pagination";
 import { SkeletonListRow } from "../ui/Skeleton";
@@ -109,6 +111,8 @@ export default function PanelTransactions() {
                                                         set("dateFrom", null);
                                                         set("dateTo", null);
                                                       });
+  const isMobile = useIsMobile();
+
 
   // ── Enrich transactions ───────────────────────────────────
   // - Resolve tag names
@@ -478,37 +482,52 @@ export default function PanelTransactions() {
           <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {flatPage} z {flatTotalPages}
           </div>
-          <div style={(s as any).card}>
-            <table style={(s as any).table}>
-              <thead>
-                <tr>
-                  <th style={(s as any).th}>Data</th>
-                  <th style={(s as any).th}>Kategoria</th>
-                  <th style={(s as any).th}>Opis</th>
-                  <th style={(s as any).th}>Tagi</th>
-                  <th style={(s as any).th}>Prio</th>
-                  <th style={{ ...(s as any).th, textAlign: "right" }}>Kwota</th>
-                  <th style={(s as any).th}>Autor</th>
-                  <th style={(s as any).th}>Akcje</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedFlat.map(tx => (
-                  <TransactionRow
-                    key={tx.id}
-                    tx={tx}
-                    isMonthClosed={isActiveMonthClosed}
-                    onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
-                    onReturn={() => setReturnTarget(tx)}
-                    onUpdated={handleUpdated}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pagination page={flatPage} totalPages={flatTotalPages} onPageChange={setFlatPage} />
-        </>
-      )}
+          {isMobile ? (
+                      <div>
+                        {paginatedFlat.map(tx => (
+                          <TransactionCard
+                            key={tx.id}
+                            tx={tx}
+                            isMonthClosed={isActiveMonthClosed}
+                            onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
+                            onReturn={() => setReturnTarget(tx)}
+                            onUpdated={handleUpdated}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                    <div style={(s as any).card}>
+                      <table style={(s as any).table}>
+                        <thead>
+                          <tr>
+                            <th style={(s as any).th}>Data</th>
+                            <th style={(s as any).th}>Kategoria</th>
+                            <th style={(s as any).th}>Opis</th>
+                            <th style={(s as any).th}>Tagi</th>
+                            <th style={(s as any).th}>Prio</th>
+                            <th style={{ ...(s as any).th, textAlign: "right" }}>Kwota</th>
+                            <th style={(s as any).th}>Autor</th>
+                            <th style={(s as any).th}>Akcje</th>
+                          </tr>
+                        </thead>
+                          <tbody>
+                            {paginatedFlat.map(tx => (
+                              <TransactionRow
+                                key={tx.id}
+                                tx={tx}
+                                isMonthClosed={isActiveMonthClosed}
+                                onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
+                                onReturn={() => setReturnTarget(tx)}
+                                onUpdated={handleUpdated}
+                              />
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                      <Pagination page={flatPage} totalPages={flatTotalPages} onPageChange={setFlatPage} />
+                    </>
+        )}
 
       {/* Grouped view */}
       {!isFirstLoad && grouped && groups.length > 0 && (
@@ -536,35 +555,48 @@ export default function PanelTransactions() {
                   <span style={(s as any).groupSum}>{fmt(group.sum)} PLN</span>
                 </div>
               </div>
-              {!collapsed[group.key] && (
-                <table style={(s as any).table}>
-                  <thead>
-                    <tr>
-                      <th style={(s as any).th}>Data</th>
-                      <th style={(s as any).th}>Kategoria</th>
-                      <th style={(s as any).th}>Opis</th>
-                      <th style={(s as any).th}>Tagi</th>
-                      <th style={(s as any).th}>Prio</th>
-                      <th style={{ ...(s as any).th, textAlign: "right" }}>Kwota</th>
-                      <th style={(s as any).th}>Autor</th>
-                      <th style={(s as any).th}>Akcje</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.items.map(tx => (
-                      <TransactionRow
-                        key={tx.id}
-                        tx={tx}
-                        isMonthClosed={isActiveMonthClosed}
-                        onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
-                        onReturn={() => setReturnTarget(tx)}
-                        onUpdated={handleUpdated}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+              {!collapsed[group.key] && (isMobile ? (
+                            <div style={{ padding: "0 8px 8px" }}>
+                              {group.items.map(tx => (
+                                <TransactionCard
+                                  key={tx.id}
+                                  tx={tx}
+                                  isMonthClosed={isActiveMonthClosed}
+                                  onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
+                                  onReturn={() => setReturnTarget(tx)}
+                                  onUpdated={handleUpdated}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <table style={(s as any).table}>
+                              <thead>
+                                <tr>
+                                  <th style={(s as any).th}>Data</th>
+                                  <th style={(s as any).th}>Kategoria</th>
+                                  <th style={(s as any).th}>Opis</th>
+                                  <th style={(s as any).th}>Tagi</th>
+                                  <th style={(s as any).th}>Prio</th>
+                                  <th style={{ ...(s as any).th, textAlign: "right" }}>Kwota</th>
+                                  <th style={(s as any).th}>Autor</th>
+                                  <th style={(s as any).th}>Akcje</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {group.items.map(tx => (
+                                  <TransactionRow
+                                    key={tx.id}
+                                    tx={tx}
+                                    isMonthClosed={isActiveMonthClosed}
+                                    onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
+                                    onReturn={() => setReturnTarget(tx)}
+                                    onUpdated={handleUpdated}
+                                  />
+                                ))}
+                              </tbody>
+                            </table>
+                          ))}
+                </div>
           ))}
           <Pagination page={groupPage} totalPages={groupTotalPages} onPageChange={setGroupPage} />
         </>

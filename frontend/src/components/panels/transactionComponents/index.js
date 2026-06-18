@@ -2,7 +2,7 @@
 // File: frontend/src/components/panels/transactionComponents/index.js
 // ============================================================
 
-export { TransactionRow }                              from "./TransactionRow";
+export { TransactionRow, TransactionCard }                              from "./TransactionRow";
 export { ReturnModal }                                 from "./ReturnModal";
 export { EditTransactionModal }                        from "./EditTransactionModal";
 export { TransactionForm, emptyFormValues, txToFormValues } from "./TransactionForm";
