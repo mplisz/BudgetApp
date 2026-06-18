@@ -15,9 +15,21 @@ function todayYMD(): string {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
+const isPercent = (v: Voucher) => v.valueType === "percent" || v.percentValue != null;
+
+// Remaining PLN balance — amount vouchers only. Percent vouchers have no
+// depleting balance; their availability is one-shot (see isUsable).
 function computeRemaining(v: Voucher): number {
+  if (isPercent(v)) return 0;
   const used = (v.usedInTransactions || []).reduce((s, u) => s + u.amount, 0);
   return Math.max(0, v.initialValue - used);
+}
+
+// Percent = one-shot → usable only while never used; amount → has balance.
+function isUsable(v: Voucher): boolean {
+  return isPercent(v)
+    ? (v.usedInTransactions || []).length === 0
+    : computeRemaining(v) > 0;
 }
 
 interface UseVouchersResult {
@@ -43,7 +55,7 @@ export function useVouchers(cart: CartItem[] = []): UseVouchersResult {
         setRawVouchers(
           data
             .map(v => ({ ...v, remainingValue: computeRemaining(v) }))
-            .filter(v => !v.isArchived && v.remainingValue > 0 && (!v.expiresAt || v.expiresAt >= today))
+            .filter(v => !v.isArchived && isUsable(v) && (!v.expiresAt || v.expiresAt >= today))
         );
       } catch {
         // Silently fail — voucher dropdown stays empty
@@ -54,21 +66,32 @@ export function useVouchers(cart: CartItem[] = []): UseVouchersResult {
     load();
   }, [fetchWithAuth]);
 
-  // Sum voucher amounts already reserved in the cart (per voucherId)
+  // Sum voucher amounts already reserved in the cart, per voucherId.
+  // Reads the new allocations array, falling back to legacy scalar fields.
   const cartReserved = useMemo<Record<string, number>>(() => {
     const reserved: Record<string, number> = {};
     for (const item of cart) {
-      if (!item.useVoucher || !item.voucherId) continue;
-      reserved[item.voucherId] = (reserved[item.voucherId] || 0) + (item.voucherAmount || 0);
+      const allocs = item.voucherAllocations
+        ?? (item.useVoucher && item.voucherId
+              ? [{ voucherId: item.voucherId, amount: item.voucherAmount || 0 }]
+              : []);
+      for (const a of allocs) {
+        reserved[a.voucherId] = (reserved[a.voucherId] || 0) + (a.amount || 0);
+      }
     }
     return reserved;
   }, [cart]);
 
-  // Adjust remaining values for in-cart reservations
+  // Adjust availability for in-cart reservations:
+  //   - percent voucher already in the cart → one-shot, so it's gone
+  //   - amount  voucher → subtract the reserved amount from its balance
   const vouchers = useMemo<Voucher[]>(() =>
     rawVouchers
-      .map(v => ({ ...v, remainingValue: Math.max(0, v.remainingValue - (cartReserved[v.id] || 0)) }))
-      .filter(v => v.remainingValue > 0),
+      .filter(v => !(isPercent(v) && cartReserved[v.id] != null))
+      .map(v => isPercent(v)
+        ? v
+        : { ...v, remainingValue: Math.max(0, v.remainingValue - (cartReserved[v.id] || 0)) })
+      .filter(v => isPercent(v) || v.remainingValue > 0),
     [rawVouchers, cartReserved]
   );
 

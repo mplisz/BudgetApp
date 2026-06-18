@@ -19,7 +19,7 @@ import { TagMultiSelect } from "../../ui/TagMultiSelect";
 import { MerchantInput } from "../../ui/MerchantInput";
 
 import type {
-  FormValues, FormLineItem, TransactionPayload, TransactionFormProps, RateInfo,
+  FormValues, FormLineItem, TransactionPayload, TransactionFormProps, RateInfo, VoucherAllocation,
 } from "../../../types/transaction";
 
 // ── Styles ────────────────────────────────────────────────────
@@ -53,9 +53,7 @@ export function emptyFormValues(): FormValues {
     priority:        2,
     description:     "",
     tags:            [],
-    useVoucher:      false,
-    voucherId:       "",
-    voucherAmount:   "",
+    voucherAllocations: [],
     amountGross:     "",
     discountAmount:  "",
     qty:             1,
@@ -81,9 +79,11 @@ export function txToFormValues(tx: Record<string, unknown>): FormValues {
     priority:        ((tx.priority as number) || 2) as 1 | 2 | 3 | 4,
     description:     (tx.description    as string) || "",
     tags:            (tx.tags           as string[]) || [],
-    useVoucher:      (tx.useVoucher     as boolean) || false,
-    voucherId:       (tx.voucherId      as string) || "",
-    voucherAmount:   tx.voucherAmount   ? String(tx.voucherAmount) : "",
+    voucherAllocations: Array.isArray(tx.voucherAllocations)
+      ? (tx.voucherAllocations as VoucherAllocation[]).map(a => ({ voucherId: a.voucherId, amount: a.amount }))
+      : (tx.voucherId
+          ? [{ voucherId: tx.voucherId as string, amount: Number(tx.voucherAmount) || 0 }]
+          : []),
     amountGross:     "",
     discountAmount:  "",
     qty:             1,
@@ -110,6 +110,7 @@ export function TransactionForm({
   isSaving = false,
   mode = "add",
   cart = [],
+  showVouchers = true,
 }: TransactionFormProps) {
   const { tags, transactions, limits, settings } = useAppContext() as {
     tags:         Array<{ id: string; name: string; icon: string; isArchived: boolean }>;
@@ -185,15 +186,40 @@ export function TransactionForm({
     return round2(raw * rateInfo.activeRate);
   }, [effectiveAmountOrig, rateInfo.activeRate]);
 
-  // Auto-cap voucherAmount when amountPLN drops
+  // Recompute/clamp voucher allocations when the PLN amount changes:
+  // percent vouchers re-derive from the new gross, fixed ones stay capped
+  // to the leftover budget. Keeps Σ allocations ≤ amountPLN.
   useEffect(() => {
-    if (!form.useVoucher || !form.voucherAmount) return;
-    const vAmt = parseDecimal(form.voucherAmount) || 0;
-    if (amountPLN > 0 && vAmt > amountPLN) set("voucherAmount", String(amountPLN));
+    if (!form.voucherAllocations.length) return;
+    let budget = amountPLN;
+    const next = form.voucherAllocations.map(a => {
+      const v = vouchers.find(x => x.id === a.voucherId);
+      let val = a.amount;
+      if (v && v.valueType === "percent") val = round2(amountPLN * (v.percentValue || 0) / 100);
+      val = round2(Math.min(val, budget));
+      budget = Math.max(0, round2(budget - val));
+      return { ...a, amount: val };
+    });
+    if (JSON.stringify(next) !== JSON.stringify(form.voucherAllocations)) {
+      set("voucherAllocations", next);
+    }
   }, [amountPLN]);
 
-  // Voucher section visible only for EXPENSE + when active vouchers exist + not a line-item tx
-  const showVoucherSection = form.categoryType === "EXPENSE" && vouchers.length > 0 && !hasLineItems;
+  // Voucher section visible only for EXPENSE + active vouchers + not a line-item tx,
+  // and only when allowed (cart-item edits suppress it — vouchers are cart-level).
+  // Voucher section only when allowed, EXPENSE, vouchers exist, not a
+  // line-item tx — AND the cart is empty. Once you're building a cart,
+  // vouchers are chosen at the cart level, so the form hides its own.
+  // Voucher section only when there is actually something to pick: an EXPENSE,
+  // not a line-item tx, empty cart (cart-level vouchers otherwise), AND at
+  // least one voucher whose store matches the current shop. Empty shop or no
+  // matching voucher → no section at all (nothing selectable anyway).
+  const normShop = (s?: string | null) => (s ?? "").trim().toLowerCase();
+  const eligibleVouchers = normShop(form.merchant) === ""
+    ? []
+    : vouchers.filter(v => normShop(v.store) === normShop(form.merchant));
+  const showVoucherSection = showVouchers && form.categoryType === "EXPENSE"
+    && !hasLineItems && cart.length === 0 && eligibleVouchers.length > 0;
 
   const handleRateReady = useCallback(({ activeRate, resolvedCurrency }: RateInfo) => {
     setRateInfo({ activeRate, resolvedCurrency });
@@ -212,9 +238,7 @@ export function TransactionForm({
       ...prev,
       subcategoryId, subcategoryName, categoryId, categoryName,
       categoryType: categoryType ?? null,
-      ...(categoryType !== "EXPENSE" && {
-        useVoucher: false, voucherId: "", voucherAmount: "",
-      }),
+      ...(categoryType !== "EXPENSE" && { voucherAllocations: [] }),
     }));
 
     // Budget warning toast on subcategory select
@@ -242,18 +266,6 @@ export function TransactionForm({
       showWarning(`⚠️ ${categoryName}: ${pct.toFixed(1)}% limitu (${fmt(spent)} / ${fmt(activeLimit)})`);
     }
   }, [budgetMonth, transactions, limits, settings, showError, showWarning]);
-
-  function handleVoucherSelect(id: string) {
-    if (!id) {
-      set("useVoucher", false); set("voucherId", ""); set("voucherAmount", "");
-      return;
-    }
-    const v = vouchers.find(v => v.id === id);
-    if (!v) return;
-    set("useVoucher", true);
-    set("voucherId", id);
-    set("voucherAmount", String(amountPLN > 0 ? Math.min(v.remainingValue, amountPLN) : v.remainingValue));
-  }
 
   // ── Build payload ─────────────────────────────────────────
 
@@ -299,6 +311,7 @@ export function TransactionForm({
         useVoucher:       false,
         voucherId:        null,
         voucherAmount:    0,
+        voucherAllocations: [],
         netAmount:        sumPLN,
         isRecurring:      false,
         recurringId:      null,
@@ -323,9 +336,8 @@ export function TransactionForm({
       }
     }
 
-    const cappedVoucher = form.useVoucher
-      ? Math.min(parseDecimal(form.voucherAmount) || 0, amountPLN)
-      : 0;
+    const allocations  = showVouchers ? form.voucherAllocations.filter(a => a.amount > 0) : [];
+    const voucherTotal = round2(allocations.reduce((s, a) => s + a.amount, 0));
 
     return {
       date:             dateYMD,
@@ -342,10 +354,11 @@ export function TransactionForm({
       description:      form.description.trim(),
       tags:             form.tags,
       priority:         form.priority,
-      useVoucher:       form.useVoucher,
-      voucherId:        form.useVoucher ? form.voucherId : null,
-      voucherAmount:    cappedVoucher,
-      netAmount:        form.useVoucher ? Math.max(0, amountPLN - cappedVoucher) : amountPLN,
+      voucherAllocations: allocations,
+      useVoucher:       allocations.length > 0,
+      voucherId:        allocations[0]?.voucherId ?? null,
+      voucherAmount:    voucherTotal,
+      netAmount:        round2(Math.max(0, amountPLN - voucherTotal)),
       isRecurring:      false,
       recurringId:      null,
       // On edit, send lineItems:[] so collapsing a breakdown clears it on the
@@ -650,19 +663,16 @@ export function TransactionForm({
       {showVoucherSection && (
         <VoucherSection
           vouchers={vouchers}
+          merchant={form.merchant}
           isLoading={vouchersLoading}
           isOpen={voucherOpen}
           onToggle={() => {
             setVoucherOpen(v => !v);
-            if (voucherOpen) {
-              set("useVoucher", false); set("voucherId", ""); set("voucherAmount", "");
-            }
+            if (voucherOpen) set("voucherAllocations", []);
           }}
-          voucherId={form.voucherId}
-          voucherAmount={form.voucherAmount}
+          allocations={form.voucherAllocations}
           amountPLN={amountPLN}
-          onSelect={handleVoucherSelect}
-          onAmountChange={v => set("voucherAmount", v)}
+          onChange={a => set("voucherAllocations", a)}
         />
       )}
 
@@ -678,7 +688,18 @@ export function TransactionForm({
         )}
         {onAddToCart && (
           <button
-            onClick={() => { const p = buildPayload(); if (p) onAddToCart(p); }}
+            onClick={() => {
+              const p = buildPayload();
+              if (!p) return;
+              // Vouchers are chosen at the cart level, not per item — strip here.
+              if (p.voucherAllocations && p.voucherAllocations.length > 0) {
+                showWarning("Voucher wybierzesz dla całego koszyka — nie przenosi się z formularza.");
+              }
+              onAddToCart({
+                ...p, voucherAllocations: [], useVoucher: false,
+                voucherId: null, voucherAmount: 0, netAmount: p.amount,
+              });
+            }}
             disabled={isSaving}
             style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #3b82f644", background: "#3b82f611", color: "#3b82f6", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
             🛒 Add to cart

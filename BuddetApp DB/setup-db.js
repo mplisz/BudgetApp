@@ -16,7 +16,7 @@ const containers = [
   { id: "Categories",            partitionKey: "/userId"  },
  // { id: "Tags",                  partitionKey: "/userId"  },
   { id: "Limits",                partitionKey: "/userId"  }, 
-  { id: "RecurringTransactions", partitionKey: "/userId"  },
+  { id: "Vouchers", partitionKey: "/userId"  },
   { id: "Transactions",          partitionKey: "/userId"  },
   { id: "PlannedExpenses",       partitionKey: "/userId"  },
   { id: "RefreshTokens",         partitionKey: "/email"   },

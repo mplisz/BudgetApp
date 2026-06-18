@@ -10,13 +10,15 @@
 //     (was causing merged items to disappear on edit)
 // ============================================================
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useAppContext }    from "../../../context/AppContext";
 import { useTransactions }  from "../../../hooks/useTransactions";
+import { useVouchers }      from "../../../hooks/useVouchers";
 import { useToast }         from "../../../hooks/useToast";
-import { fmt }              from "../../../utils/helpers";
+import { fmt, round2 }      from "../../../utils/helpers";
 import { PRIORITY_COLORS }  from "../../ui/PriorityPicker";
-import type { TransactionPayload } from "../../../types/transaction";
+import { VoucherSection }   from "./VoucherSection";
+import type { TransactionPayload, VoucherAllocation } from "../../../types/transaction";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -109,6 +111,22 @@ export function aggregateCart(items: CartItem[]): CartItem[] {
   );
 }
 
+// Strip cart-only / _ocr* fields → API payload. Receipt link + merchant +
+// warranty + merge breakdown survive as real (optional) payload fields.
+function toPayload(item: CartItem): TransactionPayload {
+  const {
+    _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote,
+    _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _ocrNeedsReview,
+    _lineItems, ...payload
+  } = item;
+  if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
+  if (_ocrReceiptId)   payload.receiptId       = _ocrReceiptId;
+  if (_ocrMerchant)    payload.merchant         = _ocrMerchant;
+  if (_ocrWarranty)    payload.isWarranty       = true;
+  if (_lineItems && _lineItems.length > 1) payload.lineItems = _lineItems;
+  return payload as TransactionPayload;
+}
+
 // ── Component ─────────────────────────────────────────────────
 
 export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
@@ -116,7 +134,10 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
     cart:    CartItem[];
     setCart: (v: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
   };
-  const { addTransaction }                   = useTransactions() as { addTransaction: (p: TransactionPayload) => Promise<unknown> };
+  const { addTransaction, addTransactionBatch } = useTransactions() as {
+    addTransaction:      (p: TransactionPayload) => Promise<unknown>;
+    addTransactionBatch: (b: { transactions: TransactionPayload[]; voucherIds: string[] }) => Promise<unknown[] | null>;
+  };
   const { showSuccess, showError, showInfo } = useToast() as {
     showSuccess: (m: string) => void;
     showError:   (m: string) => void;
@@ -126,16 +147,57 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
   const [statuses,   setStatuses]   = useState<Record<string, ItemStatus>>({});
   const [saving,     setSaving]     = useState(false);
 
+  // ── Cart-level vouchers ────────────────────────────────────
+  // Vouchers apply to the WHOLE cart (per decyzja 2); the backend /batch
+  // endpoint splits them proportionally across the resulting transactions.
+  const { vouchers: cartVouchers } = useVouchers(cart);
+  const [cartAllocations, setCartAllocations] = useState<VoucherAllocation[]>([]);
+  const [voucherOpen, setVoucherOpen] = useState(false);
+
+  // A cart voucher needs EVERY line to be from its shop. So we only offer a
+  // shop to the voucher selector when all lines share one non-empty shop;
+  // any no-shop line or a different shop disqualifies shop-tied vouchers
+  // (a transaction without a shop is fine — it just means no voucher here).
+  const cartMerchant = useMemo(() => {
+    const norm = (s?: string | null) => (s ?? "").trim().toLowerCase();
+    const shops = cart.map(i => norm(i.merchant || i._ocrMerchant));
+    const first = shops[0] ?? "";
+    if (first === "" || shops.some(s => s !== first)) return "";
+    return (cart[0].merchant || cart[0]._ocrMerchant || "") as string;
+  }, [cart]);
+
+  // Vouchers actually usable here = those whose store matches the (consistent)
+  // cart shop. Empty/mixed shop → none → the section is hidden entirely.
+  const eligibleCartVouchers = useMemo(() => {
+    const norm = (s?: string | null) => (s ?? "").trim().toLowerCase();
+    const m = norm(cartMerchant);
+    return m === "" ? [] : cartVouchers.filter(v => norm(v.store) === m);
+  }, [cartVouchers, cartMerchant]);
+
   // ── Derived totals ─────────────────────────────────────────
 
   const totalGross   = cart.reduce((s, i) => s + (i.amount || 0), 0);
-  const totalNet     = cart.reduce((s, i) =>
-    s + (i.useVoucher && i.voucherAmount > 0
-      ? Math.max(0, (i.amount || 0) - i.voucherAmount)
-      : (i.amount || 0)), 0);
-  const totalVoucher = cart.reduce((s, i) => s + (i.useVoucher ? (i.voucherAmount || 0) : 0), 0);
+  const totalVoucher = round2(cartAllocations.reduce((s, a) => s + (a.amount || 0), 0));
+  const totalNet     = Math.max(0, round2(totalGross - totalVoucher));
   const hasVouchers  = totalVoucher > 0;
   const errorCount   = Object.values(statuses).filter(s => s === STATUS.ERROR).length;
+
+  // Re-derive/clamp cart vouchers when the cart total changes: percent
+  // vouchers recompute from the new gross, fixed ones stay within budget.
+  useEffect(() => {
+    if (!cartAllocations.length) return;
+    let budget = totalGross;
+    const next = cartAllocations.map(a => {
+      const v = cartVouchers.find(x => x.id === a.voucherId);
+      let val = a.amount;
+      if (v && v.valueType === "percent") val = round2(totalGross * (v.percentValue || 0) / 100);
+      val = round2(Math.min(val, budget));
+      budget = Math.max(0, round2(budget - val));
+      return { ...a, amount: val };
+    });
+    if (JSON.stringify(next) !== JSON.stringify(cartAllocations)) setCartAllocations(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalGross]);
 
   function setStatus(id: string, status: ItemStatus) {
     setStatuses(prev => ({ ...prev, [id]: status }));
@@ -159,78 +221,71 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
     const pending = aggregateCart(cart.filter(i => statuses[i._cartId] !== STATUS.DONE));
     if (!pending.length) return;
 
-    setSaving(true);
-    const savedIds:  string[] = [];
-    const failedIds: string[] = [];
-
-    // Sequential saves — not parallel — to prevent race conditions
-    // on voucher usedInTransactions (last-write-wins would corrupt data)
-    for (const item of pending) {
-      // OCR items may arrive without a matched category — backend would
-      // 400 anyway, so fail fast locally with a clear reason.
-      if (!item.subcategoryId || !item.categoryId) {
-        const ids = item._allCartIds || [item._cartId];
-        ids.forEach(id => setStatus(id, STATUS.ERROR));
-        failedIds.push(...ids);
-        showError(`"${item.description || "Pozycja"}" nie ma kategorii — edytuj ją (✏️) przed zapisem.`);
-        continue;
-      }
-      setStatus(item._cartId, STATUS.SAVING);
-      try {
-        const { _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote, _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _ocrNeedsReview, _lineItems, ...payload } = item;
-        // Receipt link survives the strip — it's a real (optional) payload
-        // field, unlike the purely-visual _ocr* fields above.
-        if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
-        if (_ocrReceiptId)   payload.receiptId       = _ocrReceiptId;
-        if (_ocrMerchant)    payload.merchant         = _ocrMerchant;
-        if (_ocrWarranty)    payload.isWarranty       = true;
-        // Merge breakdown → real payload field (only present for true merges)
-        if (_lineItems && _lineItems.length > 1) payload.lineItems = _lineItems;
-        const result = await addTransaction(payload);
-        if (result) {
-          const ids = item._allCartIds || [item._cartId];
-          ids.forEach(id => setStatus(id, STATUS.DONE));
-          savedIds.push(...ids);
-        } else {
-          const ids = item._allCartIds || [item._cartId];
-          ids.forEach(id => setStatus(id, STATUS.ERROR));
-          failedIds.push(...ids);
-        }
-      } catch {
-        setStatus(item._cartId, STATUS.ERROR);
-        failedIds.push(item._cartId);
-      }
+    // Local pre-check: every line needs a category (backend would 400 anyway).
+    const invalid = pending.find(i => !i.subcategoryId || !i.categoryId);
+    if (invalid) {
+      (invalid._allCartIds || [invalid._cartId]).forEach(id => setStatus(id, STATUS.ERROR));
+      showError(`"${invalid.description || "Pozycja"}" nie ma kategorii — edytuj ją (✏️) przed zapisem.`);
+      return;
     }
 
+    const noun = (n: number) => (n === 1 ? "pozycję" : n < 5 ? "pozycje" : "pozycji");
+    const voucherIds = cartAllocations.map(a => a.voucherId);
+    setSaving(true);
+
+    // ── Batch path: cart-level vouchers → atomic /batch with split ──
+    if (voucherIds.length > 0) {
+      pending.forEach(item => (item._allCartIds || [item._cartId]).forEach(id => setStatus(id, STATUS.SAVING)));
+      const result = await addTransactionBatch({ transactions: pending.map(toPayload), voucherIds });
+      setSaving(false);
+
+      const allIds = pending.flatMap(i => i._allCartIds || [i._cartId]);
+      if (result) {
+        allIds.forEach(id => setStatus(id, STATUS.DONE));
+        showSuccess(`Zapisano ${pending.length} ${noun(pending.length)}! ✅`);
+        setCartAllocations([]);
+        setVoucherOpen(false);
+        setTimeout(() => {
+          setCart(prev => prev.filter(i => !allIds.includes(i._cartId)));
+          setStatuses(prev => { const n = { ...prev }; allIds.forEach(id => delete n[id]); return n; });
+          onSaveComplete?.();
+        }, 1200);
+      } else {
+        allIds.forEach(id => setStatus(id, STATUS.ERROR));   // hook already toasted
+      }
+      return;
+    }
+
+    // ── No vouchers: per-item sequential save (preserves partial success) ──
+    const savedIds: string[] = [];
+    for (const item of pending) {
+      setStatus(item._cartId, STATUS.SAVING);
+      try {
+        const result = await addTransaction(toPayload(item));
+        const ids = item._allCartIds || [item._cartId];
+        if (result) { ids.forEach(id => setStatus(id, STATUS.DONE));  savedIds.push(...ids); }
+        else        { ids.forEach(id => setStatus(id, STATUS.ERROR)); }
+      } catch {
+        setStatus(item._cartId, STATUS.ERROR);
+      }
+    }
     setSaving(false);
 
-    // Count transactions saved (not individual cart ids — merged items count as 1)
     const savedTxCount = pending.filter(item =>
       (item._allCartIds || [item._cartId]).some(id => savedIds.includes(id))
     ).length;
-    const failTxCount  = pending.length - savedTxCount;
-    const noun         = savedTxCount === 1 ? "pozycję" : savedTxCount < 5 ? "pozycje" : "pozycji";
+    const failTxCount = pending.length - savedTxCount;
 
-    if (failTxCount === 0) {
-      showSuccess(`Zapisano ${savedTxCount} ${noun}! ✅`);
-    } else if (savedTxCount === 0) {
-      showError("Nie udało się zapisać żadnej pozycji. Sprawdź połączenie.");
-    } else {
-      showInfo(`Zapisano ${savedTxCount} z ${pending.length} pozycji. ${failTxCount} nie udało się.`);
-    }
+    if (failTxCount === 0)       showSuccess(`Zapisano ${savedTxCount} ${noun(savedTxCount)}! ✅`);
+    else if (savedTxCount === 0) showError("Nie udało się zapisać żadnej pozycji. Sprawdź połączenie.");
+    else                         showInfo(`Zapisano ${savedTxCount} z ${pending.length} pozycji. ${failTxCount} nie udało się.`);
 
-    // Remove saved items after short delay so user sees ✅
     setTimeout(() => {
       setCart(prev => prev.filter(i => !savedIds.includes(i._cartId)));
-      setStatuses(prev => {
-        const n = { ...prev };
-        savedIds.forEach(id => delete n[id]);
-        return n;
-      });
+      setStatuses(prev => { const n = { ...prev }; savedIds.forEach(id => delete n[id]); return n; });
       if (savedTxCount > 0) onSaveComplete?.();
     }, 1200);
-
-  }, [cart, statuses, addTransaction, setCart, showSuccess, showError, showInfo, onSaveComplete]);
+  }, [cart, statuses, cartAllocations, addTransaction, addTransactionBatch, setCart, showSuccess, showError, showInfo, onSaveComplete]);
 
   if (cart.length === 0) return null;
 
@@ -371,6 +426,20 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
           );
         })}
       </div>
+
+      {/* Cart-level vouchers — applied to the whole cart, split on save */}
+      {eligibleCartVouchers.length > 0 && (
+        <VoucherSection
+          vouchers={cartVouchers}
+          merchant={cartMerchant}
+          isLoading={false}
+          isOpen={voucherOpen}
+          onToggle={() => { setVoucherOpen(o => !o); if (voucherOpen) setCartAllocations([]); }}
+          allocations={cartAllocations}
+          amountPLN={totalGross}
+          onChange={setCartAllocations}
+        />
+      )}
 
       {/* Actions */}
       <div style={{ borderTop: "1px solid #1e293b", paddingTop: 12 }}>

@@ -12,6 +12,7 @@ import { AppDatePicker, toYMD, fromYMD, todayLocal } from "../ui/AppDatePicker";
 import { BudgetInput }        from "../ui/BudgetInput";
 import { ConfirmModal }              from "../ui/ConfirmModal";
 import { ExpiringVouchersBanner } from "../ui/ExpiringVouchersBanner";
+import { MerchantInput }      from "../ui/MerchantInput";
 import { fmt }                from "../../utils/helpers";
 
 // ── Styles ────────────────────────────────────────────────────
@@ -40,7 +41,8 @@ function daysUntil(dateStr) {
 
 function emptyForm() {
   return {
-    description: "", code: "", initialValue: "", currency: "PLN",
+    description: "", code: "", valueType: "amount",
+    initialValue: "", percentValue: "", currency: "PLN",
     expiresAt: null, store: "", notes: "",
   };
 }
@@ -51,16 +53,28 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
 
   function set(k, v) { setForm(p => ({ ...p, [k]: v })); }
 
+  const isPercent = form.valueType === "percent";
+
   function handleSubmit() {
-    if (!form.description?.trim()) { showError("Podaj opis vouchera."); return; }
-    const val = parseFloat(form.initialValue);
-    if (!val || val <= 0)                          { showError("Podaj wartość > 0.");              return; }
-    if (!form.code.trim())                         { showError("Podaj kod vouchera.");             return; }
-    onSubmit({
+    if (!form.description?.trim()) { showError("Podaj opis vouchera.");        return; }
+    if (!form.code.trim())        { showError("Podaj kod vouchera.");          return; }
+    if (!form.store?.trim())      { showError("Podaj sklep / wystawcę.");      return; }
+
+    const base = {
       ...form,
-      initialValue: val,
-      expiresAt:    form.expiresAt ? toYMD(form.expiresAt) : null,
-    });
+      store:     form.store.trim(),
+      expiresAt: form.expiresAt ? toYMD(form.expiresAt) : null,
+    };
+
+    if (isPercent) {
+      const pct = parseInt(form.percentValue, 10);
+      if (!pct || pct < 1 || pct > 100) { showError("Podaj procent 1–100."); return; }
+      onSubmit({ ...base, valueType: "percent", percentValue: pct, initialValue: undefined });
+    } else {
+      const val = parseFloat(form.initialValue);
+      if (!val || val <= 0) { showError("Podaj wartość > 0."); return; }
+      onSubmit({ ...base, valueType: "amount", initialValue: val, percentValue: undefined });
+    }
   }
 
   return (
@@ -71,22 +85,67 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
           onChange={e => set("description", e.target.value)}
           placeholder="np. Karta Medicover Sport, bon Allegro..." />
       </div>
+
+      {/* Value type toggle — locked after creation */}
+      <div style={s.formRow}>
+        <label style={s.lbl}>Typ wartości</label>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[
+            { key: "amount",  label: "Kwota (PLN)" },
+            { key: "percent", label: "Procent (%)" },
+          ].map(t => (
+            <button
+              key={t.key}
+              type="button"
+              disabled={mode === "edit"}
+              onClick={() => set("valueType", t.key)}
+              style={{
+                flex: 1, padding: "7px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                cursor: mode === "edit" ? "not-allowed" : "pointer",
+                opacity: mode === "edit" && form.valueType !== t.key ? 0.4 : 1,
+                border:     `1px solid ${form.valueType === t.key ? "#10b981" : "#1e293b"}`,
+                background: form.valueType === t.key ? "#10b98122" : "transparent",
+                color:      form.valueType === t.key ? "#10b981"   : "#475569",
+              }}
+            >{t.label}</button>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div style={s.formRow}>
           {mode === "edit" ? (
+            isPercent ? (
+              <>
+                <label style={s.lbl}>Rabat</label>
+                <input readOnly value={`−${form.percentValue}%`} style={{ ...s.inp, opacity: 0.6, cursor: "default" }} />
+              </>
+            ) : (
+              <>
+                <label style={s.lbl}>Pozostało (PLN)</label>
+                <input
+                  readOnly
+                  value={typeof form.remainingValue === "number" ? form.remainingValue : form.initialValue}
+                  style={{ ...s.inp, opacity: 0.6, cursor: "default" }}
+                />
+                <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+                  Wartość początkowa: <strong style={{ color: "#94a3b8" }}>{form.initialValue} PLN</strong>
+                  {" · "}Użyto: <strong style={{ color: "#f97316" }}>
+                    {Math.max(0, form.initialValue - (typeof form.remainingValue === "number" ? form.remainingValue : form.initialValue))} PLN
+                  </strong>
+                </div>
+              </>
+            )
+          ) : isPercent ? (
             <>
-              <label style={s.lbl}>Pozostało (PLN)</label>
+              <label style={s.lbl}>Procent (%) *</label>
               <input
-                readOnly
-                value={typeof form.remainingValue === "number" ? form.remainingValue : form.initialValue}
-                style={{ ...s.inp, opacity: 0.6, cursor: "default" }}
+                type="number" min={1} max={100} step={1}
+                style={s.inp}
+                value={form.percentValue}
+                onChange={e => set("percentValue", e.target.value)}
+                placeholder="np. 20"
               />
-              <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
-                Wartość początkowa: <strong style={{ color: "#94a3b8" }}>{form.initialValue} PLN</strong>
-                {" · "}Użyto: <strong style={{ color: "#f97316" }}>
-                  {Math.max(0, form.initialValue - (typeof form.remainingValue === "number" ? form.remainingValue : form.initialValue))} PLN
-                </strong>
-              </div>
             </>
           ) : (
             <>
@@ -106,8 +165,13 @@ function VoucherForm({ initial, onSubmit, onCancel, isSaving, mode = "add" }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div style={s.formRow}>
-          <label style={s.lbl}>Sklep / wystawca</label>
-          <input style={s.inp} value={form.store} onChange={e => set("store", e.target.value)} placeholder="np. Medicover" />
+          <label style={s.lbl}>Sklep / wystawca *</label>
+          <MerchantInput
+            value={form.store}
+            onChange={v => set("store", v)}
+            placeholder="np. Medicover"
+            style={s.inp}
+          />
         </div>
         <div style={s.formRow}>
           <label style={s.lbl}>Data ważności <span style={{color:'#475569',fontWeight:400,textTransform:'none'}}>(opcjonalna)</span></label>
@@ -168,9 +232,12 @@ function UsageHistory({ entries }) {
 
 // ── VoucherCard ───────────────────────────────────────────────
 function VoucherCard({ v, onEdit, onArchive, warnDays = 14 }) {
+  const isPercent = v.valueType === "percent";
   const days   = daysUntil(v.expiresAt);
-  const pct    = v.initialValue > 0 ? Math.round((v.remainingValue / v.initialValue) * 100) : 0;
-  const isUsed = v.remainingValue <= 0;
+  // Percent vouchers are one-shot: "used" once they appear in any tx.
+  const isUsed = isPercent ? (v.usedInTransactions || []).length > 0 : v.remainingValue <= 0;
+  const pct    = isPercent ? (isUsed ? 0 : 100)
+               : v.initialValue > 0 ? Math.round((v.remainingValue / v.initialValue) * 100) : 0;
 
   const statusColor = isUsed ? "#6b7280"
     : days !== null && days <= 0          ? "#ef4444"
@@ -211,12 +278,21 @@ function VoucherCard({ v, onEdit, onArchive, warnDays = 14 }) {
           )}
 
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
-            <span style={{ color: "#94a3b8" }}>
-              Pozostało: <strong style={{ color: statusColor, fontSize: 14 }}>{fmt(v.remainingValue)} {v.currency}</strong>
-            </span>
-            <span style={{ color: "#475569" }}>
-              z {fmt(v.initialValue)} {v.currency}
-            </span>
+            {isPercent ? (
+              <span style={{ color: "#94a3b8" }}>
+                Rabat: <strong style={{ color: statusColor, fontSize: 14 }}>−{v.percentValue}%</strong>
+                {isUsed && <span style={{ color: "#475569", marginLeft: 6 }}>(wykorzystany)</span>}
+              </span>
+            ) : (
+              <>
+                <span style={{ color: "#94a3b8" }}>
+                  Pozostało: <strong style={{ color: statusColor, fontSize: 14 }}>{fmt(v.remainingValue)} {v.currency}</strong>
+                </span>
+                <span style={{ color: "#475569" }}>
+                  z {fmt(v.initialValue)} {v.currency}
+                </span>
+              </>
+            )}
             {v.expiresAt && (
               <span style={{ color: "#475569" }}>
                 Ważny do: <strong style={{ color: days !== null && days <= warnDays ? "#f97316" : "#64748b" }}>{v.expiresAt}</strong>
@@ -293,7 +369,10 @@ export default function PanelVouchers() {
   useEffect(() => { loadVouchers(true); }, []);
 
   const displayed = vouchers.filter(v => {
-    if (filter === "active")   return !v.isArchived && v.remainingValue > 0;
+    const usable = v.valueType === "percent"
+      ? (v.usedInTransactions || []).length === 0
+      : v.remainingValue > 0;
+    if (filter === "active")   return !v.isArchived && usable;
     if (filter === "archived") return v.isArchived;
     return true;  // all
   });
@@ -325,7 +404,7 @@ export default function PanelVouchers() {
             const days = Math.ceil((new Date(v.expiresAt) - new Date()) / 86400000);
             return (
               <div key={v.id} style={{ fontSize: 12, color: "#94a3b8", display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-                <span>🎫 <strong style={{ color: "#e2e8f0" }}>{v.name}</strong> — za {days} {days === 1 ? "dzień" : "dni"} ({v.expiresAt})</span>
+                <span>🎫 <strong style={{ color: "#e2e8f0" }}>{v.description || v.code}</strong> — za {days} {days === 1 ? "dzień" : "dni"} ({v.expiresAt})</span>
                 <span style={{ color: "#a78bfa" }}>{fmt(v.remainingValue)} PLN</span>
               </div>
             );

@@ -5,21 +5,34 @@
 
 export type Priority = 1 | 2 | 3 | 4;
 
+// A single voucher applied to a transaction. amount is always PLN
+// (percent vouchers are pre-resolved to their PLN value).
+export interface VoucherAllocation {
+  voucherId: string;
+  amount:    number;
+}
+
 export interface Voucher {
   id:                  string;
   code:                string;
-  remainingValue:      number;
+  description:         string;
+  store:               string;                    // mandatory — drives store-match
+  valueType:           "amount" | "percent";
+  percentValue?:       number | null;             // percent vouchers
+  remainingValue:      number;                     // amount vouchers (0 for percent)
   expiresAt?:          string;
   isArchived:          boolean;
   initialValue:        number;
+  currency?:           string;
   usedInTransactions?: Array<{ amount: number }>;
 }
 
 export interface CartItem {
-  _cartId:       string;
-  useVoucher?:   boolean;
-  voucherId?:    string;
+  _cartId:        string;
+  useVoucher?:    boolean;
+  voucherId?:     string;
   voucherAmount?: number;
+  voucherAllocations?: VoucherAllocation[];
 }
 
 export interface RateInfo {
@@ -52,9 +65,7 @@ export interface FormValues {
   priority:        Priority;
   description:     string;
   tags:            string[];
-  useVoucher:      boolean;
-  voucherId:       string;
-  voucherAmount:   string;
+  voucherAllocations: VoucherAllocation[];
   amountGross:     string;
   discountAmount:  string;
   qty:             number;
@@ -80,6 +91,7 @@ export interface TransactionPayload {
   useVoucher:       boolean;
   voucherId:        string | null;
   voucherAmount:    number;
+  voucherAllocations?: VoucherAllocation[];
   netAmount:        number;
   isRecurring:      boolean;
   recurringId:      null;
@@ -104,6 +116,7 @@ export interface TransactionFormProps {
   isSaving?:      boolean;
   mode?:          "add" | "edit";
   cart?:          CartItem[];
+  showVouchers?:  boolean;   // default true; cart-item edits pass false (cart-level only)
 }
 
 export interface FormLineItem {

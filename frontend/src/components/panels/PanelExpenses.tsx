@@ -383,13 +383,11 @@ export default function PanelExpenses() {
             priority:        editingCartItem.priority,
             description:     editingCartItem.description,
             tags:            editingCartItem.tags || [],
-            useVoucher:      editingCartItem.useVoucher || false,
-            voucherId:       editingCartItem.voucherId  || "",
-            voucherAmount:   editingCartItem.voucherAmount ? String(editingCartItem.voucherAmount) : "",
+            voucherAllocations: editingCartItem.voucherAllocations ?? [],
             amountGross:     "",
             discountAmount:  "",
             qty:             1,
-            merchant:        editingCartItem._ocrMerchant || "",
+            merchant:        editingCartItem.merchant || editingCartItem._ocrMerchant || "",
             lineItems:       [],
           };
         })() 
@@ -697,6 +695,8 @@ export default function PanelExpenses() {
                 onAddToCart={editingCartItem ? undefined : handleAddToCart}
                 isSaving={isSaving}
                 mode="add"
+                showVouchers={!editingCartItem}
+                cart={editingCartItem ? [] : cart}
               />
               {editingCartItem && (
                 <button
