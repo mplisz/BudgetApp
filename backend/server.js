@@ -112,7 +112,7 @@ app.use((req, res, next) => {
 
 // Lightweight liveness probe — no auth, no DB hit.
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({ status: 'ok'});
 });
 
 

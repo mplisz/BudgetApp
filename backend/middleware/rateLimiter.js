@@ -21,7 +21,7 @@ const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = require('express-rate-limit');
 
 const hasDedicatedLimiter = (path) =>
-    path.startsWith('/auth/') || path.startsWith('/limits'|| path.startsWith('/ocr'));
+    path.startsWith('/auth/') || path.startsWith('/limits')|| path.startsWith('/ocr');
 
 // Factory — keeps limiters DRY
 const createLimiter = (windowMs, maxRequests, baseMessage, extraOptions = {}) => {
