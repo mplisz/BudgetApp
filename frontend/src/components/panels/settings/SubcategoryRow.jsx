@@ -1,5 +1,6 @@
 // ============================================================
 // File: src/components/panels/settings/SubcategoryRow.jsx
+// Rozszerzony o canBeLuxmed toggle (analogicznie do canBeRecurring)
 // ============================================================
 
 import { EditableLabel }  from "../../ui/EditableLabel";
@@ -9,11 +10,22 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
   const isExpense  = parentType === "EXPENSE";
   const isDisabled = subData.isArchived || parentIsArchived;
 
+  // canBeLuxmed toggle pokazujemy tylko dla kategorii Zdrowie (EXPENSE).
+  // Sprawdzamy po parentId żeby nie musieć przekazywać dodatkowego flaga — 
+  // wszystkie znane ID kategorii Zdrowie zaczynają się od "cat_zdrowie".
+  const isZdrowieCategory = parentId === "cat_zdrowie";
+
   return (
     <div style={{
       display:             "grid",
-      // EXPENSE: name | priority | recurring | critical | archive
-      gridTemplateColumns: isExpense ? "1fr 140px 100px 100px 40px" : "1fr 40px",
+      // EXPENSE (Zdrowie): name | priority | recurring | critical | luxmed | archive
+      // EXPENSE (inne):    name | priority | recurring | critical | archive
+      // INCOME/SAVING/TRANSFER: name | archive
+      gridTemplateColumns: isExpense
+        ? isZdrowieCategory
+          ? "1fr 140px 100px 100px 100px 40px"
+          : "1fr 140px 100px 100px 40px"
+        : "1fr 40px",
       gap:                 8,
       alignItems:          "center",
       padding:             "8px 0",
@@ -30,6 +42,10 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
         />
         {subData.isArchived && (
           <span style={{ fontSize: 10, color: "#ef4444" }}>(Arch)</span>
+        )}
+        {subData.canBeLuxmed && !isZdrowieCategory && (
+          // Fallback badge jeśli subkategoria ma flagę ale nie jesteśmy w Zdrowie
+          <span style={{ fontSize: 10, color: "#06b6d4" }}>🏥</span>
         )}
       </div>
 
@@ -66,11 +82,7 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
         </button>
       )}
 
-      {/* isCritical toggle — only EXPENSE.
-          When ON, expenses in this subcategory bypass the priority filter
-          in PanelSafetyNet and are treated as "non-negotiable" (counted into
-          Survival Mode regardless of priority).
-          Use for: school fees, medication, kids' essentials. */}
+      {/* isCritical toggle — only EXPENSE */}
       {isExpense && (
         <button
           onClick={() => !isDisabled && onUpdate(subData.id, subName, parentId, { isCritical: !subData.isCritical })}
@@ -93,6 +105,32 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
           }}
         >
           🔒 {subData.isCritical ? "Krytyczne" : "—"}
+        </button>
+      )}
+
+      {/* canBeLuxmed toggle — only EXPENSE + Zdrowie category */}
+      {isExpense && isZdrowieCategory && (
+        <button
+          onClick={() => !isDisabled && onUpdate(subData.id, subName, parentId, { canBeLuxmed: !subData.canBeLuxmed })}
+          disabled={isDisabled}
+          title={subData.canBeLuxmed
+            ? "Wyłącz z puli zwrotów LuxMed"
+            : "Włącz do puli zwrotów LuxMed — transakcje z tej subkategorii będą widoczne w panelu Zwroty LuxMed"
+          }
+          style={{
+            background:    subData.canBeLuxmed ? "#06b6d422" : "transparent",
+            border:        `1px solid ${subData.canBeLuxmed ? "#06b6d466" : "#1e293b"}`,
+            color:         subData.canBeLuxmed ? "#06b6d4" : "#334155",
+            borderRadius:  6,
+            padding:       "4px 8px",
+            cursor:        isDisabled ? "not-allowed" : "pointer",
+            fontSize:      11,
+            fontWeight:    700,
+            whiteSpace:    "nowrap",
+            opacity:       isDisabled ? 0.4 : 1,
+          }}
+        >
+          🏥 {subData.canBeLuxmed ? "LuxMed" : "—"}
         </button>
       )}
 

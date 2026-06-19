@@ -51,6 +51,7 @@ export function useCategoryManager() {
               isArchived:     child.isArchived || false,
               canBeRecurring: child.canBeRecurring ?? false,
               isCritical:     child.isCritical     ?? false,
+              canBeLuxmed:    child.canBeLuxmed     ?? false, 
             });
           }
         });
@@ -105,6 +106,7 @@ export function useCategoryManager() {
     priority = 2,
     canBeRecurring = false,
     isCritical = false,
+    canBeLuxmed = false, 
   ) {
     setIsSavingCat(true);
     try {
@@ -115,6 +117,7 @@ export function useCategoryManager() {
           priority,
           canBeRecurring: canBeRecurring ?? false,
           isCritical:     isCritical     ?? false,
+          canBeLuxmed:    canBeLuxmed     ?? false,
         }),
       });
 
@@ -144,6 +147,7 @@ export function useCategoryManager() {
                 isArchived: false,
                 canBeRecurring: saved.canBeRecurring ?? false,
                 isCritical:     saved.isCritical     ?? false,
+                canBeLuxmed:    saved.canBeLuxmed     ?? false, 
               }],
             };
           }

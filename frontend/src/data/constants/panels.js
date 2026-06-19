@@ -33,10 +33,10 @@ export const PANEL_META = {
   basebudget:         { icon: "🏦", label: "Baza budżetu",      section: "Analiza miesiąca", mobile: true },
 
   // Tools (month-independent)
-  vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia",        mobile:true },
+  vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia",       mobile:true },
   safetynet:          { icon: "🛡️", label: "Poduszka",         section: "Narzędzia",        mobile: true },
   analytics:          { icon: "📊", label: "Analiza",           section: "Narzędzia"   },
-
+ luxmed:             { icon: "🏥", label: "Zwroty LuxMed",     section: "Narzędzia",        mobile: true},
   // Admin
   settings:           { icon: "⚙️", label: "Ustawienia",        section: "Administracja"    },
   admin:              { icon: "🔐", label: "Admin",             section: "Administracja"    },
@@ -47,8 +47,8 @@ export const PANEL_META = {
 export const MONTH_SELECTOR_PANELS = [
   "expenses", "addincome", "addrecurring", "addplanned",
   "transactions", "incometransactions",
-  "planned", "recurring",
-  "summary", "basebudget",
+  "recurring",
+  "summary", "basebudget", "luxmed"
 ];
 
 // Panels whose page title includes the active month name.
@@ -58,6 +58,6 @@ export const MONTH_SELECTOR_PANELS = [
 export const MONTH_TITLE_PANELS = [
   "expenses", "addincome", "addrecurring", "addplanned",
   "transactions", "incometransactions",
-  "planned", "recurring",
-  "summary", "basebudget",
+  "recurring",
+  "summary", "basebudget", "luxmed"
 ];

@@ -36,12 +36,12 @@ import { LogoutButton } from "./components/ui/LogoutButton";
 import { ToastContainer } from "./components/ui/ToastContainer";
 import { MonthStatusButton } from "./components/layout/MonthStatusButton";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
-import { PANEL_META } from "./data/constants";
+import { PANEL_META, MONTH_SELECTOR_PANELS, MONTH_TITLE_PANELS } from "./data/constants";
 import { panelIdFromPath, getDefaultPath } from "./data/routes";
 import { useMonthFromUrl, useMonthGuard } from "./hooks/useMonthFromUrl";
 import { PanelLoader }   from "./components/ui/PanelLoader";
 import { useAppContext } from "./context/AppContext";
-import { useMonthStatus } from "./hooks/useMonthStatus";
+
 
 // ── Lazy-loaded panels ───────────────────────────────────────
 
@@ -60,20 +60,11 @@ const PanelAddPlanned         = lazy(() => import("./components/panels/PanelAddP
 const PanelSummary            = lazy(() => import("./components/panels/PanelSummary"));
 const PanelAnalytics          = lazy(() => import("./components/panels/PanelAnalytics"));
 const PanelSafetyNet          = lazy(() => import("./components/panels/PanelSafetyNet"));
+const PanelLuxmed             = lazy(() => import("./components/panels/PanelLuxmed"));
 
 // ── Which panels show the MonthNavigator in the header ──────
-const PANELS_WITH_MONTH_NAVIGATOR = new Set([
-  "expenses", "addincome", "addrecurring", "addplanned",
-  "transactions", "incometransactions", "planned", "recurring",
-  "summary", "basebudget",
-]);
-
-// ── Which panels show the month name in the title ──────────
-const PANELS_WITH_MONTH_TITLE = new Set([
-  "expenses", "addincome", "addrecurring", "addplanned",
-  "transactions", "incometransactions", "planned", "recurring",
-  "summary", "basebudget",
-]);
+const PANELS_WITH_MONTH_NAVIGATOR = new Set(MONTH_SELECTOR_PANELS);
+const PANELS_WITH_MONTH_TITLE     = new Set(MONTH_TITLE_PANELS);
 
 // ============================================================
 // Authenticated layout — used as a route wrapper
@@ -243,13 +234,15 @@ function AppContent() {
         <Route path="income-transactions" element={<PanelIncomeTransactions />} />
         <Route path="summary"             element={<PanelSummary />} />
         <Route path="basebudget"          element={<PanelBaseBudget />} />
-
-        {/* Lists & tools */}
         <Route path="recurring" element={<PanelRecurring />} />
         <Route path="planned"   element={<PanelPlanned />} />
+
+        {/* Lists & tools */}
+
         <Route path="vouchers"  element={<PanelVouchers />} />
         <Route path="safetynet" element={<PanelSafetyNet />} />
         <Route path="analytics" element={<PanelAnalytics />} />
+        <Route path="/luxmed" element={<PanelLuxmed />} />
 
         {/* Admin */}
         <Route path="settings" element={<PanelSettings />} />

@@ -74,6 +74,10 @@ const SettingsSchema = z.object({
     .optional(),
   // Persisted state for PanelSafetyNet (Poduszka finansowa)
   safetyNet:     SafetyNetSchema.optional(),
+  luxmed: z.object({
+    maxPercent: z.number().int().min(1).max(100).optional(),
+    maxTotal:   z.number().min(0).max(99999).optional(),
+  }).optional(),
 }).refine(
   data => data.thresholds
        || data.targets
@@ -81,7 +85,8 @@ const SettingsSchema = z.object({
        || data.appStartMonth !== undefined
        || data.voucherExpiryWarningDays !== undefined
        || data.safetyNet !== undefined
-       || data.notifyDaysBefore !== undefined,
+       || data.notifyDaysBefore !== undefined
+       || data.luxmed !== undefined,
   { message: "No valid fields provided for update." }
 );
 
@@ -103,6 +108,9 @@ const DEFAULT_SETTINGS = {
     maxObligationsPercent: 35,
     minRetirementPercent:  15,
     minSavingsPercent:     20,
+  },  luxmed: {
+    maxPercent: 90,   // max. % 
+    maxTotal:   500,  // max amount of return
   },
   currencies:    DEFAULT_CURRENCIES,
   voucherExpiryWarningDays: 14,
@@ -145,6 +153,7 @@ router.get('/', async (req, res) => {
     if (!("appStartMonth"            in doc)) doc.appStartMonth = null;
     if (!("voucherExpiryWarningDays" in doc)) doc.voucherExpiryWarningDays = 14;
     if (!("safetyNet"                in doc)) doc.safetyNet = null;
+    if (!("luxmed"    in doc)) doc.luxmed    = { maxPercent: 90, maxTotal: 500 };
 
     res.json(doc);
   } catch (error) {
@@ -208,6 +217,9 @@ router.patch('/', async (req, res) => {
       safetyNet: parsed.data.safetyNet !== undefined
         ? { ...(existing.safetyNet || {}), ...parsed.data.safetyNet }
         : (existing.safetyNet ?? null),
+      luxmed: parsed.data.luxmed !== undefined
+        ? { ...(existing.luxmed || { maxPercent: 90, maxTotal: 500 }), ...parsed.data.luxmed }
+        : (existing.luxmed ?? { maxPercent: 90, maxTotal: 500 }),
       updatedAt:     new Date().toISOString(),
       updatedBy:     req.user.id,
       updatedByName: req.user.name,

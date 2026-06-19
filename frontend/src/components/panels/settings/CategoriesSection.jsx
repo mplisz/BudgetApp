@@ -20,17 +20,18 @@ export function CategoriesSection() {
   const { categories } = useAppContext();
   const { isLoadingCats, isSavingCat, showError, executePatch, addCategoryToDb } = useCategoryManager();
 
-  const [showArchived,     setShowArchived]     = useState(false);
-  const [showArchivedSubs, setShowArchivedSubs] = useState(false);
-  const [expandedCatId,    setExpandedCatId]    = useState(null);
-  const [newCatName,       setNewCatName]       = useState("");
-  const [newCatIcon,       setNewCatIcon]       = useState("📦");
-  const [newCatType,       setNewCatType]       = useState("EXPENSE");
-  const [newSubName,       setNewSubName]       = useState("");
-  const [newSubPriority,   setNewSubPriority]   = useState(2);
+  const [showArchived,         setShowArchived]         = useState(false);
+  const [showArchivedSubs,     setShowArchivedSubs]     = useState(false);
+  const [expandedCatId,        setExpandedCatId]        = useState(null);
+  const [newCatName,           setNewCatName]           = useState("");
+  const [newCatIcon,           setNewCatIcon]           = useState("📦");
+  const [newCatType,           setNewCatType]           = useState("EXPENSE");
+  const [newSubName,           setNewSubName]           = useState("");
+  const [newSubPriority,       setNewSubPriority]       = useState(2);
   const [newSubCanBeRecurring, setNewSubCanBeRecurring] = useState(false);
-  const [newSubIsCritical, setNewSubIsCritical] = useState(false);
-  const [modalConfig,      setModalConfig]      = useState(MODAL_CLOSED);
+  const [newSubIsCritical,     setNewSubIsCritical]     = useState(false);
+  const [newSubCanBeLuxmed,    setNewSubCanBeLuxmed]    = useState(false);
+  const [modalConfig,          setModalConfig]          = useState(MODAL_CLOSED);
 
   const expandedCat = useMemo(() =>
     categories.find(c => c.id === expandedCatId) || null,
@@ -42,7 +43,6 @@ export function CategoriesSection() {
     [categories, showArchived]
   );
 
-  // All type sections — derived from categoryTypes.js (single source of truth)
   const typeSections = getCategoryTypeSections();
 
   function handleUpdateCategory(id, name, parentId, updates) {
@@ -69,10 +69,14 @@ export function CategoriesSection() {
       newSubPriority,
       newSubCanBeRecurring,
       newSubIsCritical,
+      newSubCanBeLuxmed,
     );
     if (success) {
-      setNewSubName(""); setNewSubPriority(2);
-      setNewSubCanBeRecurring(false); setNewSubIsCritical(false);
+      setNewSubName("");
+      setNewSubPriority(2);
+      setNewSubCanBeRecurring(false);
+      setNewSubIsCritical(false);
+      setNewSubCanBeLuxmed(false);
     }
   }
 
@@ -246,6 +250,20 @@ export function CategoriesSection() {
                       </label>
                     )}
 
+                    {expandedCat.type === "EXPENSE" && (
+                      <label
+                        title="LuxMed — transakcje z tej subkategorii będą widoczne w panelu Zwroty LuxMed"
+                        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "0 4px", whiteSpace: "nowrap" }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={newSubCanBeLuxmed}
+                          onChange={e => setNewSubCanBeLuxmed(e.target.checked)}
+                        />
+                        <span style={{ fontSize: 11, color: "#64748b" }}>🏥</span>
+                      </label>
+                    )}
+
                     <button
                       onClick={handleAddSubCategory}
                       disabled={isSavingCat}
@@ -259,7 +277,7 @@ export function CategoriesSection() {
                   <div style={{
                     display: "grid",
                     gridTemplateColumns: expandedCat.type === "EXPENSE"
-                      ? "1fr 140px 100px 100px 40px"
+                      ? "1fr 140px 100px 100px 100px 40px"
                       : "1fr 40px",
                     gap: 8, marginBottom: 8,
                   }}>
@@ -269,6 +287,7 @@ export function CategoriesSection() {
                         <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>PRIORYTET</span>
                         <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>CYKLICZNE</span>
                         <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>KRYTYCZNE</span>
+                        <span style={{ color: "#06b6d4",  fontSize: 10, fontWeight: 700 }}>LUXMED</span>
                       </>
                     )}
                   </div>

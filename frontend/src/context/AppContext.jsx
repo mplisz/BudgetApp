@@ -82,6 +82,7 @@ export function AppProvider({ children }) {
           isArchived:     child.isArchived      || false,
           canBeRecurring: child.canBeRecurring  ?? false,
           isCritical:     child.isCritical      ?? false,
+          canBeLuxmed:    child.canBeLuxmed      ?? false,  
         });
       }
     });

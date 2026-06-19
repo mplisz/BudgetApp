@@ -7,6 +7,7 @@ import { TagsSection }           from "./settings/TagsSection";
 import { SettingsSection }       from "./settings/SettingsSection";
 import { CurrenciesSection }     from "./settings/CurrenciesSection";
 import { theme as s }            from "./../../styles/theme";
+import { LuxmedSection }         from  "./settings/LuxmedSection";
 
 function PanelSettings() {
   return (
@@ -17,6 +18,7 @@ function PanelSettings() {
       <CategoriesSection />
       <CurrenciesSection />
       <TagsSection />
+      <LuxmedSection />
       <SettingsSection />
     </div>
   );

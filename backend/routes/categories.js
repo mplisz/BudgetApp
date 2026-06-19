@@ -9,12 +9,10 @@
 //   - GET stays as a SQL query because it scans all docs in the
 //     partition without specific IDs — that's the right tool there.
 //
-// Bug fixes vs previous version:
-//   - PATCH no longer overwrites `canBeRecurring` to `false` on
-//     every update. Removed `.default(false)` from PATCH schema
-//     so absent fields stay untouched.
-//   - PATCH now supports `isCritical` (subcategory flag) which
-//     was already in POST schema but missing from PATCH.
+// Bug fixes / changes vs previous version:
+//   - PATCH no longer overwrites `canBeRecurring` to `false` on every update.
+//   - PATCH now supports `isCritical` and `canBeLuxmed`.
+//   - Schemas refactored: CategoryBaseSchema + .extend() / .partial().
 // ============================================================
 
 const express = require('express');
@@ -31,30 +29,34 @@ router.use(requireAuth);
 // POST: brand-new category, defaults make sense (caller may omit).
 // PATCH: partial update — every field MUST be optional and absent
 //         fields must NOT mutate the doc. Therefore no .default() here.
-
-const CategoryPostSchema = z.object({
-  name:             z.string().min(2, "Name must be at least 2 characters")
-                              .max(50, "Name must be at most 50 characters"),
-  icon:             z.string().max(10).optional(),
+const CategoryBaseSchema = z.object({
+  name:           z.string().min(2, "Name must be at least 2 characters")
+                            .max(50, "Name must be at most 50 characters"),
+  icon:           z.string().max(10).optional(),
+  priority:       z.number().int().min(1).max(4).optional(),
+  canBeRecurring: z.boolean().optional(),
+  isCritical:     z.boolean().optional(),
+  canBeLuxmed:    z.boolean().optional(),   // 🏥 LuxMed refund eligibility
+});
+ 
+// POST: create-only fields + defaults 
+const CategoryPostSchema = CategoryBaseSchema.extend({
   parentCategoryId: z.string().nullable().optional(),
   type:             z.enum(['EXPENSE', 'INCOME', 'SAVING', 'TRANSFER']).nullable().optional(),
-  priority:         z.number().int().min(1).max(4).optional(),
-  canBeRecurring:   z.boolean().optional().default(false),
+  canBeRecurring:   z.boolean().optional().default(false),  // override base 
   isCritical:       z.boolean().optional().default(false),
+  canBeLuxmed:      z.boolean().optional().default(false),
 });
-
-const CategoryPatchSchema = z.object({
-  name:             z.string().min(2).max(50).optional(),
-  icon:             z.string().max(10).optional(),
-  isArchived:       z.boolean().optional(),
-  priority:         z.number().int().min(1).max(4).optional(),
-  // NOTE: no `.default()` — patch is partial. Missing field == no change.
-  canBeRecurring:   z.boolean().optional(),
-  isCritical:       z.boolean().optional(),
-}).refine(data => Object.keys(data).length > 0, {
-  message: "No valid fields provided for update.",
-});
-
+ 
+// PATCH: each field optional, no field in the body = no update
+const CategoryPatchSchema = CategoryBaseSchema
+  .extend({
+    isArchived: z.boolean().optional(),
+  })
+  .partial()
+  .refine(data => Object.keys(data).length > 0, {
+    message: "No valid fields provided for update.",
+  });
 // ── GET ──────────────────────────────────────────────────────
 // Lists all categories for the user's family. SQL query is the right
 // tool here — we're scanning the whole partition, not fetching a
@@ -146,7 +148,9 @@ router.post('/', async (req, res) => {
       createdAt: new Date().toISOString(),
       createdBy: req.user.id,
       createdByName: req.user.name,
-      canBeRecurring: parsed.data.canBeRecurring ?? false
+      canBeRecurring: parsed.data.canBeRecurring ?? false,
+      isCritical:     parsed.data.isCritical     ?? false,  
+      canBeLuxmed:    parsed.data.canBeLuxmed     ?? false,
     };
 
     const { resource } = await categoriesContainer.items.create(newCategory);
@@ -195,7 +199,7 @@ router.patch('/update/:id', async (req, res) => {
     }
 
     // ── Build safe updates (only fields that were sent) ─────
-    const { name, icon, isArchived, priority, canBeRecurring, isCritical } = parsed.data;
+    const { name, icon, isArchived, priority, canBeRecurring, isCritical, canBeLuxmed  } = parsed.data;
     const safeUpdates = {};
     if (name           !== undefined) safeUpdates.name           = name.trim();
     if (icon           !== undefined) safeUpdates.icon           = icon.substring(0, 10);
@@ -203,6 +207,8 @@ router.patch('/update/:id', async (req, res) => {
     if (priority       !== undefined) safeUpdates.priority       = priority;
     if (canBeRecurring !== undefined) safeUpdates.canBeRecurring = canBeRecurring;
     if (isCritical     !== undefined) safeUpdates.isCritical     = isCritical;
+    if (canBeLuxmed    !== undefined) safeUpdates.canBeLuxmed    = canBeLuxmed;
+    
 
     safeUpdates.updatedAt     = new Date().toISOString();
     safeUpdates.updatedBy     = req.user.id;
