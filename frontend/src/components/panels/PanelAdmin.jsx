@@ -74,7 +74,7 @@ export default function PanelAdmin() {
   }
 
   return (
-    <div style={{ ...s.panel, maxWidth: 600 }}>
+      <div style={{ ...s.panel, maxWidth: 600, margin: "0 auto" }}>
       <div style={{ marginBottom: 24 }}>
         <div style={s.sectionTitle}>🔐 Admin</div>
         <div style={{ color: "#475569", fontSize: 13, marginTop: 4 }}>
