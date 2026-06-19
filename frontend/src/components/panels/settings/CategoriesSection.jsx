@@ -94,7 +94,7 @@ export function CategoriesSection() {
         {isLoadingCats ? (
           <div style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>⏳ Ładowanie bazy...</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 12, alignItems: "stretch" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 12, alignItems: "stretch" }} data-cats-grid>
 
             {/* ── LEFT COLUMN ───────────────────────────────── */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -274,8 +274,8 @@ export function CategoriesSection() {
                   </div>
 
                   {/* Subcategory list header */}
-                  <div style={{
-                    display: "grid",
+                  <div data-subcat-header style={{
+                    display: "grid", 
                     gridTemplateColumns: expandedCat.type === "EXPENSE"
                       ? "1fr 140px 100px 100px 100px 40px"
                       : "1fr 40px",
@@ -331,7 +331,12 @@ export function CategoriesSection() {
           </div>
         )}
       </CollapsibleSection>
-
+      <style>{`
+        @media (max-width: 700px) {
+          [data-cats-grid] { grid-template-columns: 1fr !important; }
+          [data-subcat-header] { display: none !important; }
+        }
+      `}</style>
       <ConfirmModal
         isOpen={modalConfig.isOpen}
         title={modalConfig.title}
