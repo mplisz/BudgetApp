@@ -35,8 +35,8 @@ export const PANEL_META = {
   // Tools (month-independent)
   vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia",       mobile:true },
   safetynet:          { icon: "🛡️", label: "Poduszka",         section: "Narzędzia",        mobile: true },
-  analytics:          { icon: "📊", label: "Analiza",           section: "Narzędzia"   },
- luxmed:             { icon: "🏥", label: "Zwroty LuxMed",     section: "Narzędzia",        mobile: true},
+  analytics:          { icon: "📊", label: "Analiza",           section: "Narzędzia",       mobile: true},
+  luxmed:             { icon: "🏥", label: "Zwroty LuxMed",     section: "Narzędzia",       mobile: true},
   // Admin
   settings:           { icon: "⚙️", label: "Ustawienia",        section: "Administracja",     mobile: true},
   admin:              { icon: "🔐", label: "Admin",             section: "Administracja",     mobile: true},

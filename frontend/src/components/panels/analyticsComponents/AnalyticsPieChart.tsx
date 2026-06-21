@@ -2,11 +2,15 @@
 // File: src/components/panels/analyticsComponents/AnalyticsPieChart.tsx
 // Pie chart of category spending across the range, with drill-down
 // into subcategories on click.
+//
+// Now reused for BOTH expense structure and income structure — pass
+// `emptyMessage` to tailor the empty-state wording.
 // ============================================================
 
 import { useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { fmt } from "../../../utils/helpers";
+import { CHART_COLORS, chartTooltipStyle, chartTooltipLabelStyle, chartTooltipItemStyle, toNum, ChartEmpty } from "./chartKit";
 
 export interface AnalyticsCategorySlice {
   categoryId:   string;
@@ -23,23 +27,14 @@ export interface AnalyticsCategorySlice {
 
 interface AnalyticsPieChartProps {
   data: AnalyticsCategorySlice[];
+  emptyMessage?: string;
 }
 
-const PIE_COLORS = [
-  "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
-  "#10b981", "#06b6d4", "#3b82f6", "#8b5cf6", "#a855f7",
-  "#ec4899", "#f43f5e",
-];
-
-export function AnalyticsPieChart({ data }: AnalyticsPieChartProps) {
+export function AnalyticsPieChart({ data, emptyMessage }: AnalyticsPieChartProps) {
   const [drillCategoryId, setDrillCategoryId] = useState<string | null>(null);
 
   if (data.length === 0) {
-    return (
-      <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
-        Brak wydatków w zakresie.
-      </div>
-    );
+    return <ChartEmpty message={emptyMessage ?? "Brak wydatków w zakresie."} />;
   }
 
   const drillCategory = drillCategoryId
@@ -107,14 +102,16 @@ export function AnalyticsPieChart({ data }: AnalyticsPieChartProps) {
             cursor={!drillCategory ? "pointer" : "default"}
           >
             {chartData.map((_, i) => (
-              <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
             ))}
           </Pie>
           <Tooltip
-            contentStyle={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8 }}
+            contentStyle={chartTooltipStyle}
+            labelStyle={chartTooltipLabelStyle}
+            itemStyle={chartTooltipItemStyle}
             formatter={(v: unknown) => {
-              const num = typeof v === "number" ? v : Number(v) || 0;
-                  return [
+              const num = toNum(v);
+              return [
                 `${fmt(num)} zł (${total > 0 ? ((num / total) * 100).toFixed(1) : 0}%)`,
                 "Suma",
               ];

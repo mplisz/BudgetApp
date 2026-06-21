@@ -1,11 +1,19 @@
 // ============================================================
 // File: src/components/panels/analyticsComponents/MonthlyTrendChart.tsx
 // Line chart: income / transfers / expenses / savings / balance per month.
+//
+// #8 — when each point carries `expensesMA` (3-month trailing average of
+// expenses, computed by the panel), a dashed overlay line is drawn so a
+// one-off spike is visually separated from a real upward trend.
 // ============================================================
 
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
+import {
+  SERIES, chartTooltipStyle, chartTooltipLabelStyle, AXIS_STROKE, AXIS_FONT_SIZE,
+  plnLabel, ChartEmpty,
+} from "./chartKit";
 
 export interface MonthlyDataPoint {
   month:     string;   // "YYYY-MM"
@@ -14,6 +22,7 @@ export interface MonthlyDataPoint {
   expenses:  number;
   savings:   number;
   balance:   number;
+  expensesMA?: number; // 3-month trailing average of expenses (#8)
 }
 
 interface MonthlyTrendChartProps {
@@ -22,33 +31,40 @@ interface MonthlyTrendChartProps {
 
 export function MonthlyTrendChart({ data }: MonthlyTrendChartProps) {
   if (data.length === 0) {
-    return (
-      <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
-        Brak danych w wybranym zakresie.
-      </div>
-    );
+    return <ChartEmpty message="Brak danych w wybranym zakresie." />;
   }
+
+  const hasMA = data.some(d => typeof d.expensesMA === "number");
 
   return (
     <ResponsiveContainer width="100%" height={320}>
       <LineChart data={data} margin={{ top: 12, right: 20, bottom: 0, left: -10 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-        <XAxis dataKey="month" stroke="#475569" fontSize={11} />
-        <YAxis stroke="#475569" fontSize={11} />
+        <XAxis dataKey="month" stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} />
+        <YAxis stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} />
         <Tooltip
-          contentStyle={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8 }}
-          labelStyle={{ color: "#e2e8f0" }}
-          formatter={(v: unknown) => {
-            const num = typeof v === "number" ? v : Number(v) || 0;
-            return `${num.toLocaleString("pl-PL")} zł`;
-          }}
+          contentStyle={chartTooltipStyle}
+          labelStyle={chartTooltipLabelStyle}
+          formatter={(v: unknown) => plnLabel(v)}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Line type="monotone" dataKey="income"    name="Wpływy"        stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-        <Line type="monotone" dataKey="transfers" name="Transfery"     stroke="#22d3ee" strokeWidth={2} dot={{ r: 3 }} />
-        <Line type="monotone" dataKey="expenses"  name="Wydatki"       stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
-        <Line type="monotone" dataKey="savings"   name="Oszczędności"  stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
-        <Line type="monotone" dataKey="balance"   name="Saldo"         stroke="#e2e8f0" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="4 4" />
+        <Line type="monotone" dataKey="income"    name="Wpływy"        stroke={SERIES.income}    strokeWidth={2} dot={{ r: 3 }} />
+        <Line type="monotone" dataKey="transfers" name="Transfery"     stroke={SERIES.transfers} strokeWidth={2} dot={{ r: 3 }} />
+        <Line type="monotone" dataKey="expenses"  name="Wydatki"       stroke={SERIES.expenses}  strokeWidth={2} dot={{ r: 3 }} />
+        <Line type="monotone" dataKey="savings"   name="Oszczędności"  stroke={SERIES.savings}   strokeWidth={2} dot={{ r: 3 }} />
+        <Line type="monotone" dataKey="balance"   name="Saldo"         stroke={SERIES.balance}   strokeWidth={2} dot={{ r: 3 }} strokeDasharray="4 4" />
+        {hasMA && (
+          <Line
+            type="monotone"
+            dataKey="expensesMA"
+            name="Wydatki — średnia 3M"
+            stroke={SERIES.movingAvg}
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            dot={false}
+            connectNulls
+          />
+        )}
       </LineChart>
     </ResponsiveContainer>
   );

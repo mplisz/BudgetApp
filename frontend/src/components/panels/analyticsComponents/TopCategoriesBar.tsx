@@ -7,6 +7,10 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import { fmt } from "../../../utils/helpers";
+import {
+  CHART_COLORS, chartTooltipStyle, chartTooltipLabelStyle, chartTooltipItemStyle,
+  AXIS_STROKE, AXIS_FONT_SIZE, plnTick, toNum, ChartEmpty,
+} from "./chartKit";
 
 export interface CategoryTotal {
   categoryId:   string;
@@ -22,21 +26,11 @@ interface TopCategoriesBarProps {
   onClick?: (cat: CategoryTotal) => void;
 }
 
-const BAR_COLORS = [
-  "#ef4444", "#f97316", "#f59e0b", "#eab308",
-  "#84cc16", "#10b981", "#06b6d4", "#3b82f6",
-  "#8b5cf6", "#a855f7",
-];
-
 export function TopCategoriesBar({ data, topN = 10, onClick }: TopCategoriesBarProps) {
   const sorted = [...data].sort((a, b) => b.total - a.total).slice(0, topN);
 
   if (sorted.length === 0) {
-    return (
-      <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
-        Brak wydatków w zakresie.
-      </div>
-    );
+    return <ChartEmpty message="Brak wydatków w zakresie." />;
   }
 
   // Add icon to label for richer Y axis
@@ -48,13 +42,15 @@ export function TopCategoriesBar({ data, topN = 10, onClick }: TopCategoriesBarP
   return (
     <ResponsiveContainer width="100%" height={Math.max(180, sorted.length * 34)}>
       <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 60, bottom: 4, left: 8 }}>
-        <XAxis type="number" stroke="#475569" fontSize={11} tickFormatter={v => fmt(v)} />
+        <XAxis type="number" stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} tickFormatter={plnTick} />
         <YAxis type="category" dataKey="label" stroke="#cbd5e1" fontSize={12} width={140} />
         <Tooltip
           cursor={{ fill: "#1e293b22" }}
-          contentStyle={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8 }}
+          contentStyle={chartTooltipStyle}
+          labelStyle={chartTooltipLabelStyle}
+          itemStyle={chartTooltipItemStyle}
           formatter={(v: unknown, _name: unknown, item: unknown) => {
-            const num = typeof v === "number" ? v : Number(v) || 0;
+            const num = toNum(v);
             const payload = (item as { payload?: CategoryTotal })?.payload;
             const share = payload?.share ?? 0;
             return [`${fmt(num)} zł (${share.toFixed(1)}%)`, "Suma"];
@@ -69,7 +65,7 @@ export function TopCategoriesBar({ data, topN = 10, onClick }: TopCategoriesBarP
           cursor={onClick ? "pointer" : "default"}
         >
           {chartData.map((_, i) => (
-            <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
           ))}
         </Bar>
       </BarChart>

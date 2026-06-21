@@ -2,6 +2,9 @@
 // File: src/components/panels/analyticsComponents/MonthlyTable.tsx
 // Sortable table — one row per month with budget breakdown.
 // Click on a row → switches active month and navigates to summary.
+//
+// Mobile: the 7-column grid can't shrink below ~560px without crushing,
+// so the wrapper scrolls horizontally instead of clipping/squeezing.
 // ============================================================
 
 import { fmt } from "../../../utils/helpers";
@@ -22,16 +25,17 @@ export function MonthlyTable({ data, onClick }: MonthlyTableProps) {
     padding: "8px 12px", fontSize: 10, color: "#475569",
     textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700,
     textAlign: "left", borderBottom: "1px solid #1e293b", background: "#090e1b",
+    whiteSpace: "nowrap",
   };
 
   const td: React.CSSProperties = {
     padding: "10px 12px", fontSize: 13, color: "#cbd5e1",
-    borderBottom: "1px solid #0f172a",
+    borderBottom: "1px solid #0f172a", whiteSpace: "nowrap",
   };
 
   return (
-    <div style={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 12, overflow: "hidden" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+    <div style={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 12, overflowX: "auto" }}>
+      <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse" }}>
         <thead>
           <tr>
             <th style={th}>Miesiąc</th>
