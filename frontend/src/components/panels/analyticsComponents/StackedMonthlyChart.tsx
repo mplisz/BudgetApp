@@ -21,7 +21,7 @@ export interface StackedSeries {
 }
 
 interface Props {
-  data:          Array<{ month: string } & Record<string, number>>;
+  data:          Array<{ month: string; [series: string]: number | string }>;
   series:        StackedSeries[];
   emptyMessage?: string;
 }
