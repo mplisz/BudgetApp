@@ -65,6 +65,7 @@ interface OcrMeta {
   isDuplicate:      boolean;          // backend flagged a likely re-scan
   duplicateWarning: string | null;   // separate from `warning` (OCR quality)
   currency:        string | null;   // ISO fromt the recipt null/"PLN" ⇒ base
+  summary: string | null;
 
 }
 
@@ -267,6 +268,7 @@ export default function PanelExpenses() {
         isDuplicate:      !!data.isDuplicate,
         currency:        normalizeCurrency(data.metadata?.currency), 
         duplicateWarning: data.duplicateWarning   ?? null,
+        summary: data.metadata?.summary ?? null, 
       });
       if (data.warning) showWarning(data.warning);
     } catch (err) {
@@ -331,6 +333,7 @@ export default function PanelExpenses() {
         // items stay visibly flagged after adding — on a 28-item receipt
         // it's impossible to remember which the AI was unsure about.
         _ocrNeedsReview:  line.categoryConfidence < 0.75 || undefined,
+        _ocrSummary:  ocrMeta?.summary || undefined
       })),
     ]);
 

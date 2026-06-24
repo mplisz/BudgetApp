@@ -36,6 +36,7 @@ export interface CartItem extends TransactionPayload {
   _ocrWarranty?:    boolean; // receipt flagged as warranty → longer retention
   _ocrNeedsReview?: boolean; // AI was unsure — keep flagged in cart until edited
   _lineItems?:      Array<{ description: string; amount: number; originalAmount?: number; originalCurrency?: string }>;
+  _ocrSummary?: string;
 }
 
 interface CartPanelProps {
@@ -106,16 +107,21 @@ export function aggregateCart(items: CartItem[]): CartItem[] {
   }
   // Singletons don't need lineItems (description+amount of the tx itself
   // already say everything). Keep the array only for true merges.
-  return Array.from(groups.values()).map(g =>
-    (g._mergedCount || 1) > 1 ? g : (() => { const { _lineItems, ...rest } = g; return rest as CartItem; })()
-  );
+  return Array.from(groups.values()).map(g => {
+    if ((g._mergedCount || 1) > 1) {
+      // Merged → details in _lineItems; description as the label of the reciept
+      return { ...g, description: g._ocrSummary || g.description };
+    }
+    const { _lineItems, ...rest } = g;   // singleton → bez rozbicia, zostaje nazwa pozycji
+    return rest as CartItem;
+  });
 }
 
 // Strip cart-only / _ocr* fields → API payload. Receipt link + merchant +
 // warranty + merge breakdown survive as real (optional) payload fields.
 function toPayload(item: CartItem): TransactionPayload {
   const {
-    _cartId, _allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote,
+    _cartId, _ocrSummary ,_allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote,
     _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _ocrNeedsReview,
     _lineItems, ...payload
   } = item;

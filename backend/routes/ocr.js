@@ -106,6 +106,8 @@ const LlmItemSchema = z.object({
   category:           z.string().max(100).optional().nullable(),
   subcategory:        z.string().max(100).optional().nullable(),
   categoryConfidence: z.number().min(0).max(1).optional().default(0.5),
+
+
 });
 
 const LlmResponseSchema = z.object({
@@ -117,6 +119,7 @@ const LlmResponseSchema = z.object({
     currency:      z.string().max(5).optional().nullable(),
     receiptNumber: z.string().max(60).optional().nullable(),  // nr wydruku/paragonu
     sellerTaxId:   z.string().max(20).optional().nullable(),  // NIP sprzedawcy (cyfry)
+    summary: z.string().max(120).optional().nullable(),
   }).optional().default({}),
   warning: z.string().max(500).optional().nullable(),
 });
@@ -259,7 +262,10 @@ Przykłady:
 rabaty (reguła 1 — scal z odpowiednią pozycją) albo zwroty/anulowania (reguła 11 — pomiń
 całkowicie). Nigdy nie zwracaj korekty jako osobnej pozycji.
 POMIJAJ: linie VAT/PTU, numery NIP, formy płatności, wydaną resztę, punkty lojalnościowe i naklejki, kaucje zwrócone (ujemne).
-
+22. PODSUMOWANIE PARAGONU (metadata.summary): krótka, ogólna etykieta CAŁEGO paragonu po polsku
+— typ zakupów + sklep, NIE lista pozycji. Maks ~6 słów.
+Przykłady: "Spożywcze, Lidl"; "Chemia, Rossmann"; "Paliwo, Orlen".
+Jeśli nie da się sensownie podsumować — null.
 KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
 
 KATEGORIE UŻYTKOWNIKA:
@@ -668,6 +674,8 @@ router.post("/receipt", async (req, res) => {
         date:     metadata.date     || null,
         totalSum: metadata.totalSum != null ? roundMoney(metadata.totalSum) : null,
         currency: metadata.currency || "PLN",
+        summary: metadata.summary || null,
+
       },
       warning:          sumWarning,
       duplicateWarning,
