@@ -9,8 +9,8 @@ const sx = s as any;
 interface DateRangeFilterProps {
   dateFrom:      Date | null;
   dateTo:        Date | null;
-  onFrom:        (d: Date) => void;
-  onTo:          (d: Date) => void;
+  onFrom: (d: Date | null) => void;
+  onTo:   (d: Date | null) => void;
   bounds:        DateBounds;
   disabled?:     boolean;        // e.g. no transactions this month
   emptyMessage?: string;
@@ -52,12 +52,14 @@ export function DateRangeFilter({
 
       {showToday && (
         <div style={sx.filterBox}>
-        {/* <label style={sx.filterLabel}>Szybko</label> */}
-          <QuickPills pills={[{
-            label:   "Dzisiaj",
-            active:  todayActive,
-            onClick: () => { onFrom(today); onTo(today); },
-          }]} />
+        <QuickPills pills={[{
+          label:   "Dzisiaj",
+          active:  todayActive,
+          onClick: () => {
+            if (todayActive) { onFrom(null); onTo(null); }   // klik ponownie → reset
+            else             { onFrom(today); onTo(today); }
+          },
+        }]} />
         </div>
       )}
     </>

@@ -26,6 +26,9 @@ import { ToggleBtn, VIEW_TOGGLE_STYLE } from "../ui/ToggleBtn";
 import { useMonthLoad } from "../../hooks/useMonthLoad";
 import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
+import { TriFilterButton, matchTri, type Tri } from "../ui/TriFilterButton";
+
+
 const PAGE_SIZE = 25;
 
 // ── Types ─────────────────────────────────────────────────────
@@ -96,10 +99,10 @@ export default function PanelTransactions() {
     dateTo:     null as Date | null,
     prio:       [] as number[],
     tags:       [] as string[],
-    hasReturn:   false,
-    hasReceipt:  false,
     merchant:    "",
-    onlyWarranty: false, 
+    hasReturn:  "off" as Tri,
+    hasReceipt: "off" as Tri,
+    warranty:   "off" as Tri,
   });
 
   const [collapsed,          setCollapsed]          = useState<Record<string, boolean>>({});
@@ -177,9 +180,10 @@ export default function PanelTransactions() {
       if (filters.dateTo   && tx.date > toYMD(filters.dateTo))                             return false;
       if (filters.prio.length && !filters.prio.includes(tx.priority || 2))                 return false;
       if (filters.tags.length && !filters.tags.some(t => (tx.tags || []).includes(t)))     return false;
-      if (filters.hasReturn && !((tx.sameMonthReturned ?? 0) > 0 || (tx.voucherAmount ?? 0) > 0)) return false;
-      if (filters.hasReceipt && !tx.receiptBlobPath) return false;
-      if (filters.onlyWarranty && !tx.isWarranty) return false;
+      const returned = (tx.sameMonthReturned ?? 0) > 0 || (tx.voucherAmount ?? 0) > 0;
+      if (!matchTri(filters.hasReturn,  returned))            return false;
+      if (!matchTri(filters.hasReceipt, !!tx.receiptBlobPath)) return false;
+      if (!matchTri(filters.warranty,   !!tx.isWarranty))      return false;
       if (filters.merchant && tx.merchant !== filters.merchant) return false;
       return true;
     }),
@@ -388,42 +392,12 @@ export default function PanelTransactions() {
             {/* Returns */}
             <div style={(s as any).filterBox}>
               <div style={(s as any).filterLabel}>Zwroty</div>
-              <button
-                onClick={() => set("hasReturn", !filters.hasReturn)}
-                style={{
-                  height: 28,
-                  padding: "0 10px",
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  fontSize: 11,
-                  background: filters.hasReturn ? "#34d399" : "#1e293b",
-                  color:      filters.hasReturn ? "#000"    : "#64748b",
-                }}
-              >
-                🔙 Zwroty
-              </button>
+              <TriFilterButton state={filters.hasReturn}  onChange={v => set("hasReturn", v)}  label="🔙 Zwroty"      color="#34d399" />
             </div>
               {/* Receipts */}
             <div style={(s as any).filterBox}>
               <div style={(s as any).filterLabel}>Paragony</div>
-              <button
-                onClick={() => set("hasReceipt", !filters.hasReceipt)}
-                style={{
-                  height: 28,
-                  padding: "0 10px",
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  fontSize: 11,
-                  background: filters.hasReceipt ? "#f59e0b" : "#1e293b",
-                  color:      filters.hasReceipt ? "#000"    : "#64748b",
-                }}
-              >
-                📎 Z paragonem
-              </button>
+              <TriFilterButton state={filters.hasReceipt} onChange={v => set("hasReceipt", v)} label="📎 Z paragonem" color="#f59e0b" />
             </div>
             {/* Merchant */}
             {uniqueMerchants.length > 0 && (
@@ -442,17 +416,7 @@ export default function PanelTransactions() {
             {/* Warranty */}
             <div style={(s as any).filterBox}>
               <div style={(s as any).filterLabel}>Gwarancja</div>
-              <button
-                onClick={() => set("onlyWarranty", !filters.onlyWarranty)}
-                style={{
-                  height: 28, padding: "0 10px", borderRadius: 6, border: "none",
-                  cursor: "pointer", fontWeight: 700, fontSize: 11,
-                  background: filters.onlyWarranty ? "#f59e0b" : "#1e293b",
-                  color:      filters.onlyWarranty ? "#000"    : "#64748b",
-                }}
-              >
-                🛡️ Gwarancyjne
-              </button>
+              <TriFilterButton state={filters.warranty}   onChange={v => set("warranty", v)}   label="🛡️ Gwarancyjne" color="#f59e0b" />
             </div>
             {/* Clear */}
             {hasActiveFilters && (
