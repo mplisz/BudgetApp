@@ -238,7 +238,7 @@ export function CategoriesSection() {
 
                     {expandedCat.type === "EXPENSE" && (
                       <label
-                        title="Krytyczne — wliczane do Survival Mode niezależnie od priorytetu (czesne, leki, opłaty dla dzieci)"
+                        title="Krytyczne — wliczane do Trybu przetrwania niezależnie od priorytetu (czesne, leki, opłaty dla dzieci)"
                         style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "0 4px", whiteSpace: "nowrap" }}
                       >
                         <input

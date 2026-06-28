@@ -77,7 +77,7 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
       onClick={() => !isDisabled && onUpdate(subData.id, subName, parentId, { isCritical: !subData.isCritical })}
       disabled={isDisabled}
       title={subData.isCritical
-        ? "Wyłącz jako 'nienaruszalne' (przestanie wpadać do Survival Mode)"
+        ? "Wyłącz jako 'nienaruszalne' (przestanie wpadać do Trybu przetrwania)"
         : "Oznacz jako 'nienaruszalne' (czesne, leki, opłata za przedszkole). Te wydatki będą wliczane do każdego trybu w poduszce finansowej, niezależnie od priorytetu."
       }
       style={{

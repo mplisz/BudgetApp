@@ -381,12 +381,12 @@ export function TransactionForm({
     <div>
       {/* Date */}
       <div style={frow}>
-        <label style={lbl}>Date</label>
+        <label style={lbl}>Data</label>
         <AppDatePicker value={form.date} onChange={(date: Date) => set("date", date)} maxDate={null} />
         <div style={{ fontSize: 11, color: "#10b98199", marginTop: 4 }}>
-          Budget month: <strong>{budgetMonth}</strong>
-          {mode === "edit" && <span style={{ color: "#475569" }}> (not editable)</span>}
-          {mode === "add"  && <span style={{ color: "#475569" }}> (from navigator)</span>}
+          Miesiąc budżetowy: <strong>{budgetMonth}</strong>
+          {mode === "edit" && <span style={{ color: "#475569" }}> (nieedytowalny)</span>}
+          {mode === "add"  && <span style={{ color: "#475569" }}> (z nawigatora)</span>}
         </div>
       </div>
 
@@ -457,10 +457,10 @@ export function TransactionForm({
           {/* Row: label (left) + qty spinner (right) */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 6 }}>
             <label style={{ ...lbl, marginBottom: 0 }}>
-              {discount.isOpen ? "Gross unit price" : "Amount"} ({rateInfo.resolvedCurrency || "PLN"})
+              {discount.isOpen ? "Cena jednostkowa brutto" : "Kwota"} ({rateInfo.resolvedCurrency || "PLN"})
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              Qty
+              Ilość
               {/* Changed to text numeric input mode to mitigate issues on mobile phone with changing the quantity */}
               <input
                 type="text"
@@ -506,8 +506,8 @@ export function TransactionForm({
               <input
                 type="text" readOnly
                 value={discount.summary && discount.summary.grossTotal > 0 ? String(round2(discount.summary.net)) : ""}
-                placeholder="net total"
-                title="Net total = (unit × qty) − discount"
+                placeholder="suma netto"
+                title="Suma netto = (cena jedn. × ilość) − rabat"
                 style={{ ...inp, flex: 1, minWidth: 80, color: "#10b981", cursor: "not-allowed", opacity: 0.8, borderColor: "#10b98133" }}
               />
             </div>
@@ -557,7 +557,7 @@ export function TransactionForm({
                 style={{ width: 14, height: 14, accentColor: "#f59e0b", cursor: "pointer" }}
               />
               <span style={{ fontSize: 12, color: discount.isOpen ? "#f59e0b" : "#475569", fontWeight: 600 }}>
-                🏷️ Discount
+                🏷️ Rabat
               </span>
             </label>
 
@@ -586,7 +586,7 @@ export function TransactionForm({
                           color:      discount.discountMode === m ? "#f59e0b"   : "#475569",
                         }}
                       >
-                        {m === "per_order" ? "Per order" : "Per unit"}
+                        {m === "per_order" ? "Na zamówienie" : "Na sztukę"}
                       </button>
                     ))}
                   </div>
@@ -611,7 +611,7 @@ export function TransactionForm({
 
       {/* Subcategory */}
       <div style={frow}>
-        <label style={lbl}>Subcategory</label>
+        <label style={lbl}>Subkategoria</label>
         <SubcategorySelect value={form.subcategoryId} onChange={handleSubcategoryChange} />
         {form.categoryName && (
           <div style={{ fontSize: 11, color: "#475569", marginTop: 5 }}>{form.categoryName}</div>
@@ -629,11 +629,11 @@ export function TransactionForm({
 
       {/* Description */}
       <div style={frow}>
-        <label style={lbl}>Description (optional)</label>
+        <label style={lbl}>Opis (opcjonalnie)</label>
         <input
           value={form.description}
           onChange={e => set("description", e.target.value)}
-          placeholder="e.g. Grocery run – weekend"
+          placeholder="np. Zakupy spożywcze – weekend"
           maxLength={500}
           style={inp}
         />
@@ -683,7 +683,7 @@ export function TransactionForm({
         {onCancel && (
           <button onClick={onCancel}
             style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", cursor: "pointer", fontWeight: 600 }}>
-            Cancel
+            Anuluj
           </button>
         )}
         {onAddToCart && (
@@ -702,12 +702,12 @@ export function TransactionForm({
             }}
             disabled={isSaving}
             style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #3b82f644", background: "#3b82f611", color: "#3b82f6", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
-            🛒 Add to cart
+            🛒 Dodaj do koszyka
           </button>
         )}
         <button onClick={handleSubmit} disabled={isSaving}
           style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: isSaving ? "#1e293b" : "#10b981", color: "#fff", cursor: isSaving ? "not-allowed" : "pointer", fontWeight: 700, fontSize: 14 }}>
-          {isSaving ? "Saving…" : mode === "add" ? "💾 Save" : "💾 Update"}
+          {isSaving ? "Zapisywanie…" : mode === "add" ? "💾 Zapisz" : "💾 Aktualizuj"}
         </button>
       </div>
     </div>

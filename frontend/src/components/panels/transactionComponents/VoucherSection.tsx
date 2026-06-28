@@ -101,7 +101,7 @@ export function VoucherSection({
     <div style={vWrap}>
       <CollapsibleToggle
         icon="🎫"
-        label="Vouchers / gift cards"
+        label="Vouchery / karty podarunkowe"
         isOpen={isOpen}
         onToggle={onToggle}
         badge={badge}
@@ -109,7 +109,7 @@ export function VoucherSection({
 
       {isOpen && (
         <div style={vBox}>
-          {isLoading && <div style={vHint}>loading…</div>}
+          {isLoading && <div style={vHint}>ładowanie…</div>}
 
           {!isLoading && m === "" && (
             <div style={vHint}>Wybierz sklep, aby zobaczyć dostępne vouchery.</div>

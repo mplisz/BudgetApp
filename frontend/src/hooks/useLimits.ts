@@ -159,7 +159,7 @@ export function useLimits(): UseLimitsResult {
       // Partial errors — show warning but don't throw
       if (data.errors?.length) {
         const failed = data.errors.map(e => e.categoryId).join(", ");
-        showError(`Some categories failed to save: ${failed}`);
+        showError(`Nie udało się zapisać niektórych kategorii: ${failed}`);
       }
 
       // Update local state — replace docs for affected categories

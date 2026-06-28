@@ -556,7 +556,7 @@ function PanelSafetyNetDesktop() {
         gap: 16,
         marginBottom: 16,
       }} data-sn-row>
-        <Card title="🧮 4 warstwy kosztów (Survival → No Change)">
+        <Card title="🧮 4 warstwy kosztów (Przetrwanie → Bez zmian)">
           <CostLayersCard layers={layers} highlightLevel={selectedLevel} />
         </Card>
 

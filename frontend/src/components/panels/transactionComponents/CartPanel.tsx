@@ -413,14 +413,14 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
                   <div style={{ display: "flex", gap: 4 }}>
                     <button
                       onClick={() => handleLoadToForm(item)}
-                      title="Edit"
+                      title="Edytuj"
                       style={{ background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
                     >
                       ✏️
                     </button>
                     <button
                       onClick={() => removeFromCart(item._cartId)}
-                      title="Remove from cart"
+                      title="Usuń z koszyka"
                       style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
                     >
                       ✕

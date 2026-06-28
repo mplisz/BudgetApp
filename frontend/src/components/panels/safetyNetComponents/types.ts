@@ -46,10 +46,10 @@ export interface CostLayer {
 }
 
 export const LEVEL_META: Record<PriorityLevel, { label: string; modeLabel: string; color: string; desc: string }> = {
-  1: { label: "Survival", modeLabel: "Survival Mode", color: "#ef4444", desc: "Absolutne minimum — czynsz, raty, leki, bazowe jedzenie" },
-  2: { label: "OK",        modeLabel: "OK Mode",       color: "#f97316", desc: "P1 + ważne stałe koszty — drobne subskrypcje, ubrania" },
-  3: { label: "Nice",      modeLabel: "Nice Mode",     color: "#eab308", desc: "P1+P2 + komfort — restauracje, hobby, wycieczki" },
-  4: { label: "No Change", modeLabel: "No Change Mode", color: "#10b981", desc: "Pełen styl życia bez cięć — wszystko 1:1" },
+  1: { label: "Przetrwanie", modeLabel: "Tryb przetrwania", color: "#ef4444", desc: "Absolutne minimum — czynsz, raty, leki, bazowe jedzenie" },
+  2: { label: "OK",          modeLabel: "Tryb OK",           color: "#f97316", desc: "P1 + ważne stałe koszty — drobne subskrypcje, ubrania" },
+  3: { label: "Komfort",     modeLabel: "Tryb komfortowy",   color: "#eab308", desc: "P1+P2 + komfort — restauracje, hobby, wycieczki" },
+  4: { label: "Bez zmian",   modeLabel: "Tryb bez zmian",    color: "#10b981", desc: "Pełen styl życia bez cięć — wszystko 1:1" },
 };
 
 // ── Income sources ───────────────────────────────────────────
