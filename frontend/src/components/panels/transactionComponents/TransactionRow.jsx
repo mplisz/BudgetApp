@@ -111,25 +111,23 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
           )}
           {!isMonthClosed && (
             <>
-              {/* Edit — hidden for recurring; ⚠ indicator if has returns */}
-              {!isRecurring && (
+              {/* Edit —  ⚠ indicator if has returns */}
                 <button
                   style={{ ...s.actionBtn("#3b82f6"), marginRight: 4, position: "relative" }}
                   onClick={() => setEditOpen(true)}
                   title={hasReturns ? "Edytuj — powiązane transfery i vouchery zostaną zarchiwizowane" : "Edytuj"}
                 >
                   ✏️
-                  {hasReturns && (
+                {hasReturns && (
                     <span style={{
                       position: "absolute", top: -4, right: -4,
                       fontSize: 9, color: "#f59e0b", fontWeight: 800,
                     }}>⚠</span>
                   )}
                 </button>
-              )}
 
-              {/* Return — hidden for recurring and fully returned */}
-              {!isRecurring && !isFullyReturned && (
+              {/* Return — hidden for fully returned */}
+              {!isFullyReturned && (
                 <button
                   style={{ ...s.actionBtn("#f97316"), marginRight: 4 }}
                   onClick={onReturn}
@@ -307,12 +305,12 @@ export function TransactionCard({ tx, isMonthClosed, onDelete, onReturn, onUpdat
               📎 Paragon
             </button>
           )}
-          {!isMonthClosed && !isRecurring && (
+          {!isMonthClosed &&  (
             <button style={{ ...s.actionBtn("#3b82f6"), padding: "6px 12px" }} onClick={() => setEditOpen(true)}>
               ✏️ Edytuj{hasReturns ? " ⚠" : ""}
             </button>
           )}
-          {!isMonthClosed && !isRecurring && !isFullyReturned && (
+          {!isMonthClosed && !isFullyReturned && (
             <button style={{ ...s.actionBtn("#f97316"), padding: "6px 12px" }} onClick={onReturn}>
               🔙 Zwróć
             </button>
