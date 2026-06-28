@@ -167,47 +167,43 @@ export default function PanelExpenses() {
     setOcrMode(false);
   }, [setEditingCartItem]);
 
-  const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
-    if (!editingCartItem) return;
+const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
+  if (!editingCartItem) return;
 
-    // For merged items, _allCartIds contains all original cart ids.
-    // Remove all of them and insert the edited item at the first position.
-    const allIds = editingCartItem._allCartIds || [editingCartItem._cartId];
-    const keepId = allIds[0];
+  // Merged items carry every original id in _allCartIds. Editing
+  // collapses them back into one line, kept at the first id.
+  const allIds = editingCartItem._allCartIds || [editingCartItem._cartId];
+  const keepId = allIds[0];
 
-    setCart(prev => {
-      const insertAt = prev.findIndex(i => allIds.includes(i._cartId));
-      const filtered = prev.filter(i => !allIds.includes(i._cartId));
-      const newItem: CartItem = {
-        ...payload,
-        _cartId:       keepId,
-        _mergedCount:  1,
-        _allCartIds:   [keepId],
-        // Preserve OCR provenance — the form returns plain transaction
-        // fields and has no knowledge of _ocr* metadata. Editing an
-        // item's category/amount doesn't change which receipt it came
-        // from, so the receipt link must survive the rebuild.
-        _ocrWarranty:    editingCartItem._ocrWarranty,
-        // Editing IS the review — once the user touched it, clear the flag.
-        _ocrNeedsReview: undefined,
-        _ocrReceiptId:   editingCartItem._ocrReceiptId,
-        _ocrReceiptPath: editingCartItem._ocrReceiptPath,
-        _ocrMerchant:    editingCartItem._ocrMerchant,
-        _ocrGross:       editingCartItem._ocrGross,
-        _ocrDiscount:    editingCartItem._ocrDiscount,
-        _ocrMergeNote:   editingCartItem._ocrMergeNote,
-      };
-      if (insertAt >= 0) {
-        filtered.splice(Math.min(insertAt, filtered.length), 0, newItem);
-      } else {
-        filtered.push(newItem);
-      }
-      return filtered;
-    });
-    resetForm();
+  setCart(prev => {
+    const insertAt = prev.findIndex(i => allIds.includes(i._cartId));
+    const filtered = prev.filter(i => !allIds.includes(i._cartId));
+
+    // Patch-subset: the existing cart item is the source of truth.
+    // We spread it as the base so ALL provenance (_ocr*, _lineItems,
+    // any future _* field) survives automatically — then overlay the
+    // edited transaction fields from the form. No more enumerating
+    // eight _ocr* fields by hand and silently dropping the ninth.
+    const newItem: CartItem = {
+      ...editingCartItem,        // base — keeps provenance + cart metadata
+      ...payload,                // overlay — form is authority on tx fields
+      _cartId:         keepId,
+      _mergedCount:    1,
+      _allCartIds:     [keepId],
+      _ocrNeedsReview: undefined, // editing IS the review → clear the flag
+    };
+
+    if (insertAt >= 0) {
+      filtered.splice(Math.min(insertAt, filtered.length), 0, newItem);
+    } else {
+      filtered.push(newItem);
+    }
+    return filtered;
+  });
+  resetForm();
   // editingCartItem MUST be in deps — without it the closure captures
   // the initial null value and the save does nothing (stale closure bug)
-  }, [editingCartItem, setCart]);
+}, [editingCartItem, setCart]);
 
   const handleCartSaveComplete = useCallback(() => {
     setFormKey(k => k + 1);
