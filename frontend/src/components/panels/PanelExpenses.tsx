@@ -23,6 +23,7 @@ import { normalizeCurrency } from "../../utils/currencies";
 import { useCurrencyConverter } from "../../hooks/useCurrencyConverter";
 import { useCurrencyManager }   from "../../hooks/useCurrencyManager";
 import { TagMultiSelect } from "../ui/TagMultiSelect";
+import { CartItemEditorModal } from "./transactionComponents/CartItemEditorModal";
 
 // ── Cart ID generator ─────────────────────────────────────────
 
@@ -366,37 +367,9 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
     return (!code || code === baseCurrency.code) ? null : code;
   }, [cart, baseCurrency.code]);
 
-    const formInitialValues = editingCartItem
-      ? (() => {
-          const [y, m, d] = editingCartItem.date.split("-").map(Number);
-          return {
-            date:            new Date(y, m - 1, d),
-            currency:        editingCartItem.originalCurrency,
-            customCurrency:  "",
-            amountOrig:      String(editingCartItem.originalAmount),
-            subcategoryId:   editingCartItem.subcategoryId,
-            subcategoryName: editingCartItem.subcategoryName,
-            categoryId:      editingCartItem.categoryId,
-            categoryName:    editingCartItem.categoryName,
-            categoryType:    null,
-            priority:        editingCartItem.priority,
-            description:     editingCartItem.description,
-            tags:            editingCartItem.tags || [],
-            voucherAllocations: editingCartItem.voucherAllocations ?? [],
-            amountGross:     "",
-            discountAmount:  "",
-            qty:             1,
-            merchant:        editingCartItem.merchant || editingCartItem._ocrMerchant || "",
-            lineItems:       [],
-          };
-        })() 
-      : cartDate
-      ? 
-      { 
-      ...emptyFormValues(), date: cartDate ,
-      ...(cartCurrency ? { currency: cartCurrency, customCurrency: "" } : {})
-      }
-      : undefined;
+  const formInitialValues = cartDate
+    ? { ...emptyFormValues(), date: cartDate, ...(cartCurrency ? { currency: cartCurrency, customCurrency: "" } : {}) }
+    : undefined;
 
   // ── Guards ────────────────────────────────────────────────
 
@@ -460,27 +433,25 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
         <div className="expenses-form-col">
           <div style={{ marginBottom: 20, marginTop: 8 }}>
             <div style={(s as any).sectionTitle}>
-              {editingCartItem ? "✏️ Edytuj pozycję z koszyka" : "➕ Dodaj wydatek"}
+              ➕ Dodaj wydatek
             </div>
           </div>
 
 
           {/* Mode toggle: manual / OCR */}
-          {!editingCartItem && (
-            <div style={{ display: "flex", gap: 8, padding: 6, background: "#0d1424", border: "1px solid #1e293b", borderRadius: 10, marginBottom: 24 }}>
-              <button onClick={() => setOcrMode(false)}
-                style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: !ocrMode ? "#10b981" : "transparent", color: !ocrMode ? "#fff" : "#64748b" }}>
-                ✏️ Ręcznie
-              </button>
-              <button onClick={() => { setOcrMode(true); setOcrLines([]); }}
-                style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: ocrMode ? "#10b981" : "transparent", color: ocrMode ? "#fff" : "#64748b" }}>
-                📷 Skan paragonu
-              </button>
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 8, padding: 6, background: "#0d1424", border: "1px solid #1e293b", borderRadius: 10, marginBottom: 24 }}>
+            <button onClick={() => setOcrMode(false)}
+              style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: !ocrMode ? "#10b981" : "transparent", color: !ocrMode ? "#fff" : "#64748b" }}>
+              ✏️ Ręcznie
+            </button>
+            <button onClick={() => { setOcrMode(true); setOcrLines([]); }}
+              style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: ocrMode ? "#10b981" : "transparent", color: ocrMode ? "#fff" : "#64748b" }}>
+              📷 Skan paragonu
+            </button>
+          </div>
 
           {/* ════ OCR MODE ════ */}
-          {ocrMode && !editingCartItem && (
+          {ocrMode && (
             <>
               {ocrLines.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "32px 0" }}>
@@ -682,30 +653,18 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
               )}
             </>
           )}
-
-          {/* ════ MANUAL MODE ════ */}
-          {(!ocrMode || editingCartItem) && (
-            <>
-              <TransactionForm
-                key={formKey}
-                initialValues={formInitialValues}
-                budgetMonth={budgetMonth}
-                onSubmit={editingCartItem ? handleCartItemSave : handleSubmitDirect}
-                onAddToCart={editingCartItem ? undefined : handleAddToCart}
-                isSaving={isSaving}
-                mode="add"
-                showVouchers={!editingCartItem}
-                cart={editingCartItem ? [] : cart}
-              />
-              {editingCartItem && (
-                <button
-                  onClick={resetForm}
-                  style={{ marginTop: 8, background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 12 }}
-                >
-                  ✕ Anuluj edycję koszyka
-                </button>
-              )}
-            </>
+          {/* ════ ADD ════ */}
+          {!ocrMode && (
+            <TransactionForm
+              key={formKey}
+              initialValues={formInitialValues}
+              budgetMonth={budgetMonth}
+              onSubmit={handleSubmitDirect}
+              onAddToCart={handleAddToCart}
+              isSaving={isSaving}
+              mode="add"
+              cart={cart}
+            />
           )}
         </div>
 
@@ -719,6 +678,16 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
           </div>
         )}
       </div>
+
+      {editingCartItem && (
+        <CartItemEditorModal
+          item={editingCartItem}
+          budgetMonth={budgetMonth}
+          isSaving={isSaving}
+          onSave={handleCartItemSave}
+          onCancel={resetForm}
+        />
+      )}
 
       <style>{`
         .expenses-layout   { display: flex; gap: 24px; align-items: flex-start; justify-content: center;}
