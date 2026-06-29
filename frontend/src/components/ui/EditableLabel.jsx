@@ -3,6 +3,7 @@
 // Reusable inline editable label with double-click to edit
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useState } from "react";
 
 export function EditableLabel({ value, onSave, disabled = false, fontSize = 13, fontWeight = 600 }) {
@@ -33,8 +34,8 @@ export function EditableLabel({ value, onSave, disabled = false, fontSize = 13, 
         }}
         onClick={e => e.stopPropagation()}
         style={{
-          flex: 1, background: "#0d1424", border: "1px solid #10b981",
-          borderRadius: 6, padding: "2px 8px", color: "#e2e8f0",
+          flex: 1, background: c.surface, border: `1px solid ${c.success}`,
+          borderRadius: 6, padding: "2px 8px", color: c.text,
           fontSize, outline: "none"
         }}
       />
@@ -43,7 +44,7 @@ export function EditableLabel({ value, onSave, disabled = false, fontSize = 13, 
 
   return (
     <span
-      style={{ flex: 1, color: "#e2e8f0", fontSize, fontWeight }}
+      style={{ flex: 1, color: c.text, fontSize, fontWeight }}
       onDoubleClick={e => { e.stopPropagation(); if (!disabled) setIsEditing(true); }}
       title={disabled ? "" : "Kliknij dwukrotnie aby edytować"}
     >

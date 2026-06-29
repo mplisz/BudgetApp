@@ -3,6 +3,7 @@
 // Horizontal bar chart — top N categories by total amount.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -43,9 +44,9 @@ export function TopCategoriesBar({ data, topN = 10, onClick }: TopCategoriesBarP
     <ResponsiveContainer width="100%" height={Math.max(180, sorted.length * 34)}>
       <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 60, bottom: 4, left: 8 }}>
         <XAxis type="number" stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} tickFormatter={plnTick} />
-        <YAxis type="category" dataKey="label" stroke="#cbd5e1" fontSize={12} width={140} />
+        <YAxis type="category" dataKey="label" stroke={c.textBody} fontSize={12} width={140} />
         <Tooltip
-          cursor={{ fill: "#1e293b22" }}
+          cursor={{ fill: alpha(c.border, "22") }}
           contentStyle={chartTooltipStyle}
           labelStyle={chartTooltipLabelStyle}
           itemStyle={chartTooltipItemStyle}

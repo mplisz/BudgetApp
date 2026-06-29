@@ -29,8 +29,9 @@
 //     computing on an empty window.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useAuth }                from "../../context/AuthContext";
+import { useApi }                 from "../../hooks/useApi";
 import { useAppContext }          from "../../context/AppContext";
 import { useTransactionsRange }   from "../../hooks/useTransactionsRange";
 import { useSettings }            from "../../hooks/useSettings";
@@ -40,7 +41,6 @@ import { theme as s }             from "../../styles/theme";
 import { Card }                   from "../ui/summaryUi";
 import { useCurrencyManager }     from "../../hooks/useCurrencyManager";
 import { toYMD, todayLocal }      from "../ui/AppDatePicker";
-import { useIsMobile }            from "../../hooks/useIsMobile";
 
 import {
   lastNMonths,
@@ -65,8 +65,6 @@ import type {
   AssetBucket, PriorityLevel, SafetyNetSettings, SnTransaction, AppCategory,
 } from "./safetyNetComponents/types";
 import { SkeletonKpiCard, SkeletonCard, SkeletonChart, SkeletonListRow } from "../ui/Skeleton";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // ── Persisted subset (NO selectedLevel) ──────────────────────
 
@@ -107,7 +105,7 @@ export default function PanelSafetyNet() {
 
 function PanelSafetyNetDesktop() {
   const { settings }                            = useSettings()  as UseSettingsResult;
-  const { fetchWithAuth }                       = useAuth()      as { fetchWithAuth: typeof fetch };
+  const api                                     = useApi();
   const { setSettings, categories, settings: appSettings } = useAppContext() as {
     setSettings: (v: AppSettings) => void;
     categories:  AppCategory[];
@@ -207,16 +205,9 @@ function PanelSafetyNetDesktop() {
       const key = JSON.stringify(snState);
       if (key === lastSavedKey.current) return;
       try {
-        const res = await fetchWithAuth(`${API_URL}/api/settings`, {
-          method:  "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ safetyNet: snState }),
-        });
-        if ((res as Response).ok) {
-          const saved = await (res as Response).json();
-          setSettings(saved);
-          lastSavedKey.current = key;
-        }
+        const saved = await api.patch<AppSettings>("/api/settings", { safetyNet: snState });
+        setSettings(saved);
+        lastSavedKey.current = key;
       } catch {
         // silent
       }
@@ -384,28 +375,28 @@ function PanelSafetyNetDesktop() {
     <div style={{ padding: "0 0 60px 0", maxWidth: 1400, margin: "0 auto" }}>
         <div style={{ marginBottom: 20, marginTop: 8 }}>
           <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
-          <div style={{ fontSize: 13, color: "#64748b" }}>
+          <div style={{ fontSize: 13, color: c.textSecondary }}>
             Analiza zostanie odblokowana po rozpoczęciu budżetu.
           </div>
         </div>
 
         <Card>
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#94a3b8" }}>
+          <div style={{ textAlign: "center", padding: "60px 20px", color: c.textTertiary }}>
             <div style={{ fontSize: 56, marginBottom: 16 }}>📅</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", marginBottom: 8 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 8 }}>
               Brak danych historycznych
             </div>
             <div style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 520, margin: "0 auto" }}>
               Budżet rozpoczyna się od{" "}
-              <strong style={{ color: "#10b981" }}>{floor}</strong>.
+              <strong style={{ color: c.success }}>{floor}</strong>.
               Panel poduszki finansowej zacznie pokazywać analizę kosztów,
               dochodów i deficytów po zakończeniu pierwszego pełnego miesiąca
               budżetowego.
             </div>
             <div style={{
               marginTop: 24, padding: "10px 14px",
-              background: "#0d1424", border: "1px solid #1e293b",
-              borderRadius: 8, fontSize: 12, color: "#64748b",
+              background: c.surface, border: `1px solid ${c.border}`,
+              borderRadius: 8, fontSize: 12, color: c.textSecondary,
               maxWidth: 520, margin: "24px auto 0",
             }}>
               💡 Możesz już teraz przygotować portfel aktywów — gdy ruszy
@@ -431,7 +422,7 @@ function PanelSafetyNetDesktop() {
       <div style={{ padding: "0 0 40px 0", maxWidth: 1400, margin: "0 auto" }}>
         <div style={{ marginBottom: 20, marginTop: 8 }}>
           <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
-          <div style={{ fontSize: 13, color: "#64748b" }}>
+          <div style={{ fontSize: 13, color: c.textSecondary }}>
             Ładowanie danych z ostatnich {snState.lookbackMonths} miesięcy…
           </div>
         </div>
@@ -467,17 +458,17 @@ function PanelSafetyNetDesktop() {
       {/* Header */}
       <div style={{ marginBottom: 20, marginTop: 8 }}>
         <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>
+        <div style={{ fontSize: 13, color: c.textSecondary }}>
           {fromMonth} → {toMonth} · {windowMonths.length}-miesięczna baza ·
           horyzont przetrwania: {snState.horizonMonths} mies. · obecne aktywa:{" "}
-          <strong style={{ color: "#10b981" }}>{fmt(assetsTotal)}</strong>
+          <strong style={{ color: c.success }}>{fmt(assetsTotal)}</strong>
         </div>
 
         {fxRefreshNote && (
           <div style={{
             marginTop: 8, padding: "6px 10px",
-            background: "#10b98111", border: "1px solid #10b98144",
-            borderRadius: 6, fontSize: 11, color: "#10b981",
+            background: alpha(c.success, "11"), border: `1px solid ${alpha(c.success, "44")}`,
+            borderRadius: 6, fontSize: 11, color: c.success,
           }}>
             {fxRefreshNote}
           </div>
@@ -486,8 +477,8 @@ function PanelSafetyNetDesktop() {
         {windowClamped && (
           <div style={{
             marginTop: 8, padding: "6px 10px",
-            background: "#3b82f611", border: "1px solid #3b82f644",
-            borderRadius: 6, fontSize: 11, color: "#60a5fa",
+            background: alpha(c.info, "11"), border: `1px solid ${alpha(c.info, "44")}`,
+            borderRadius: 6, fontSize: 11, color: c.infoSky,
           }}>
             ℹ️ Okno historyczne przycięte do {fromMonth} (budżet zaczyna się od {floor}).
             Średnie liczone z {windowMonths.length} {windowMonths.length === 1 ? "miesiąca" : "miesięcy"}.
@@ -497,8 +488,8 @@ function PanelSafetyNetDesktop() {
         {insufficientHistory && (
           <div style={{
             marginTop: 8, padding: "6px 10px",
-            background: "#f59e0b11", border: "1px solid #f59e0b44",
-            borderRadius: 6, fontSize: 11, color: "#f59e0b",
+            background: alpha(c.warning, "11"), border: `1px solid ${alpha(c.warning, "44")}`,
+            borderRadius: 6, fontSize: 11, color: c.warning,
           }}>
             ⚠️ Masz tylko {monthsWithData} {monthsWithData === 1 ? "miesiąc" : "miesięcy"} historii
             w wybranym oknie ({windowMonths.length} mies.). Średnie mogą być zaniżone —
@@ -512,7 +503,7 @@ function PanelSafetyNetDesktop() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}  data-sn-row>
           <div>
             <div style={{
-              fontSize: 11, color: "#475569", fontWeight: 700,
+              fontSize: 11, color: c.textMuted, fontWeight: 700,
               textTransform: "uppercase", letterSpacing: "0.5px",
               marginBottom: 8,
             }}>
@@ -523,7 +514,7 @@ function PanelSafetyNetDesktop() {
               onChange={setLookback}
               options={LOOKBACK_OPTIONS}
             />
-            <div style={{ fontSize: 10, color: "#475569", marginTop: 6, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
               Krótsze okna lepiej oddają obecne koszty po zmianach (np. przeprowadzka),
               dłuższe łapią roczne ubezpieczenia i wyprawki.
             </div>
@@ -531,7 +522,7 @@ function PanelSafetyNetDesktop() {
 
           <div>
             <div style={{
-              fontSize: 11, color: "#475569", fontWeight: 700,
+              fontSize: 11, color: c.textMuted, fontWeight: 700,
               textTransform: "uppercase", letterSpacing: "0.5px",
               marginBottom: 8,
             }}>
@@ -542,7 +533,7 @@ function PanelSafetyNetDesktop() {
               onChange={setHorizon}
               options={HORIZON_OPTIONS}
             />
-            <div style={{ fontSize: 10, color: "#475569", marginTop: 6, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
               Na ile miesięcy ma starczyć poduszka, gdy zrealizuje się scenariusz utraty wybranych dochodów.
             </div>
           </div>
@@ -579,13 +570,13 @@ function PanelSafetyNetDesktop() {
           onSelectLevel={setSelectedLevel}
         />
         <div style={{
-          fontSize: 11, color: "#475569", marginTop: 10,
-          padding: "8px 10px", background: "#0d1424",
-          border: "1px solid #1e293b", borderRadius: 8, lineHeight: 1.6,
+          fontSize: 11, color: c.textMuted, marginTop: 10,
+          padding: "8px 10px", background: c.surface,
+          border: `1px solid ${c.border}`, borderRadius: 8, lineHeight: 1.6,
         }}>
           💡 Kliknij wiersz, aby ustawić poziom jako cel asystenta poniżej. Aktywnie wybrany poziom:{" "}
-          <strong style={{ color: "#e2e8f0" }}>P1–P{selectedLevel}</strong>{" "}
-          <span style={{ color: "#334155" }}>(tylko w bieżącej sesji — nie zapisywane)</span>.
+          <strong style={{ color: c.text }}>P1–P{selectedLevel}</strong>{" "}
+          <span style={{ color: c.borderStrong }}>(tylko w bieżącej sesji — nie zapisywane)</span>.
         </div>
       </Card>
 

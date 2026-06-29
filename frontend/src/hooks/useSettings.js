@@ -3,11 +3,9 @@
 // ============================================================
 
 import { useState, useEffect } from "react";
-import { useAuth }      from "../context/AuthContext";
 import { useAppContext } from "../context/AppContext";
 import { useToast } from "./useToast";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { useApi } from "./useApi";
 
 const DEFAULT_SETTINGS = {
   thresholds: { warningPercent: 80, criticalPercent: 95 },
@@ -20,7 +18,7 @@ const DEFAULT_SETTINGS = {
 };
 
 export function useSettings() {
-  const { fetchWithAuth }          = useAuth();
+  const api                        = useApi();
   const { settings, setSettings }  = useAppContext();
   const { showError, showSuccess } = useToast();
 
@@ -34,9 +32,7 @@ export function useSettings() {
       if (settings !== null) { setIsLoading(false); return; }
       setIsLoading(true);
       try {
-        const res = await fetchWithAuth(`${API_URL}/api/settings`);
-        if (!res.ok) throw new Error("Failed to fetch");
-        const data = await res.json();
+        const data = await api.get("/api/settings");
         setSettings(data);
       } catch (err) {
         showError("Nie udało się załadować ustawień.");
@@ -46,21 +42,13 @@ export function useSettings() {
       }
     }
     loadSettings();
-  }, [fetchWithAuth, setSettings]);
+  }, [api, setSettings]);
 
   // ── Update ──────────────────────────────────────────────────
   async function updateSettings(patch) {
     setIsSaving(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/settings`, {
-        method: "PATCH",
-        body:   JSON.stringify(patch),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Nie udało się zapisać ustawień.");
-      }
-      const saved = await res.json();
+      const saved = await api.patch("/api/settings", patch, { fallback: "Nie udało się zapisać ustawień." });
       setSettings(saved);
       showSuccess("Zapisano! ✅");
     } catch (err) {

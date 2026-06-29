@@ -7,18 +7,16 @@
 
 import { useCallback } from "react";
 import { useAppContext } from "../context/AppContext";
-import { useAuth }       from "../context/AuthContext";
 import { useToast }      from "./useToast";
+import { useApi }        from "./useApi";
 import { nextCalendarMonth } from "../utils/helpers";
 import { useMonthFromUrl} from "./useMonthFromUrl";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export function useMonthStatus() {
   const { closedMonths, setClosedMonths } = useAppContext();
   const { budgetMonth, setBudgetMonth }  = useMonthFromUrl();
 
-  const { fetchWithAuth }          = useAuth();
+  const api                        = useApi();
   const { showError, showSuccess } = useToast();
 
   const activeBudgetMonth = budgetMonth;
@@ -38,17 +36,7 @@ export function useMonthStatus() {
 
   const closeMonth = useCallback(async (budgetMonth) => {
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/months`, {
-        method: "POST",
-        body:   JSON.stringify({ budgetMonth }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Nie udało się zamknąć miesiąca.");
-      }
-
-      const saved = await res.json();
+      const saved = await api.post("/api/months", { budgetMonth }, { fallback: "Nie udało się zamknąć miesiąca." });
 
       // Update local Set
       setClosedMonths(prev => new Set([...prev, budgetMonth]));
@@ -62,20 +50,13 @@ export function useMonthStatus() {
       showError(err.message);
       return null;
     }
-  }, [fetchWithAuth, closedMonths, setClosedMonths, showSuccess, showError]);
+  }, [api, closedMonths, setClosedMonths, showSuccess, showError]);
 
   // ── Reopen month ──────────────────────────────────────────
 
   const openMonth = useCallback(async (budgetMonth) => {
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/months/${budgetMonth}`, {
-        method: "DELETE",
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Nie udało się otworzyć miesiąca.");
-      }
+      await api.del(`/api/months/${budgetMonth}`, undefined, { fallback: "Nie udało się otworzyć miesiąca." });
 
       setClosedMonths(prev => {
         const next = new Set(prev);
@@ -89,7 +70,7 @@ export function useMonthStatus() {
       showError(err.message);
       return false;
     }
-  }, [fetchWithAuth, setClosedMonths, showSuccess, showError]);
+  }, [api, setClosedMonths, showSuccess, showError]);
 
   // ── Auto-navigate to first open month ────────────────────
   // Starting from current calendar month, find first non-closed month

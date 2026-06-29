@@ -3,6 +3,7 @@
 // Pie chart of expenses by category with subcategory drill-down.
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { useState } from "react";
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
@@ -10,6 +11,9 @@ import {
 import { fmt } from "../../../utils/helpers";
 import type { CategorySummary, SubcategorySummary } from "../../../types/summary";
 
+// Categorical distinguishability ramp — deliberately raw, not c.* tokens
+// (see chartKit.CHART_COLORS: a category's hue is a different axis from the
+// UI's semantic palette).
 const PIE_COLORS = [
   "#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#a855f7",
   "#06b6d4", "#f97316", "#84cc16", "#ec4899", "#14b8a6",
@@ -18,7 +22,6 @@ const PIE_COLORS = [
 interface SpendingPieChartProps {
   categories: CategorySummary[];
   getSubcategories: (categoryId: string) => SubcategorySummary[];
-  totalExpenses: number;
 }
 
 interface PieEntry {
@@ -41,14 +44,14 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   const d = payload[0].payload;
   return (
     <div style={{
-      background: "#1e293b",
-      border: "1px solid #334155",
+      background: c.border,
+      border: `1px solid ${c.borderStrong}`,
       borderRadius: 10,
       padding: "10px 14px",
       fontSize: 13,
     }}>
-      <div style={{ color: "#e2e8f0", fontWeight: 700 }}>{d.icon} {d.name}</div>
-      <div style={{ color: "#10b981", fontWeight: 800, marginTop: 4 }}>{fmt(d.value)}</div>
+      <div style={{ color: c.text, fontWeight: 700 }}>{d.icon} {d.name}</div>
+      <div style={{ color: c.success, fontWeight: 800, marginTop: 4 }}>{fmt(d.value)}</div>
     </div>
   );
 }
@@ -59,10 +62,10 @@ const emptyStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   height: 200,
-  color: "#64748b",
+  color: c.textSecondary,
 };
 
-export function SpendingPieChart({ categories, getSubcategories, totalExpenses }: SpendingPieChartProps) {
+export function SpendingPieChart({ categories, getSubcategories }: SpendingPieChartProps) {
   const [drillCategoryId, setDrillCategoryId] = useState<string | null>(null);
 
   const drillCategory = drillCategoryId
@@ -96,7 +99,7 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
 
     return (
       <div>
-        <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 12 }}>
+        <div style={{ color: c.textTertiary, fontSize: 12, marginBottom: 12 }}>
           Kliknij wycinek → podgląd subkategorii
         </div>
         <div style={{ flex: 1, height: 260, width: "100%"}}>
@@ -118,7 +121,7 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
               <Tooltip content={<CustomTooltip />} />
               <Legend
                 formatter={(value: string) => (
-                  <span style={{ color: "#e2e8f0", fontSize: 12 }}>{value}</span>
+                  <span style={{ color: c.text, fontSize: 12 }}>{value}</span>
                 )}
               />
             </PieChart>
@@ -145,10 +148,10 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
         <button
           onClick={() => setDrillCategoryId(null)}
           style={{
-            background: "#1e293b",
-            border: "1px solid #334155",
+            background: c.border,
+            border: `1px solid ${c.borderStrong}`,
             borderRadius: 8,
-            color: "#e2e8f0",
+            color: c.text,
             padding: "4px 12px",
             fontSize: 13,
             cursor: "pointer",
@@ -156,7 +159,7 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
         >
           ← Wróć
         </button>
-        <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14 }}>
+        <span style={{ color: c.text, fontWeight: 700, fontSize: 14 }}>
           {drillCategory.categoryIcon} {drillCategory.categoryName} › subkategorie
         </span>
       </div>
@@ -178,7 +181,7 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
                 <Tooltip content={<CustomTooltip />} />
                 <Legend
                   formatter={(value: string) => (
-                    <span style={{ color: "#e2e8f0", fontSize: 11 }}>{value}</span>
+                    <span style={{ color: c.text, fontSize: 11 }}>{value}</span>
                   )}
                 />
               </PieChart>
@@ -192,13 +195,13 @@ export function SpendingPieChart({ categories, getSubcategories, totalExpenses }
                 display: "flex",
                 justifyContent: "space-between",
                 padding: "6px 0",
-                borderBottom: i < subs.length - 1 ? "1px solid #1e293b" : "none",
+                borderBottom: i < subs.length - 1 ? `1px solid ${c.border}` : "none",
                 fontSize: 12,
               }}>
-                <span style={{ color: "#94a3b8" }}>› {sub.subcategoryName}</span>
-                <span style={{ color: "#e2e8f0" }}>
+                <span style={{ color: c.textTertiary }}>› {sub.subcategoryName}</span>
+                <span style={{ color: c.text }}>
                   {fmt(sub.spent)}{" "}
-                  <span style={{ color: "#475569" }}>
+                  <span style={{ color: c.textMuted }}>
                     ({sub.percentOfCategory.toFixed(1)}% kat. / {sub.percentOfTotal.toFixed(1)}% ogółu)
                   </span>
                 </span>

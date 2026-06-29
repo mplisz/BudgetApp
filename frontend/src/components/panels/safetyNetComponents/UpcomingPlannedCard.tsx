@@ -5,6 +5,7 @@
 // target cushion is bigger than baseDeficit × horizon.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useMemo } from "react";
 import { fmt } from "../../../utils/helpers";
 import { Card, EmptyState } from "../../ui/summaryUi";
@@ -49,13 +50,13 @@ export function UpcomingPlannedCard({
       }}>
         <div>
           <div style={{
-            fontSize: 13, fontWeight: 800, color: "#e2e8f0", marginBottom: 4,
+            fontSize: 13, fontWeight: 800, color: c.text, marginBottom: 4,
           }}>
             📅 Nadchodzące planowane wydatki
           </div>
-          <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: c.textSecondary, lineHeight: 1.5 }}>
             Zobowiązania z modułu planowanych, które wypadają w Twoim oknie{" "}
-            <strong style={{ color: "#94a3b8" }}>{horizonMonths} miesięcy</strong>{" "}
+            <strong style={{ color: c.textTertiary }}>{horizonMonths} miesięcy</strong>{" "}
             (OC, podatki, obozy, itp.). Są dodawane do celu poduszki dla każdego poziomu —
             filtrowane po priorytecie zgodnie z warstwami kosztów.
           </div>
@@ -66,9 +67,9 @@ export function UpcomingPlannedCard({
           style={{
             flexShrink: 0,
             padding: "5px 10px",
-            border: `1px solid ${enabled ? "#10b98166" : "#1e293b"}`,
-            background: enabled ? "#10b98122" : "transparent",
-            color: enabled ? "#10b981" : "#64748b",
+            border: `1px solid ${enabled ? alpha(c.success, "66") : c.border}`,
+            background: enabled ? alpha(c.success, "22") : "transparent",
+            color: enabled ? c.success : c.textSecondary,
             borderRadius: 8,
             fontSize: 11,
             fontWeight: 700,
@@ -83,10 +84,10 @@ export function UpcomingPlannedCard({
       {!enabled && (
         <div style={{
           padding: "10px 12px",
-          background: "#0d1424",
-          border: "1px solid #1e293b",
+          background: c.surface,
+          border: `1px solid ${c.border}`,
           borderRadius: 8,
-          fontSize: 12, color: "#64748b", lineHeight: 1.5,
+          fontSize: 12, color: c.textSecondary, lineHeight: 1.5,
         }}>
           Symulator <strong>nie</strong> uwzględnia planowanych wydatków — poduszka
           pokazuje tylko podstawowy koszt przeżycia. Włącz, aby zobaczyć pełny obraz.
@@ -113,7 +114,7 @@ export function UpcomingPlannedCard({
               label="Razem w horyzoncie"
               value={sumAll}
               hint={`${upcoming.length} ${upcoming.length === 1 ? "pozycja" : "pozycji"}`}
-              color="#cbd5e1"
+              color={c.textBody}
             />
             <SummaryTile
               label={`Wlicza się do P1–P${selectedLevel}`}
@@ -155,12 +156,12 @@ function SummaryTile({ label, value, hint, color }: SummaryTileProps) {
   return (
     <div style={{
       padding: "10px 12px",
-      background: "#0d1424",
-      border: "1px solid #1e293b",
+      background: c.surface,
+      border: `1px solid ${c.border}`,
       borderRadius: 8,
     }}>
       <div style={{
-        fontSize: 10, color: "#475569", fontWeight: 700,
+        fontSize: 10, color: c.textMuted, fontWeight: 700,
         textTransform: "uppercase", letterSpacing: "0.5px",
         marginBottom: 4,
       }}>
@@ -168,7 +169,7 @@ function SummaryTile({ label, value, hint, color }: SummaryTileProps) {
       </div>
       <div style={{ fontSize: 16, fontWeight: 800, color }}>{fmt(value)}</div>
       {hint && (
-        <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>{hint}</div>
+        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{hint}</div>
       )}
     </div>
   );
@@ -188,8 +189,8 @@ function PlannedRow({ planned, includedAtLevel }: PlannedRowProps) {
       gridTemplateColumns: "auto 1fr auto auto",
       gap: 10, alignItems: "center",
       padding: "8px 10px",
-      background: includedAtLevel ? "#0d1424" : "#090e1b",
-      border: `1px solid ${includedAtLevel ? meta.color + "33" : "#1e293b"}`,
+      background: includedAtLevel ? c.surface : c.bgDeepest,
+      border: `1px solid ${includedAtLevel ? meta.color + "33" : c.border}`,
       borderRadius: 8,
       opacity: includedAtLevel ? 1 : 0.55,
     }}>
@@ -211,17 +212,17 @@ function PlannedRow({ planned, includedAtLevel }: PlannedRowProps) {
       {/* Label */}
       <div style={{ minWidth: 0 }}>
         <div style={{
-          fontSize: 13, fontWeight: 700, color: "#e2e8f0",
+          fontSize: 13, fontWeight: 700, color: c.text,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {planned.mode === "envelope" ? "🐷 " : "🎯 "}
           {planned.description}
         </div>
-        <div style={{ fontSize: 10, color: "#475569" }}>
+        <div style={{ fontSize: 10, color: c.textMuted }}>
           {planned.plannedMonth} · {planned.categoryName}
           {planned.subcategoryName && ` › ${planned.subcategoryName}`}
           {planned.mode === "envelope" && planned.paidPLN > 0 && (
-            <span style={{ color: "#10b981", marginLeft: 6 }}>
+            <span style={{ color: c.success, marginLeft: 6 }}>
               · zebrane {fmt(planned.paidPLN)} / {fmt(planned.totalAmountPLN)}
             </span>
           )}
@@ -230,7 +231,7 @@ function PlannedRow({ planned, includedAtLevel }: PlannedRowProps) {
 
       {/* Amount */}
       <div style={{
-        fontSize: 13, fontWeight: 800, color: "#e2e8f0",
+        fontSize: 13, fontWeight: 800, color: c.text,
         textAlign: "right", minWidth: 80,
       }}>
         {fmt(planned.amountInHorizon)}
@@ -242,7 +243,7 @@ function PlannedRow({ planned, includedAtLevel }: PlannedRowProps) {
         : `Pomijane na poziomie P${planned.priority - 1} i niżej`
       } style={{
         fontSize: 12,
-        color: includedAtLevel ? "#10b981" : "#475569",
+        color: includedAtLevel ? c.success : c.textMuted,
         width: 18,
         textAlign: "center",
       }}>

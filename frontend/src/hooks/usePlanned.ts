@@ -4,11 +4,9 @@
 // ============================================================
 
 import { useState, useCallback, useMemo } from "react";
-import { useAuth }       from "../context/AuthContext";
 import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { useApi }        from "./useApi";
 
 // ── Domain types ──────────────────────────────────────────────
 
@@ -188,7 +186,7 @@ interface UsePlannedResult {
 }
 
 export function usePlanned(): UsePlannedResult {
-  const { fetchWithAuth }                        = useAuth() as { fetchWithAuth: typeof fetch };
+  const api                                      = useApi();
   const { planned, setPlanned, setTransactions, settings} = useAppContext() as {
     planned:         PlannedDoc[];
     setPlanned:      (v: PlannedDoc[] | ((p: PlannedDoc[]) => PlannedDoc[])) => void;
@@ -212,29 +210,21 @@ export function usePlanned(): UsePlannedResult {
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/planned`);
-      const data = await (res as Response).json() as PlannedDoc[];
-      if (!(res as Response).ok) throw new Error((data as unknown as { error: string }).error || "Failed to load.");
+      const data = await api.get<PlannedDoc[]>("/api/planned", { fallback: "Nie udało się pobrać planów." });
       setPlanned(data.filter(d => !d.isArchived));
     } catch (err) {
       showError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [fetchWithAuth, setPlanned, showError]);
+  }, [api, setPlanned, showError]);
 
   // ── Create ─────────────────────────────────────────────────
 
   const createPlanned = useCallback(async (payload: PlannedPostPayload): Promise<PlannedDoc | null> => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/planned`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await (res as Response).json() as PlannedDoc;
-      if (!(res as Response).ok) throw new Error((data as unknown as { error: string }).error || "Failed to create.");
+      const data = await api.post<PlannedDoc>("/api/planned", payload, { fallback: "Nie udało się utworzyć planu." });
       setPlanned(prev => [...prev, data]);
       showSuccess("Plan dodany! ✅");
       return data;
@@ -244,7 +234,7 @@ export function usePlanned(): UsePlannedResult {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setPlanned, showSuccess, showError]);
+  }, [api, setPlanned, showSuccess, showError]);
 
   // ── Update — PATCH only changed fields ────────────────────
   // virtualSavings is intentionally NOT sent — backend recomputes it.
@@ -252,13 +242,7 @@ export function usePlanned(): UsePlannedResult {
   const updatePlanned = useCallback(async (id: string, patch: PlannedPatchPayload): Promise<PlannedDoc | null> => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/planned/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      const data = await (res as Response).json() as PlannedDoc;
-      if (!(res as Response).ok) throw new Error((data as unknown as { error: string }).error || "Failed to update.");
+      const data = await api.patch<PlannedDoc>(`/api/planned/${id}`, patch, { fallback: "Nie udało się zaktualizować planu." });
       replacePlanned(data);
       showSuccess("Plan zaktualizowany! ✅");
       return data;
@@ -268,18 +252,14 @@ export function usePlanned(): UsePlannedResult {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setPlanned, showSuccess, showError]);
+  }, [api, setPlanned, showSuccess, showError]);
 
   // ── Archive ────────────────────────────────────────────────
 
   const archivePlanned = useCallback(async (id: string): Promise<boolean> => {
     setIsSaving(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/planned/${id}`, { method: "DELETE" });
-      if (!(res as Response).ok) {
-        const data = await (res as Response).json() as { error: string };
-        throw new Error(data.error || "Failed to archive.");
-      }
+      await api.del(`/api/planned/${id}`, undefined, { fallback: "Nie udało się zarchiwizować planu." });
       setPlanned(prev => prev.filter(p => p.id !== id));
       showSuccess("Plan zarchiwizowany.");
       return true;
@@ -289,20 +269,18 @@ export function usePlanned(): UsePlannedResult {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setPlanned, showSuccess, showError]);
+  }, [api, setPlanned, showSuccess, showError]);
 
   // ── Purchase ───────────────────────────────────────────────
 
   const purchasePlanned = useCallback(async (id: string, date: string, budgetMonth: string): Promise<PlannedDoc | null> => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/planned/${id}/purchase`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, budgetMonth }),
-      });
-      const data = await (res as Response).json() as PlannedDoc & { transactions?: unknown[] };
-      if (!(res as Response).ok) throw new Error((data as unknown as { error: string }).error || "Failed to purchase.");
+      const data = await api.post<PlannedDoc & { transactions?: unknown[] }>(
+        `/api/planned/${id}/purchase`,
+        { date, budgetMonth },
+        { fallback: "Nie udało się potwierdzić zakupu." },
+      );
       replacePlanned(data);
       if (data.transactions) {
         setTransactions(prev => [...(prev as unknown[]), ...data.transactions!]);
@@ -315,7 +293,7 @@ export function usePlanned(): UsePlannedResult {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setPlanned, setTransactions, showSuccess, showError]);
+  }, [api, setPlanned, setTransactions, showSuccess, showError]);
 
   // ── Pay month ──────────────────────────────────────────────
 
@@ -324,13 +302,11 @@ export function usePlanned(): UsePlannedResult {
   ): Promise<PlannedDoc | null> => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/planned/${id}/pay`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ month, amountPLN, amount, fxRate, dismissed: false }),
-      });
-      const data = await (res as Response).json() as PlannedDoc;
-      if (!(res as Response).ok) throw new Error((data as unknown as { error: string }).error || "Failed to pay.");
+      const data = await api.post<PlannedDoc>(
+        `/api/planned/${id}/pay`,
+        { month, amountPLN, amount, fxRate, dismissed: false },
+        { fallback: "Nie udało się zapisać wpłaty." },
+      );
       replacePlanned(data);
       return data;
     } catch (err) {
@@ -339,20 +315,18 @@ export function usePlanned(): UsePlannedResult {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setPlanned, showError]);
+  }, [api, setPlanned, showError]);
 
   // ── Dismiss month ──────────────────────────────────────────
 
   const dismissMonth = useCallback(async (id: string, month: string): Promise<PlannedDoc | null> => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/planned/${id}/pay`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ month, dismissed: true }),
-      });
-      const data = await (res as Response).json() as PlannedDoc;
-      if (!(res as Response).ok) throw new Error((data as unknown as { error: string }).error || "Failed to dismiss.");
+      const data = await api.post<PlannedDoc>(
+        `/api/planned/${id}/pay`,
+        { month, dismissed: true },
+        { fallback: "Nie udało się pominąć miesiąca." },
+      );
       replacePlanned(data);
       return data;
     } catch (err) {
@@ -361,7 +335,7 @@ export function usePlanned(): UsePlannedResult {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setPlanned, showError]);
+  }, [api, setPlanned, showError]);
 
   const today = new Date().toISOString().slice(0, 10);
 

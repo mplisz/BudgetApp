@@ -3,6 +3,7 @@
 // Multi-selector of tags.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState } from "react";
 import type { ReactElement } from "react";
 import { useAppContext } from "../../context/AppContext";
@@ -49,10 +50,10 @@ export function TagMultiSelect({
 
   const inp: React.CSSProperties = {
     width:        "100%",
-    background:   "#0a0f1e",
-    border:       "1px solid #1e293b",
+    background:   c.bg,
+    border:       `1px solid ${c.border}`,
     borderRadius: 8,
-    color:        "#e2e8f0",
+    color:        c.text,
     padding:      "9px 12px",
     fontSize:     14,
     outline:      "none",
@@ -70,8 +71,8 @@ export function TagMultiSelect({
               onClick={() => toggle(t.id)}
               style={{
                 padding: "3px 10px", borderRadius: 20,
-                background: "#10b98122", border: "1px solid #10b981",
-                color: "#34d399", fontSize: 12,
+                background: alpha(c.success, "22"), border: `1px solid ${c.success}`,
+                color: c.successLight, fontSize: 12,
                 cursor: disabled ? "default" : "pointer",
               }}>
               {t.icon} {t.name} {!disabled && "✕"}
@@ -95,7 +96,7 @@ export function TagMultiSelect({
         {open && filteredTags.length > 0 && (
           <div style={{
             position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50,
-            background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8,
+            background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8,
             maxHeight: 200, overflowY: "auto", marginTop: 4,
           }}>
             {filteredTags.map(t => {
@@ -106,8 +107,8 @@ export function TagMultiSelect({
                   onMouseDown={() => { toggle(t.id); setSearch(""); }}
                   style={{
                     padding: "8px 14px", cursor: "pointer", fontSize: 13,
-                    color:      selected ? "#10b981" : "#e2e8f0",
-                    background: selected ? "#10b98111" : "transparent",
+                    color:      selected ? c.success : c.text,
+                    background: selected ? alpha(c.success, "11") : "transparent",
                     display: "flex", justifyContent: "space-between", alignItems: "center",
                   }}>
                   <span>{t.icon} {t.name}</span>
@@ -121,10 +122,10 @@ export function TagMultiSelect({
         {open && filteredTags.length === 0 && search.length > 0 && (
           <div style={{
             position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50,
-            background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8,
-            padding: "10px 14px", marginTop: 4, fontSize: 13, color: "#475569",
+            background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8,
+            padding: "10px 14px", marginTop: 4, fontSize: 13, color: c.textMuted,
           }}>
-            Brak tagów pasujących do „{search}"
+            Brak tagów pasujących do „{search}”
           </div>
         )}
       </div>

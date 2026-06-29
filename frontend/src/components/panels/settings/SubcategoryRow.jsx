@@ -8,6 +8,7 @@
 //   spodem. Każdy element zdefiniowany raz, tylko inaczej ułożony.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { EditableLabel }  from "../../ui/EditableLabel";
 import { PriorityPicker } from "../../ui/PriorityPicker";
 import { useIsMobile }    from "../../../hooks/useIsMobile";
@@ -32,11 +33,11 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
         onSave={(newName) => onUpdate(subData.id, subName, parentId, { name: newName })}
       />
       {subData.isArchived && (
-        <span style={{ fontSize: 10, color: "#ef4444" }}>(Arch)</span>
+        <span style={{ fontSize: 10, color: c.danger }}>(Arch)</span>
       )}
       {subData.canBeLuxmed && !isZdrowieCategory && (
         // Fallback badge jeśli subkategoria ma flagę ale nie jesteśmy w Zdrowie
-        <span style={{ fontSize: 10, color: "#06b6d4" }}>🏥</span>
+        <span style={{ fontSize: 10, color: c.cyan }}>🏥</span>
       )}
     </div>
   );
@@ -56,9 +57,9 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
       disabled={isDisabled}
       title={subData.canBeRecurring ? "Wyłącz z cyklicznych" : "Włącz do cyklicznych"}
       style={{
-        background:    subData.canBeRecurring ? "#10b98122" : "transparent",
-        border:        `1px solid ${subData.canBeRecurring ? "#10b98166" : "#1e293b"}`,
-        color:         subData.canBeRecurring ? "#10b981" : "#334155",
+        background:    subData.canBeRecurring ? alpha(c.success, "22") : "transparent",
+        border:        `1px solid ${subData.canBeRecurring ? alpha(c.success, "66") : c.border}`,
+        color:         subData.canBeRecurring ? c.success : c.borderStrong,
         borderRadius:  6,
         padding:       "4px 8px",
         cursor:        isDisabled ? "not-allowed" : "pointer",
@@ -81,9 +82,9 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
         : "Oznacz jako 'nienaruszalne' (czesne, leki, opłata za przedszkole). Te wydatki będą wliczane do każdego trybu w poduszce finansowej, niezależnie od priorytetu."
       }
       style={{
-        background:    subData.isCritical ? "#a855f722" : "transparent",
-        border:        `1px solid ${subData.isCritical ? "#a855f766" : "#1e293b"}`,
-        color:         subData.isCritical ? "#a855f7" : "#334155",
+        background:    subData.isCritical ? alpha(c.voucher, "22") : "transparent",
+        border:        `1px solid ${subData.isCritical ? alpha(c.voucher, "66") : c.border}`,
+        color:         subData.isCritical ? c.voucher : c.borderStrong,
         borderRadius:  6,
         padding:       "4px 8px",
         cursor:        isDisabled ? "not-allowed" : "pointer",
@@ -106,9 +107,9 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
         : "Włącz do puli zwrotów LuxMed — transakcje z tej subkategorii będą widoczne w panelu Zwroty LuxMed"
       }
       style={{
-        background:    subData.canBeLuxmed ? "#06b6d422" : "transparent",
-        border:        `1px solid ${subData.canBeLuxmed ? "#06b6d466" : "#1e293b"}`,
-        color:         subData.canBeLuxmed ? "#06b6d4" : "#334155",
+        background:    subData.canBeLuxmed ? alpha(c.cyan, "22") : "transparent",
+        border:        `1px solid ${subData.canBeLuxmed ? alpha(c.cyan, "66") : c.border}`,
+        color:         subData.canBeLuxmed ? c.cyan : c.borderStrong,
         borderRadius:  6,
         padding:       "4px 8px",
         cursor:        isDisabled ? "not-allowed" : "pointer",
@@ -135,8 +136,8 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
       title={subData.isArchived ? "Przywróć" : "Archiwizuj"}
       style={{
         background:    "transparent",
-        border:        "1px solid #1e293b",
-        color:         "#64748b",
+        border:        `1px solid ${c.border}`,
+        color:         c.textSecondary,
         borderRadius:  6,
         padding:       "4px 8px",
         cursor:        "pointer",
@@ -155,7 +156,7 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
     return (
       <div style={{
         padding: "10px 0",
-        borderBottom: "1px solid #1e293b",
+        borderBottom: `1px solid ${c.border}`,
         opacity: subData.isArchived ? 0.4 : 1,
       }}>
         {/* Name + archive */}
@@ -193,7 +194,7 @@ export function SubcategoryRow({ subName, subData, parentName, parentId, parentT
       gap:                 8,
       alignItems:          "center",
       padding:             "8px 0",
-      borderBottom:        "1px solid #1e293b",
+      borderBottom:        `1px solid ${c.border}`,
       opacity:             subData.isArchived ? 0.4 : 1,
     }}>
       {nameCell}

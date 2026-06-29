@@ -6,6 +6,7 @@
 // Analogically to SettingsSection.jsx
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState, useEffect } from "react";
 import { useSettings }         from "../../../hooks/useSettings";
 import { CollapsibleSection }  from "../../ui/index";
@@ -44,18 +45,18 @@ export function LuxmedSection() {
 
   const rowStyle   = {
     display: "flex", justifyContent: "space-between", alignItems: "center",
-    padding: "10px 0", borderBottom: "1px solid #1e293b",
+    padding: "10px 0", borderBottom: `1px solid ${c.border}`,
   };
-  const labelStyle = { color: "#e2e8f0", fontSize: 13 };
-  const descStyle  = { color: "#475569", fontSize: 11, marginTop: 2 };
+  const labelStyle = { color: c.text, fontSize: 13 };
+  const descStyle  = { color: c.textMuted, fontSize: 11, marginTop: 2 };
   const inputStyle = { ...s.input, width: 90, textAlign: "center" };
 
   return (
     <CollapsibleSection title="🏥 Zwroty LuxMed" defaultOpen={false}>
       {validationError && (
         <div style={{
-          padding: "10px 14px", background: "#ef444422",
-          borderLeft: "4px solid #ef4444", color: "#f87171",
+          padding: "10px 14px", background: alpha(c.danger, "22"),
+          borderLeft: `4px solid ${c.danger}`, color: c.dangerLight,
           marginBottom: 12, borderRadius: 4, fontSize: 13,
         }}>
           {validationError}
@@ -63,7 +64,7 @@ export function LuxmedSection() {
       )}
 
       {isLoading ? (
-        <div style={{ color: "#475569", fontSize: 13 }}>Ładowanie…</div>
+        <div style={{ color: c.textMuted, fontSize: 13 }}>Ładowanie…</div>
       ) : (
         <>
           {/* maxPercent */}
@@ -84,7 +85,7 @@ export function LuxmedSection() {
                 onChange={e => setMaxPercent(e.target.value)}
                 style={inputStyle}
               />
-              <span style={{ color: "#64748b", fontSize: 13 }}>%</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>%</span>
             </div>
           </div>
 
@@ -107,7 +108,7 @@ export function LuxmedSection() {
                 onChange={e => setMaxTotal(e.target.value)}
                 style={inputStyle}
               />
-              <span style={{ color: "#64748b", fontSize: 13 }}>PLN</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>PLN</span>
             </div>
           </div>
 
@@ -115,7 +116,7 @@ export function LuxmedSection() {
           {isPercentValid && isTotalValid && (
             <div style={{
               marginTop: 12, padding: "10px 14px",
-              background: "#06b6d411", border: "1px solid #06b6d433",
+              background: alpha(c.cyan, "11"), border: `1px solid ${alpha(c.cyan, "33")}`,
               borderRadius: 8, fontSize: 12, color: "#67e8f9",
             }}>
               Np. wizyta za 300 PLN → zwrot maks.{" "}

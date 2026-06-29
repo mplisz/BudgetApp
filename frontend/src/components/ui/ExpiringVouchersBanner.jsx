@@ -8,6 +8,7 @@
 //   style    – optional style override for the container
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { fmt } from "../../utils/helpers";
 
 export function ExpiringVouchersBanner({ vouchers = [], style = {} }) {
@@ -15,29 +16,29 @@ export function ExpiringVouchersBanner({ vouchers = [], style = {} }) {
 
   return (
     <div style={{
-      background:   "#f9731611",
-      border:       "1px solid #f9731633",
+      background:   alpha(c.orange, "11"),
+      border:       `1px solid ${alpha(c.orange, "33")}`,
       borderRadius: 8,
       padding:      "10px 14px",
       ...style,
     }}>
-      <div style={{ fontSize: 11, color: "#f97316", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: c.orange, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
         ⚠️ {vouchers.length === 1 ? "Voucher wygasa wkrótce" : `${vouchers.length} vouchery wygasają wkrótce`}
       </div>
       {vouchers.map(v => {
         const days = Math.ceil((new Date(v.expiresAt) - new Date()) / 86400000);
         return (
           <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, marginTop: 4 }}>
-            <span style={{ color: "#94a3b8" }}>
-              🎫 <strong style={{ color: "#e2e8f0" }}>{v.name}</strong>
+            <span style={{ color: c.textTertiary }}>
+              🎫 <strong style={{ color: c.text }}>{v.name}</strong>
               {" — za "}
-              <span style={{ color: "#f97316" }}>
+              <span style={{ color: c.orange }}>
                 {days} {days === 1 ? "dzień" : "dni"}
               </span>
               {" "}
-              <span style={{ color: "#475569" }}>({v.expiresAt})</span>
+              <span style={{ color: c.textMuted }}>({v.expiresAt})</span>
             </span>
-            <span style={{ color: "#a78bfa", fontWeight: 600, flexShrink: 0, marginLeft: 12 }}>
+            <span style={{ color: c.voucherLight, fontWeight: 600, flexShrink: 0, marginLeft: 12 }}>
               {fmt(v.remainingValue)} PLN
             </span>
           </div>

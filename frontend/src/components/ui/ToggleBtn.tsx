@@ -19,6 +19,7 @@
 //   View switcher:  <ToggleBtn {...VIEW_TOGGLE_STYLE} active={view === "list"} onClick={...}>☰ Lista</ToggleBtn>
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import type { CSSProperties } from "react";
 
 interface ToggleBtnProps {
@@ -33,8 +34,8 @@ interface ToggleBtnProps {
 // ── Shared preset — green view-mode switcher (Lista / Kalendarz / Grupy)
 // Used in PanelRecurring and PanelTransactions header.
 export const VIEW_TOGGLE_STYLE: Pick<ToggleBtnProps, "activeColor" | "activeBorder" | "style"> = {
-  activeColor:  "#10b981",
-  activeBorder: "#10b981",
+  activeColor:  c.success,
+  activeBorder: c.success,
   style: { padding: "6px 14px", fontWeight: 700 },
 };
 
@@ -42,8 +43,8 @@ export function ToggleBtn({
   active,
   onClick,
   children,
-  activeColor  = "#1e293b",
-  activeBorder = "#334155",
+  activeColor  = c.border,
+  activeBorder = c.borderStrong,
   style        = {},
 }: ToggleBtnProps) {
   return (
@@ -51,9 +52,9 @@ export function ToggleBtn({
       onClick={onClick}
       style={{
         background:   active ? activeColor  : "transparent",
-        border:       `1px solid ${active ? activeBorder : "#1e293b"}`,
+        border:       `1px solid ${active ? activeBorder : c.border}`,
         borderRadius: 6,
-        color:        active ? "#fff"       : "#475569",
+        color:        active ? c.white       : c.textMuted,
         padding:      "5px 10px",
         fontSize:     12,
         cursor:       "pointer",

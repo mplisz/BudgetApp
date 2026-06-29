@@ -13,10 +13,8 @@
 
 import { useCallback } from "react";
 import { useAppContext } from "../context/AppContext";
-import { useAuth }       from "../context/AuthContext";
 import { useToast }      from "./useToast";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { useApi }        from "./useApi";
 
 export const DEFAULT_CURRENCIES = [
   { code: "PLN", name: "Polski złoty",     isArchived: false, isBase: true  },
@@ -29,7 +27,7 @@ export const DEFAULT_CURRENCIES = [
 
 export function useCurrencyManager() {
   const { settings, setSettings } = useAppContext();
-  const { fetchWithAuth }         = useAuth();
+  const api                       = useApi();
   const { showError, showSuccess } = useToast();
 
   const allCurrencies = settings?.currencies ?? DEFAULT_CURRENCIES;
@@ -51,22 +49,14 @@ export function useCurrencyManager() {
     }
 
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/settings`, {
-        method: "PATCH",
-        body:   JSON.stringify({ currencies: newList }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Nie udało się zapisać walut.");
-      }
-      const saved = await res.json();
+      const saved = await api.patch("/api/settings", { currencies: newList }, { fallback: "Nie udało się zapisać walut." });
       setSettings(saved);
       return true;
     } catch (err) {
       showError(err.message);
       return false;
     }
-  }, [fetchWithAuth, setSettings, showError]);
+  }, [api, setSettings, showError]);
 
   // ── Add ──────────────────────────────────────────────────────
   async function addCurrency(code, name) {

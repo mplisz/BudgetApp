@@ -3,15 +3,13 @@
 // Edit modal for INCOME / TRANSFER — uses shared IncomeForm.
 // ============================================================
 
-import { useAuth }    from "../../../context/AuthContext";
+import { c } from "../../../styles/tokens";
 import { useToast }   from "../../../hooks/useToast";
+import { useApi }     from "../../../hooks/useApi";
 import { IncomeForm } from "./IncomeForm";
 import { toYMD }      from "../../ui/AppDatePicker";
-import { translateError } from "../../../data/constants/errorMessages";
 import { s }          from "./txStyles.jsx";
 import type { IncomeFormValues } from "./IncomeForm";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface Transaction {
   id:              string;
@@ -34,10 +32,9 @@ interface EditIncomeModalProps {
 }
 
 export function EditIncomeModal({ tx, onClose, onUpdated }: EditIncomeModalProps) {
-  const { fetchWithAuth }          = useAuth() as { fetchWithAuth: typeof fetch };
-  const { showSuccess, showError } = useToast() as {
+  const api                        = useApi();
+  const { showSuccess } = useToast() as {
     showSuccess: (m: string) => void;
-    showError:   (m: string) => void;
   };
 
   const [y, m, d] = tx.date.split("-").map(Number);
@@ -54,29 +51,19 @@ export function EditIncomeModal({ tx, onClose, onUpdated }: EditIncomeModalProps
   };
 
   async function handleSubmit(form: IncomeFormValues) {
-    const res = await fetchWithAuth(`${API_URL}/api/transactions/${tx.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type:             form.categoryType ?? tx.type,
-        subcategoryId:    form.subcategoryId,
-        subcategoryName:  form.subcategoryName,
-        categoryId:       form.categoryId,
-        categoryName:     form.categoryName,
-        amount:           Number(form.amount),
-        originalAmount:   Number(form.amount),
-        originalCurrency: "PLN",
-        fxRate:           1,
-        date:             toYMD(form.date),
-        description:      form.description || "",
-      }),
-    }) as Response;
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      throw new Error(translateError(body.error ?? "", "Nie udało się zaktualizować wpływu."));
-    }
-    const updated = await res.json() as Transaction;
+    const updated = await api.patch<Transaction>(`/api/transactions/${tx.id}`, {
+      type:             form.categoryType ?? tx.type,
+      subcategoryId:    form.subcategoryId,
+      subcategoryName:  form.subcategoryName,
+      categoryId:       form.categoryId,
+      categoryName:     form.categoryName,
+      amount:           Number(form.amount),
+      originalAmount:   Number(form.amount),
+      originalCurrency: "PLN",
+      fxRate:           1,
+      date:             toYMD(form.date),
+      description:      form.description || "",
+    }, { fallback: "Nie udało się zaktualizować wpływu." });
     showSuccess("Wpływ zaktualizowany! ✅");
     onUpdated(updated);
     onClose();
@@ -84,10 +71,10 @@ export function EditIncomeModal({ tx, onClose, onUpdated }: EditIncomeModalProps
 
   const modalInp: React.CSSProperties = {
     width:        "100%",
-    background:   "#0a0f1e",
-    border:       "1px solid #1e293b",
+    background:   c.bg,
+    border:       `1px solid ${c.border}`,
     borderRadius: 8,
-    color:        "#e2e8f0",
+    color:        c.text,
     padding:      "9px 12px",
     fontSize:     14,
     outline:      "none",

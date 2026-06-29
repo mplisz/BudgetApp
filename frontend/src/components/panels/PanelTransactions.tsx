@@ -5,6 +5,7 @@
 // UI: Polish | Comments: English
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useState, useMemo } from "react";
 import { useAppContext }   from "../../context/AppContext";
 import { useTransactions } from "../../hooks/useTransactions";
@@ -268,23 +269,23 @@ export default function PanelTransactions() {
 
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>🧾 Wydatki</div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 }}>🧾 Wydatki</div>
+        <div style={{ fontSize: 13, color: c.textSecondary }}>
           {activeBudgetMonth} ·{" "}
           {isFirstLoad ? (
-            <span style={{ color: "#475569" }}>ładowanie…</span>
+            <span style={{ color: c.textMuted }}>ładowanie…</span>
           ) : (
             <>
               {filtered.length} transakcji · łącznie{" "}
-              <strong style={{ color: "#e2e8f0" }}>{fmt(totalSum)} PLN</strong>
+              <strong style={{ color: c.text }}>{fmt(totalSum)} PLN</strong>
               {totalVoucherSum > 0 && (
-                <span style={{ marginLeft: 8, color: "#a78bfa" }}>voucher: {fmt(totalVoucherSum)}</span>
+                <span style={{ marginLeft: 8, color: c.voucherLight }}>voucher: {fmt(totalVoucherSum)}</span>
               )}
               {totalReturnedSum > 0 && (
-                <span style={{ marginLeft: 8, color: "#34d399" }}>zwroty: -{fmt(totalReturnedSum)}</span>
+                <span style={{ marginLeft: 8, color: c.successLight }}>zwroty: -{fmt(totalReturnedSum)}</span>
               )}
               {isActiveMonthClosed && (
-                <span style={{ marginLeft: 10, ...(s as any).badge("#ef4444") }}>🔒 zamknięty</span>
+                <span style={{ marginLeft: 10, ...(s as any).badge(c.danger) }}>🔒 zamknięty</span>
               )}
             </>
           )}
@@ -293,9 +294,9 @@ export default function PanelTransactions() {
 
       {/* Filters */}
       {!isFirstLoad && (
-        <div style={{ background: "#090e1b", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+        <div style={{ background: c.bgDeepest, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
+            <div style={{ fontSize: 11, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
             <div style={{ display: "flex", gap: 6 }}>
               <ToggleBtn {...VIEW_TOGGLE_STYLE} active={!grouped} onClick={() => setGrouped(false)}>
                 📋 Lista
@@ -355,8 +356,8 @@ export default function PanelTransactions() {
                     style={{
                       width: 28, height: 28, borderRadius: 6, border: "none",
                       cursor: "pointer", fontWeight: 700, fontSize: 11,
-                      background: filters.prio.includes(p) ? (PRIO_COLORS as Record<number, string>)[p] : "#1e293b",
-                      color:      filters.prio.includes(p) ? "#fff" : "#64748b",
+                      background: filters.prio.includes(p) ? (PRIO_COLORS as Record<number, string>)[p] : c.border,
+                      color:      filters.prio.includes(p) ? c.white : c.textSecondary,
                     }}
                   >
                     P{p}
@@ -379,8 +380,8 @@ export default function PanelTransactions() {
                       )}
                       style={{
                         padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
-                        background: filters.tags.includes(tag.id) ? "#3b82f6" : "#1e293b",
-                        color:      filters.tags.includes(tag.id) ? "#fff"    : "#64748b",
+                        background: filters.tags.includes(tag.id) ? c.info : c.border,
+                        color:      filters.tags.includes(tag.id) ? c.white    : c.textSecondary,
                       }}
                     >
                       {tag.name}
@@ -392,12 +393,12 @@ export default function PanelTransactions() {
             {/* Returns */}
             <div style={(s as any).filterBox}>
               <div style={(s as any).filterLabel}>Zwroty</div>
-              <TriFilterButton state={filters.hasReturn}  onChange={v => set("hasReturn", v)}  label="🔙 Zwroty"      color="#34d399" />
+              <TriFilterButton state={filters.hasReturn}  onChange={v => set("hasReturn", v)}  label="🔙 Zwroty"      color={c.successLight} />
             </div>
               {/* Receipts */}
             <div style={(s as any).filterBox}>
               <div style={(s as any).filterLabel}>Paragony</div>
-              <TriFilterButton state={filters.hasReceipt} onChange={v => set("hasReceipt", v)} label="📎 Z paragonem" color="#f59e0b" />
+              <TriFilterButton state={filters.hasReceipt} onChange={v => set("hasReceipt", v)} label="📎 Z paragonem" color={c.warning} />
             </div>
             {/* Merchant */}
             {uniqueMerchants.length > 0 && (
@@ -406,7 +407,7 @@ export default function PanelTransactions() {
                 <select
                   value={filters.merchant}
                   onChange={e => set("merchant", e.target.value)}
-                  style={{ height: 28, background: "#1e293b", color: "#94a3b8", border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" }}
+                  style={{ height: 28, background: c.border, color: c.textTertiary, border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" }}
                 >
                   <option value="">Wszystkie sklepy</option>
                   {uniqueMerchants.map(m => <option key={m} value={m}>{m}</option>)}
@@ -416,11 +417,11 @@ export default function PanelTransactions() {
             {/* Warranty */}
             <div style={(s as any).filterBox}>
               <div style={(s as any).filterLabel}>Gwarancja</div>
-              <TriFilterButton state={filters.warranty}   onChange={v => set("warranty", v)}   label="🛡️ Gwarancyjne" color="#f59e0b" />
+              <TriFilterButton state={filters.warranty}   onChange={v => set("warranty", v)}   label="🛡️ Gwarancyjne" color={c.warning} />
             </div>
             {/* Clear */}
             {hasActiveFilters && (
-              <button onClick={clearFilters} style={{ ...(s as any).actionBtn("#ef4444"), alignSelf: "flex-end", marginBottom: 4 }}>
+              <button onClick={clearFilters} style={{ ...(s as any).actionBtn(c.danger), alignSelf: "flex-end", marginBottom: 4 }}>
                 ✕ Wyczyść
               </button>
             )}
@@ -435,7 +436,7 @@ export default function PanelTransactions() {
       )}
 
       {!isFirstLoad && filtered.length === 0 && (
-        <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
+        <div style={{ textAlign: "center", padding: "40px 0", color: c.borderStrong }}>
           Brak transakcji{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
         </div>
       )}
@@ -443,7 +444,7 @@ export default function PanelTransactions() {
       {/* Flat list */}
       {!isFirstLoad && !grouped && filtered.length > 0 && (
         <>
-          <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
+          <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {flatPage} z {flatTotalPages}
           </div>
           {isMobile ? (
@@ -496,25 +497,25 @@ export default function PanelTransactions() {
       {/* Grouped view */}
       {!isFirstLoad && grouped && groups.length > 0 && (
         <>
-          <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
+          <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {groups.length} grup · strona {groupPage} z {groupTotalPages}
           </div>
           {paginatedGroups.map(group => (
             <div key={group.key} style={(s as any).card}>
               <div style={(s as any).groupHeader} onClick={() => toggleGroup(group.key)}>
                 <div style={(s as any).groupTitle}>
-                  <span style={{ color: "#64748b" }}>{collapsed[group.key] ? "▶" : "▼"}</span>
+                  <span style={{ color: c.textSecondary }}>{collapsed[group.key] ? "▶" : "▼"}</span>
                   {group.name}
-                  <span style={{ color: "#475569", fontSize: 12, fontWeight: 400 }}>
+                  <span style={{ color: c.textMuted, fontSize: 12, fontWeight: 400 }}>
                     ({group.items.length})
                   </span>
                 </div>
                 <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                   {group.returnedSum > 0 && (
-                    <span style={{ fontSize: 12, color: "#34d399" }}>-{fmt(group.returnedSum)}</span>
+                    <span style={{ fontSize: 12, color: c.successLight }}>-{fmt(group.returnedSum)}</span>
                   )}
                   {group.voucherSum > 0 && (
-                    <span style={{ fontSize: 12, color: "#a78bfa" }}>voucher: {fmt(group.voucherSum)}</span>
+                    <span style={{ fontSize: 12, color: c.voucherLight }}>voucher: {fmt(group.voucherSum)}</span>
                   )}
                   <span style={(s as any).groupSum}>{fmt(group.sum)} PLN</span>
                 </div>
@@ -570,16 +571,16 @@ export default function PanelTransactions() {
       {!isFirstLoad && filtered.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "12px 4px", gap: 24 }}>
           {totalReturnedSum > 0 && (
-            <span style={{ fontSize: 12, color: "#34d399" }}>
+            <span style={{ fontSize: 12, color: c.successLight }}>
               Zwroty: <strong>-{fmt(totalReturnedSum)} PLN</strong>
             </span>
           )}
           {totalVoucherSum > 0 && (
-            <span style={{ fontSize: 12, color: "#a78bfa" }}>
+            <span style={{ fontSize: 12, color: c.voucherLight }}>
               Vouchery: <strong>{fmt(totalVoucherSum)} PLN</strong>
             </span>
           )}
-          <span style={{ fontSize: 14, color: "#e2e8f0" }}>
+          <span style={{ fontSize: 14, color: c.text }}>
             Razem: <strong>{fmt(totalSum)} PLN</strong>
           </span>
         </div>

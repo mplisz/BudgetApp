@@ -3,6 +3,7 @@
 // Redesigned — czytelna karta oszczędności z radialnym wskaźnikiem
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { useMemo } from "react";
 import { fmt } from "../../../utils/helpers";
 import { EmptyState } from "../../ui/summaryUi";
@@ -41,7 +42,7 @@ function RadialRing({ pct, color, size = 88 }: RadialRingProps) {
       <circle
         cx={center} cy={center} r={r}
         fill="none"
-        stroke="#1e293b"
+        stroke={c.border}
         strokeWidth={8}
       />
       {/* fill */}
@@ -84,7 +85,7 @@ function CategoryBar({ cat, totalSaved, color, isLast }: CategoryBarProps) {
     <div style={{
       paddingBottom: isLast ? 0 : 10,
       marginBottom:  isLast ? 0 : 10,
-      borderBottom:  isLast ? "none" : "1px solid #1e293b",
+      borderBottom:  isLast ? "none" : `1px solid ${c.border}`,
     }}>
       <div style={{
         display:        "flex",
@@ -92,12 +93,12 @@ function CategoryBar({ cat, totalSaved, color, isLast }: CategoryBarProps) {
         alignItems:     "center",
         marginBottom:   4,
       }}>
-        <span style={{ color: "#94a3b8", fontSize: 12 }}>
+        <span style={{ color: c.textTertiary, fontSize: 12 }}>
           🏦 {cat.categoryName}
         </span>
-        <span style={{ color: "#e2e8f0", fontSize: 12, fontWeight: 700 }}>
+        <span style={{ color: c.text, fontSize: 12, fontWeight: 700 }}>
           {fmt(cat.spent)}
-          <span style={{ color: "#475569", fontSize: 10, marginLeft: 6 }}>
+          <span style={{ color: c.textMuted, fontSize: 10, marginLeft: 6 }}>
             {pct.toFixed(0)}%
           </span>
         </span>
@@ -105,7 +106,7 @@ function CategoryBar({ cat, totalSaved, color, isLast }: CategoryBarProps) {
       {/* thin bar */}
       <div style={{
         height: 3,
-        background: "#0d1424",
+        background: c.surface,
         borderRadius: 99,
         overflow: "hidden",
       }}>
@@ -153,10 +154,10 @@ export function SavingsSummary({
   const shortfall  = Math.max(0, targetAmt - totalSaved);
 
   const color = isOk
-    ? "#10b981"
+    ? c.success
     : pct >= minSavingsPercent * 0.75
-      ? "#f59e0b"
-      : "#ef4444";
+      ? c.warning
+      : c.danger;
 
   if (savingsByCategory.length === 0 && totalIncome === 0) {
     return <EmptyState message="Brak danych" />;
@@ -167,7 +168,7 @@ export function SavingsSummary({
 
       {/* ── Hero card ── */}
       <div style={{
-        background:   "#0d1424",
+        background:   c.surface,
         borderRadius: 14,
         border:       `1px solid ${color}33`,
         padding:      "16px 18px",
@@ -192,7 +193,7 @@ export function SavingsSummary({
             <span style={{ fontSize: 15, fontWeight: 800, color, lineHeight: 1 }}>
               {pct.toFixed(0)}%
             </span>
-            <span style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>
+            <span style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>
               wpływów
             </span>
           </div>
@@ -200,7 +201,7 @@ export function SavingsSummary({
 
         {/* Text block */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 600, marginBottom: 3 }}>
+          <div style={{ fontSize: 10, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 600, marginBottom: 3 }}>
             Łącznie odłożono
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color, lineHeight: 1.1, marginBottom: 6 }}>
@@ -225,7 +226,7 @@ export function SavingsSummary({
             }}>
               Cel {minSavingsPercent}%
             </span>
-            <span style={{ color: "#475569" }}>
+            <span style={{ color: c.textMuted }}>
               = {fmt(targetAmt)}
             </span>
           </div>
@@ -233,18 +234,18 @@ export function SavingsSummary({
           {/* Status */}
           <div style={{ marginTop: 6, fontSize: 11 }}>
             {isOk ? (
-              <span style={{ color: "#10b981", fontWeight: 600 }}>
+              <span style={{ color: c.success, fontWeight: 600 }}>
                 ✅ Cel osiągnięty
                 {totalSaved > targetAmt && targetAmt > 0 && (
-                  <span style={{ color: "#475569", marginLeft: 5 }}>
+                  <span style={{ color: c.textMuted, marginLeft: 5 }}>
                     (+{fmt(totalSaved - targetAmt)})
                   </span>
                 )}
               </span>
             ) : targetAmt > 0 ? (
-              <span style={{ color: "#64748b" }}>
+              <span style={{ color: c.textSecondary }}>
                 Brakuje{" "}
-                <strong style={{ color: "#f59e0b" }}>{fmt(shortfall)}</strong>
+                <strong style={{ color: c.warning }}>{fmt(shortfall)}</strong>
                 {" "}do celu
               </span>
             ) : null}
@@ -255,14 +256,14 @@ export function SavingsSummary({
       {/* ── Category breakdown ── */}
       {savingsByCategory.length > 0 && (
         <div style={{
-          background:   "#0a0f1e",
+          background:   c.bg,
           borderRadius: 10,
-          border:       "1px solid #1e293b",
+          border:       `1px solid ${c.border}`,
           padding:      "12px 14px",
         }}>
           <div style={{
             fontSize:        10,
-            color:           "#334155",
+            color:           c.borderStrong,
             fontWeight:      700,
             textTransform:   "uppercase",
             letterSpacing:   "0.5px",

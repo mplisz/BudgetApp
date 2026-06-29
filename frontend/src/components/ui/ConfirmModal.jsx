@@ -2,6 +2,7 @@
 // File: src/components/ui/ConfirmModal.jsx
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import React from "react";
 import { theme as s } from "../../styles/theme";
 
@@ -22,20 +23,20 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }) {
     >
       <div
         style={{
-          backgroundColor: "#1e293b",
+          backgroundColor: c.border,
           borderRadius: "12px",
           padding: "24px",
           maxWidth: "400px",
           width: "100%",
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-          border: "1px solid #334155",
+          border: `1px solid ${c.borderStrong}`,
         }}
         onClick={e => e.stopPropagation()}
       >
-        <h3 style={{ margin: "0 0 12px 0", color: "#f8fafc", fontSize: "18px" }}>
+        <h3 style={{ margin: "0 0 12px 0", color: c.textBrightest, fontSize: "18px" }}>
           {title}
         </h3>
-        <p style={{ margin: "0 0 24px 0", color: "#94a3b8", fontSize: "14px", lineHeight: "1.5", whiteSpace: "pre-line" }}>
+        <p style={{ margin: "0 0 24px 0", color: c.textTertiary, fontSize: "14px", lineHeight: "1.5", whiteSpace: "pre-line" }}>
           {message}
         </p>
 
@@ -43,8 +44,8 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }) {
           <button
             onClick={onCancel}
             style={{
-              background: "transparent", border: "1px solid #475569",
-              color: "#cbd5e1", padding: "8px 16px", borderRadius: "6px",
+              background: "transparent", border: `1px solid ${c.textMuted}`,
+              color: c.textBody, padding: "8px 16px", borderRadius: "6px",
               cursor: "pointer", fontWeight: "600",
             }}
           >
@@ -53,8 +54,8 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }) {
           <button
             onClick={onConfirm}
             style={{
-              background: "#ef4444", border: "none",
-              color: "#fff", padding: "8px 16px", borderRadius: "6px",
+              background: c.danger, border: "none",
+              color: c.white, padding: "8px 16px", borderRadius: "6px",
               cursor: "pointer", fontWeight: "600",
             }}
           >

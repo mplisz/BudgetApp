@@ -209,21 +209,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     let response = await makeRequest(accessTokenRef.current);
 
-   /* if (response.status === 401) {
-      try {
-        const newToken = await refreshAccessToken();
-        response       = await makeRequest(newToken);
-      } catch (refreshErr) {
-        // Refresh also failed — force logout state.
-        // Note: every caller currently waiting on the same singleflight
-        // Promise will hit this catch too. They'll each call applyToken(null)
-        // and setUser(null), but those are idempotent so it's fine.
-        applyToken(null);
-        setUser(null);
-        throw new Error("Session expired. Please log in again.");
-      }
-    }
-    */
       if (response.status === 401) {
       try {
         const newToken = await refreshAccessToken();

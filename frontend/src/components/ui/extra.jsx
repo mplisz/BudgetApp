@@ -3,6 +3,7 @@
 // Extra components: CollapsibleCard, DrillDownPie, DurationPicker
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useState } from "react";
 import { fmt } from "../../utils/helpers";
 import { CATEGORIES, PIE_COLORS } from "../../data/constants";
@@ -14,12 +15,12 @@ export function CollapsibleCard({ title, children, badge, badgeColor, s, default
     <div style={{ ...s.card, marginTop: 4 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
         onClick={() => setOpen(v => !v)}>
-        <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+        <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>
           {title}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {badge && <span style={{ color: badgeColor || "#10b981", fontWeight: 800, fontSize: 16 }}>{badge}</span>}
-          <span style={{ color: "#475569", fontSize: 16, transform: open ? "rotate(0)" : "rotate(-90deg)", transition: "transform 0.2s" }}>▾</span>
+          {badge && <span style={{ color: badgeColor || c.success, fontWeight: 800, fontSize: 16 }}>{badge}</span>}
+          <span style={{ color: c.textMuted, fontSize: 16, transform: open ? "rotate(0)" : "rotate(-90deg)", transition: "transform 0.2s" }}>▾</span>
         </div>
       </div>
       {open && children}
@@ -56,23 +57,23 @@ export function DrillDownPie({ filteredExpenses, categories, s }) {
   return (
     <div style={s.card}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+        <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>
           {selectedPieCat ? <>{catIcon} {selectedPieCat} – podkategorie</> : "🥧 Podział wydatków"}
         </div>
         {selectedPieCat && (
           <button onClick={() => setSelectedPieCat(null)}
-            style={{ background: "#1e293b", border: "1px solid #334155", color: "#94a3b8", borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+            style={{ background: c.border, border: `1px solid ${c.borderStrong}`, color: c.textTertiary, borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
             ⬅️ Powrót
           </button>
         )}
       </div>
       {!selectedPieCat && (
-        <div style={{ color: "#475569", fontSize: 10, marginBottom: 8, textAlign: "center" }}>
+        <div style={{ color: c.textMuted, fontSize: 10, marginBottom: 8, textAlign: "center" }}>
           Kliknij wycinek lub kategorię aby zobaczyć podkategorie
         </div>
       )}
       {drillTotal === 0 ? (
-        <div style={{ color: "#475569", fontSize: 13, textAlign: "center", padding: 20 }}>Brak wydatków</div>
+        <div style={{ color: c.textMuted, fontSize: 13, textAlign: "center", padding: 20 }}>Brak wydatków</div>
       ) : (
         <PieChart
           data={drillData}
@@ -115,14 +116,14 @@ export function DurationPicker({ startMonth, endMonth, onStartChange, onEndChang
         <label style={{ ...s.label, cursor: "pointer", marginBottom: 0 }}>
           ⏳ Czas trwania{" "}
           {endMonth
-            ? <span style={{ color: "#eab308", fontWeight: 700 }}>· do {endMonth}</span>
-            : <span style={{ color: "#475569", fontWeight: 400 }}>(opcjonalnie)</span>}
+            ? <span style={{ color: c.amber, fontWeight: 700 }}>· do {endMonth}</span>
+            : <span style={{ color: c.textMuted, fontWeight: 400 }}>(opcjonalnie)</span>}
         </label>
-        <span style={{ color: "#475569", fontSize: 14, transform: open ? "rotate(0)" : "rotate(-90deg)", transition: "transform 0.2s" }}>▾</span>
+        <span style={{ color: c.textMuted, fontSize: 14, transform: open ? "rotate(0)" : "rotate(-90deg)", transition: "transform 0.2s" }}>▾</span>
       </div>
 
       {open && (
-        <div style={{ background: "#1e293b", borderRadius: 10, padding: "12px 14px" }}>
+        <div style={{ background: c.border, borderRadius: 10, padding: "12px 14px" }}>
           <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
             <div style={{ flex: 1 }}>
               <label style={{ ...s.label, fontSize: 10, marginBottom: 4 }}>📅 Miesiąc początkowy</label>
@@ -135,7 +136,7 @@ export function DurationPicker({ startMonth, endMonth, onStartChange, onEndChang
                 }} />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ ...s.label, fontSize: 10, marginBottom: 4, color: "#eab308" }}>🔢 Liczba miesięcy</label>
+              <label style={{ ...s.label, fontSize: 10, marginBottom: 4, color: c.amber }}>🔢 Liczba miesięcy</label>
               <input style={s.input} type="number" min="1" max="360" placeholder="np. 10"
                 value={durationMonths}
                 onChange={e => {
@@ -147,13 +148,13 @@ export function DurationPicker({ startMonth, endMonth, onStartChange, onEndChang
           </div>
           {endMonth && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <span style={{ color: "#64748b", fontSize: 12 }}>Miesiąc końcowy:</span>
-              <span style={{ color: "#eab308", fontWeight: 700, fontSize: 14 }}>📅 {endMonth}</span>
+              <span style={{ color: c.textSecondary, fontSize: 12 }}>Miesiąc końcowy:</span>
+              <span style={{ color: c.amber, fontWeight: 700, fontSize: 14 }}>📅 {endMonth}</span>
             </div>
           )}
           {endMonth && (
             <button onClick={onClear}
-              style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 11 }}>
+              style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 11 }}>
               ✕ Usuń ograniczenie czasu
             </button>
           )}

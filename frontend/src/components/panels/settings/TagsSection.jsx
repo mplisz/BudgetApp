@@ -2,6 +2,7 @@
 // File: src/components/panels/settings/TagsSection.jsx
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { useState }          from "react";
 import { theme as s }        from "../../../styles/theme";
 import { CollapsibleSection } from "../../ui/index";
@@ -40,53 +41,53 @@ export function TagsSection() {
     <>
       <CollapsibleSection title="🏷️ Zarządzanie tagami" defaultOpen={false}>
         {isLoading ? (
-          <div style={{ color: "#475569", fontSize: 13 }}>Ładowanie tagów...</div>
+          <div style={{ color: c.textMuted, fontSize: 13 }}>Ładowanie tagów...</div>
         ) : (
           <>
             {/* Active tags */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Aktywne</span>
+              <span style={{ color: c.textTertiary, fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Aktywne</span>
               <ArchiveToggleButton isShowingArchived={showArchived} onToggle={() => setShowArchived(!showArchived)} />
             </div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
               {tags.map(tag => (
-                <div key={tag.id} style={{ display: "flex", alignItems: "center", gap: 6, background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "6px 12px" }}>
+                <div key={tag.id} style={{ display: "flex", alignItems: "center", gap: 6, background: c.border, border: `1px solid ${c.borderStrong}`, borderRadius: 8, padding: "6px 12px" }}>
                   <EmojiSelector
                     currentEmoji={tag.icon}
                     onSelect={emoji => handleUpdateTag(tag.id, { icon: emoji })}
                   />
                   <EditableLabel value={tag.name} onSave={(newName) => handleUpdateTag(tag.id, { name: newName })} />
                   <button onClick={() => confirmArchive(tag)}
-                    style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 14 }}>
+                    style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 14 }}>
                     🗑️
                   </button>
                 </div>
               ))}
               {tags.length === 0 && (
-                <div style={{ color: "#475569", fontSize: 13 }}>Brak aktywnych tagów.</div>
+                <div style={{ color: c.textMuted, fontSize: 13 }}>Brak aktywnych tagów.</div>
               )}
             </div>
 
             {/* Archive */}
             {showArchived && (
               <>
-                <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>
+                <div style={{ color: c.textTertiary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>
                   Archiwum
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
                   {archivedTags.map(tag => (
-                    <div key={tag.id} style={{ display: "flex", alignItems: "center", gap: 6, background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "6px 12px", opacity: 0.5 }}>
+                    <div key={tag.id} style={{ display: "flex", alignItems: "center", gap: 6, background: c.border, border: `1px solid ${c.borderStrong}`, borderRadius: 8, padding: "6px 12px", opacity: 0.5 }}>
                       <span style={{ fontSize: 16 }}>{tag.icon}</span>
-                      <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{tag.name}</span>
+                      <span style={{ color: c.text, fontSize: 13, fontWeight: 600 }}>{tag.name}</span>
                       <button onClick={() => handleRestoreTag(tag.id)} title="Przywróć"
-                        style={{ background: "none", border: "none", color: "#10b981", cursor: "pointer", fontSize: 14 }}>
+                        style={{ background: "none", border: "none", color: c.success, cursor: "pointer", fontSize: 14 }}>
                         🔄
                       </button>
                     </div>
                   ))}
                   {archivedTags.length === 0 && (
-                    <div style={{ color: "#475569", fontSize: 13 }}>Brak zarchiwizowanych tagów.</div>
+                    <div style={{ color: c.textMuted, fontSize: 13 }}>Brak zarchiwizowanych tagów.</div>
                   )}
                 </div>
               </>

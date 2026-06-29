@@ -10,6 +10,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { CartItemEditor } from "./CartItemEditor";
+import { c } from "../../../styles/tokens";
 import type { TransactionPayload } from "../../../types/transaction";
 import type { CartItem } from "./CartPanel";
 
@@ -39,7 +40,7 @@ export function CartItemEditorModal({ item, budgetMonth, isSaving = false, onSav
       {/* Dim overlay — tap to close. Covers the cart too (standard modal). */}
       <div
         onClick={onCancel}
-        style={{ position: "fixed", inset: 0, background: "rgba(2,6,18,0.7)", zIndex: 1000 }}
+        style={{ position: "fixed", inset: 0, background: "rgba(2,6,18,0.7)", zIndex: 1000 }}  // intentional translucent scrim
       />
 
       {/* Box — centered (desktop) / bottom-sheet (mobile), switched by CSS */}
@@ -52,7 +53,7 @@ export function CartItemEditorModal({ item, budgetMonth, isSaving = false, onSav
         {/* Mobile grabber — invisible on desktop */}
         <div className="cart-editor-grabber" />
 
-        <div style={{ fontWeight: 800, color: "#e2e8f0", fontSize: 16, marginBottom: 16 }}>
+        <div style={{ fontWeight: 800, color: c.text, fontSize: 16, marginBottom: 16 }}>
           ✏️ Edytuj pozycję z koszyka
         </div>
 
@@ -68,7 +69,7 @@ export function CartItemEditorModal({ item, budgetMonth, isSaving = false, onSav
       <style>{`
         .cart-editor-box {
           position: fixed; z-index: 1001;
-          background: #0d1424; border: 1px solid #1e293b;
+          background: ${c.surface}; border: 1px solid ${c.border};
           overflow-y: auto;
           /* Desktop: centered modal */
           top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -87,7 +88,7 @@ export function CartItemEditorModal({ item, budgetMonth, isSaving = false, onSav
           }
           .cart-editor-grabber {
             display: block; width: 36px; height: 4px; border-radius: 99px;
-            background: #1e293b; margin: 0 auto 12px;
+            background: ${c.raised}; margin: 0 auto 12px;
           }
         }
         @keyframes cart-editor-up {

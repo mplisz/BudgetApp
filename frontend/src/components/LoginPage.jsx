@@ -3,6 +3,7 @@
 // Renders the Google Login UI with error handling
 // ============================================================
 
+import { c } from "../styles/tokens";
 import React from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
@@ -35,10 +36,10 @@ export function LoginPage() {
       textAlign: 'center',
       fontFamily: 'sans-serif'
     }}>
-      <h2 style={{ marginBottom: '10px', color: '#1e293b' }}>
+      <h2 style={{ marginBottom: '10px', color: c.border }}>
         Budget App
       </h2>
-      <p style={{ marginBottom: '30px', color: '#64748b', maxWidth: '300px' }}>
+      <p style={{ marginBottom: '30px', color: c.textSecondary, maxWidth: '300px' }}>
         Log in to access your shared family budget.
       </p>
 
@@ -53,7 +54,7 @@ export function LoginPage() {
             text="signin_with"
           />
         ) : (
-          <p style={{ color: '#6366f1', fontWeight: 'bold' }}>Verifying...</p>
+          <p style={{ color: c.indigo, fontWeight: 'bold' }}>Verifying...</p>
         )}
       </div>
 
@@ -63,7 +64,7 @@ export function LoginPage() {
           marginTop: '20px', 
           padding: '10px 20px', 
           backgroundColor: '#fef2f2', 
-          color: '#ef4444', 
+          color: c.danger, 
           borderRadius: '8px',
           border: '1px solid #fee2e2',
           fontSize: '14px',

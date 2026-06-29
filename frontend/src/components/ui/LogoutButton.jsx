@@ -2,6 +2,7 @@
 // File: src/components/ui/LogoutButton.jsx
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -23,9 +24,9 @@ export const LogoutButton = () => {
         width: 36,
         height: 36,
         borderRadius: "50%",
-        border: `2px solid ${isLoading ? "#475569" : "#ef444466"}`,
-        background: isLoading ? "#1e293b" : "#ef444411",
-        color: isLoading ? "#475569" : "#ef4444",
+        border: `2px solid ${isLoading ? c.textMuted : alpha(c.danger, "66")}`,
+        background: isLoading ? c.border : alpha(c.danger, "11"),
+        color: isLoading ? c.textMuted : c.danger,
         cursor: isLoading ? "not-allowed" : "pointer",
         display: "flex",
         alignItems: "center",
@@ -35,14 +36,14 @@ export const LogoutButton = () => {
       }}
       onMouseEnter={e => {
         if (!isLoading) {
-          e.currentTarget.style.background = "#ef444422";
-          e.currentTarget.style.borderColor = "#ef4444";
+          e.currentTarget.style.background = alpha(c.danger, "22");
+          e.currentTarget.style.borderColor = c.danger;
         }
       }}
       onMouseLeave={e => {
         if (!isLoading) {
-          e.currentTarget.style.background = "#ef444411";
-          e.currentTarget.style.borderColor = "#ef444466";
+          e.currentTarget.style.background = alpha(c.danger, "11");
+          e.currentTarget.style.borderColor = alpha(c.danger, "66");
         }
       }}
     >

@@ -6,6 +6,7 @@
 // UI: Polish | Comments: English
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useAppContext }   from "../../context/AppContext";
@@ -39,12 +40,12 @@ function IncomeRow({ tx, isMonthClosed, onDelete, onUpdated }) {
   return (
     <>
       <tr
-        onMouseEnter={e => e.currentTarget.style.background = "#0a0f1e"}
+        onMouseEnter={e => e.currentTarget.style.background = c.bg}
         onMouseLeave={e => e.currentTarget.style.background = "transparent"}
         style={{ transition: "background 0.1s" }}
       >
         <td style={s.td}>
-          <span style={{ color: "#94a3b8", fontSize: 12 }}>{tx.date}</span>
+          <span style={{ color: c.textTertiary, fontSize: 12 }}>{tx.date}</span>
         </td>
 
         <td style={s.td}>
@@ -58,44 +59,44 @@ function IncomeRow({ tx, isMonthClosed, onDelete, onUpdated }) {
         </td>
 
         <td style={s.td}>
-          <div style={{ fontWeight: 600, color: "#e2e8f0", fontSize: 13 }}>{tx.categoryName}</div>
-          <div style={{ color: "#64748b", fontSize: 11 }}>› {tx.subcategoryName}</div>
+          <div style={{ fontWeight: 600, color: c.text, fontSize: 13 }}>{tx.categoryName}</div>
+          <div style={{ color: c.textSecondary, fontSize: 11 }}>› {tx.subcategoryName}</div>
         </td>
 
         <td style={{ ...s.td, maxWidth: 200, wordBreak: "break-word", whiteSpace: "normal" }}>
-          <span style={{ color: "#94a3b8" }}>
-            {tx.description || <span style={{ color: "#334155" }}>—</span>}
+          <span style={{ color: c.textTertiary }}>
+            {tx.description || <span style={{ color: c.borderStrong }}>—</span>}
           </span>
         </td>
 
         <td style={s.td}>
           {(tx.tagNames || []).length > 0
-            ? tx.tagNames.map((name, i) => <span key={i} style={s.badge("#3b82f6")}>{name}</span>)
-            : <span style={{ color: "#334155" }}>—</span>}
+            ? tx.tagNames.map((name, i) => <span key={i} style={s.badge(c.info)}>{name}</span>)
+            : <span style={{ color: c.borderStrong }}>—</span>}
         </td>
 
         <td style={{ ...s.td, textAlign: "right" }}>
           {tx.originalCurrency !== "PLN" && (
-            <div style={{ fontSize: 11, color: "#64748b" }}>
+            <div style={{ fontSize: 11, color: c.textSecondary }}>
               {tx.originalAmount} {tx.originalCurrency} @ {tx.fxRate}
             </div>
           )}
-          <div style={{ fontWeight: 700, color: "#10b981", fontSize: 14 }}>
+          <div style={{ fontWeight: 700, color: c.success, fontSize: 14 }}>
             {fmt(tx.amount)} PLN
           </div>
         </td>
 
         <td style={s.td}>
-          <span style={{ color: "#475569", fontSize: 12 }}>{tx.author || "—"}</span>
+          <span style={{ color: c.textMuted, fontSize: 12 }}>{tx.author || "—"}</span>
         </td>
 
         <td style={s.td}>
           <div style={{ display: "flex", gap: 6 }}>
             {!isMonthClosed && (
-              <button style={s.actionBtn("#3b82f6")} onClick={() => setEditOpen(true)}>✏️</button>
+              <button style={s.actionBtn(c.info)} onClick={() => setEditOpen(true)}>✏️</button>
             )}
             {!isMonthClosed && (
-              <button style={s.actionBtn("#ef4444")} onClick={onDelete}>🗑</button>
+              <button style={s.actionBtn(c.danger)} onClick={onDelete}>🗑</button>
             )}
           </div>
         </td>
@@ -128,8 +129,8 @@ function IncomeCard({ tx, isMonthClosed, onDelete, onUpdated }) {
 
   return (
     <div style={{
-      background:   "#0d1424",
-      border:       "1px solid #1e293b",
+      background:   c.surface,
+      border:       `1px solid ${c.border}`,
       borderRadius: 12,
       padding:      "12px 14px",
       marginBottom: 8,
@@ -138,21 +139,21 @@ function IncomeCard({ tx, isMonthClosed, onDelete, onUpdated }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{
-            fontWeight: 600, color: "#e2e8f0", fontSize: 14,
+            fontWeight: 600, color: c.text, fontSize: 14,
             overflow: "hidden", textOverflow: "ellipsis",
           }}>
             {tx.categoryName}
           </div>
           {tx.subcategoryName && (
-            <div style={{ color: "#64748b", fontSize: 12 }}>› {tx.subcategoryName}</div>
+            <div style={{ color: c.textSecondary, fontSize: 12 }}>› {tx.subcategoryName}</div>
           )}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontWeight: 700, color: "#10b981", fontSize: 15, whiteSpace: "nowrap" }}>
+          <div style={{ fontWeight: 700, color: c.success, fontSize: 15, whiteSpace: "nowrap" }}>
             {fmt(tx.amount)} PLN
           </div>
           {isForeign && (
-            <div style={{ fontSize: 11, color: "#64748b", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: 11, color: c.textSecondary, whiteSpace: "nowrap" }}>
               {tx.originalAmount} {tx.originalCurrency} @ {tx.fxRate}
             </div>
           )}
@@ -161,7 +162,7 @@ function IncomeCard({ tx, isMonthClosed, onDelete, onUpdated }) {
 
       {/* Meta row: date + type + tags + author */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
-        <span style={{ color: "#94a3b8", fontSize: 12 }}>{tx.date}</span>
+        <span style={{ color: c.textTertiary, fontSize: 12 }}>{tx.date}</span>
         <span style={{
           background: tColor + "22", color: tColor,
           border: `1px solid ${tColor}44`,
@@ -170,16 +171,16 @@ function IncomeCard({ tx, isMonthClosed, onDelete, onUpdated }) {
           {tLabel}
         </span>
         {(tx.tagNames || []).map((name, i) => (
-          <span key={i} style={s.badge("#3b82f6")}>{name}</span>
+          <span key={i} style={s.badge(c.info)}>{name}</span>
         ))}
         {tx.author && (
-          <span style={{ color: "#475569", fontSize: 11, marginLeft: "auto" }}>{tx.author}</span>
+          <span style={{ color: c.textMuted, fontSize: 11, marginLeft: "auto" }}>{tx.author}</span>
         )}
       </div>
 
       {/* Description */}
       {tx.description && (
-        <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 8, wordBreak: "break-word" }}>
+        <div style={{ color: c.textTertiary, fontSize: 13, marginTop: 8, wordBreak: "break-word" }}>
           {tx.description}
         </div>
       )}
@@ -188,12 +189,12 @@ function IncomeCard({ tx, isMonthClosed, onDelete, onUpdated }) {
       {!isMonthClosed && (
         <div style={{
           display: "flex", gap: 8, justifyContent: "flex-end",
-          marginTop: 12, paddingTop: 10, borderTop: "1px solid #0f172a",
+          marginTop: 12, paddingTop: 10, borderTop: `1px solid ${c.surfaceAlt}`,
         }}>
-          <button style={{ ...s.actionBtn("#3b82f6"), padding: "6px 14px" }} onClick={() => setEditOpen(true)}>
+          <button style={{ ...s.actionBtn(c.info), padding: "6px 14px" }} onClick={() => setEditOpen(true)}>
             ✏️ Edytuj
           </button>
-          <button style={{ ...s.actionBtn("#ef4444"), padding: "6px 14px" }} onClick={onDelete}>
+          <button style={{ ...s.actionBtn(c.danger), padding: "6px 14px" }} onClick={onDelete}>
             🗑 Usuń
           </button>
         </div>
@@ -285,16 +286,16 @@ export default function PanelIncomeTransactions() {
     <div style={{ padding: "0 0 40px 0" }}>
 
       {/* Header */}
-      <div style={{ fontSize: 13, color: "#64748b" }}>
+      <div style={{ fontSize: 13, color: c.textSecondary }}>
         {activeBudgetMonth} ·{" "}
         {isFirstLoad ? (
-          <span style={{ color: "#475569" }}>ładowanie…</span>
+          <span style={{ color: c.textMuted }}>ładowanie…</span>
         ) : (
           <>
             {filtered.length} wpisów · łącznie{" "}
-            <strong style={{ color: "#10b981" }}>{fmt(totalSum)}</strong>
+            <strong style={{ color: c.success }}>{fmt(totalSum)}</strong>
             {isActiveMonthClosed && (
-              <span style={{ marginLeft: 10, ...s.badge("#ef4444") }}>🔒 zamknięty</span>
+              <span style={{ marginLeft: 10, ...s.badge(c.danger) }}>🔒 zamknięty</span>
             )}
           </>
         )}
@@ -302,7 +303,7 @@ export default function PanelIncomeTransactions() {
 
       {/* Filters — hidden while the month's data is still loading */}
       {!isFirstLoad && (
-        <div style={{ background: "#090e1b", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+        <div style={{ background: c.bgDeepest, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
           <div style={s.filterRow}>
 
             {/* Type */}
@@ -337,7 +338,7 @@ export default function PanelIncomeTransactions() {
             />
 
             {hasActiveFilters && (
-              <button onClick={clearFilters} style={{ ...s.actionBtn("#64748b"), fontSize: 11, alignSelf: "flex-end" }}>
+              <button onClick={clearFilters} style={{ ...s.actionBtn(c.textSecondary), fontSize: 11, alignSelf: "flex-end" }}>
                 ✕ Wyczyść
               </button>
             )}
@@ -346,12 +347,12 @@ export default function PanelIncomeTransactions() {
       )}
       {/* Table */}
       {filtered.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
+        <div style={{ textAlign: "center", padding: "40px 0", color: c.borderStrong }}>
           Brak wpływów{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
         </div>
       ) : (
         <>
-          <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
+          <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {page} z {totalPages}
           </div>
         {isMobile ? (

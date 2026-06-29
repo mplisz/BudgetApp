@@ -5,10 +5,8 @@
 // ============================================================
 
 import { useState, useMemo, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useApi } from "./useApi";
 import type { Voucher, CartItem } from "../types/transaction";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 function todayYMD(): string {
   const d = new Date();
@@ -38,7 +36,7 @@ interface UseVouchersResult {
 }
 
 export function useVouchers(cart: CartItem[] = []): UseVouchersResult {
-  const { fetchWithAuth } = useAuth() as { fetchWithAuth: typeof fetch };
+  const api = useApi();
 
   const [rawVouchers, setRawVouchers] = useState<Voucher[]>([]);
   const [isLoading,   setIsLoading]   = useState(false);
@@ -48,9 +46,7 @@ export function useVouchers(cart: CartItem[] = []): UseVouchersResult {
     async function load() {
       setIsLoading(true);
       try {
-        const res  = await fetchWithAuth(`${API_URL}/api/vouchers`);
-        const data = await (res as Response).json() as Voucher[];
-        if (!(res as Response).ok) return;
+        const data  = await api.get<Voucher[]>("/api/vouchers");
         const today = todayYMD();
         setRawVouchers(
           data
@@ -64,7 +60,7 @@ export function useVouchers(cart: CartItem[] = []): UseVouchersResult {
       }
     }
     load();
-  }, [fetchWithAuth]);
+  }, [api]);
 
   // Sum voucher amounts already reserved in the cart, per voucherId.
   // Reads the new allocations array, falling back to legacy scalar fields.

@@ -6,6 +6,7 @@
 // of settings.targets.* which are defined as "% dochodu miesięcznego".
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, ResponsiveContainer,
 } from "recharts";
@@ -34,7 +35,7 @@ export function SavingsRateChart({ data, minSavingsPercent, minRetirementPercent
   return (
     <ResponsiveContainer width="100%" height={320}>
       <LineChart data={data} margin={{ top: 12, right: 20, bottom: 0, left: -10 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+        <CartesianGrid strokeDasharray="3 3" stroke={c.border} />
         <XAxis dataKey="month" stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} />
         <YAxis
           stroke={AXIS_STROKE}

@@ -12,13 +12,14 @@
 // With the split: "ah, 4 000 base + 3 000 critical".
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { useMemo } from "react";
 import { fmt } from "../../../utils/helpers";
 import { EmptyState } from "../../ui/summaryUi";
 import { LEVEL_META } from "./types";
 import type { CostLayer, PriorityLevel } from "./types";
 
-const CRITICAL_COLOR = "#a855f7";   // purple — same hue as 🔒 button in Settings
+const CRITICAL_COLOR = c.voucher;   // purple — same hue as 🔒 button in Settings
 
 interface CostLayersCardProps {
   layers:           CostLayer[];
@@ -69,9 +70,9 @@ export function CostLayersCard({ layers, highlightLevel }: CostLayersCardProps) 
 
       {/* Tiny help footer */}
       <div style={{
-        fontSize: 11, color: "#475569", lineHeight: 1.6,
-        padding: "8px 10px", background: "#0d1424",
-        border: "1px solid #1e293b", borderRadius: 8,
+        fontSize: 11, color: c.textMuted, lineHeight: 1.6,
+        padding: "8px 10px", background: c.surface,
+        border: `1px solid ${c.border}`, borderRadius: 8,
       }}>
         💡 Każdy wyższy poziom zawiera koszty poprzednich (P1 ⊂ P1+P2 ⊂ …). Średnia liczona na bazie wybranego okna historycznego.
         {hasCritical && (
@@ -101,7 +102,7 @@ function StackedLayersBar({ layers, total, criticalCost, highlight }: StackedLay
       <div style={{
         display: "flex", height: 14,
         borderRadius: 99, overflow: "hidden",
-        background: "#0d1424", border: "1px solid #1e293b",
+        background: c.surface, border: `1px solid ${c.border}`,
       }}>
         {/* Critical segment first — always present in every level */}
         {criticalCost > 0 && total > 0 && (
@@ -153,7 +154,7 @@ function StackedLayersBar({ layers, total, criticalCost, highlight }: StackedLay
         {layers.map(layer => (
           <div key={layer.level} style={{
             display: "flex", alignItems: "center", gap: 6,
-            fontSize: 11, color: "#94a3b8",
+            fontSize: 11, color: c.textTertiary,
           }}>
             <span style={{
               width: 10, height: 10, borderRadius: 2,
@@ -185,8 +186,8 @@ function LevelRow({ layer, maxCost, isHighlighted }: LevelRowProps) {
   return (
     <div style={{
       padding: "10px 12px",
-      background: isHighlighted ? `${layer.color}11` : "#0d1424",
-      border:    `1px solid ${isHighlighted ? `${layer.color}66` : "#1e293b"}`,
+      background: isHighlighted ? `${layer.color}11` : c.surface,
+      border:    `1px solid ${isHighlighted ? `${layer.color}66` : c.border}`,
       borderRadius: 10,
       transition: "background 0.2s, border-color 0.2s",
     }}>
@@ -209,7 +210,7 @@ function LevelRow({ layer, maxCost, isHighlighted }: LevelRowProps) {
             {meta.modeLabel}
           </div>
           <div style={{
-            fontSize: 11, color: "#64748b", marginTop: 2,
+            fontSize: 11, color: c.textSecondary, marginTop: 2,
             overflow: "hidden", textOverflow: "ellipsis",
           }}>
             {meta.desc}
@@ -217,10 +218,10 @@ function LevelRow({ layer, maxCost, isHighlighted }: LevelRowProps) {
         </div>
 
         <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "#e2e8f0" }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: c.text }}>
             {fmt(layer.monthlyCost)}
           </div>
-          <div style={{ fontSize: 10, color: "#475569" }}>
+          <div style={{ fontSize: 10, color: c.textMuted }}>
             / mies.
             {layer.level > 1 && bucketContribution > 0 && (
               <> · +{fmt(bucketContribution)} z P{layer.level}</>
@@ -238,7 +239,7 @@ function LevelRow({ layer, maxCost, isHighlighted }: LevelRowProps) {
       </div>
 
       <div style={{
-        height: 6, background: "#0a0f1e", borderRadius: 99, overflow: "hidden",
+        height: 6, background: c.bg, borderRadius: 99, overflow: "hidden",
       }}>
         <div style={{
           height: "100%", width: `${fillPct}%`, background: layer.color,

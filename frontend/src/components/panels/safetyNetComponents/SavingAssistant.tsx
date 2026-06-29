@@ -6,6 +6,7 @@
 // payoff described in the spec.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState, useMemo } from "react";
 import { fmt, roundToNearest } from "../../../utils/helpers";
 import { Card } from "../../ui/summaryUi";
@@ -51,7 +52,7 @@ export function SavingAssistant({
 
   if (!target || !baseEta || !adjEta) {
     return (
-      <div style={{ color: "#64748b", fontSize: 13, padding: 20 }}>
+      <div style={{ color: c.textSecondary, fontSize: 13, padding: 20 }}>
         Wybierz poziom w tabeli powyżej, aby zobaczyć asystenta odkładania.
       </div>
     );
@@ -88,9 +89,9 @@ export function SavingAssistant({
           <div style={{ color: meta.color, fontWeight: 800, fontSize: 14 }}>
             {meta.modeLabel}
           </div>
-          <div style={{ color: "#64748b", fontSize: 11 }}>
-            Cel: <strong style={{ color: "#e2e8f0" }}>{fmt(roundToNearest(target.targetCushion, 500))}</strong>
-            {" "}· obecnie zebrane: <strong style={{ color: "#e2e8f0" }}>{fmt(assetsTotal)}</strong>
+          <div style={{ color: c.textSecondary, fontSize: 11 }}>
+            Cel: <strong style={{ color: c.text }}>{fmt(roundToNearest(target.targetCushion, 500))}</strong>
+            {" "}· obecnie zebrane: <strong style={{ color: c.text }}>{fmt(assetsTotal)}</strong>
           </div>
         </div>
       </div>
@@ -101,30 +102,30 @@ export function SavingAssistant({
           label="Średni dochód"
           value={fmt(capability.avgMonthlyIncome)}
           sub="/ mies."
-          color="#10b981"
+          color={c.success}
         />
         <StatTile
           label="Średnie wydatki"
           value={fmt(capability.avgMonthlyExpenses)}
           sub="/ mies."
-          color="#ef4444"
+          color={c.danger}
         />
         <StatTile
           label="Siła oszczędzania"
           value={fmt(capability.avgMonthlySavings)}
           sub={savingsNegative ? "⚠️ wydajesz więcej niż zarabiasz" : "/ mies. baza"}
-          color={savingsNegative ? "#ef4444" : "#10b981"}
+          color={savingsNegative ? c.danger : c.success}
         />
       </div>
 
       {/* What-if sliders */}
-      <Card style={{ background: "#0d1424", border: "1px solid #1e293b" }}>
+      <Card style={{ background: c.surface, border: `1px solid ${c.border}` }}>
         <div style={{
-          fontSize: 11, color: "#475569", fontWeight: 700,
+          fontSize: 11, color: c.textMuted, fontWeight: 700,
           textTransform: "uppercase", letterSpacing: "0.5px",
           marginBottom: 12,
         }}>
-          Symulator „Co jeśli"
+          Symulator „Co jeśli”
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -135,7 +136,7 @@ export function SavingAssistant({
             min={0}
             max={extraMax}
             step={50}
-            color="#10b981"
+            color={c.success}
             hint="Zwiększa miesięczne tempo oszczędzania."
           />
           <NumberStepper
@@ -145,7 +146,7 @@ export function SavingAssistant({
             min={0}
             max={cutMax}
             step={50}
-            color="#f59e0b"
+            color={c.warning}
             hint="Podwójny efekt: ↑ tempo i ↓ cel poduszki!"
           />
         </div>
@@ -157,8 +158,8 @@ export function SavingAssistant({
             style={{
               marginTop: 10,
               background: "transparent",
-              border: "1px solid #1e293b",
-              color: "#94a3b8",
+              border: `1px solid ${c.border}`,
+              color: c.textTertiary,
               borderRadius: 8,
               padding: "5px 12px",
               fontSize: 11,
@@ -176,15 +177,15 @@ export function SavingAssistant({
         <EtaCard
           title="📅 Bazowo"
           eta={baseEta}
-          color="#94a3b8"
+          color={c.textTertiary}
         />
         <EtaCard
           title="🚀 Po zmianach"
           eta={adjEta}
           color={
-            adjEta.isAlreadyReached ? "#10b981"
-            : adjEta.isUnreachable  ? "#ef4444"
-            : "#3b82f6"
+            adjEta.isAlreadyReached ? c.success
+            : adjEta.isUnreachable  ? c.danger
+            : c.info
           }
           highlight
         />
@@ -194,10 +195,10 @@ export function SavingAssistant({
       {monthsImproved !== null && monthsImproved > 0.05 && (
         <div style={{
           padding: "10px 14px",
-          background: "#10b98111",
-          border: "1px solid #10b98144",
+          background: alpha(c.success, "11"),
+          border: `1px solid ${alpha(c.success, "44")}`,
           borderRadius: 10,
-          fontSize: 13, color: "#10b981", fontWeight: 700,
+          fontSize: 13, color: c.success, fontWeight: 700,
           textAlign: "center",
         }}>
           🎉 Brawo! Z tymi zmianami zbudujesz poduszkę{" "}
@@ -221,12 +222,12 @@ function EtaCard({ title, eta, color, highlight }: EtaCardProps) {
   return (
     <div style={{
       padding: 14,
-      background: highlight ? `${color}11` : "#0d1424",
-      border: `1px solid ${highlight ? `${color}44` : "#1e293b"}`,
+      background: highlight ? `${color}11` : c.surface,
+      border: `1px solid ${highlight ? `${color}44` : c.border}`,
       borderRadius: 10,
     }}>
       <div style={{
-        fontSize: 11, color: "#475569", fontWeight: 700,
+        fontSize: 11, color: c.textMuted, fontWeight: 700,
         textTransform: "uppercase", letterSpacing: "0.5px",
         marginBottom: 8,
       }}>
@@ -235,20 +236,20 @@ function EtaCard({ title, eta, color, highlight }: EtaCardProps) {
 
       {eta.isAlreadyReached ? (
         <>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#10b981" }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: c.success }}>
             ✓ Cel osiągnięty
           </div>
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>
             Twoje aktywa już pokrywają poduszkę dla tego poziomu.
           </div>
         </>
       ) : eta.isUnreachable ? (
         <>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#ef4444" }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: c.danger }}>
             Nieosiągalne
           </div>
-          <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-            Brakuje <strong style={{ color: "#ef4444" }}>{fmt(eta.gapPLN)}</strong>,
+          <div style={{ fontSize: 11, color: c.textSecondary, marginTop: 4 }}>
+            Brakuje <strong style={{ color: c.danger }}>{fmt(eta.gapPLN)}</strong>,
             a tempo oszczędzania to <strong>{fmt(eta.adjustedSavingPace)}</strong>/mies.
             Zwiększ wpływy, ogranicz wydatki albo wybierz niższy poziom.
           </div>
@@ -258,12 +259,12 @@ function EtaCard({ title, eta, color, highlight }: EtaCardProps) {
           <div style={{ fontSize: 22, fontWeight: 800, color }}>
             {formatEtaDate(eta.etaDate)}
           </div>
-          <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-            za <strong style={{ color: "#e2e8f0" }}>{formatMonthsPretty(eta.monthsToTarget ?? 0)}</strong>
-            {" "}· brakuje <strong style={{ color: "#e2e8f0" }}>{fmt(eta.gapPLN)}</strong>
-            {" "}· tempo <strong style={{ color: "#e2e8f0" }}>{fmt(eta.adjustedSavingPace)}</strong>/mies.
+          <div style={{ fontSize: 11, color: c.textSecondary, marginTop: 4 }}>
+            za <strong style={{ color: c.text }}>{formatMonthsPretty(eta.monthsToTarget ?? 0)}</strong>
+            {" "}· brakuje <strong style={{ color: c.text }}>{fmt(eta.gapPLN)}</strong>
+            {" "}· tempo <strong style={{ color: c.text }}>{fmt(eta.adjustedSavingPace)}</strong>/mies.
           </div>
-          <div style={{ fontSize: 10, color: "#475569", marginTop: 6 }}>
+          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>
             Cel skorygowany: {fmt(roundToNearest(eta.adjustedTarget, 500))}
           </div>
         </>

@@ -8,6 +8,7 @@
 // without touching this file. That's the point of step 1.
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { TransactionForm } from "./TransactionForm";
 import type { FormValues, TransactionPayload } from "../../../types/transaction";
 import type { CartItem } from "./CartPanel";
@@ -63,7 +64,7 @@ export function CartItemEditor({ item, budgetMonth, isSaving = false, onSave, on
       />
       <button
         onClick={onCancel}
-        style={{ marginTop: 8, background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 12 }}
+        style={{ marginTop: 8, background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 12 }}
       >
         ✕ Anuluj edycję koszyka
       </button>

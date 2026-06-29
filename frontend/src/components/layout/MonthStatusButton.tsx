@@ -7,6 +7,7 @@
 // of AppContext state.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState } from "react";
 import { useMonthStatus } from "../../hooks/useMonthStatus";
 import { useMonthFromUrl } from "../../hooks/useMonthFromUrl";
@@ -58,9 +59,9 @@ export function MonthStatusButton() {
           gap:          5,
           padding:      "5px 10px",
           borderRadius: 8,
-          border:       "1px solid #ef444444",
-          background:   "#ef444411",
-          color:        "#f87171",
+          border:       `1px solid ${alpha(c.danger, "44")}`,
+          background:   alpha(c.danger, "11"),
+          color:        c.dangerLight,
           cursor:       isSaving ? "not-allowed" : "pointer",
           fontSize:     12,
           fontWeight:   600,
@@ -87,18 +88,18 @@ export function MonthStatusButton() {
         <div
           onClick={e => e.stopPropagation()}
           style={{
-            background:   "#0d1424",
-            border:       "1px solid #1e293b",
+            background:   c.surface,
+            border:       `1px solid ${c.border}`,
             borderRadius: 12,
             padding:      "24px 28px",
             maxWidth:     400,
             width:        "90vw",
           }}>
           <div style={{ fontSize: 24, marginBottom: 12 }}>🔒</div>
-          <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 16, marginBottom: 8 }}>
+          <div style={{ fontWeight: 700, color: c.text, fontSize: 16, marginBottom: 8 }}>
             Zamknąć {monthLabel}?
           </div>
-          <div style={{ color: "#94a3b8", fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+          <div style={{ color: c.textTertiary, fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
             Po zamknięciu miesiąca nie będzie można dodawać ani edytować transakcji w tym okresie.
             Można go później ponownie otworzyć.
           </div>
@@ -108,8 +109,8 @@ export function MonthStatusButton() {
               disabled={isSaving}
               style={{
                 background: "transparent",
-                border:     "1px solid #1e293b",
-                color:      "#94a3b8",
+                border:     `1px solid ${c.border}`,
+                color:      c.textTertiary,
                 padding:    "8px 16px",
                 borderRadius: 8,
                 cursor:     "pointer",
@@ -121,9 +122,9 @@ export function MonthStatusButton() {
               onClick={handleClose}
               disabled={isSaving}
               style={{
-                background: "#ef4444",
+                background: c.danger,
                 border:     "none",
-                color:      "#fff",
+                color:      c.white,
                 padding:    "8px 16px",
                 borderRadius: 8,
                 cursor:     isSaving ? "not-allowed" : "pointer",
@@ -148,9 +149,9 @@ export function MonthStatusButton() {
         gap:          5,
         padding:      "5px 10px",
         borderRadius: 8,
-        border:       "1px solid #10b98144",
-        background:   "#10b98111",
-        color:        "#10b981",
+        border:       `1px solid ${alpha(c.success, "44")}`,
+        background:   alpha(c.success, "11"),
+        color:        c.success,
         cursor:       "pointer",
         fontSize:     12,
         fontWeight:   600,

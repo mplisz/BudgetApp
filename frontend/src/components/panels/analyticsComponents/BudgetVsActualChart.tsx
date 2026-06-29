@@ -4,6 +4,7 @@
 // The "Wydano" bar turns red in months where spending exceeds the limit.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell, ResponsiveContainer,
 } from "recharts";
@@ -30,13 +31,13 @@ export function BudgetVsActualChart({ data }: Props) {
   return (
     <ResponsiveContainer width="100%" height={320}>
       <BarChart data={data} margin={{ top: 12, right: 20, bottom: 0, left: -10 }} barGap={4}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+        <CartesianGrid strokeDasharray="3 3" stroke={c.border} />
         <XAxis dataKey="month" stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} />
         <YAxis stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} tickFormatter={plnTick} />
         <Tooltip
           contentStyle={chartTooltipStyle}
           labelStyle={chartTooltipLabelStyle}
-          cursor={{ fill: "#1e293b22" }}
+          cursor={{ fill: alpha(c.border, "22") }}
           formatter={(v: unknown, name: unknown) => [plnLabel(v), name as string]}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />

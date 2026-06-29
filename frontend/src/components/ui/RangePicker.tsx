@@ -4,7 +4,8 @@
 // Used in: PanelAnalytics, PanelPlanned (refactor).
 // ============================================================
 
-import { AppDatePicker, fromYM, toYM } from "./AppDatePicker";
+import { c } from "../../styles/tokens";
+import { AppDatePicker, toYM } from "./AppDatePicker";
 
 export interface DateRange {
   // Number of months from "today" backwards. 0 = no preset selected.
@@ -69,8 +70,8 @@ export function RangePicker({ value, onChange, allowCustom = true, allowAll = tr
             style={{
               padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer",
               fontWeight: 700, fontSize: 12,
-              background: isActive ? "#10b981" : "#1e293b",
-              color:      isActive ? "#fff"     : "#64748b",
+              background: isActive ? c.success : c.border,
+              color:      isActive ? c.white     : c.textSecondary,
             }}
           >
             {pill.label}
@@ -80,11 +81,11 @@ export function RangePicker({ value, onChange, allowCustom = true, allowAll = tr
 
       {allowCustom && (
         <>
-          <div style={{ width: 1, height: 20, background: "#1e293b" }} />
+          <div style={{ width: 1, height: 20, background: c.border }} />
 
           {/* Custom from/to */}
           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-            <span style={{ fontSize: 11, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
               Od:
             </span>
             <AppDatePicker
@@ -96,7 +97,7 @@ export function RangePicker({ value, onChange, allowCustom = true, allowAll = tr
           </div>
 
           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-            <span style={{ fontSize: 11, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
               Do:
             </span>
             <AppDatePicker
@@ -111,8 +112,8 @@ export function RangePicker({ value, onChange, allowCustom = true, allowAll = tr
             <button
               onClick={clearCustom}
               style={{
-                padding: "6px 10px", borderRadius: 8, border: "1px solid #334155",
-                background: "transparent", color: "#64748b", fontSize: 12, cursor: "pointer",
+                padding: "6px 10px", borderRadius: 8, border: `1px solid ${c.borderStrong}`,
+                background: "transparent", color: c.textSecondary, fontSize: 12, cursor: "pointer",
               }}
             >
               ✕ Wyczyść

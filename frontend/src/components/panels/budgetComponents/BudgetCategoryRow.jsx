@@ -16,6 +16,7 @@
 //   onChange(catId, string) to allow "".
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { theme as s } from "../../../styles/theme";
 
 export function BudgetCategoryRow({
@@ -25,7 +26,7 @@ export function BudgetCategoryRow({
   baseAmount,
   onChange,
   readOnly,
-  accent = "#10b981",
+  accent = c.success,
 }) {
   const isOverride        = variant === "override";
   const hasActiveOverride = isOverride && value !== "" && value !== undefined;
@@ -46,11 +47,11 @@ export function BudgetCategoryRow({
   return (
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "10px 0", borderBottom: "1px solid #1e293b",
+      padding: "10px 0", borderBottom: `1px solid ${c.border}`,
       opacity: readOnly ? 0.65 : 1,
     }}>
       {/* Category label */}
-      <span style={{ display: "flex", alignItems: "center", gap: 8, color: "#cbd5e1", fontSize: 14 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 8, color: c.textBody, fontSize: 14 }}>
         <span style={{ fontSize: 18 }}>{category.icon}</span>
         {category.name}
       </span>
@@ -73,14 +74,14 @@ export function BudgetCategoryRow({
             fontSize: 14,
             cursor: readOnly ? "not-allowed" : "text",
             background: readOnly
-              ? "#0a0f1e"
-              : isOverride && hasActiveOverride ? "#1a1200" : "#1e293b",
+              ? c.bg
+              : isOverride && hasActiveOverride ? "#1a1200" : c.border,
             borderColor: readOnly
-              ? "#1e293b"
+              ? c.border
               : isOverride && hasActiveOverride ? accent + "88" : accent + "44",
             color: readOnly
-              ? "#475569"
-              : isOverride ? (hasActiveOverride ? accent : "#475569") : "#f1f5f9",
+              ? c.textMuted
+              : isOverride ? (hasActiveOverride ? accent : c.textMuted) : c.textStrong,
           }}
         />
 
@@ -91,7 +92,7 @@ export function BudgetCategoryRow({
             title="Usuń nadpisanie — wróć do wartości z bazy"
             style={{
               background: "transparent", border: "none",
-              color: "#ef4444", cursor: "pointer",
+              color: c.danger, cursor: "pointer",
               fontSize: 16, lineHeight: 1, padding: "2px 4px", borderRadius: 4,
             }}
           >

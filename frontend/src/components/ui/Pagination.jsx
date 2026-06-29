@@ -5,6 +5,8 @@
 // Shows max 5 page buttons around the current page.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
+
 export function Pagination({ page, totalPages, onPageChange }) {
   if (totalPages <= 1) return null;
 
@@ -32,9 +34,9 @@ export function Pagination({ page, totalPages, onPageChange }) {
       style={{
         minWidth: 34, height: 32, padding: "0 10px",
         borderRadius: 8, border: "1px solid",
-        borderColor:  active ? "#10b981" : "#1e293b",
-        background:   active ? "#10b98122" : "transparent",
-        color:        active ? "#10b981" : disabled || content === "…" ? "#334155" : "#94a3b8",
+        borderColor:  active ? c.success : c.border,
+        background:   active ? alpha(c.success, "22") : "transparent",
+        color:        active ? c.success : disabled || content === "…" ? c.borderStrong : c.textTertiary,
         cursor:       disabled || content === "…" ? "default" : "pointer",
         fontSize: 13, fontWeight: active ? 700 : 400,
       }}
@@ -48,7 +50,7 @@ export function Pagination({ page, totalPages, onPageChange }) {
       {btn("←", page - 1, page === 1)}
       {getPages().map((p, i) =>
         p === "…"
-          ? <span key={`ellipsis-${i}`} style={{ color: "#334155", padding: "0 4px" }}>…</span>
+          ? <span key={`ellipsis-${i}`} style={{ color: c.borderStrong, padding: "0 4px" }}>…</span>
           : btn(p, p, false, p === page)
       )}
       {btn("→", page + 1, page === totalPages)}

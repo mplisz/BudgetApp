@@ -2,6 +2,7 @@
 // File: frontend/src/components/panels/settings/SettingsSection.jsx
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState, useEffect } from "react";
 import { theme as s }          from "../../../styles/theme";
 import { CollapsibleSection }  from "../../ui";
@@ -81,24 +82,24 @@ export function SettingsSection() {
   }
 
   const inputStyle = { ...s.input, width: 70, textAlign: "center" };
-  const rowStyle   = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #1e293b" };
-  const labelStyle = { color: "#e2e8f0", fontSize: 13 };
-  const descStyle  = { color: "#475569", fontSize: 11, marginTop: 2 };
+  const rowStyle   = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${c.border}` };
+  const labelStyle = { color: c.text, fontSize: 13 };
+  const descStyle  = { color: c.textMuted, fontSize: 11, marginTop: 2 };
 
   return (
     <CollapsibleSection title="⚙️ Progi i limity" defaultOpen={false}>
       {validationError && (
-        <div style={{ padding: "10px 14px", background: "#ef444422", borderLeft: "4px solid #ef4444", color: "#f87171", marginBottom: 12, borderRadius: 4, fontSize: 13 }}>
+        <div style={{ padding: "10px 14px", background: alpha(c.danger, "22"), borderLeft: `4px solid ${c.danger}`, color: c.dangerLight, marginBottom: 12, borderRadius: 4, fontSize: 13 }}>
           {validationError}
         </div>
       )}
 
       {isLoading ? (
-        <div style={{ color: "#475569", fontSize: 13 }}>Ładowanie...</div>
+        <div style={{ color: c.textMuted, fontSize: 13 }}>Ładowanie...</div>
       ) : (
         <>
           {/* Progi budżetowe */}
-          <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase", marginBottom: 8, marginTop: 4 }}>
+          <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase", marginBottom: 8, marginTop: 4 }}>
             🚦 Progi alertów
           </div>
 
@@ -110,7 +111,7 @@ export function SettingsSection() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input type="number" min={1} max={99} value={warningPercent}
                 onChange={e => setWarningPercent(e.target.value)} style={inputStyle} />
-              <span style={{ color: "#64748b", fontSize: 13 }}>%</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>%</span>
             </div>
           </div>
 
@@ -122,12 +123,12 @@ export function SettingsSection() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input type="number" min={1} max={99} value={criticalPercent}
                 onChange={e => setCriticalPercent(e.target.value)} style={inputStyle} />
-              <span style={{ color: "#64748b", fontSize: 13 }}>%</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>%</span>
             </div>
           </div>
 
           {/* Cele finansowe */}
-          <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase", marginBottom: 8, marginTop: 20 }}>
+          <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase", marginBottom: 8, marginTop: 20 }}>
             🎯 Cele finansowe (do Podsumowania)
           </div>
 
@@ -139,7 +140,7 @@ export function SettingsSection() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input type="number" min={0} max={100} value={maxInsurance}
                 onChange={e => setMaxInsurance(e.target.value)} style={inputStyle} />
-              <span style={{ color: "#64748b", fontSize: 13 }}>%</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>%</span>
             </div>
           </div>
 
@@ -151,7 +152,7 @@ export function SettingsSection() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input type="number" min={0} max={100} value={maxObligations}
                 onChange={e => setMaxObligations(e.target.value)} style={inputStyle} />
-              <span style={{ color: "#64748b", fontSize: 13 }}>%</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>%</span>
             </div>
           </div>
 
@@ -163,7 +164,7 @@ export function SettingsSection() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input type="number" min={0} max={100} value={minRetirement}
                 onChange={e => setMinRetirement(e.target.value)} style={inputStyle} />
-              <span style={{ color: "#64748b", fontSize: 13 }}>%</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>%</span>
             </div>
           </div>
 
@@ -175,12 +176,12 @@ export function SettingsSection() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input type="number" min={0} max={100} value={minSavings}
                 onChange={e => setMinSavings(e.target.value)} style={inputStyle} />
-              <span style={{ color: "#64748b", fontSize: 13 }}>%</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>%</span>
             </div>
           </div>
 
           {/* Nawigacja miesięcy */}
-          <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase", marginBottom: 8, marginTop: 20 }}>
+          <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase", marginBottom: 8, marginTop: 20 }}>
             📅 Nawigacja miesięcy
           </div>
 
@@ -195,15 +196,15 @@ export function SettingsSection() {
                 onClick={() => setStartMonthEnabled(e => !e)}
                 style={{
                   width: 40, height: 22, borderRadius: 99, cursor: "pointer", position: "relative", flexShrink: 0,
-                  background:  startMonthEnabled ? "#10b981" : "#1e293b",
-                  border:      `1px solid ${startMonthEnabled ? "#10b981" : "#334155"}`,
+                  background:  startMonthEnabled ? c.success : c.border,
+                  border:      `1px solid ${startMonthEnabled ? c.success : c.borderStrong}`,
                   transition:  "background 0.2s",
                 }}>
                 <div style={{
                   position: "absolute", top: 3,
                   left:       startMonthEnabled ? 20 : 3,
                   width: 14, height: 14, borderRadius: "50%",
-                  background: "#fff", transition: "left 0.2s",
+                  background: c.white, transition: "left 0.2s",
                 }} />
               </div>
             </div>
@@ -217,8 +218,8 @@ export function SettingsSection() {
               />
             )}
             {!startMonthEnabled && settings?.appStartMonth && (
-              <div style={{ fontSize: 11, color: "#475569" }}>
-                Aktualnie: <strong style={{ color: "#94a3b8" }}>{settings.appStartMonth}</strong> — wyłącz toggle i zapisz żeby usunąć
+              <div style={{ fontSize: 11, color: c.textMuted }}>
+                Aktualnie: <strong style={{ color: c.textTertiary }}>{settings.appStartMonth}</strong> — wyłącz toggle i zapisz żeby usunąć
               </div>
             )}
           </div>
@@ -236,7 +237,7 @@ export function SettingsSection() {
                 onChange={e => setVoucherExpiryDays(e.target.value)}
                 style={inputStyle}
               />
-              <span style={{ color: "#64748b", fontSize: 13 }}>dni</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>dni</span>
             </div>
           </div>
           {/* Recurring notification window */}
@@ -252,7 +253,7 @@ export function SettingsSection() {
                 onChange={e => setRecurringNotifyDays(e.target.value)}
                 style={inputStyle}
               />
-              <span style={{ color: "#64748b", fontSize: 13 }}>dni</span>
+              <span style={{ color: c.textSecondary, fontSize: 13 }}>dni</span>
             </div>
           </div>
           <button

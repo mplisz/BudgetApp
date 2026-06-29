@@ -13,6 +13,7 @@
 // Styles live in ./voucherStyles.
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { fmt, parseDecimal, round2 } from "../../../utils/helpers";
 import { CollapsibleToggle }         from "./CollapsibleToggle";
 import {
@@ -182,11 +183,11 @@ export function VoucherSection({
           {/* Breakdown */}
           {allocations.length > 0 && (
             <div style={vBreakdown}>
-              <span style={{ color: "#64748b" }}>
-                Gotówka: <strong style={{ color: "#10b981" }}>{fmt(netCash)}</strong>
+              <span style={{ color: c.textSecondary }}>
+                Gotówka: <strong style={{ color: c.success }}>{fmt(netCash)}</strong>
               </span>
-              <span style={{ color: "#64748b" }}>
-                Vouchery: <strong style={{ color: "#a855f7" }}>{fmt(totalVoucher)}</strong>
+              <span style={{ color: c.textSecondary }}>
+                Vouchery: <strong style={{ color: c.voucher }}>{fmt(totalVoucher)}</strong>
               </span>
             </div>
           )}

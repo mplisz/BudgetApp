@@ -5,6 +5,7 @@
 // Rendered via createPortal → always above every stacking context.
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ToastContext, useToastState, useToast } from "../../hooks/useToast";
@@ -13,26 +14,26 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 const STYLES = {
   error: {
     background: "#1a0a0a",
-    border:     "1px solid #ef4444",
-    color:      "#f87171",
+    border:     `1px solid ${c.danger}`,
+    color:      c.dangerLight,
     icon:       "✕",
   },
   success: {
     background: "#0a1a10",
-    border:     "1px solid #10b981",
-    color:      "#34d399",
+    border:     `1px solid ${c.success}`,
+    color:      c.successLight,
     icon:       "✓",
   },
   info: {
-    background: "#0a0f1e",
-    border:     "1px solid #3b82f6",
-    color:      "#93c5fd",
+    background: c.bg,
+    border:     `1px solid ${c.info}`,
+    color:      c.infoLight,
     icon:       "ℹ",
   },
   warning: {
     background: "#1a1200",
-    border:     "1px solid #f59e0b",
-    color:      "#fbbf24",
+    border:     `1px solid ${c.warning}`,
+    color:      c.warningLight,
     icon:       "⚠",
   },
 }

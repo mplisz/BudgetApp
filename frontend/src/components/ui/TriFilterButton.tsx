@@ -5,6 +5,8 @@
 // UI: Polish | Comments: English
 // ============================================================
 
+import { c } from "../../styles/tokens";
+
 export type Tri = "off" | "yes" | "no";
 
 // Cycle order: off → yes → no → off
@@ -33,10 +35,10 @@ interface TriFilterButtonProps {
 }
 
 export function TriFilterButton({
-  state, onChange, label, color = "#f59e0b",
+  state, onChange, label, color = c.warning,
 }: TriFilterButtonProps) {
-  const bg  = state === "yes" ? color : state === "no" ? "#ef4444" : "#1e293b";
-  const txt = state === "off" ? "#64748b" : "#000";
+  const bg  = state === "yes" ? color : state === "no" ? c.danger : c.border;
+  const txt = state === "off" ? c.textSecondary : "#000";
   const prefix = state === "yes" ? "✓ " : state === "no" ? "🚫 " : "";
 
   return (

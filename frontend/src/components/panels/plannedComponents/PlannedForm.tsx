@@ -10,6 +10,7 @@
 //   paid entries and giving each month a brand-new amount.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState, useCallback, useRef, useMemo } from "react";
 import { SubcategorySelect }   from "../../ui/SubcategorySelect";
 import { PriorityPicker }      from "../../ui/PriorityPicker";
@@ -234,7 +235,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
       <div style={frow}>
         <label style={(s as any).label}>
           Opis *{" "}
-          <span style={{ color: "#475569", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+          <span style={{ color: c.textMuted, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             (nazwa planowanego wydatku)
           </span>
         </label>
@@ -243,7 +244,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
           value={form.description}
           onChange={e => set("description", e.target.value)}
           placeholder="np. Laptop, wakacje, hulajnoga..."
-          style={{ ...(s as any).input, border: `1px solid ${!form.description?.trim() ? "#ef444466" : "#1e293b"}` }}
+          style={{ ...(s as any).input, border: `1px solid ${!form.description?.trim() ? alpha(c.danger, "66") : c.border}` }}
         />
       </div>
 
@@ -262,14 +263,14 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
               style={{
                 flex: 1, padding: "10px 8px", borderRadius: 10,
                 cursor: mode === "edit" ? "not-allowed" : "pointer",
-                background: form.mode === opt.key ? "#3b82f622" : "#1e293b",
-                border: `1px solid ${form.mode === opt.key ? "#3b82f6" : "transparent"}`,
-                color: form.mode === opt.key ? "#3b82f6" : "#64748b",
+                background: form.mode === opt.key ? alpha(c.info, "22") : c.border,
+                border: `1px solid ${form.mode === opt.key ? c.info : "transparent"}`,
+                color: form.mode === opt.key ? c.info : c.textSecondary,
                 textAlign: "left", opacity: mode === "edit" ? 0.7 : 1,
               }}
             >
               <div style={{ fontWeight: 700, fontSize: 13 }}>{opt.label}</div>
-              <div style={{ fontSize: 10, marginTop: 2, color: "#475569" }}>{opt.sub}</div>
+              <div style={{ fontSize: 10, marginTop: 2, color: c.textMuted }}>{opt.sub}</div>
             </button>
           ))}
         </div>
@@ -295,14 +296,14 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
           placeholder="— Kategoria zakupu - gdzie trafi wydatek? —"
         />
         {form.targetCategoryName && (
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>{form.targetCategoryName}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{form.targetCategoryName}</div>
         )}
       </div>
       {/* URL (optional) */}
       <div style={frow}>
         <label style={(s as any).label}>
           Link{" "}
-          <span style={{ color: "#475569", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+          <span style={{ color: c.textMuted, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             (opcjonalnie — np. strona produktu)
           </span>
         </label>
@@ -336,7 +337,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
           style={(s as any).input}
         />
         {rateInfo.resolvedCurrency !== "PLN" && form.totalAmount && (
-          <div style={{ fontSize: 12, color: "#10b981", marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: c.success, marginTop: 4 }}>
             = <strong>{fmt(parseFloat(form.totalAmount) * (form.fxRate || 1))}</strong> PLN
           </div>
         )}
@@ -372,16 +373,16 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
 
           {suggestion !== null && (
             <div style={{
-              background: "#0a0f1e", border: "1px solid #1e293b",
+              background: c.bg, border: `1px solid ${c.border}`,
               borderRadius: 10, padding: "12px 14px", marginBottom: 16,
             }}>
-              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+              <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 4 }}>
                 💡 Sugerowana rata miesięczna
               </div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: "#10b981" }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: c.success }}>
                 {fmt(suggestion)} {rateInfo.resolvedCurrency !== "PLN" ? rateInfo.resolvedCurrency : "PLN/mies."}
               </div>
-              <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>
+              <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>
                 {form.plannedMonth ? `${monthsBetween(cur, toYM(form.plannedMonth))} miesięcy do ${toYM(form.plannedMonth)}` : ""}
               </div>
             </div>
@@ -408,12 +409,12 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
         {onCancel && (
           <button onClick={onCancel}
-            style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", cursor: "pointer", fontWeight: 600 }}>
+            style={{ padding: "10px 20px", borderRadius: 8, border: `1px solid ${c.border}`, background: "transparent", color: c.textTertiary, cursor: "pointer", fontWeight: 600 }}>
             Anuluj
           </button>
         )}
         <button onClick={handleSubmit} disabled={isSaving}
-          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: isSaving ? "#1e293b" : "#3b82f6", color: "#fff", cursor: isSaving ? "not-allowed" : "pointer", fontWeight: 700, fontSize: 14 }}>
+          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: isSaving ? c.border : c.info, color: c.white, cursor: isSaving ? "not-allowed" : "pointer", fontWeight: 700, fontSize: 14 }}>
           {isSaving ? "Zapisuję…" : mode === "add" ? "📅 Dodaj planowany" : "💾 Zapisz zmiany"}
         </button>
       </div>

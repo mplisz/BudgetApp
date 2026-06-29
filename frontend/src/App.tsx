@@ -23,6 +23,7 @@
 //                         error would linger until manual reset).
 // ============================================================
 
+import { c, alpha } from "./styles/tokens";
 import { Suspense, lazy, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
@@ -108,23 +109,23 @@ function AuthenticatedLayout() {
   }, [isExplicit, closedMonths, setBudgetMonth]);
   
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0f1e", color: "#e2e8f0", fontFamily: "'DM Sans', sans-serif", display: "flex" }}>
+    <div style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "'DM Sans', sans-serif", display: "flex" }}>
       <ToastContainer />
       <div className="app-sidebar"><Sidebar /></div>
       <main className="app-main" style={{ flex: 1, minHeight: "100vh", paddingBottom: 80 }}>
       <header className="app-header" style={{
-        background: "#0d1424", borderBottom: "1px solid #1e293b",
+        background: c.surface, borderBottom: `1px solid ${c.border}`,
         display: "flex", alignItems: "center", justifyContent: "space-between",
         flexWrap: "wrap", gap: 8,
         position: "sticky", top: 0, zIndex: 100,
       }}>
           {/* Left: panel title */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}>
+            <span style={{ fontSize: 13, color: c.textSecondary, fontWeight: 600 }}>
               {currentItem?.icon} {currentItem?.label}
             </span>
             {showMonthTitle && (
-              <span style={{ color: "#10b981", fontWeight: 800, fontSize: 15 }}>
+              <span style={{ color: c.success, fontWeight: 800, fontSize: 15 }}>
                 {MONTHS[month]} {year}
               </span>
             )}
@@ -142,13 +143,13 @@ function AuthenticatedLayout() {
               <div style={{
                 display: "flex", alignItems: "center", gap: 8,
                 padding: "4px 10px", borderRadius: 8,
-                background: "#ef444411", border: "1px solid #ef444444",
-                color: "#ef4444", fontSize: 11, fontWeight: 700,
+                background: alpha(c.danger, "11"), border: `1px solid ${alpha(c.danger, "44")}`,
+                color: c.danger, fontSize: 11, fontWeight: 700,
               }}>
                 <span>⚠️ Pasek narzędzi padł</span>
                 <button onClick={reset} style={{
-                  background: "transparent", border: "1px solid #ef444466",
-                  color: "#ef4444", borderRadius: 6, padding: "2px 8px",
+                  background: "transparent", border: `1px solid ${alpha(c.danger, "66")}`,
+                  color: c.danger, borderRadius: 6, padding: "2px 8px",
                   cursor: "pointer", fontSize: 11, fontWeight: 700,
                 }}>
                   ↻
@@ -204,9 +205,9 @@ function AppContent() {
   if (isLoading) {
     return (
       <div style={{
-        minHeight: "100vh", background: "#0a0f1e",
+        minHeight: "100vh", background: c.bg,
         display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#10b981", fontWeight: 800,
+        color: c.success, fontWeight: 800,
       }}>
         Weryfikacja sesji...
       </div>

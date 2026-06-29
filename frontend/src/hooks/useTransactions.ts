@@ -6,13 +6,11 @@
 // ============================================================
 
 import { useState, useCallback } from "react";
-import { useAuth }        from "../context/AuthContext";
 import { useAppContext }  from "../context/AppContext";
 import { useToast }       from "./useToast";
-import { translateError } from "../data/constants/errorMessages";
+import { useApi }         from "./useApi";
+import { ApiError }       from "../data/api/client";
 import type { TransactionPayload } from "../types/transaction";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // Stored transaction as returned by the API. Kept structurally loose — the
 // app treats transaction documents dynamically; only `id` is relied on here.
@@ -30,8 +28,18 @@ interface AppCtx {
   setTransactions: (v: StoredTx[] | ((prev: StoredTx[]) => StoredTx[])) => void;
 }
 
+// Detects the backend's 409 "please confirm" sentinel on a thrown ApiError.
+function confirmSentinelFrom(err: unknown): ConfirmSentinel | null {
+  if (err instanceof ApiError && err.status === 409
+      && err.body && typeof err.body === "object"
+      && (err.body as { requiresConfirmation?: boolean }).requiresConfirmation) {
+    return { _requiresConfirmation: true, ...(err.body as Record<string, unknown>) };
+  }
+  return null;
+}
+
 export function useTransactions() {
-  const { fetchWithAuth }                 = useAuth() as { fetchWithAuth: typeof fetch };
+  const api                               = useApi();
   const { transactions, setTransactions } = useAppContext() as AppCtx;
   const { showSuccess, showError }        = useToast() as {
     showSuccess: (m: string) => void;
@@ -46,33 +54,25 @@ export function useTransactions() {
     if (!budgetMonth) return;
     setIsLoading(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/transactions?budgetMonth=${budgetMonth}`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Nie udało się pobrać transakcji.");
-      }
-      const data = await res.json();
+      const data = await api.get<StoredTx[]>(
+        `/api/transactions?budgetMonth=${budgetMonth}`,
+        { fallback: "Nie udało się pobrać transakcji." },
+      );
       setTransactions(data);
     } catch (err) {
       showError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [fetchWithAuth, setTransactions, showError]);
+  }, [api, setTransactions, showError]);
 
   // ── Add new transaction ──────────────────────────────────────────────────────
   const addTransaction = useCallback(async (payload: TransactionPayload): Promise<StoredTx | null> => {
     setIsSaving(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/transactions`, {
-        method: "POST",
-        body:   JSON.stringify(payload),
+      const saved = await api.post<StoredTx>("/api/transactions", payload, {
+        fallback: "Nie udało się dodać transakcji.",
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(translateError(err.error, "Nie udało się dodać transakcji."));
-      }
-      const saved = await res.json() as StoredTx;
       setTransactions(prev => [saved, ...prev]);
       showSuccess("Transakcja dodana! ✅");
       return saved;
@@ -82,7 +82,7 @@ export function useTransactions() {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setTransactions, showSuccess, showError]);
+  }, [api, setTransactions, showSuccess, showError]);
 
   // ── Add a batch of transactions (OCR / cart) ─────────────────────────────────
   // Sends the whole cart to /batch so the backend can split selected vouchers
@@ -94,15 +94,11 @@ export function useTransactions() {
   ): Promise<StoredTx[] | null> => {
     setIsSaving(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/transactions/batch`, {
-        method: "POST",
-        body:   JSON.stringify({ transactions: items, voucherIds }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(translateError(err.error, "Nie udało się zapisać transakcji."));
-      }
-      const saved = await res.json() as StoredTx[];
+      const saved = await api.post<StoredTx[]>(
+        "/api/transactions/batch",
+        { transactions: items, voucherIds },
+        { fallback: "Nie udało się zapisać transakcji." },
+      );
       setTransactions(prev => [...saved, ...prev]);
       return saved;
     } catch (err) {
@@ -111,7 +107,7 @@ export function useTransactions() {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setTransactions, showError]);
+  }, [api, setTransactions, showError]);
 
   // ── Update existing transaction ──────────────────────────────────────────────
   const updateTransaction = useCallback(async (
@@ -120,37 +116,23 @@ export function useTransactions() {
   ): Promise<UpdateResult> => {
     setIsSaving(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/transactions/${id}`, {
-        method: "PATCH",
-        body:   JSON.stringify(patch),
+      const updated = await api.patch<StoredTx>(`/api/transactions/${id}`, patch, {
+        fallback: "Nie udało się zaktualizować transakcji.",
       });
-
-      // Special case: backend requires confirmation before archiving linked items
-      if (res.status === 409) {
-        const body = await res.json().catch(() => ({}));
-        if (body.requiresConfirmation) {
-          // Return sentinel object — EditTransactionModal detects this
-          return { _requiresConfirmation: true, ...body };
-        }
-        throw new Error(translateError(body.error, "Nie udało się zaktualizować transakcji."));
-      }
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(translateError(err.error, "Nie udało się zaktualizować transakcji."));
-      }
-
-      const updated = await res.json() as StoredTx;
       setTransactions(prev => prev.map(t => (t.id === id ? updated : t)));
       showSuccess("Transakcja zaktualizowana! ✅");
       return updated;
     } catch (err) {
+      // Backend requires confirmation before archiving linked items —
+      // surface the sentinel so EditTransactionModal can prompt the user.
+      const sentinel = confirmSentinelFrom(err);
+      if (sentinel) return sentinel;
       showError((err as Error).message);
       return null;
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setTransactions, showSuccess, showError]);
+  }, [api, setTransactions, showSuccess, showError]);
 
   // ── Soft-delete transaction ──────────────────────────────────────────────────
   const deleteTransaction = useCallback(async (
@@ -159,36 +141,23 @@ export function useTransactions() {
   ): Promise<DeleteResult> => {
     setIsSaving(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/transactions/${id}`, {
-        method: "DELETE",
-        body:   Object.keys(options).length ? JSON.stringify(options) : undefined,
-      });
-
-      // Special case: backend requires confirmation
-      if (res.status === 409) {
-        const body = await res.json().catch(() => ({}));
-        if (body.requiresConfirmation) {
-          return { _requiresConfirmation: true, ...body };
-        }
-        throw new Error(translateError(body.error, "Nie udało się zarchiwizować transakcji."));
-      }
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(translateError(err.error, "Nie udało się zarchiwizować transakcji."));
-      }
-
-      const body = await res.json() as { success: boolean; id: string };
+      const body = await api.del<{ success: boolean; id: string }>(
+        `/api/transactions/${id}`,
+        Object.keys(options).length ? options : undefined,
+        { fallback: "Nie udało się zarchiwizować transakcji." },
+      );
       setTransactions(prev => prev.filter(t => t.id !== id));
       showSuccess("Transakcja zarchiwizowana.");
       return body;
     } catch (err) {
+      const sentinel = confirmSentinelFrom(err);
+      if (sentinel) return sentinel;
       showError((err as Error).message);
       return null;
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setTransactions, showSuccess, showError]);
+  }, [api, setTransactions, showSuccess, showError]);
 
   return {
     transactions,

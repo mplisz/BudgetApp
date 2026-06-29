@@ -7,6 +7,7 @@
 // one-off spike is visually separated from a real upward trend.
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
@@ -39,7 +40,7 @@ export function MonthlyTrendChart({ data }: MonthlyTrendChartProps) {
   return (
     <ResponsiveContainer width="100%" height={320}>
       <LineChart data={data} margin={{ top: 12, right: 20, bottom: 0, left: -10 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+        <CartesianGrid strokeDasharray="3 3" stroke={c.border} />
         <XAxis dataKey="month" stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} />
         <YAxis stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} />
         <Tooltip

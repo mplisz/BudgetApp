@@ -14,6 +14,7 @@
 // side, so this component stays purely about input + suggestions.
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useState, useMemo, useRef } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import { useAppContext } from "../../context/AppContext";
@@ -121,7 +122,7 @@ export function MerchantInput({
           style={{
             position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
             margin: 0, padding: 4, listStyle: "none", zIndex: 50,
-            background: "#0d1424", border: "1px solid #1e293b",
+            background: c.surface, border: `1px solid ${c.border}`,
             borderRadius: 8, maxHeight: 220, overflowY: "auto",
             boxShadow: "0 8px 24px rgba(0,0,0,.4)",
           }}
@@ -137,8 +138,8 @@ export function MerchantInput({
               onMouseEnter={() => setHighlight(i)}
               style={{
                 padding: "9px 12px", borderRadius: 6, cursor: "pointer",
-                fontSize: 14, color: "#e2e8f0",
-                background: i === highlight ? "#1e293b" : "transparent",
+                fontSize: 14, color: c.text,
+                background: i === highlight ? c.border : "transparent",
               }}
             >
               🏪 {m}

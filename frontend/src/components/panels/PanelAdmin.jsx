@@ -3,15 +3,17 @@
 // Admin panel – session management
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useApi } from "../../hooks/useApi";
 import { theme as s } from "../../styles/theme";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const ACCESS_TOKEN_EXPIRY = import.meta.env.VITE_ACCESS_TOKEN_EXPIRY || "15 min";
 
 export default function PanelAdmin() {
-  const { fetchWithAuth, user } = useAuth();
+  const { user } = useAuth();
+  const api = useApi();
   const [members, setMembers]         = useState([]);
   const [selected, setSelected]       = useState(null);
   const [sessionCount, setSessionCount] = useState(null);
@@ -24,8 +26,7 @@ export default function PanelAdmin() {
     async function loadMembers() {
       setIsLoading(true);
       try {
-        const res = await fetchWithAuth(`${API_URL}/api/auth/family-members`);
-        const data = await res.json();
+        const data = await api.get(`/api/auth/family-members`);
         setMembers(data);
         setSelected(data[0]?.email || null);
       } catch (err) {
@@ -35,7 +36,7 @@ export default function PanelAdmin() {
       }
     }
     loadMembers();
-  }, [fetchWithAuth]);
+  }, [api]);
 
   // Load session count when selected changes
   useEffect(() => {
@@ -43,27 +44,21 @@ export default function PanelAdmin() {
     async function loadSessionCount() {
       setSessionCount(null);
       try {
-        const res = await fetchWithAuth(`${API_URL}/api/auth/sessions?email=${encodeURIComponent(selected)}`);
-        const data = await res.json();
+        const data = await api.get(`/api/auth/sessions?email=${encodeURIComponent(selected)}`);
         setSessionCount(data.count);
       } catch (err) {
         setSessionCount(null);
       }
     }
     loadSessionCount();
-  }, [selected, fetchWithAuth]);
+  }, [selected, api]);
 
   async function handleRevokeAll() {
     if (!selected) return;
     setIsRevoking(true);
     setResult(null);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/auth/revoke-all`, {
-        method: "DELETE",
-        body: JSON.stringify({ email: selected })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Błąd serwera");
+      const data = await api.del(`/api/auth/revoke-all`, { email: selected }, { fallback: "Błąd serwera" });
       setResult({ success: true, message: `✅ ${data.message}` });
       setSessionCount(0); // po revoke zerujemy
     } catch (err) {
@@ -77,22 +72,22 @@ export default function PanelAdmin() {
       <div style={{ ...s.panel, maxWidth: 600, margin: "0 auto" }}>
       <div style={{ marginBottom: 24 }}>
         <div style={s.sectionTitle}>🔐 Admin</div>
-        <div style={{ color: "#475569", fontSize: 13, marginTop: 4 }}>
+        <div style={{ color: c.textMuted, fontSize: 13, marginTop: 4 }}>
           Zarządzanie sesjami członków rodziny
         </div>
       </div>
 
       <div style={s.card}>
-        <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase", marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase", marginBottom: 16 }}>
           🚫 Unieważnij wszystkie sesje
         </div>
 
         {isLoading ? (
-          <div style={{ color: "#475569", fontSize: 13 }}>Ładowanie...</div>
+          <div style={{ color: c.textMuted, fontSize: 13 }}>Ładowanie...</div>
         ) : (
           <>
             <div style={{ marginBottom: 12 }}>
-              <label style={{ color: "#64748b", fontSize: 12, fontWeight: 600, display: "block", marginBottom: 6 }}>
+              <label style={{ color: c.textSecondary, fontSize: 12, fontWeight: 600, display: "block", marginBottom: 6 }}>
                 Wybierz użytkownika:
               </label>
               <select
@@ -108,19 +103,19 @@ export default function PanelAdmin() {
               </select>
 
               {/* Session count */}
-              <div style={{ marginTop: 8, fontSize: 12, color: "#64748b" }}>
+              <div style={{ marginTop: 8, fontSize: 12, color: c.textSecondary }}>
                 Aktywne sesje:{" "}
                 {sessionCount === null ? (
-                  <span style={{ color: "#475569" }}>Ładowanie...</span>
+                  <span style={{ color: c.textMuted }}>Ładowanie...</span>
                 ) : (
-                  <strong style={{ color: sessionCount === 0 ? "#10b981" : "#e2e8f0" }}>
+                  <strong style={{ color: sessionCount === 0 ? c.success : c.text }}>
                     {sessionCount}
                   </strong>
                 )}
               </div>
             </div>
 
-            <div style={{ background: "#ef444411", border: "1px solid #ef444433", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#f87171" }}>
+            <div style={{ background: alpha(c.danger, "11"), border: `1px solid ${alpha(c.danger, "33")}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: c.dangerLight }}>
               ⚠️ Spowoduje to wylogowanie wszystkich urządzeń wybranego użytkownika. Przy następnym odświeżeniu tokenu (max {ACCESS_TOKEN_EXPIRY}) sesja wygaśnie.
             </div>
 
@@ -129,9 +124,9 @@ export default function PanelAdmin() {
               disabled={isRevoking || !selected || sessionCount === 0}
               style={{
                 ...s.btn(),
-                background: isRevoking ? "#1e293b" : "#ef444422",
-                color: isRevoking ? "#475569" : "#ef4444",
-                border: "1px solid #ef444444",
+                background: isRevoking ? c.border : alpha(c.danger, "22"),
+                color: isRevoking ? c.textMuted : c.danger,
+                border: `1px solid ${alpha(c.danger, "44")}`,
                 opacity: (isRevoking || sessionCount === 0) ? 0.5 : 1,
                 cursor: sessionCount === 0 ? "not-allowed" : "pointer"
               }}
@@ -142,9 +137,9 @@ export default function PanelAdmin() {
             {result && (
               <div style={{
                 marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 13,
-                background: result.success ? "#10b98111" : "#ef444411",
-                color: result.success ? "#10b981" : "#f87171",
-                border: `1px solid ${result.success ? "#10b98133" : "#ef444433"}`
+                background: result.success ? alpha(c.success, "11") : alpha(c.danger, "11"),
+                color: result.success ? c.success : c.dangerLight,
+                border: `1px solid ${result.success ? alpha(c.success, "33") : alpha(c.danger, "33")}`
               }}>
                 {result.message}
               </div>

@@ -2,6 +2,7 @@
 // File: src/components/panels/settings/CategoriesSection.jsx
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState, useMemo } from "react";
 import { useAppContext }      from "../../../context/AppContext";
 import { theme as s }        from "../../../styles/theme";
@@ -92,7 +93,7 @@ export function CategoriesSection() {
     <>
       <CollapsibleSection title="📂 Kategorie" defaultOpen={false}>
         {isLoadingCats ? (
-          <div style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>⏳ Ładowanie bazy...</div>
+          <div style={{ padding: 40, textAlign: "center", color: c.textTertiary }}>⏳ Ładowanie bazy...</div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 12, alignItems: "stretch" }} data-cats-grid>
 
@@ -101,7 +102,7 @@ export function CategoriesSection() {
 
               {/* Add new root category */}
               <div style={s.card}>
-                <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase", marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase", marginBottom: 12 }}>
                   ➕ Nowa główna
                 </div>
 
@@ -116,7 +117,7 @@ export function CategoriesSection() {
                   />
                 </div>
 
-                <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "#0d1424", padding: 3, borderRadius: 10 }}>
+                <div style={{ display: "flex", gap: 4, marginBottom: 12, background: c.surface, padding: 3, borderRadius: 10 }}>
                   {typeSections.map(({ type, label, icon }) => (
                     <button
                       key={type}
@@ -124,8 +125,8 @@ export function CategoriesSection() {
                       style={{
                         flex: 1, padding: "6px 2px", borderRadius: 8, border: "none",
                         fontSize: 10, fontWeight: 700, cursor: "pointer",
-                        background: newCatType === type ? "#10b981" : "transparent",
-                        color:      newCatType === type ? "#fff"    : "#64748b",
+                        background: newCatType === type ? c.success : "transparent",
+                        color:      newCatType === type ? c.white    : c.textSecondary,
                       }}
                     >
                       {icon} {label}
@@ -145,7 +146,7 @@ export function CategoriesSection() {
               {/* Category list grouped by type */}
               <div style={{ ...s.card, flex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase" }}>📂 Lista</div>
+                  <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase" }}>📂 Lista</div>
                   <ArchiveToggleButton isShowingArchived={showArchived} onToggle={() => setShowArchived(!showArchived)} />
                 </div>
 
@@ -184,7 +185,7 @@ export function CategoriesSection() {
               {expandedCat ? (
                 <div style={s.card}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 11, textTransform: "uppercase" }}>
+                    <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase" }}>
                       {expandedCat.icon} {expandedCat.name} — subkategorie
                     </div>
                     <ArchiveToggleButton
@@ -210,9 +211,9 @@ export function CategoriesSection() {
                             onClick={() => setNewSubPriority(p)}
                             style={{
                               width: 28, height: 36, borderRadius: 6,
-                              border: `1px solid ${newSubPriority === p ? "#10b981" : "#334155"}`,
-                              background: newSubPriority === p ? "#10b98122" : "transparent",
-                              color:      newSubPriority === p ? "#10b981"   : "#475569",
+                              border: `1px solid ${newSubPriority === p ? c.success : c.borderStrong}`,
+                              background: newSubPriority === p ? alpha(c.success, "22") : "transparent",
+                              color:      newSubPriority === p ? c.success   : c.textMuted,
                               cursor: "pointer", fontSize: 11, fontWeight: 700,
                             }}
                           >
@@ -232,7 +233,7 @@ export function CategoriesSection() {
                           checked={newSubCanBeRecurring}
                           onChange={e => setNewSubCanBeRecurring(e.target.checked)}
                         />
-                        <span style={{ fontSize: 11, color: "#64748b" }}>🔄</span>
+                        <span style={{ fontSize: 11, color: c.textSecondary }}>🔄</span>
                       </label>
                     )}
 
@@ -246,7 +247,7 @@ export function CategoriesSection() {
                           checked={newSubIsCritical}
                           onChange={e => setNewSubIsCritical(e.target.checked)}
                         />
-                        <span style={{ fontSize: 11, color: "#64748b" }}>🔒</span>
+                        <span style={{ fontSize: 11, color: c.textSecondary }}>🔒</span>
                       </label>
                     )}
 
@@ -260,7 +261,7 @@ export function CategoriesSection() {
                           checked={newSubCanBeLuxmed}
                           onChange={e => setNewSubCanBeLuxmed(e.target.checked)}
                         />
-                        <span style={{ fontSize: 11, color: "#64748b" }}>🏥</span>
+                        <span style={{ fontSize: 11, color: c.textSecondary }}>🏥</span>
                       </label>
                     )}
 
@@ -281,13 +282,13 @@ export function CategoriesSection() {
                       : "1fr 40px",
                     gap: 8, marginBottom: 8,
                   }}>
-                    <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>NAZWA</span>
+                    <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>NAZWA</span>
                     {expandedCat.type === "EXPENSE" && (
                       <>
-                        <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>PRIORYTET</span>
-                        <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>CYKLICZNE</span>
-                        <span style={{ color: "#475569", fontSize: 10, fontWeight: 700 }}>KRYTYCZNE</span>
-                        <span style={{ color: "#06b6d4",  fontSize: 10, fontWeight: 700 }}>LUXMED</span>
+                        <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>PRIORYTET</span>
+                        <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>CYKLICZNE</span>
+                        <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>KRYTYCZNE</span>
+                        <span style={{ color: c.cyan,  fontSize: 10, fontWeight: 700 }}>LUXMED</span>
                       </>
                     )}
                   </div>
@@ -300,7 +301,7 @@ export function CategoriesSection() {
                       .map((sub, index) => (
                         <div
                           key={sub.id}
-                          style={{ background: index % 2 === 0 ? "transparent" : "#ffffff08", borderRadius: 4 }}
+                          style={{ background: index % 2 === 0 ? "transparent" : alpha(c.white, "08"), borderRadius: 4 }}
                         >
                           <SubcategoryRow
                             subName={sub.name}
@@ -320,7 +321,7 @@ export function CategoriesSection() {
                 <div style={{
                   ...s.card, flex: 1,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "#475569", border: "2px dashed #1e293b",
+                  color: c.textMuted, border: `2px dashed ${c.border}`,
                   background: "transparent", minHeight: 200,
                 }}>
                   Wybierz kategorię główną po lewej.

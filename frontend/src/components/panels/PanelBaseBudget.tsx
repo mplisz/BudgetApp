@@ -17,6 +17,7 @@
 // threaded down as a prop to LimitRow / TotalsRow / SectionHeader.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAppContext }  from "../../context/AppContext";
 import { useMonthStatus } from "../../hooks/useMonthStatus";
@@ -58,7 +59,7 @@ const GRID = "1fr 140px 140px 80px 110px 130px 110px";
 // Shared border style that draws the PLAN | FAKT vertical separator.
 // Applied to every Wydano cell (header, data rows, totals, grand total).
 const SEPARATOR: React.CSSProperties = {
-  borderLeft: "1px solid #334155",
+  borderLeft: `1px solid ${c.borderStrong}`,
   paddingLeft: 12,
 };
 
@@ -115,18 +116,18 @@ function sumSpentForCategory(
 
 // ── Mobile read-only stat tile ────────────────────────────────
 
-function LimitStat({ label, value, color = "#e2e8f0" }: {
+function LimitStat({ label, value, color = c.text }: {
   label: string;
   value: string;
   color?: string;
 }) {
   return (
     <div style={{
-      background: "#0a0f1e", border: "1px solid #1e293b",
+      background: c.bg, border: `1px solid ${c.border}`,
       borderRadius: 8, padding: "8px 10px", minWidth: 0,
     }}>
       <div style={{
-        fontSize: 10, color: "#475569", fontWeight: 700,
+        fontSize: 10, color: c.textMuted, fontWeight: 700,
         textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 3,
       }}>
         {label}
@@ -141,12 +142,12 @@ function LimitStat({ label, value, color = "#e2e8f0" }: {
 function PlannedCell({ items }: { items: PlannedItem[] }) {
   const total = items.reduce((s, p) => s + p.amount, 0);
   if (items.length === 0) {
-    return <span style={{ color: "#334155", fontSize: 12 }}>—</span>;
+    return <span style={{ color: c.borderStrong, fontSize: 12 }}>—</span>;
   }
   // Single item — plain span avoids flex container causing sub-pixel drift vs Cykliczne.
   if (items.length === 1) {
     return (
-      <span style={{ fontSize: 13, color: "#a855f7", fontWeight: 600 }}>
+      <span style={{ fontSize: 13, color: c.voucher, fontWeight: 600 }}>
         {fmt(items[0].amount)}
       </span>
     );
@@ -156,17 +157,17 @@ function PlannedCell({ items }: { items: PlannedItem[] }) {
       {items.map((p, i) => (
         <div key={i} title={p.description} style={{ display: "flex", alignItems: "center", gap: 3 }}>
           {p.isEnvelope && (
-            <span style={{ fontSize: 10, color: "#7c3aed" }} title="Wirtualna koperta">📋</span>
+            <span style={{ fontSize: 10, color: c.purpleDeep }} title="Wirtualna koperta">📋</span>
           )}
-          <span style={{ fontSize: 13, color: "#a855f7", fontWeight: 600 }}>
+          <span style={{ fontSize: 13, color: c.voucher, fontWeight: 600 }}>
             {fmt(p.amount)}
           </span>
         </div>
       ))}
       {items.length > 1 && (
         <div style={{
-          fontSize: 10, color: "#64748b",
-          borderTop: "1px solid #1e293b",
+          fontSize: 10, color: c.textSecondary,
+          borderTop: `1px solid ${c.border}`,
           paddingTop: 2, marginTop: 1,
         }}>
           = {fmt(total)}
@@ -228,26 +229,26 @@ function LimitRow({
     const plannedTotal = plannedItems.reduce((sum, p) => sum + p.amount, 0);
     return (
       <div style={{
-        background: "#0d1424", border: "1px solid #1e293b", borderRadius: 12,
+        background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12,
         padding: "12px 14px", marginBottom: 8, opacity: cat._readOnly ? 0.5 : 1,
       }}>
         {/* Category */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 16 }}>{cat.icon}</span>
-          <span style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{cat.name}</span>
+          <span style={{ fontWeight: 700, color: c.text, fontSize: 14 }}>{cat.name}</span>
           {cat._readOnly && (
-            <span style={{ fontSize: 10, color: "#475569", fontWeight: 400 }}>(zarchiwizowana)</span>
+            <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 400 }}>(zarchiwizowana)</span>
           )}
         </div>
 
         {/* Editable: Baza + Nadpisanie */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div>
-            <label style={{ display: "block", fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700, marginBottom: 5 }}>
+            <label style={{ display: "block", fontSize: 11, color: c.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700, marginBottom: 5 }}>
               Baza
             </label>
             {isReadOnly ? (
-              <div style={{ ...inputStyle, color: "#64748b", opacity: 0.6 }}>
+              <div style={{ ...inputStyle, color: c.textSecondary, opacity: 0.6 }}>
                 {activeBase ? fmt(activeBase.amount) : "—"}
               </div>
             ) : (
@@ -260,18 +261,18 @@ function LimitRow({
             )}
           </div>
           <div>
-            <label style={{ display: "block", fontSize: 11, color: hasOverride ? "#f59e0b" : "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700, marginBottom: 5 }}>
+            <label style={{ display: "block", fontSize: 11, color: hasOverride ? c.warning : c.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700, marginBottom: 5 }}>
               Nadpisanie
             </label>
             {isReadOnly ? (
-              <div style={{ ...inputStyle, color: hasOverride ? "#f59e0b" : "#334155", opacity: 0.6 }}>
+              <div style={{ ...inputStyle, color: hasOverride ? c.warning : c.borderStrong, opacity: 0.6 }}>
                 {hasOverride ? fmt(active!.amount) : "—"}
               </div>
             ) : (
               <BudgetInput
                 value={overrideEdits[cat.id] ?? ""}
                 onChange={(v) => setOverride(cat.id, v)}
-                style={{ ...inputStyle, borderColor: hasOverride ? "#f59e0b66" : "#1e293b" }}
+                style={{ ...inputStyle, borderColor: hasOverride ? alpha(c.warning, "66") : c.border }}
                 placeholder="—"
               />
             )}
@@ -279,31 +280,31 @@ function LimitRow({
         </div>
 
         {/* Read-only stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, borderTop: "1px solid #1e293b", paddingTop: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, borderTop: `1px solid ${c.border}`, paddingTop: 12 }}>
           <LimitStat
             label="Aktywny"
             value={effectiveLimit !== null ? fmt(effectiveLimit) : "—"}
-            color={effectiveLimit !== null ? (hasOverride ? "#f59e0b" : "#10b981") : "#334155"}
+            color={effectiveLimit !== null ? (hasOverride ? c.warning : c.success) : c.borderStrong}
           />
           {showExtra && (
             <LimitStat
               label="Wydano"
               value={spentAmount > 0 ? fmt(spentAmount) : "—"}
-              color={spentAmount > 0 ? (isOverBudget ? "#ef4444" : "#e2e8f0") : "#334155"}
+              color={spentAmount > 0 ? (isOverBudget ? c.danger : c.text) : c.borderStrong}
             />
           )}
           {showExtra === true && (
             <LimitStat
               label="Cykliczne"
               value={recurringAmount > 0 ? fmt(recurringAmount) : "—"}
-              color={recurringAmount > 0 ? "#3b82f6" : "#334155"}
+              color={recurringAmount > 0 ? c.info : c.borderStrong}
             />
           )}
           {showExtra === true && (
             <LimitStat
               label="Planowane"
               value={plannedTotal > 0 ? fmt(plannedTotal) : "—"}
-              color={plannedTotal > 0 ? "#a855f7" : "#334155"}
+              color={plannedTotal > 0 ? c.voucher : c.borderStrong}
             />
           )}
         </div>
@@ -318,21 +319,21 @@ function LimitRow({
       gap: 8,
       alignItems: "start",
       padding: "10px 0",
-      borderBottom: "1px solid #1e293b",
+      borderBottom: `1px solid ${c.border}`,
       opacity: cat._readOnly ? 0.5 : 1,
     }}>
       {/* Category name */}
       <div style={{ paddingTop: 2 }}>
-        <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13 }}>
+        <div style={{ fontWeight: 700, color: c.text, fontSize: 13 }}>
           {cat.icon} {cat.name}
           {cat._readOnly && (
-            <span style={{ fontSize: 10, color: "#475569", marginLeft: 6, fontWeight: 400 }}>
+            <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 6, fontWeight: 400 }}>
               (zarchiwizowana)
             </span>
           )}
         </div>
         {baseHistory.length > 1 && (
-          <div style={{ fontSize: 10, color: "#334155", marginTop: 2 }}>
+          <div style={{ fontSize: 10, color: c.borderStrong, marginTop: 2 }}>
             📝 {baseHistory.length} wersji bazy
           </div>
         )}
@@ -341,7 +342,7 @@ function LimitRow({
       {/* Base limit input — always shows underlying base even when override is active */}
       <div>
         {isReadOnly ? (
-          <div style={{ ...inputStyle, color: "#64748b", cursor: "not-allowed", opacity: 0.6 }}>
+          <div style={{ ...inputStyle, color: c.textSecondary, cursor: "not-allowed", opacity: 0.6 }}>
             {activeBase ? fmt(activeBase.amount) : "—"}
           </div>
         ) : (
@@ -353,7 +354,7 @@ function LimitRow({
           />
         )}
         {activeBase && (
-          <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>
+          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3 }}>
             od {activeBase.date}
           </div>
         )}
@@ -362,19 +363,19 @@ function LimitRow({
       {/* Override input — single-month override */}
       <div>
         {isReadOnly ? (
-          <div style={{ ...inputStyle, color: hasOverride ? "#f59e0b" : "#334155", cursor: "not-allowed", opacity: 0.6 }}>
+          <div style={{ ...inputStyle, color: hasOverride ? c.warning : c.borderStrong, cursor: "not-allowed", opacity: 0.6 }}>
             {hasOverride ? fmt(active!.amount) : "—"}
           </div>
         ) : (
           <BudgetInput
             value={overrideEdits[cat.id] ?? ""}
             onChange={(v) => setOverride(cat.id, v)}
-            style={{ ...inputStyle, borderColor: hasOverride ? "#f59e0b66" : "#1e293b" }}
+            style={{ ...inputStyle, borderColor: hasOverride ? alpha(c.warning, "66") : c.border }}
             placeholder="—"
           />
         )}
         {hasOverride && (
-          <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 3 }}>
+          <div style={{ fontSize: 10, color: c.warning, marginTop: 3 }}>
             ⚡ nadpisanie {activeBudgetMonth}
           </div>
         )}
@@ -383,22 +384,22 @@ function LimitRow({
       {/* Active limit (base or override) */}
       <div style={{ textAlign: "right", paddingTop: 2 }}>
         {effectiveLimit !== null ? (
-          <span style={{ fontWeight: 700, fontSize: 13, color: hasOverride ? "#f59e0b" : "#10b981" }}>
+          <span style={{ fontWeight: 700, fontSize: 13, color: hasOverride ? c.warning : c.success }}>
             {fmt(effectiveLimit)}
           </span>
         ) : (
-          <span style={{ color: "#334155", fontSize: 12 }}>—</span>
+          <span style={{ color: c.borderStrong, fontSize: 12 }}>—</span>
         )}
       </div>
 
       {/* Cykliczne — empty cell for SAVING preserves grid alignment */}
       <div style={{ textAlign: "right", paddingTop: 2 }}>
         {showExtra === true && (recurringAmount > 0 ? (
-          <span style={{ fontSize: 13, color: "#3b82f6", fontWeight: 600 }}>
+          <span style={{ fontSize: 13, color: c.info, fontWeight: 600 }}>
             {fmt(recurringAmount)}
           </span>
         ) : (
-          <span style={{ color: "#334155", fontSize: 12 }}>—</span>
+          <span style={{ color: c.borderStrong, fontSize: 12 }}>—</span>
         ))}
       </div>
 
@@ -411,11 +412,11 @@ function LimitRow({
       <div style={{ textAlign: "right", paddingTop: 2, ...SEPARATOR }}>
         {showExtra && (
           spentAmount > 0 ? (
-            <span style={{ fontSize: 13, fontWeight: 600, color: isOverBudget ? "#ef4444" : "#e2e8f0" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: isOverBudget ? c.danger : c.text }}>
               {fmt(spentAmount)}
             </span>
           ) : (
-            <span style={{ color: "#334155", fontSize: 12 }}>—</span>
+            <span style={{ color: c.borderStrong, fontSize: 12 }}>—</span>
           )
         )}
       </div>
@@ -438,30 +439,30 @@ function TotalsRow({ activeLimit, spent, recurring, planned, showExtra = true, i
   if (isMobile) {
     return (
       <div style={{
-        background: "#0a0f1e", border: "1px solid #334155", borderRadius: 10,
+        background: c.bg, border: `1px solid ${c.borderStrong}`, borderRadius: 10,
         padding: "12px 14px", marginBottom: 8,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.5px" }}>
             Suma
           </span>
           <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
             {activeLimit > 0 && (
-              <span style={{ fontSize: 12, color: "#64748b" }}>
-                Aktywny <strong style={{ fontSize: 15, color: "#10b981" }}>{fmt(activeLimit)}</strong>
+              <span style={{ fontSize: 12, color: c.textSecondary }}>
+                Aktywny <strong style={{ fontSize: 15, color: c.success }}>{fmt(activeLimit)}</strong>
               </span>
             )}
             {showExtra && spent > 0 && (
-              <span style={{ fontSize: 12, color: "#64748b" }}>
-                Wydano <strong style={{ fontSize: 15, color: isOverBudget ? "#ef4444" : "#e2e8f0" }}>{fmt(spent)}</strong>
+              <span style={{ fontSize: 12, color: c.textSecondary }}>
+                Wydano <strong style={{ fontSize: 15, color: isOverBudget ? c.danger : c.text }}>{fmt(spent)}</strong>
               </span>
             )}
           </div>
         </div>
         {showExtra === true && (recurring > 0 || planned > 0) && (
-          <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 12, color: "#64748b", flexWrap: "wrap" }}>
-            {recurring > 0 && <span>Cykliczne <strong style={{ color: "#3b82f6" }}>{fmt(recurring)}</strong></span>}
-            {planned > 0 && <span>Planowane <strong style={{ color: "#a855f7" }}>{fmt(planned)}</strong></span>}
+          <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 12, color: c.textSecondary, flexWrap: "wrap" }}>
+            {recurring > 0 && <span>Cykliczne <strong style={{ color: c.info }}>{fmt(recurring)}</strong></span>}
+            {planned > 0 && <span>Planowane <strong style={{ color: c.voucher }}>{fmt(planned)}</strong></span>}
           </div>
         )}
       </div>
@@ -475,32 +476,32 @@ function TotalsRow({ activeLimit, spent, recurring, planned, showExtra = true, i
       gap: 8,
       alignItems: "center",
       padding: "10px 0",
-      borderTop: "2px solid #334155",
-      background: "#0a0f1e",
+      borderTop: `2px solid ${c.borderStrong}`,
+      background: c.bg,
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.5px" }}>
         Suma
       </div>
       <div />{/* base */}
       <div />{/* override */}
       <div style={{ textAlign: "right" }}>
         {activeLimit > 0 && (
-          <span style={{ fontWeight: 800, fontSize: 13, color: "#10b981" }}>{fmt(activeLimit)}</span>
+          <span style={{ fontWeight: 800, fontSize: 13, color: c.success }}>{fmt(activeLimit)}</span>
         )}
       </div>
       <div style={{ textAlign: "right" }}>
         {showExtra === true && recurring > 0 && (
-          <span style={{ fontWeight: 800, fontSize: 13, color: "#3b82f6" }}>{fmt(recurring)}</span>
+          <span style={{ fontWeight: 800, fontSize: 13, color: c.info }}>{fmt(recurring)}</span>
         )}
       </div>
       <div style={{ textAlign: "right" }}>
         {showExtra === true && planned > 0 && (
-          <span style={{ fontWeight: 800, fontSize: 13, color: "#a855f7" }}>{fmt(planned)}</span>
+          <span style={{ fontWeight: 800, fontSize: 13, color: c.voucher }}>{fmt(planned)}</span>
         )}
       </div>
       <div style={{ textAlign: "right", ...SEPARATOR }}>
         {showExtra && spent > 0 && (
-          <span style={{ fontWeight: 800, fontSize: 13, color: isOverBudget ? "#ef4444" : "#e2e8f0" }}>
+          <span style={{ fontWeight: 800, fontSize: 13, color: isOverBudget ? c.danger : c.text }}>
             {fmt(spent)}
           </span>
         )}
@@ -521,7 +522,7 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true, isMobile }:
   if (isMobile) {
     return (
       <div style={{ marginTop: 24, marginBottom: 10 }}>
-        <div style={{ fontWeight: 700, color: "#f1f5f9", fontSize: 14 }}>{title}</div>
+        <div style={{ fontWeight: 700, color: c.textStrong, fontSize: 14 }}>{title}</div>
       </div>
     );
   }
@@ -529,7 +530,7 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true, isMobile }:
   return (
     <>
       <div style={{ marginTop: 28, marginBottom: 10 }}>
-        <div style={{ fontWeight: 700, color: "#f1f5f9", fontSize: 14 }}>{title}</div>
+        <div style={{ fontWeight: 700, color: c.textStrong, fontSize: 14 }}>{title}</div>
       </div>
 
       {/* ── Group label row: PLAN | Estymata | Faktycznie wydano ── */}
@@ -542,25 +543,25 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true, isMobile }:
         <div />{/* category */}
         {/* PLAN spans: Baza + Nadpisanie + Aktywny = cols 2-4 */}
         <div style={{ gridColumn: "2 / 5", display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
             Plan
           </span>
-          <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
+          <div style={{ flex: 1, height: 1, background: c.border }} />
         </div>
         {/* Estymata — cols 5-6, only for EXPENSE */}
         {showExtra === true ? (
-          <div style={{ gridColumn: "5 / 7", display: "flex", alignItems: "center", gap: 6, borderLeft: "1px solid #334155", paddingLeft: 12 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <div style={{ gridColumn: "5 / 7", display: "flex", alignItems: "center", gap: 6, borderLeft: `1px solid ${c.borderStrong}`, paddingLeft: 12 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
               Estymata
             </span>
-            <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
+            <div style={{ flex: 1, height: 1, background: c.border }} />
           </div>
         ) : (
           <div style={{ gridColumn: "5 / 7" }} />
         )}
         {/* Faktycznie wydano — col 7, always shown when showExtra truthy */}
         <div style={{ gridColumn: "7 / 8", display: "flex", alignItems: "center", gap: 6, ...SEPARATOR }}>
-          <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
+          <div style={{ flex: 1, height: 1, background: c.border }} />
         </div>
       </div>
 
@@ -570,41 +571,41 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true, isMobile }:
         gridTemplateColumns: GRID,
         gap: 8,
         padding: "4px 0 10px",
-        borderBottom: "2px solid #1e293b",
+        borderBottom: `2px solid ${c.border}`,
         marginBottom: 4,
       }}>
         <div style={(s as any).label}>Kategoria</div>
         <div style={(s as any).label}>
           Baza
-          <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+          <div style={{ fontSize: 10, color: c.borderStrong, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             od daty wzwyż
           </div>
         </div>
         <div style={(s as any).label}>
           Nadpisanie
-          <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+          <div style={{ fontSize: 10, color: c.borderStrong, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             tylko {activeBudgetMonth}
           </div>
         </div>
         <div style={{ ...(s as any).label, textAlign: "right" }}>Aktywny</div>
 
         {/* Cykliczne — Estymata zone, EXPENSE only */}
-        <div style={{ ...(s as any).label, textAlign: "right", color: "#3b82f6", borderLeft: "1px solid #334155", paddingLeft: 12 }}>
+        <div style={{ ...(s as any).label, textAlign: "right", color: c.info, borderLeft: `1px solid ${c.borderStrong}`, paddingLeft: 12 }}>
           {showExtra === true && (
             <>
               🔄 Cykliczne
-              <div style={{ fontSize: 10, color: "#334155", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+              <div style={{ fontSize: 10, color: c.borderStrong, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
                 ten miesiąc
               </div>
             </>
           )}
         </div>
-        <div style={{ ...(s as any).label, textAlign: "right", color: "#a855f7" }}>
+        <div style={{ ...(s as any).label, textAlign: "right", color: c.voucher }}>
           {showExtra === true && "📅 Planowane"}
         </div>
 
         {/* Faktycznie wydano — rightmost, separator from Estymata zone */}
-        <div style={{ ...(s as any).label, textAlign: "right", color: "#e2e8f0", ...SEPARATOR }}>
+        <div style={{ ...(s as any).label, textAlign: "right", color: c.text, ...SEPARATOR }}>
           {showExtra && "Faktycznie wydano"}
         </div>
       </div>
@@ -851,7 +852,7 @@ export default function PanelBaseBudget() {
     <div style={{ padding: "0 0 40px 0", maxWidth: 1100, margin: "0 auto" }}>
       <div style={{ marginBottom: 20 }}>
         <div style={(s as any).sectionTitle}>🏦 Baza budżetu</div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>
+        <div style={{ fontSize: 13, color: c.textSecondary }}>
           {activeBudgetMonth} · planowanie wydatków i oszczędności
         </div>
       </div>
@@ -859,7 +860,7 @@ export default function PanelBaseBudget() {
       <LockBanner isPastMonth={isPastMonth} isMonthClosed={isMonthClosed} selectedMonth={activeBudgetMonth} />
 
       {isLoading && (
-        <div style={{ color: "#475569", textAlign: "center", padding: 40 }}>Ładowanie…</div>
+        <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>
       )}
 
       {!isLoading && (
@@ -884,33 +885,33 @@ export default function PanelBaseBudget() {
             if (isMobile) {
               return (
                 <div style={{
-                  marginTop: 8, border: "1px solid #10b98144", borderRadius: 12,
-                  background: "#0d1424", padding: "14px 16px",
+                  marginTop: 8, border: `1px solid ${alpha(c.success, "44")}`, borderRadius: 12,
+                  background: c.surface, padding: "14px 16px",
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: envelopeTotal > 0 ? 2 : 10 }}>
-                    <span style={{ fontSize: 12, color: "#94a3b8" }}>📤 Estymata wydatków</span>
-                    <span style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{fmt(totalOutflow)} zł</span>
+                    <span style={{ fontSize: 12, color: c.textTertiary }}>📤 Estymata wydatków</span>
+                    <span style={{ fontWeight: 700, color: c.text, fontSize: 14 }}>{fmt(totalOutflow)} zł</span>
                   </div>
                   {envelopeTotal > 0 && (
-                    <div style={{ fontSize: 10, color: "#a855f7", textAlign: "right", marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, color: c.voucher, textAlign: "right", marginBottom: 10 }}>
                       w tym 🪙 {fmt(envelopeTotal)} koperty
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-                    <span style={{ fontSize: 12, color: "#94a3b8" }}>📥 Kwota dostępna</span>
-                    <span style={{ fontWeight: 700, color: "#10b981", fontSize: 14 }}>{fmt(monthlyIncome)} zł</span>
+                    <span style={{ fontSize: 12, color: c.textTertiary }}>📥 Kwota dostępna</span>
+                    <span style={{ fontWeight: 700, color: c.success, fontSize: 14 }}>{fmt(monthlyIncome)} zł</span>
                   </div>
                   {monthlyIncome > 0 && (
                     <div style={{
                       display: "flex", justifyContent: "space-between", alignItems: "center",
                       padding: "10px 12px", borderRadius: 8,
-                      background: surplus >= 0 ? "#10b98111" : "#ef444411",
-                      border: `1px solid ${surplus >= 0 ? "#10b98133" : "#ef444433"}`,
+                      background: surplus >= 0 ? alpha(c.success, "11") : alpha(c.danger, "11"),
+                      border: `1px solid ${surplus >= 0 ? alpha(c.success, "33") : alpha(c.danger, "33")}`,
                     }}>
-                      <span style={{ fontSize: 12, color: "#475569", fontWeight: 700 }}>
+                      <span style={{ fontSize: 12, color: c.textMuted, fontWeight: 700 }}>
                         {surplus >= 0 ? "Nadwyżka" : "Niedobór"}
                       </span>
-                      <span style={{ fontWeight: 800, fontSize: 16, color: surplus >= 0 ? "#10b981" : "#ef4444" }}>
+                      <span style={{ fontWeight: 800, fontSize: 16, color: surplus >= 0 ? c.success : c.danger }}>
                         {surplus >= 0 ? "+" : ""}{fmt(surplus)}
                       </span>
                     </div>
@@ -922,7 +923,7 @@ export default function PanelBaseBudget() {
             return (
               <div style={{
                 marginTop: 8,
-                border: "1px solid #10b98144",
+                border: `1px solid ${alpha(c.success, "44")}`,
                 borderRadius: 8,
                 overflow: "hidden",
               }}>
@@ -933,29 +934,29 @@ export default function PanelBaseBudget() {
                   gap: 8,
                   alignItems: "center",
                   padding: "10px 12px",
-                  background: "#0a0f1e",
-                  borderBottom: hasSurplus ? "1px solid #1e293b" : "none",
+                  background: c.bg,
+                  borderBottom: hasSurplus ? `1px solid ${c.border}` : "none",
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: "#10b981", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: c.success, textTransform: "uppercase", letterSpacing: "0.5px" }}>
                     💰 Razem budżet
                   </div>
                   <div />{/* base */}
                   <div />{/* override */}
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 800, fontSize: 14, color: "#10b981" }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: c.success }}>
                       {fmt(expenseTotals.activeLimit + savingTotals.activeLimit)}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     {(expenseTotals.recurring + savingTotals.recurring) > 0 && (
-                      <span style={{ fontWeight: 800, fontSize: 13, color: "#3b82f6" }}>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: c.info }}>
                         {fmt(expenseTotals.recurring + savingTotals.recurring)}
                       </span>
                     )}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     {(expenseTotals.planned + savingTotals.planned) > 0 && (
-                      <span style={{ fontWeight: 800, fontSize: 13, color: "#a855f7" }}>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: c.voucher }}>
                         {fmt(expenseTotals.planned + savingTotals.planned)}
                       </span>
                     )}
@@ -964,7 +965,7 @@ export default function PanelBaseBudget() {
                     {(expenseTotals.spent + savingTotals.spent) > 0 && (
                       <span style={{
                         fontWeight: 800, fontSize: 13,
-                        color: (expenseTotals.spent + savingTotals.spent) > (expenseTotals.activeLimit + savingTotals.activeLimit) ? "#ef4444" : "#e2e8f0",
+                        color: (expenseTotals.spent + savingTotals.spent) > (expenseTotals.activeLimit + savingTotals.activeLimit) ? c.danger : c.text,
                       }}>
                         {fmt(expenseTotals.spent + savingTotals.spent)}
                       </span>
@@ -980,27 +981,27 @@ export default function PanelBaseBudget() {
                     gap: 16,
                     alignItems: "center",
                     padding: "10px 12px",
-                    background: "#0d1424",
+                    background: c.surface,
                   }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#94a3b8" }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: c.textTertiary }}>
                         <span>📤 Estymata wydatków:</span>
-                        <span style={{ fontWeight: 700, color: "#e2e8f0" }}>
+                        <span style={{ fontWeight: 700, color: c.text }}>
                           {fmt(totalOutflow)} zł
                         </span>
                         {envelopeTotal > 0 && (
-                          <span style={{ fontSize: 10, color: "#a855f7" }}>
+                          <span style={{ fontSize: 10, color: c.voucher }}>
                             (w tym 🪙 {fmt(envelopeTotal)} koperty)
                           </span>
                         )}
                       </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#94a3b8" }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: c.textTertiary }}>
                         <span>📥 Kwota dostępna w miesiącu:</span>
-                        <span style={{ fontWeight: 700, color: "#10b981" }}>
+                        <span style={{ fontWeight: 700, color: c.success }}>
                           {fmt(monthlyIncome)} zł
                         </span>
                         {monthlyIncome === 0 && (
-                          <span style={{ fontSize: 10, color: "#475569", fontStyle: "italic" }}>
+                          <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>
                             (brak zaksięgowanych wpływów / transferów)
                           </span>
                         )}
@@ -1012,13 +1013,13 @@ export default function PanelBaseBudget() {
                         textAlign: "right",
                         padding: "8px 12px",
                         borderRadius: 6,
-                        background: surplus >= 0 ? "#10b98111" : "#ef444411",
-                        border: `1px solid ${surplus >= 0 ? "#10b98133" : "#ef444433"}`,
+                        background: surplus >= 0 ? alpha(c.success, "11") : alpha(c.danger, "11"),
+                        border: `1px solid ${surplus >= 0 ? alpha(c.success, "33") : alpha(c.danger, "33")}`,
                       }}>
-                        <div style={{ fontSize: 10, color: "#475569", marginBottom: 2 }}>
+                        <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 2 }}>
                           {surplus >= 0 ? "Nadwyżka" : "Niedobór"}
                         </div>
-                        <div style={{ fontWeight: 800, fontSize: 15, color: surplus >= 0 ? "#10b981" : "#ef4444" }}>
+                        <div style={{ fontWeight: 800, fontSize: 15, color: surplus >= 0 ? c.success : c.danger }}>
                           {surplus >= 0 ? "+" : ""}{fmt(surplus)}
                         </div>
                       </div>
@@ -1042,14 +1043,14 @@ export default function PanelBaseBudget() {
             <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button
                 onClick={() => { loadLimits(); setIsDirty(false); }}
-                style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", cursor: "pointer", fontWeight: 600 }}
+                style={{ padding: "10px 20px", borderRadius: 8, border: `1px solid ${c.border}`, background: "transparent", color: c.textTertiary, cursor: "pointer", fontWeight: 600 }}
               >
                 Anuluj
               </button>
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                style={{ ...(s as any).btn("#10b981"), opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}
+                style={{ ...(s as any).btn(c.success), opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}
               >
                 {isSaving ? "Zapisuję…" : "💾 Zapisz limity"}
               </button>
@@ -1057,15 +1058,15 @@ export default function PanelBaseBudget() {
           )}
 
           {/* Legend */}
-          <div style={{ marginTop: 32, fontSize: 11, color: "#334155", lineHeight: 1.9 }}>
-            <div style={{ color: "#475569", fontWeight: 700, marginBottom: 2 }}>Plan</div>
-            <div>🟢 <strong style={{ color: "#475569" }}>Baza</strong> — limit obowiązujący od podanego miesiąca wzwyż.</div>
-            <div>🟡 <strong style={{ color: "#475569" }}>Nadpisanie</strong> — jednorazowa korekta tylko dla {activeBudgetMonth}.</div>
-            <div style={{ marginTop: 8, color: "#475569", fontWeight: 700, marginBottom: 2 }}>Faktycznie wydano</div>
-            <div>⚪ <strong style={{ color: "#475569" }}>Faktycznie wydano</strong> — rzeczywiste transakcje z tego miesiąca (czerwone = przekroczony limit).</div>
-            <div style={{ marginTop: 8, color: "#475569", fontWeight: 700, marginBottom: 2 }}>Estymata</div>
-            <div>🔵 <strong style={{ color: "#475569" }}>Cykliczne</strong> — przewidywane koszty cykliczne; mogą, ale nie muszą wystąpić.</div>
-            <div>🟣 <strong style={{ color: "#475569" }}>Planowane</strong> — zaplanowany jednorazowy wydatek; może, ale nie musi wystąpić.</div>
+          <div style={{ marginTop: 32, fontSize: 11, color: c.borderStrong, lineHeight: 1.9 }}>
+            <div style={{ color: c.textMuted, fontWeight: 700, marginBottom: 2 }}>Plan</div>
+            <div>🟢 <strong style={{ color: c.textMuted }}>Baza</strong> — limit obowiązujący od podanego miesiąca wzwyż.</div>
+            <div>🟡 <strong style={{ color: c.textMuted }}>Nadpisanie</strong> — jednorazowa korekta tylko dla {activeBudgetMonth}.</div>
+            <div style={{ marginTop: 8, color: c.textMuted, fontWeight: 700, marginBottom: 2 }}>Faktycznie wydano</div>
+            <div>⚪ <strong style={{ color: c.textMuted }}>Faktycznie wydano</strong> — rzeczywiste transakcje z tego miesiąca (czerwone = przekroczony limit).</div>
+            <div style={{ marginTop: 8, color: c.textMuted, fontWeight: 700, marginBottom: 2 }}>Estymata</div>
+            <div>🔵 <strong style={{ color: c.textMuted }}>Cykliczne</strong> — przewidywane koszty cykliczne; mogą, ale nie muszą wystąpić.</div>
+            <div>🟣 <strong style={{ color: c.textMuted }}>Planowane</strong> — zaplanowany jednorazowy wydatek; może, ale nie musi wystąpić.</div>
           </div>
         </>
       )}

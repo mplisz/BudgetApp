@@ -34,6 +34,7 @@
 // hook equivalent in React stdlib as of 18/19.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 
@@ -107,19 +108,19 @@ function ErrorFallback({ error, componentStack, name, onReset }: ErrorFallbackPr
       padding:      "32px 24px",
       maxWidth:     560,
       margin:       "20px auto",
-      background:   "#0d1424",
-      border:       "1px solid #ef444444",
+      background:   c.surface,
+      border:       `1px solid ${alpha(c.danger, "44")}`,
       borderRadius: 14,
-      color:        "#e2e8f0",
+      color:        c.text,
       fontFamily:   "'DM Sans', sans-serif",
     }}>
       <div style={{ fontSize: 36, marginBottom: 12 }}>💥</div>
       <div style={{
-        fontSize: 18, fontWeight: 800, marginBottom: 8, color: "#ef4444",
+        fontSize: 18, fontWeight: 800, marginBottom: 8, color: c.danger,
       }}>
         Coś poszło nie tak{name ? ` (${name})` : ""}
       </div>
-      <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 13, color: c.textTertiary, marginBottom: 20, lineHeight: 1.6 }}>
         Wystąpił nieoczekiwany błąd. Możesz spróbować ponownie — jeśli problem
         wraca, odśwież stronę (F5) lub zgłoś go nam.
       </div>
@@ -129,9 +130,9 @@ function ErrorFallback({ error, componentStack, name, onReset }: ErrorFallbackPr
           onClick={onReset}
           style={{
             padding:      "9px 18px",
-            background:   "#10b981",
+            background:   c.success,
             border:       "none",
-            color:        "#fff",
+            color:        c.white,
             borderRadius: 8,
             cursor:       "pointer",
             fontSize:     13,
@@ -145,8 +146,8 @@ function ErrorFallback({ error, componentStack, name, onReset }: ErrorFallbackPr
           style={{
             padding:      "9px 18px",
             background:   "transparent",
-            border:       "1px solid #334155",
-            color:        "#94a3b8",
+            border:       `1px solid ${c.borderStrong}`,
+            color:        c.textTertiary,
             borderRadius: 8,
             cursor:       "pointer",
             fontSize:     13,
@@ -158,15 +159,15 @@ function ErrorFallback({ error, componentStack, name, onReset }: ErrorFallbackPr
       </div>
 
       <details style={{
-        background:   "#0a0f1e",
-        border:       "1px solid #1e293b",
+        background:   c.bg,
+        border:       `1px solid ${c.border}`,
         borderRadius: 8,
         padding:      "8px 12px",
         fontSize:     12,
       }}>
         <summary style={{
           cursor:     "pointer",
-          color:      "#64748b",
+          color:      c.textSecondary,
           fontWeight: 600,
           padding:    "4px 0",
         }}>
@@ -175,8 +176,8 @@ function ErrorFallback({ error, componentStack, name, onReset }: ErrorFallbackPr
         <div style={{
           marginTop:    10,
           paddingTop:   10,
-          borderTop:    "1px solid #1e293b",
-          color:        "#94a3b8",
+          borderTop:    `1px solid ${c.border}`,
+          color:        c.textTertiary,
           fontFamily:   "ui-monospace, SFMono-Regular, Consolas, monospace",
           fontSize:     11,
           lineHeight:   1.5,
@@ -186,20 +187,20 @@ function ErrorFallback({ error, componentStack, name, onReset }: ErrorFallbackPr
           overflowY:    "auto",
         }}>
           <div style={{ marginBottom: 8 }}>
-            <strong style={{ color: "#ef4444" }}>{error.name}:</strong>{" "}
+            <strong style={{ color: c.danger }}>{error.name}:</strong>{" "}
             {error.message}
           </div>
           {error.stack && (
-            <div style={{ color: "#475569", fontSize: 10 }}>
+            <div style={{ color: c.textMuted, fontSize: 10 }}>
               {error.stack}
             </div>
           )}
           {componentStack && (
             <>
-              <div style={{ marginTop: 10, marginBottom: 4, color: "#64748b" }}>
+              <div style={{ marginTop: 10, marginBottom: 4, color: c.textSecondary }}>
                 Component stack:
               </div>
-              <div style={{ color: "#475569", fontSize: 10 }}>
+              <div style={{ color: c.textMuted, fontSize: 10 }}>
                 {componentStack}
               </div>
             </>

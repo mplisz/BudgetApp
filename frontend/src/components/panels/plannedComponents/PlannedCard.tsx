@@ -4,6 +4,7 @@
 // planned date for oneoff. Actions: edit, archive, purchase.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useEffect } from "react";
 import { useCurrencyConverter }  from "../../../hooks/useCurrencyConverter";
 import { sumPaid, computeSuggestion, isReadyToPurchase } from "../../../hooks/usePlanned";
@@ -57,7 +58,7 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
     ? Math.round(doc.totalAmount * liveRate * 100) / 100
     : doc.totalAmountPLN;
   const progressPct = totalPLN > 0 ? Math.min(100, Math.round(paid / totalPLN * 100)) : 0;
-  const progressColor = ready ? "#10b981" : progressPct >= 80 ? "#f59e0b" : "#3b82f6";
+  const progressColor = ready ? c.success : progressPct >= 80 ? c.warning : c.info;
 
   // Current month virtual saving entry
   const thisMonthEntry = doc.mode === "envelope"
@@ -70,8 +71,8 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
 
   return (
     <div style={{
-      background:   "#0d1424",
-      border:       `1px solid ${ready ? "#10b98166" : "#1e293b"}`,
+      background:   c.surface,
+      border:       `1px solid ${ready ? alpha(c.success, "66") : c.border}`,
       borderRadius: 12,
       padding:      "16px",
       marginBottom: 10,
@@ -80,7 +81,7 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-            <span style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{doc.description}</span>
+            <span style={{ fontWeight: 700, color: c.text, fontSize: 14 }}>{doc.description}</span>
             {safeUrl && (
                <a
                 href={safeUrl}
@@ -88,26 +89,26 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
                 rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
                 title={doc.url}
-                style={{ fontSize: 12, color: "#3b82f6", textDecoration: "none" }}
+                style={{ fontSize: 12, color: c.info, textDecoration: "none" }}
               >
                 🔗 link
               </a>
             )}
             <span style={{
               fontSize: 10, padding: "2px 8px", borderRadius: 20,
-              background: doc.mode === "envelope" ? "#3b82f622" : "#f59e0b22",
-              color:      doc.mode === "envelope" ? "#3b82f6"   : "#f59e0b",
+              background: doc.mode === "envelope" ? alpha(c.info, "22") : alpha(c.warning, "22"),
+              color:      doc.mode === "envelope" ? c.info   : c.warning,
               fontWeight: 700,
             }}>
               {doc.mode === "envelope" ? "Koperta" : "Jednorazowy"}
             </span>
             {ready && (
-              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: "#10b98122", color: "#10b981", fontWeight: 700 }}>
+              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: alpha(c.success, "22"), color: c.success, fontWeight: 700 }}>
                 ✅ Gotowe do zakupu
               </span>
             )}
           </div>
-          <div style={{ fontSize: 12, color: "#64748b" }}>
+          <div style={{ fontSize: 12, color: c.textSecondary }}>
             {doc.targetCategoryName} › {doc.targetSubcategoryName}
             <span style={{ marginLeft: 8 }}>📅 {doc.plannedMonth}</span>
           </div>
@@ -115,14 +116,14 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
 
         {/* Amount */}
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
-          <div style={{ fontWeight: 800, fontSize: 16, color: "#e2e8f0" }}>
+          <div style={{ fontWeight: 800, fontSize: 16, color: c.text }}>
             {isForeign
               ? `${fmt(doc.totalAmount)} ${doc.originalCurrency}`
               : fmt(doc.totalAmountPLN)
             }
           </div>
           {isForeign && (
-            <div style={{ fontSize: 11, color: "#475569" }}>
+            <div style={{ fontSize: 11, color: c.textMuted }}>
               ≈ {rateLoading ? "…" : fmt(totalPLN)} PLN
             </div>
           )}
@@ -133,31 +134,31 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
       {doc.mode === "envelope" && (
         <>
           {/* Progress bar */}
-          <div style={{ height: 6, background: "#1e293b", borderRadius: 99, overflow: "hidden", marginBottom: 6 }}>
+          <div style={{ height: 6, background: c.border, borderRadius: 99, overflow: "hidden", marginBottom: 6 }}>
             <div style={{ height: "100%", width: `${progressPct}%`, background: progressColor, borderRadius: 99, transition: "width 0.4s ease" }} />
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 4, fontSize: 12, marginBottom: 8 }}>
-            <span style={{ color: "#64748b" }}>
+            <span style={{ color: c.textSecondary }}>
               Zebrano: <strong style={{ color: progressColor }}>{fmt(paid)} PLN</strong>
             </span>
-            <span style={{ color: "#475569" }}>{progressPct}%</span>
-            <span style={{ color: "#64748b" }}>
-              Cel: <strong style={{ color: "#94a3b8" }}>{fmt(totalPLN)} PLN</strong>
+            <span style={{ color: c.textMuted }}>{progressPct}%</span>
+            <span style={{ color: c.textSecondary }}>
+              Cel: <strong style={{ color: c.textTertiary }}>{fmt(totalPLN)} PLN</strong>
             </span>
           </div>
 
           {/* This month entry */}
           {thisMonthEntry && !thisMonthEntry.paidByUser && !thisMonthEntry.dismissedByUser && (
-            <div style={{ fontSize: 12, color: "#3b82f6", marginBottom: 6 }}>
+            <div style={{ fontSize: 12, color: c.info, marginBottom: 6 }}>
               💡 Ten miesiąc: <strong>{fmt(thisMonthEntry.amount)}</strong>
               {doc.originalCurrency !== "PLN" ? ` ${doc.originalCurrency}` : " PLN"}
             </div>
           )}
 
           {suggestion !== null && !ready && (
-            <div style={{ fontSize: 11, color: "#475569" }}>
-              Sugerowana rata: <strong style={{ color: "#10b981" }}>{fmt(suggestion)} PLN/mies.</strong>
+            <div style={{ fontSize: 11, color: c.textMuted }}>
+              Sugerowana rata: <strong style={{ color: c.success }}>{fmt(suggestion)} PLN/mies.</strong>
             </div>
           )}
         </>
@@ -167,16 +168,16 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
       <div style={{ display: "flex", gap: 6, marginTop: 12, justifyContent: "flex-end" }}>
         {ready && (
           <button onClick={() => onPurchase(doc)}
-            style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "#10b981", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+            style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.success, color: c.white, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
             🛍️ Kup
           </button>
         )}
         <button onClick={() => onEdit(doc)}
-          style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #334155", background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: 12 }}>
+          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textTertiary, cursor: "pointer", fontSize: 12 }}>
           ✏️ Edytuj
         </button>
         <button onClick={() => onArchive(doc)}
-          style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #334155", background: "transparent", color: "#475569", cursor: "pointer", fontSize: 12 }}>
+          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textMuted, cursor: "pointer", fontSize: 12 }}>
           🗑️
         </button>
       </div>

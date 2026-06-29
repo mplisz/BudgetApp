@@ -10,6 +10,7 @@
 //     (was causing merged items to disappear on edit)
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useAppContext }    from "../../../context/AppContext";
 import { useTransactions }  from "../../../hooks/useTransactions";
@@ -295,9 +296,6 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
 
   if (cart.length === 0) return null;
 
-  //const displayItems = aggregateCart(cart.filter(i => statuses[i._cartId] !== STATUS.DONE));
-  // Aggregate done items too — merged items should show as one ✅ row, not N rows
-  //const doneItems    = aggregateCart(cart.filter(i => statuses[i._cartId] === STATUS.DONE));
   const displayItems = cart.filter(i => statuses[i._cartId] !== STATUS.DONE);
   const doneItems    = cart.filter(i => statuses[i._cartId] === STATUS.DONE);
   const allDisplay   = [...displayItems, ...doneItems];
@@ -310,23 +308,23 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
         <div>
-          <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 15 }}>🛒 Koszyk</div>
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>
+          <div style={{ fontWeight: 700, color: c.text, fontSize: 15 }}>🛒 Koszyk</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
             {cart.length} {cart.length === 1 ? "pozycja" : cart.length < 5 ? "pozycje" : "pozycji"}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
           {hasVouchers ? (
             <>
-              <div style={{ fontSize: 11, color: "#64748b", textDecoration: "line-through" }}>{fmt(totalGross)}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: "#10b981" }}>{fmt(totalNet)}</div>
-              <div style={{ fontSize: 11, color: "#a855f7" }}>🎫 bon: {fmt(totalVoucher)}</div>
+              <div style={{ fontSize: 11, color: c.textSecondary, textDecoration: "line-through" }}>{fmt(totalGross)}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: c.success }}>{fmt(totalNet)}</div>
+              <div style={{ fontSize: 11, color: c.voucher }}>🎫 bon: {fmt(totalVoucher)}</div>
             </>
           ) : (
-            <div style={{ fontSize: 20, fontWeight: 800, color: "#10b981" }}>{fmt(totalGross)}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: c.success }}>{fmt(totalGross)}</div>
           )}
           {errorCount > 0 && (
-            <div style={{ fontSize: 11, color: "#ef4444", marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: c.danger, marginTop: 2 }}>
               {errorCount} błąd{errorCount > 1 ? "y" : ""}
             </div>
           )}
@@ -338,41 +336,41 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       <div className="cart-item-list" style={{ marginBottom: 12 }}>
         {allDisplay.map(item => {
           const status = statuses[item._cartId] || STATUS.PENDING;
-          const pColor = (PRIORITY_COLORS as Record<number, string>)[item.priority] || "#64748b";
+          const pColor = (PRIORITY_COLORS as Record<number, string>)[item.priority] || c.textSecondary;
           const itemNet = item.useVoucher && item.voucherAmount > 0
             ? Math.max(0, item.amount - item.voucherAmount)
             : item.amount;
 
           return (
             <div key={item._cartId} style={{
-              background:   "#1e293b",
+              background:   c.border,
               borderRadius: 8,
               padding:      "10px 12px",
               marginBottom: 8,
               opacity:      status === STATUS.DONE ? 0.5 : 1,
-              border:       status === STATUS.ERROR ? "1px solid #ef444444"
-                            : (item._ocrNeedsReview && status !== STATUS.DONE) ? "1px solid #f59e0b66"
+              border:       status === STATUS.ERROR ? `1px solid ${alpha(c.danger, "44")}`
+                            : (item._ocrNeedsReview && status !== STATUS.DONE) ? `1px solid ${alpha(c.warning, "66")}`
                             : "1px solid transparent",
             }}>
               {/* Row 1: name + amount + status icon */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: item.subcategoryId ? "#e2e8f0" : "#ef4444", fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ color: item.subcategoryId ? c.text : c.danger, fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {item.subcategoryId
                       ? `${item.categoryName} › ${item.subcategoryName}`
                       : "❓ Wybierz kategorię (✏️)"}
                   </div>
                   {item.description && (
-                    <div style={{ color: "#64748b", fontSize: 11, marginTop: 2 }}>{item.description}</div>
+                    <div style={{ color: c.textSecondary, fontSize: 11, marginTop: 2 }}>{item.description}</div>
                   )}
                   {item._ocrDiscount != null && item._ocrDiscount > 0 && (
-                    <div style={{ color: "#f59e0b", fontSize: 10, marginTop: 2 }}>
+                    <div style={{ color: c.warning, fontSize: 10, marginTop: 2 }}>
                       🏷️ rabat −{fmt(item._ocrDiscount)}
-                      {item._ocrGross != null && <span style={{ color: "#92710a" }}> (z {fmt(item._ocrGross)})</span>}
+                      {item._ocrGross != null && <span style={{ color: c.warningDark }}> (z {fmt(item._ocrGross)})</span>}
                     </div>
                   )}
                   {item._ocrNeedsReview && status !== STATUS.DONE && (
-                    <div style={{ color: "#f59e0b", fontSize: 10, marginTop: 2, fontWeight: 600 }}>
+                    <div style={{ color: c.warning, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
                       ⚠️ AI niepewne — sprawdź kategorię (✏️)
                     </div>
                   )}
@@ -380,12 +378,12 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
                 <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
                   {item.useVoucher && item.voucherAmount > 0 ? (
                     <>
-                      <div style={{ fontSize: 11, color: "#64748b", textDecoration: "line-through" }}>{fmt(item.amount)}</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#10b981" }}>{fmt(itemNet)} zł</div>
-                      <div style={{ fontSize: 10, color: "#a855f7" }}>🎫 {fmt(item.voucherAmount)}</div>
+                      <div style={{ fontSize: 11, color: c.textSecondary, textDecoration: "line-through" }}>{fmt(item.amount)}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(itemNet)} zł</div>
+                      <div style={{ fontSize: 10, color: c.voucher }}>🎫 {fmt(item.voucherAmount)}</div>
                     </>
                   ) : (
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#10b981" }}>{fmt(item.amount)} zł</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(item.amount)} zł</div>
                   )}
                   <span style={{ fontSize: 12 }}>
                     {status === STATUS.SAVING ? "⏳" : status === STATUS.DONE ? "✅" : status === STATUS.ERROR ? "❌" : ""}
@@ -399,29 +397,26 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
                   <span style={{ fontSize: 10, color: pColor, fontWeight: 700, border: `1px solid ${pColor}`, borderRadius: 4, padding: "1px 5px" }}>
                     P{item.priority}
                   </span>
-                  <span style={{ fontSize: 10, color: "#334155" }}>{item.date}</span>
+                  <span style={{ fontSize: 10, color: c.borderStrong }}>{item.date}</span>
                   {item.originalCurrency !== "PLN" && (
-                    <span style={{ fontSize: 10, color: "#475569" }}>
+                    <span style={{ fontSize: 10, color: c.textMuted }}>
                       {item.originalAmount} {item.originalCurrency}
                     </span>
                   )}
-                  {/*{(item._mergedCount ?? 1) > 1 && (
-                    <span style={{ fontSize: 10, color: "#475569" }}>×{item._mergedCount}</span>
-                  )}*/}
                 </div>
                 {status !== STATUS.DONE && status !== STATUS.SAVING && (
                   <div style={{ display: "flex", gap: 4 }}>
                     <button
                       onClick={() => handleLoadToForm(item)}
                       title="Edytuj"
-                      style={{ background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
+                      style={{ background: "none", border: "none", color: c.info, cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
                     >
                       ✏️
                     </button>
                     <button
                       onClick={() => removeFromCart(item._cartId)}
                       title="Usuń z koszyka"
-                      style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
+                      style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
                     >
                       ✕
                     </button>
@@ -448,24 +443,24 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       )}
 
       {/* Actions */}
-      <div style={{ borderTop: "1px solid #1e293b", paddingTop: 12 }}>
+      <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: 12 }}>
         {hasVouchers && (
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 10, padding: "6px 10px", background: "#a855f711", borderRadius: 6 }}>
-            <span style={{ color: "#64748b" }}>Koszyk: {fmt(totalGross)} · Gotówka: {fmt(totalNet)} · Bon: {fmt(totalVoucher)}</span>
-            <span style={{ color: "#a855f7" }}>🎫</span>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 10, padding: "6px 10px", background: alpha(c.voucher, "11"), borderRadius: 6 }}>
+            <span style={{ color: c.textSecondary }}>Koszyk: {fmt(totalGross)} · Gotówka: {fmt(totalNet)} · Bon: {fmt(totalVoucher)}</span>
+            <span style={{ color: c.voucher }}>🎫</span>
           </div>
         )}
         <button
           onClick={saveAll}
           disabled={saving || cart.every(i => statuses[i._cartId] === STATUS.DONE)}
-          style={{ display: "block", width: "100%", padding: "12px", borderRadius: 10, border: "none", background: saving ? "#064e3b" : "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: saving ? "not-allowed" : "pointer", marginBottom: 8 }}
+          style={{ display: "block", width: "100%", padding: "12px", borderRadius: 10, border: "none", background: saving ? c.successDark : c.success, color: c.white, fontWeight: 700, fontSize: 14, cursor: saving ? "not-allowed" : "pointer", marginBottom: 8 }}
         >
           {saving ? "⏳ Zapisuję…" : "💾 Zapisz wszystko"}
         </button>
         <button
           onClick={() => setCart([])}
           disabled={saving}
-          style={{ display: "block", width: "100%", padding: "8px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#475569", fontSize: 12, cursor: saving ? "not-allowed" : "pointer" }}
+          style={{ display: "block", width: "100%", padding: "8px", borderRadius: 8, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted, fontSize: 12, cursor: saving ? "not-allowed" : "pointer" }}
         >
           Wyczyść koszyk
         </button>
@@ -476,8 +471,8 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
 
   return (
     <div style={{
-      background: "#0d1424",
-      border: "1px solid #1e293b",
+      background: c.surface,
+      border: `1px solid ${c.border}`,
       borderRadius: 14,
       padding: 16,
     }}>

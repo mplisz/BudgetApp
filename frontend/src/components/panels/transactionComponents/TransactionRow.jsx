@@ -8,6 +8,7 @@
 //   - isFullyReturned: hide return button
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { useState }           from "react";
 import { createPortal }       from "react-dom";
 import { fmt,fmtAmount  }                from "../../../utils/helpers";
@@ -29,19 +30,19 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
   return (
     <>
       <tr
-        onMouseEnter={e => e.currentTarget.style.background = "#0a0f1e"}
+        onMouseEnter={e => e.currentTarget.style.background = c.bg}
         onMouseLeave={e => e.currentTarget.style.background = "transparent"}
         style={{ transition: "background 0.1s" }}
       >
         {/* Date */}
         <td style={s.td}>
-          <span style={{ color: "#94a3b8", fontSize: 12 }}>{tx.date}</span>
+          <span style={{ color: c.textTertiary, fontSize: 12 }}>{tx.date}</span>
         </td>
 
         {/* Category */}
         <td style={s.td}>
-          <div style={{ fontWeight: 600, color: "#e2e8f0", fontSize: 13 }}>{tx.categoryName}</div>
-          <div style={{ color: "#64748b", fontSize: 11 }}>› {tx.subcategoryName}</div>
+          <div style={{ fontWeight: 600, color: c.text, fontSize: 13 }}>{tx.categoryName}</div>
+          <div style={{ color: c.textSecondary, fontSize: 11 }}>› {tx.subcategoryName}</div>
         </td>
 
         {/* Description */}
@@ -53,14 +54,14 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
               title={lineItemsOpen ? "Zwiń pozycje" : `Pokaż ${lineItems.length} pozycji`}
               style={{
                 background: "none", border: "none", cursor: "pointer", padding: 0,
-                marginRight: 6, color: "#64748b", fontSize: 11,
+                marginRight: 6, color: c.textSecondary, fontSize: 11,
               }}
             >
               {lineItemsOpen ? "▾" : "▸"} {lineItems.length}×
             </button>
           )}
-          <span style={{ color: "#94a3b8" }}>
-            {tx.description || <span style={{ color: "#334155" }}>—</span>}
+          <span style={{ color: c.textTertiary }}>
+            {tx.description || <span style={{ color: c.borderStrong }}>—</span>}
           </span>
           {isRecurring && <span style={{ marginLeft: 6 }} title="Cykliczne">🔄</span>}
         </td>
@@ -68,8 +69,8 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
         {/* Tags */}
         <td style={s.td}>
           {(tx.tagNames || []).length > 0
-            ? tx.tagNames.map((name, i) => <span key={i} style={s.badge("#3b82f6")}>{name}</span>)
-            : <span style={{ color: "#334155" }}>—</span>}
+            ? tx.tagNames.map((name, i) => <span key={i} style={s.badge(c.info)}>{name}</span>)
+            : <span style={{ color: c.borderStrong }}>—</span>}
         </td>
 
         {/* Priority */}
@@ -78,31 +79,31 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
         {/* Amount */}
         <td style={{ ...s.td, textAlign: "right" }}>
           {tx.originalCurrency !== "PLN" && (
-            <div style={{ fontSize: 11, color: "#64748b" }}>
+            <div style={{ fontSize: 11, color: c.textSecondary }}>
               {tx.originalAmount} {tx.originalCurrency} @ {tx.fxRate}
             </div>
           )}
-          <div style={{ fontWeight: 700, color: "#10b981", fontSize: 14 }}>
+          <div style={{ fontWeight: 700, color: c.success, fontSize: 14 }}>
             {fmt(tx.amount)} PLN
           </div>
           {tx.useVoucher && tx.voucherAmount > 0 && (
-            <div style={{ fontSize: 10, color: "#a78bfa" }}>
+            <div style={{ fontSize: 10, color: c.voucherLight }}>
               voucher: {fmt(tx.voucherAmount)} | cash: {fmt(tx.netAmount ?? tx.amount - tx.voucherAmount)}
             </div>
           )}
-          {isFullyReturned     && <span style={s.badge("#10b981")}>✅ zwrócono</span>}
-          {isPartiallyReturned && <span style={s.badge("#f97316")}>🔄 częściowy {fmt(totalReturnedAmount)} PLN</span>}
+          {isFullyReturned     && <span style={s.badge(c.success)}>✅ zwrócono</span>}
+          {isPartiallyReturned && <span style={s.badge(c.orange)}>🔄 częściowy {fmt(totalReturnedAmount)} PLN</span>}
         </td>
 
         {/* Author */}
-        <td style={{ ...s.td, fontSize: 11, color: "#475569" }}>{tx.author || "—"}</td>
+        <td style={{ ...s.td, fontSize: 11, color: c.textMuted }}>{tx.author || "—"}</td>
 
         {/* Actions */}
         <td style={{ ...s.td, whiteSpace: "nowrap" }}>
           {/* Receipt preview — read-only, so visible even in closed months */}
           {tx.receiptBlobPath && (
             <button
-              style={{ ...s.actionBtn("#f59e0b"), marginRight: 4 }}
+              style={{ ...s.actionBtn(c.warning), marginRight: 4 }}
               onClick={() => setReceiptOpen(true)}
               title="Pokaż paragon"
             >
@@ -113,7 +114,7 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
             <>
               {/* Edit —  ⚠ indicator if has returns */}
                 <button
-                  style={{ ...s.actionBtn("#3b82f6"), marginRight: 4, position: "relative" }}
+                  style={{ ...s.actionBtn(c.info), marginRight: 4, position: "relative" }}
                   onClick={() => setEditOpen(true)}
                   title={hasReturns ? "Edytuj — powiązane transfery i vouchery zostaną zarchiwizowane" : "Edytuj"}
                 >
@@ -121,7 +122,7 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
                 {hasReturns && (
                     <span style={{
                       position: "absolute", top: -4, right: -4,
-                      fontSize: 9, color: "#f59e0b", fontWeight: 800,
+                      fontSize: 9, color: c.warning, fontWeight: 800,
                     }}>⚠</span>
                   )}
                 </button>
@@ -129,7 +130,7 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
               {/* Return — hidden for fully returned */}
               {!isFullyReturned && (
                 <button
-                  style={{ ...s.actionBtn("#f97316"), marginRight: 4 }}
+                  style={{ ...s.actionBtn(c.orange), marginRight: 4 }}
                   onClick={onReturn}
                   title="Zwróć"
                 >
@@ -138,7 +139,7 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
               )}
 
               {/* Archive */}
-              <button style={s.actionBtn("#ef4444")} onClick={onDelete} title="Archiwizuj">🗑️</button>
+              <button style={s.actionBtn(c.danger)} onClick={onDelete} title="Archiwizuj">🗑️</button>
             </>
           )}
         </td>
@@ -147,15 +148,15 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
       {/* Line items breakdown — second <tr> (a <div> inside <tbody> is invalid DOM) */}
       {hasLineItems && lineItemsOpen && (
         <tr>
-          <td colSpan={8} style={{ padding: "0 0 8px 0", background: "#0a0f1e" }}>
+          <td colSpan={8} style={{ padding: "0 0 8px 0", background: c.bg }}>
             <div style={{ padding: "6px 16px 8px 32px" }}>
-              <div style={{ color: "#475569", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
+              <div style={{ color: c.textMuted, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
                 Pozycje z paragonu ({lineItems.length})
               </div>
               {lineItems.map((li, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 12, borderBottom: i < lineItems.length - 1 ? "1px solid #131a2c" : "none" }}>
-                  <span style={{ color: "#94a3b8" }}>{li.description || "—"}</span>
-                  <span style={{ color: "#cbd5e1", fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 12, borderBottom: i < lineItems.length - 1 ? `1px solid ${c.surfaceAlt2}` : "none" }}>
+                  <span style={{ color: c.textTertiary }}>{li.description || "—"}</span>
+                  <span style={{ color: c.textBody, fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>
                     {li.originalCurrency && li.originalCurrency !== "PLN"
                       ? `${fmtAmount(li.originalAmount, li.originalCurrency)} ${li.originalCurrency} (${fmt(li.amount)})`
                       : fmt(li.amount)}
@@ -207,8 +208,8 @@ export function TransactionCard({ tx, isMonthClosed, onDelete, onReturn, onUpdat
 
   return (
     <div style={{
-      background:   "#0d1424",
-      border:       "1px solid #1e293b",
+      background:   c.surface,
+      border:       `1px solid ${c.border}`,
       borderRadius: 12,
       padding:      "12px 14px",
       marginBottom: 8,
@@ -218,24 +219,24 @@ export function TransactionCard({ tx, isMonthClosed, onDelete, onReturn, onUpdat
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <PrioBadge value={tx.priority || 2} />
-            <span style={{ fontWeight: 600, color: "#e2e8f0", fontSize: 14 }}>{tx.categoryName}</span>
+            <span style={{ fontWeight: 600, color: c.text, fontSize: 14 }}>{tx.categoryName}</span>
             {isRecurring && <span title="Cykliczne">🔄</span>}
           </div>
           {tx.subcategoryName && (
-            <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>› {tx.subcategoryName}</div>
+            <div style={{ color: c.textSecondary, fontSize: 12, marginTop: 2 }}>› {tx.subcategoryName}</div>
           )}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           {isForeign && (
-            <div style={{ fontSize: 11, color: "#64748b", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: 11, color: c.textSecondary, whiteSpace: "nowrap" }}>
               {tx.originalAmount} {tx.originalCurrency} @ {tx.fxRate}
             </div>
           )}
-          <div style={{ fontWeight: 700, color: "#10b981", fontSize: 15, whiteSpace: "nowrap" }}>
+          <div style={{ fontWeight: 700, color: c.success, fontSize: 15, whiteSpace: "nowrap" }}>
             {fmt(tx.amount)} PLN
           </div>
           {tx.useVoucher && tx.voucherAmount > 0 && (
-            <div style={{ fontSize: 10, color: "#a78bfa", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: 10, color: c.voucherLight, whiteSpace: "nowrap" }}>
               voucher: {fmt(tx.voucherAmount)} | cash: {fmt(tx.netAmount ?? tx.amount - tx.voucherAmount)}
             </div>
           )}
@@ -245,25 +246,25 @@ export function TransactionCard({ tx, isMonthClosed, onDelete, onReturn, onUpdat
       {/* Return status badges */}
       {(isFullyReturned || isPartiallyReturned) && (
         <div style={{ marginTop: 6 }}>
-          {isFullyReturned     && <span style={s.badge("#10b981")}>✅ zwrócono</span>}
-          {isPartiallyReturned && <span style={s.badge("#f97316")}>🔄 częściowy {fmt(totalReturnedAmount)} PLN</span>}
+          {isFullyReturned     && <span style={s.badge(c.success)}>✅ zwrócono</span>}
+          {isPartiallyReturned && <span style={s.badge(c.orange)}>🔄 częściowy {fmt(totalReturnedAmount)} PLN</span>}
         </div>
       )}
 
       {/* Meta row: date + tags + author */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
-        <span style={{ color: "#94a3b8", fontSize: 12 }}>{tx.date}</span>
+        <span style={{ color: c.textTertiary, fontSize: 12 }}>{tx.date}</span>
         {(tx.tagNames || []).map((name, i) => (
-          <span key={i} style={s.badge("#3b82f6")}>{name}</span>
+          <span key={i} style={s.badge(c.info)}>{name}</span>
         ))}
         {tx.author && (
-          <span style={{ color: "#475569", fontSize: 11, marginLeft: "auto" }}>{tx.author}</span>
+          <span style={{ color: c.textMuted, fontSize: 11, marginLeft: "auto" }}>{tx.author}</span>
         )}
       </div>
 
       {/* Description */}
       {tx.description && (
-        <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 8, wordBreak: "break-word" }}>
+        <div style={{ color: c.textTertiary, fontSize: 13, marginTop: 8, wordBreak: "break-word" }}>
           {tx.description}
         </div>
       )}
@@ -273,16 +274,16 @@ export function TransactionCard({ tx, isMonthClosed, onDelete, onReturn, onUpdat
         <div style={{ marginTop: 8 }}>
           <button
             onClick={() => setLineItemsOpen(o => !o)}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#64748b", fontSize: 12 }}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: c.textSecondary, fontSize: 12 }}
           >
             {lineItemsOpen ? "▾" : "▸"} {lineItems.length} pozycji z paragonu
           </button>
           {lineItemsOpen && (
             <div style={{ marginTop: 6, paddingLeft: 8 }}>
               {lineItems.map((li, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 12, borderBottom: i < lineItems.length - 1 ? "1px solid #131a2c" : "none" }}>
-                  <span style={{ color: "#94a3b8" }}>{li.description || "—"}</span>
-                  <span style={{ color: "#cbd5e1", fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 12, borderBottom: i < lineItems.length - 1 ? `1px solid ${c.surfaceAlt2}` : "none" }}>
+                  <span style={{ color: c.textTertiary }}>{li.description || "—"}</span>
+                  <span style={{ color: c.textBody, fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>
                     {li.originalCurrency && li.originalCurrency !== "PLN"
                       ? `${fmtAmount(li.originalAmount, li.originalCurrency)} ${li.originalCurrency} (${fmt(li.amount)})`
                       : fmt(li.amount)}
@@ -298,25 +299,25 @@ export function TransactionCard({ tx, isMonthClosed, onDelete, onReturn, onUpdat
       {(tx.receiptBlobPath || !isMonthClosed) && (
         <div style={{
           display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap",
-          marginTop: 12, paddingTop: 10, borderTop: "1px solid #0f172a",
+          marginTop: 12, paddingTop: 10, borderTop: `1px solid ${c.surfaceAlt}`,
         }}>
           {tx.receiptBlobPath && (
-            <button style={{ ...s.actionBtn("#f59e0b"), padding: "6px 12px" }} onClick={() => setReceiptOpen(true)}>
+            <button style={{ ...s.actionBtn(c.warning), padding: "6px 12px" }} onClick={() => setReceiptOpen(true)}>
               📎 Paragon
             </button>
           )}
           {!isMonthClosed &&  (
-            <button style={{ ...s.actionBtn("#3b82f6"), padding: "6px 12px" }} onClick={() => setEditOpen(true)}>
+            <button style={{ ...s.actionBtn(c.info), padding: "6px 12px" }} onClick={() => setEditOpen(true)}>
               ✏️ Edytuj{hasReturns ? " ⚠" : ""}
             </button>
           )}
           {!isMonthClosed && !isFullyReturned && (
-            <button style={{ ...s.actionBtn("#f97316"), padding: "6px 12px" }} onClick={onReturn}>
+            <button style={{ ...s.actionBtn(c.orange), padding: "6px 12px" }} onClick={onReturn}>
               🔙 Zwróć
             </button>
           )}
           {!isMonthClosed && (
-            <button style={{ ...s.actionBtn("#ef4444"), padding: "6px 12px" }} onClick={onDelete}>
+            <button style={{ ...s.actionBtn(c.danger), padding: "6px 12px" }} onClick={onDelete}>
               🗑️ Usuń
             </button>
           )}

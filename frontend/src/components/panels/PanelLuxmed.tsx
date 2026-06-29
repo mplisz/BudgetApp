@@ -3,16 +3,15 @@
 // RWD-first: cards mobile, table on desktops
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useMemo, useEffect } from "react";
 import { useAppContext }        from "../../context/AppContext";
 import { useTransactionsRange } from "../../hooks/useTransactionsRange";
 import { useMonthStatus }       from "../../hooks/useMonthStatus";
-import { useAuth }              from "../../context/AuthContext";
+import { useApi }               from "../../hooks/useApi";
 import { useToast }             from "../../hooks/useToast";
 import { ConfirmModal }         from "../ui/ConfirmModal";
 import { fmt, round2 }         from "../../utils/helpers";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -90,14 +89,14 @@ function computeSimulation(
 
 // ── Styles ────────────────────────────────────────────────────
 
-const c = {
+const s = {
   panel:    { padding: "0 0 120px 0", maxWidth: 860, margin: "0 auto" } as React.CSSProperties,
-  card:     { background: "#0d1424", border: "1px solid #1e293b", borderRadius: 12, overflow: "hidden" } as React.CSSProperties,
-  th:       { padding: "10px 12px", textAlign: "left"  as const, color: "#475569", fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.5px", borderBottom: "1px solid #1e293b", background: "#0a0f1e", whiteSpace: "nowrap" as const } as React.CSSProperties,
-  thR:      { padding: "10px 12px", textAlign: "right" as const, color: "#475569", fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.5px", borderBottom: "1px solid #1e293b", background: "#0a0f1e", whiteSpace: "nowrap" as const } as React.CSSProperties,
-  td:       { padding: "10px 12px", borderBottom: "1px solid #0f172a", color: "#e2e8f0", verticalAlign: "middle" as const } as React.CSSProperties,
-  tdR:      { padding: "10px 12px", borderBottom: "1px solid #0f172a", color: "#e2e8f0", textAlign: "right" as const, fontVariantNumeric: "tabular-nums" as const, verticalAlign: "middle" as const } as React.CSSProperties,
-  bar:      { position: "fixed" as const, bottom: 0, left: 0, right: 0, background: "#0a0f1e", borderTop: "1px solid #1e293b", padding: "10px 16px", zIndex: 100, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const } as React.CSSProperties,
+  card:     { background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, overflow: "hidden" } as React.CSSProperties,
+  th:       { padding: "10px 12px", textAlign: "left"  as const, color: c.textMuted, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.5px", borderBottom: `1px solid ${c.border}`, background: c.bg, whiteSpace: "nowrap" as const } as React.CSSProperties,
+  thR:      { padding: "10px 12px", textAlign: "right" as const, color: c.textMuted, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.5px", borderBottom: `1px solid ${c.border}`, background: c.bg, whiteSpace: "nowrap" as const } as React.CSSProperties,
+  td:       { padding: "10px 12px", borderBottom: `1px solid ${c.surfaceAlt}`, color: c.text, verticalAlign: "middle" as const } as React.CSSProperties,
+  tdR:      { padding: "10px 12px", borderBottom: `1px solid ${c.surfaceAlt}`, color: c.text, textAlign: "right" as const, fontVariantNumeric: "tabular-nums" as const, verticalAlign: "middle" as const } as React.CSSProperties,
+  bar:      { position: "fixed" as const, bottom: 0, left: 0, right: 0, background: c.bg, borderTop: `1px solid ${c.border}`, padding: "10px 16px", zIndex: 100, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const } as React.CSSProperties,
 };
 
 // ── Component ─────────────────────────────────────────────────
@@ -105,7 +104,7 @@ const c = {
 export default function PanelLuxmed() {
   const { categories, settings } = useAppContext() as any;
   const { activeBudgetMonth }    = useMonthStatus() as any;
-  const { fetchWithAuth }        = useAuth() as any;
+  const api                      = useApi();
   const { showSuccess, showError } = useToast() as any;
   const { transactions, isLoading, loadRange, invalidate } = useTransactionsRange();
 
@@ -205,17 +204,13 @@ export default function PanelLuxmed() {
     for (const row of simRows) {
       if (row.willReturn <= 0) continue;
       try {
-        const res = await fetchWithAuth(`${API_URL}/api/transactions/${row.txId}/returns`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({
-            amount: row.willReturn, cashAmount: row.willReturn, voucherAmount: 0,
-            moneyReturnedInMonth: activeBudgetMonth,
-            returnedAt: new Date().toISOString().split("T")[0],
-            reason: "Zwrot LuxMed",
-          }),
-        }) as Response;
-        res.ok ? ok++ : fail++;
+        await api.post(`/api/transactions/${row.txId}/returns`, {
+          amount: row.willReturn, cashAmount: row.willReturn, voucherAmount: 0,
+          moneyReturnedInMonth: activeBudgetMonth,
+          returnedAt: new Date().toISOString().split("T")[0],
+          reason: "Zwrot LuxMed",
+        });
+        ok++;
       } catch { fail++; }
     }
     invalidate(bounds.from, bounds.to);
@@ -247,11 +242,11 @@ export default function PanelLuxmed() {
   // ── No sub banner ────────────────────────────────────────
   if (!isLoading && luxmedSubIds.size === 0) {
     return (
-      <div style={c.panel}>
+      <div style={s.panel}>
         <PanelHeader />
-        <div style={{ padding: "16px 20px", background: "#1a1200", border: "1px solid #f59e0b44", borderRadius: 12, color: "#f59e0b", fontSize: 13, lineHeight: 1.6 }}>
+        <div style={{ padding: "16px 20px", background: "#1a1200", border: `1px solid ${alpha(c.warning, "44")}`, borderRadius: 12, color: c.warning, fontSize: 13, lineHeight: 1.6 }}>
           <strong>⚠️ Brak subkategorii LuxMed</strong>
-          <p style={{ marginTop: 8, color: "#94a3b8" }}>
+          <p style={{ marginTop: 8, color: c.textTertiary }}>
             Przejdź do <strong>Ustawienia → Kategorie</strong> i zaznacz flagą 🏥 subkategorie kwalifikujące się do zwrotu.
           </p>
         </div>
@@ -262,18 +257,18 @@ export default function PanelLuxmed() {
   const limitExhausted = effectiveLimit <= 0 && alreadyUsed > 0;
 
   return (
-    <div style={c.panel}>
+    <div style={s.panel}>
       <PanelHeader />
 
       {/* Quarter pills */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Kwartał</div>
+        <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Kwartał</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {quarterPills.map(p => (
             <button key={p.label} onClick={p.onClick} style={{
               padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none",
-              background: p.active ? "#06b6d4" : "#1e293b",
-              color:      p.active ? "#fff"    : "#64748b",
+              background: p.active ? c.cyan : c.border,
+              color:      p.active ? c.white    : c.textSecondary,
               transition: "all 0.15s",
             }}>{p.label}</button>
           ))}
@@ -281,26 +276,26 @@ export default function PanelLuxmed() {
       </div>
 
       {/* Month info */}
-      <div style={{ marginBottom: 14, padding: "8px 14px", background: "#0f1f2e", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ marginBottom: 14, padding: "8px 14px", background: "#0f1f2e", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12, color: c.textSecondary, display: "flex", alignItems: "center", gap: 8 }}>
         <span>📅</span>
-        <span>Zwroty zaksięgowane w <strong style={{ color: "#93c5fd" }}>{activeBudgetMonth}</strong> — zmień miesiąc strzałkami w headerze.</span>
+        <span>Zwroty zaksięgowane w <strong style={{ color: c.infoLight }}>{activeBudgetMonth}</strong> — zmień miesiąc strzałkami w headerze.</span>
       </div>
 
       {/* Limit exhausted */}
       {limitExhausted && (
-        <div style={{ marginBottom: 14, padding: "10px 14px", background: "#1a0a0a", border: "1px solid #ef444444", borderRadius: 8, fontSize: 13, color: "#f87171" }}>
+        <div style={{ marginBottom: 14, padding: "10px 14px", background: "#1a0a0a", border: `1px solid ${alpha(c.danger, "44")}`, borderRadius: 8, fontSize: 13, color: c.dangerLight }}>
           🚫 Limit kwartalny wyczerpany — wykorzystano <strong>{fmt(alreadyUsed)}</strong> z <strong>{fmt(maxTotal)}</strong>.
         </div>
       )}
 
       {/* Loading */}
-      {isLoading && <div style={{ color: "#475569", padding: "40px 0", textAlign: "center" }}>⏳ Ładowanie…</div>}
+      {isLoading && <div style={{ color: c.textMuted, padding: "40px 0", textAlign: "center" }}>⏳ Ładowanie…</div>}
 
       {/* Empty */}
       {!isLoading && luxmedTxs.length === 0 && (
-        <div style={{ ...c.card, padding: "40px 24px", textAlign: "center", color: "#475569" }}>
+        <div style={{ ...s.card, padding: "40px 24px", textAlign: "center", color: c.textMuted }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🏥</div>
-          <div style={{ fontSize: 14, color: "#64748b" }}>Brak transakcji LuxMed w Q{activeQ} {activeYear}</div>
+          <div style={{ fontSize: 14, color: c.textSecondary }}>Brak transakcji LuxMed w Q{activeQ} {activeYear}</div>
         </div>
       )}
 
@@ -308,20 +303,20 @@ export default function PanelLuxmed() {
       {!isLoading && luxmedTxs.length > 0 && (
         <>
           {/* ── DESKTOP: tabela (ukryta na mobile) ── */}
-          <div className="luxmed-desktop" style={c.card}>
+          <div className="luxmed-desktop" style={s.card}>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr>
-                    <th style={{ ...c.th, width: 36 }}>
+                    <th style={{ ...s.th, width: 36 }}>
                       <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ cursor: "pointer" }} />
                     </th>
-                    <th style={c.th}>Data</th>
-                    <th style={c.th}>Subkategoria / Opis</th>
-                    <th style={c.thR}>Kwota</th>
-                    <th style={c.thR}>Zwrócono</th>
-                    <th style={c.thR}>Pozostało</th>
-                    <th style={{ ...c.thR, color: "#06b6d4" }}>🏥 Symulacja</th>
+                    <th style={s.th}>Data</th>
+                    <th style={s.th}>Subkategoria / Opis</th>
+                    <th style={s.thR}>Kwota</th>
+                    <th style={s.thR}>Zwrócono</th>
+                    <th style={s.thR}>Pozostało</th>
+                    <th style={{ ...s.thR, color: c.cyan }}>🏥 Symulacja</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -337,39 +332,39 @@ export default function PanelLuxmed() {
                       <tr key={tx.id}
                         onClick={() => toggleTx(tx.id, !fullyReturned)}
                         style={{
-                          background:  isSelected ? "#06b6d408" : idx % 2 === 0 ? "transparent" : "#ffffff04",
+                          background:  isSelected ? alpha(c.cyan, "08") : idx % 2 === 0 ? "transparent" : alpha(c.white, "04"),
                           cursor:      fullyReturned ? "default" : "pointer",
                           opacity:     fullyReturned ? 0.45 : 1,
-                          borderLeft:  isSelected ? "3px solid #06b6d4" : "3px solid transparent",
+                          borderLeft:  isSelected ? `3px solid ${c.cyan}` : "3px solid transparent",
                           transition:  "background 0.1s",
                         }}>
-                        <td style={{ ...c.td, paddingRight: 4 }}>
+                        <td style={{ ...s.td, paddingRight: 4 }}>
                           <input type="checkbox" checked={isSelected} disabled={fullyReturned}
                             onChange={() => toggleTx(tx.id, !fullyReturned)}
                             onClick={e => e.stopPropagation()}
                             style={{ cursor: fullyReturned ? "not-allowed" : "pointer" }}
                           />
                         </td>
-                        <td style={{ ...c.td, whiteSpace: "nowrap", color: "#94a3b8", fontSize: 12 }}>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: c.textTertiary, fontSize: 12 }}>
                           {fmtDate(tx.date)}
-                          <div style={{ fontSize: 10, color: "#334155", marginTop: 2 }}>{tx.budgetMonth}</div>
+                          <div style={{ fontSize: 10, color: c.borderStrong, marginTop: 2 }}>{tx.budgetMonth}</div>
                         </td>
-                        <td style={c.td}>
+                        <td style={s.td}>
                           <div style={{ fontWeight: 600 }}>{tx.subcategoryName}</div>
-                          {tx.description && <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{tx.description}</div>}
+                          {tx.description && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{tx.description}</div>}
                         </td>
-                        <td style={{ ...c.tdR, fontWeight: 700 }}>{fmt(tx.amount)}</td>
-                        <td style={{ ...c.tdR, color: returned > 0 ? "#34d399" : "#334155", fontSize: 12 }}>
+                        <td style={{ ...s.tdR, fontWeight: 700 }}>{fmt(tx.amount)}</td>
+                        <td style={{ ...s.tdR, color: returned > 0 ? c.successLight : c.borderStrong, fontSize: 12 }}>
                           {returned > 0 ? fmt(returned) : "—"}
                         </td>
-                        <td style={{ ...c.tdR, fontSize: 12 }}>
+                        <td style={{ ...s.tdR, fontSize: 12 }}>
                           {fullyReturned
-                            ? <span style={{ fontSize: 10, color: "#334155" }}>Wyczerpana</span>
+                            ? <span style={{ fontSize: 10, color: c.borderStrong }}>Wyczerpana</span>
                             : fmt(remaining)}
                         </td>
-                        <td style={{ ...c.tdR, color: sim?.willReturn ? "#06b6d4" : "#334155", fontWeight: sim?.willReturn ? 700 : 400 }}>
+                        <td style={{ ...s.tdR, color: sim?.willReturn ? c.cyan : c.borderStrong, fontWeight: sim?.willReturn ? 700 : 400 }}>
                           {sim?.willReturn ? fmt(sim.willReturn)
-                            : isSelected ? <span style={{ fontSize: 10, color: "#f59e0b" }}>limit!</span>
+                            : isSelected ? <span style={{ fontSize: 10, color: c.warning }}>limit!</span>
                             : "—"}
                         </td>
                       </tr>
@@ -378,8 +373,8 @@ export default function PanelLuxmed() {
                 </tbody>
               </table>
             </div>
-            <div style={{ padding: "8px 14px", borderTop: "1px solid #0f172a", fontSize: 11, color: "#334155", display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <span>Łącznie: <strong style={{ color: "#64748b" }}>{luxmedTxs.length}</strong> tx · <strong style={{ color: "#64748b" }}>{selectableTxs.length}</strong> do zwrotu</span>
+            <div style={{ padding: "8px 14px", borderTop: `1px solid ${c.surfaceAlt}`, fontSize: 11, color: c.borderStrong, display: "flex", gap: 16, flexWrap: "wrap" }}>
+              <span>Łącznie: <strong style={{ color: c.textSecondary }}>{luxmedTxs.length}</strong> tx · <strong style={{ color: c.textSecondary }}>{selectableTxs.length}</strong> do zwrotu</span>
               <span>Limit {maxPercent}% / tx · {fmt(maxTotal)} / kwartał</span>
             </div>
           </div>
@@ -390,7 +385,7 @@ export default function PanelLuxmed() {
             {selectableTxs.length > 0 && (
               <button onClick={toggleAll} style={{
                 width: "100%", marginBottom: 10, padding: "10px 14px", borderRadius: 10,
-                border: "1px solid #1e293b", background: "transparent", color: "#64748b",
+                border: `1px solid ${c.border}`, background: "transparent", color: c.textSecondary,
                 fontSize: 13, fontWeight: 600, cursor: "pointer", textAlign: "left",
               }}>
                 {allSelected ? "☑ Odznacz wszystkie" : `☐ Zaznacz wszystkie (${selectableTxs.length})`}
@@ -409,39 +404,39 @@ export default function PanelLuxmed() {
                 <div key={tx.id}
                   onClick={() => toggleTx(tx.id, !fullyReturned)}
                   style={{
-                    ...c.card,
+                    ...s.card,
                     marginBottom: 8,
                     padding: "14px 16px",
                     opacity:    fullyReturned ? 0.5 : 1,
-                    borderColor: isSelected ? "#06b6d4" : "#1e293b",
-                    borderLeft:  isSelected ? "4px solid #06b6d4" : "1px solid #1e293b",
+                    borderColor: isSelected ? c.cyan : c.border,
+                    borderLeft:  isSelected ? `4px solid ${c.cyan}` : `1px solid ${c.border}`,
                     cursor:      fullyReturned ? "default" : "pointer",
                   }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: "#e2e8f0" }}>{tx.subcategoryName}</div>
-                      {tx.description && <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{tx.description}</div>}
-                      <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{fmtDate(tx.date)} · {tx.budgetMonth}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: c.text }}>{tx.subcategoryName}</div>
+                      {tx.description && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{tx.description}</div>}
+                      <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{fmtDate(tx.date)} · {tx.budgetMonth}</div>
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
-                      <div style={{ fontWeight: 800, fontSize: 16, color: "#e2e8f0" }}>{fmt(tx.amount)}</div>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: c.text }}>{fmt(tx.amount)}</div>
                       {fullyReturned
-                        ? <div style={{ fontSize: 10, color: "#334155", marginTop: 2 }}>Wyczerpana</div>
-                        : <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>Pozostało: {fmt(remaining)}</div>}
+                        ? <div style={{ fontSize: 10, color: c.borderStrong, marginTop: 2 }}>Wyczerpana</div>
+                        : <div style={{ fontSize: 11, color: c.textSecondary, marginTop: 2 }}>Pozostało: {fmt(remaining)}</div>}
                     </div>
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       {returned > 0 && (
-                        <span style={{ fontSize: 11, color: "#34d399" }}>✓ zwrócono {fmt(returned)}</span>
+                        <span style={{ fontSize: 11, color: c.successLight }}>✓ zwrócono {fmt(returned)}</span>
                       )}
                     </div>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                       {sim?.willReturn ? (
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#06b6d4" }}>🏥 {fmt(sim.willReturn)}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: c.cyan }}>🏥 {fmt(sim.willReturn)}</span>
                       ) : isSelected ? (
-                        <span style={{ fontSize: 11, color: "#f59e0b" }}>limit!</span>
+                        <span style={{ fontSize: 11, color: c.warning }}>limit!</span>
                       ) : null}
                       {!fullyReturned && (
                         <input type="checkbox" checked={isSelected}
@@ -502,8 +497,8 @@ export default function PanelLuxmed() {
 function PanelHeader() {
   return (
     <div style={{ marginBottom: 20, marginTop: 8 }}>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>🏥 Zwroty LuxMed</div>
-      <div style={{ fontSize: 13, color: "#64748b" }}>Zaznacz transakcje i kliknij „Zwróć" — symulacja pokaże co odzyskasz przed zapisem.</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 }}>🏥 Zwroty LuxMed</div>
+      <div style={{ fontSize: 13, color: c.textSecondary }}>Zaznacz transakcje i kliknij „Zwróć” — symulacja pokaże co odzyskasz przed zapisem.</div>
     </div>
   );
 }
@@ -523,22 +518,22 @@ function SummaryBar({ maxTotal, alreadyUsed, effectiveLimit, totalWillReturn, se
   const canReturn = totalWillReturn > 0 && !isSaving;
 
   return (
-    <div style={c.bar}>
+    <div style={s.bar}>
       {/* Stats */}
       <div style={{ display: "flex", gap: 16, flex: 1, flexWrap: "wrap" }}>
-        <Stat label="Limit Q"    value={fmt(maxTotal)}       color="#94a3b8" />
-        {alreadyUsed > 0 && <Stat label="Zużyto" value={fmt(alreadyUsed)} color="#f59e0b" />}
-        <Stat label="Dostępne"   value={fmt(effectiveLimit)} color={effectiveLimit > 0 ? "#10b981" : "#ef4444"} />
-        {selectedCount > 0 && <Stat label={`Symulacja (${selectedCount})`} value={fmt(totalWillReturn)} color="#06b6d4" bold />}
+        <Stat label="Limit Q"    value={fmt(maxTotal)}       color={c.textTertiary} />
+        {alreadyUsed > 0 && <Stat label="Zużyto" value={fmt(alreadyUsed)} color={c.warning} />}
+        <Stat label="Dostępne"   value={fmt(effectiveLimit)} color={effectiveLimit > 0 ? c.success : c.danger} />
+        {selectedCount > 0 && <Stat label={`Symulacja (${selectedCount})`} value={fmt(totalWillReturn)} color={c.cyan} bold />}
       </div>
 
       {/* Progress */}
       {maxTotal > 0 && (
         <div style={{ width: 80, flexShrink: 0 }}>
-          <div style={{ fontSize: 10, color: "#475569", marginBottom: 3, textAlign: "right" }}>{pct.toFixed(0)}%</div>
-          <div style={{ height: 4, background: "#1e293b", borderRadius: 2, overflow: "hidden" }}>
+          <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 3, textAlign: "right" }}>{pct.toFixed(0)}%</div>
+          <div style={{ height: 4, background: c.border, borderRadius: 2, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${pct}%`, borderRadius: 2, transition: "width 0.3s",
-              background: pct >= 100 ? "#ef4444" : pct >= 80 ? "#f59e0b" : "#10b981" }} />
+              background: pct >= 100 ? c.danger : pct >= 80 ? c.warning : c.success }} />
           </div>
         </div>
       )}
@@ -547,8 +542,8 @@ function SummaryBar({ maxTotal, alreadyUsed, effectiveLimit, totalWillReturn, se
       <button onClick={onConfirm} disabled={!canReturn} style={{
         padding: "10px 18px", borderRadius: 8, border: "none", fontWeight: 700, fontSize: 14,
         cursor:     canReturn ? "pointer" : "not-allowed",
-        background: canReturn ? "#06b6d4" : "#1e293b",
-        color:      canReturn ? "#fff"    : "#334155",
+        background: canReturn ? c.cyan : c.border,
+        color:      canReturn ? c.white    : c.borderStrong,
         whiteSpace: "nowrap", transition: "all 0.15s", flexShrink: 0,
       }}>
         {isSaving ? "⏳ Przetwarzanie…" : canReturn ? `🔙 Zwróć — ${fmt(totalWillReturn)}` : "Zaznacz transakcje"}
@@ -560,7 +555,7 @@ function SummaryBar({ maxTotal, alreadyUsed, effectiveLimit, totalWillReturn, se
 function Stat({ label, value, color, bold = false }: { label: string; value: string; color: string; bold?: boolean }) {
   return (
     <div>
-      <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700, marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 10, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700, marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: 14, color, fontWeight: bold ? 800 : 600, fontVariantNumeric: "tabular-nums" }}>{value}</div>
     </div>
   );

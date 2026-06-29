@@ -2,6 +2,7 @@
 // File: src/components/panels/settings/CategoryRow.jsx
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { EditableLabel } from "../../ui/EditableLabel";
 import { EmojiSelector } from "../../ui/EmojiSelector";
 
@@ -14,9 +15,9 @@ export function CategoryRow({ cat, expandedCatId, setExpandedCatId, onUpdate }) 
       style={{
         display: "flex", alignItems: "center", gap: 8, padding: "9px 8px", borderRadius: 8,
         cursor: "pointer", marginBottom: 2,
-        background: isExpanded ? "#10b98122" : "transparent",
+        background: isExpanded ? alpha(c.success, "22") : "transparent",
         opacity: cat.isArchived ? 0.4 : 1,
-        borderLeft: isExpanded ? "3px solid #10b981" : "3px solid transparent",
+        borderLeft: isExpanded ? `3px solid ${c.success}` : "3px solid transparent",
       }}>
 
       {/* Icon — click stops propagation so row doesn't toggle expand */}
@@ -34,14 +35,14 @@ export function CategoryRow({ cat, expandedCatId, setExpandedCatId, onUpdate }) 
         onSave={(newName) => onUpdate(cat.id, cat.name, null, { name: newName })}
       />
 
-      {cat.isArchived && <span style={{ fontSize: 10, color: "#ef4444" }}>(Arch)</span>}
+      {cat.isArchived && <span style={{ fontSize: 10, color: c.danger }}>(Arch)</span>}
 
       <button
         onClick={e => {
           e.stopPropagation();
           onUpdate(cat.id, cat.name, null, { isArchived: !cat.isArchived });
         }}
-        style={{ marginLeft: "auto", background: "none", border: "none", color: cat.isArchived ? "#10b981" : "#475569", cursor: "pointer", fontSize: 14 }}>
+        style={{ marginLeft: "auto", background: "none", border: "none", color: cat.isArchived ? c.success : c.textMuted, cursor: "pointer", fontSize: 14 }}>
         {cat.isArchived ? "🔄" : "✕"}
       </button>
     </div>

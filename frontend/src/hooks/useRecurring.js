@@ -6,12 +6,10 @@
 // ============================================================
 
 import { useState, useCallback, useMemo } from "react";
-import { useAuth }       from "../context/AuthContext";
 import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
-import { MONTHS,FREQUENCY_OPTIONS}        from "../data/constants";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { useApi }        from "./useApi";
+import { MONTHS }        from "../data/constants";
 
 
 // Short month names from constants (DRY)
@@ -134,7 +132,7 @@ export function computeValidTo(validFrom, monthsCount, frequency = "monthly", ac
 // ── Hook ─────────────────────────────────────────────────────
 
 export function useRecurring() {
-  const { fetchWithAuth }                       = useAuth();
+  const api                                     = useApi();
   const { recurring, setRecurring, setTransactions, settings  } = useAppContext();
   const { showSuccess, showError }              = useToast();
 
@@ -144,37 +142,28 @@ export function useRecurring() {
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/recurring/all`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load.");
+      const data = await api.get("/api/recurring/all", { fallback: "Nie udało się pobrać wydatków cyklicznych." });
       setRecurring(data);
     } catch (err) {
       showError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, [fetchWithAuth, showError, setRecurring]);
+  }, [api, showError, setRecurring]);
 
   const loadForMonth = useCallback(async (month) => {
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/recurring?month=${month}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load.");
-      return data;
+      return await api.get(`/api/recurring?month=${month}`, { fallback: "Nie udało się pobrać wydatków cyklicznych." });
     } catch (err) {
       showError(err.message);
       return [];
     }
-  }, [fetchWithAuth, showError]);
+  }, [api, showError]);
 
   const addRecurring = useCallback(async (payload) => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/recurring`, {
-        method: "POST", body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create.");
+      const data = await api.post("/api/recurring", payload, { fallback: "Nie udało się utworzyć wydatku cyklicznego." });
       setRecurring(prev => [data, ...prev]);
       showSuccess("Wydatek cykliczny dodany! 🔄");
       return data;
@@ -184,18 +173,14 @@ export function useRecurring() {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, showSuccess, showError, setRecurring]);
+  }, [api, showSuccess, showError, setRecurring]);
 
   // Update — always patches the single document
   // For cost change: pass updated costs[] with new entry
   const updateRecurring = useCallback(async (id, patch) => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/recurring/${id}`, {
-        method: "PATCH", body: JSON.stringify(patch),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update.");
+      const data = await api.patch(`/api/recurring/${id}`, patch, { fallback: "Nie udało się zaktualizować wydatku cyklicznego." });
       setRecurring(prev => prev.map(r => r.id === id ? data : r));
       showSuccess("Zaktualizowano! ✅");
       return data;
@@ -205,16 +190,12 @@ export function useRecurring() {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, showSuccess, showError, setRecurring]);
+  }, [api, showSuccess, showError, setRecurring]);
 
   const archiveRecurring = useCallback(async (id, archivedFrom) => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/recurring/${id}`, {
-        method: "DELETE", body: JSON.stringify({ archivedFrom }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to archive.");
+      await api.del(`/api/recurring/${id}`, { archivedFrom }, { fallback: "Nie udało się zarchiwizować wydatku cyklicznego." });
       setRecurring(prev => prev.map(r =>
         r.id === id ? { ...r, isArchived: true, archivedFrom } : r
       ));
@@ -226,17 +207,16 @@ export function useRecurring() {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, showSuccess, showError, setRecurring]);
+  }, [api, showSuccess, showError, setRecurring]);
 
   const confirmRecurring = useCallback(async (id, date, budgetMonth, liveRate, amountPLN) => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/recurring/${id}/confirm`, {
-        method: "POST",
-        body:   JSON.stringify({ date, budgetMonth, fxRate: liveRate, amountPLN }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to confirm.");
+      const data = await api.post(
+        `/api/recurring/${id}/confirm`,
+        { date, budgetMonth, fxRate: liveRate, amountPLN },
+        { fallback: "Nie udało się zapisać wydatku." },
+      );
       setTransactions(prev => [data.transaction, ...prev]);
       setRecurring(prev => prev.map(r =>
         r.id === id ? { ...r, lastConfirmedMonth: budgetMonth, notifiedAt: null } : r
@@ -249,16 +229,16 @@ export function useRecurring() {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setTransactions, showSuccess, showError, setRecurring]);
+  }, [api, setTransactions, showSuccess, showError, setRecurring]);
 
   const markNotified = useCallback(async (id) => {
     try {
-      await fetchWithAuth(`${API_URL}/api/recurring/${id}/notify`, { method: "POST" });
+      await api.post(`/api/recurring/${id}/notify`);
       setRecurring(prev => prev.map(r =>
         r.id === id ? { ...r, notifiedAt: new Date().toISOString() } : r
       ));
     } catch (_) {}
-  }, [fetchWithAuth, setRecurring]);
+  }, [api, setRecurring]);
 
   // Pending notifications — one per doc (no grouping needed anymore)
   const today = new Date().toISOString().slice(0, 10);

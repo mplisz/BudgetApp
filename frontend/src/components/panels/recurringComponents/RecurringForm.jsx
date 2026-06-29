@@ -4,6 +4,7 @@
 // Cost history in costs[] — new cost entry added on edit.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState, useCallback, useRef, useMemo } from "react";
 import { SubcategorySelect }  from "../../ui/SubcategorySelect";
 import { PriorityPicker }     from "../../ui/PriorityPicker";
@@ -231,7 +232,7 @@ function handleSubmit() {
       <div style={frow}>
         <label style={s.label}>
           Opis *{" "}
-          <span style={{ color: "#475569", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+          <span style={{ color: c.textMuted, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             (nazwa wydatku)
           </span>
         </label>
@@ -240,7 +241,7 @@ function handleSubmit() {
           value={form.description}
           onChange={e => set("description", e.target.value)}
           placeholder="np. Netflix, rata kredytu, karnet na siłownię..."
-          style={{ ...s.input, border: `1px solid ${!form.description?.trim() ? "#ef444466" : "#1e293b"}` }}
+          style={{ ...s.input, border: `1px solid ${!form.description?.trim() ? alpha(c.danger, "66") : c.border}` }}
         />
       </div>
 
@@ -257,12 +258,12 @@ function handleSubmit() {
           placeholder="— wybierz subkategorię —"
         />
         {!hasRecurringSubcategories && (
-          <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: c.warning, marginTop: 6 }}>
             ⚠️ Brak subkategorii oznaczonych jako cykliczne. Włącz je w <strong>Ustawienia → Kategorie → 🔄</strong>.
           </div>
         )}
         {form.categoryName && (
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 5 }}>{form.categoryName}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 5 }}>{form.categoryName}</div>
         )}
       </div>
 
@@ -290,7 +291,7 @@ function handleSubmit() {
             style={s.input}
           />
           {parseFloat(form.amount) > 0 && rateInfo.resolvedCurrency !== "PLN" && (
-            <div style={{ fontSize: 11, color: "#10b981", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: c.success, marginTop: 4 }}>
               ≈ {(parseFloat(form.amount) * (form.fxRate || 1)).toFixed(2)} PLN
             </div>
           )}
@@ -306,7 +307,7 @@ function handleSubmit() {
             }}
             style={s.input}
           />
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>Kiedy schodzi kasa</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>Kiedy schodzi kasa</div>
         </div>
       </div>
 
@@ -329,7 +330,7 @@ function handleSubmit() {
           ))}
         </select>
         {mode === "edit" && (
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>
             Zmiana cykliczności wymaga archiwizacji i dodania nowego wpisu.
           </div>
         )}
@@ -347,9 +348,9 @@ function handleSubmit() {
                 <button key={m} onClick={() => toggleActiveMonth(m)}
                   style={{
                     padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                    border: `1px solid ${active ? "#10b981" : "#1e293b"}`,
-                    background: active ? "#10b98122" : "transparent",
-                    color: active ? "#10b981" : "#475569",
+                    border: `1px solid ${active ? c.success : c.border}`,
+                    background: active ? alpha(c.success, "22") : "transparent",
+                    color: active ? c.success : c.textMuted,
                   }}>
                   {name}
                 </button>
@@ -373,8 +374,8 @@ function handleSubmit() {
               style={{
                 flex: 1, padding: "6px 4px", borderRadius: 8, border: "none",
                 fontSize: 11, fontWeight: 700, cursor: "pointer",
-                background: form.validToMode === opt.key ? "#10b981" : "#1e293b",
-                color:      form.validToMode === opt.key ? "#fff"    : "#64748b",
+                background: form.validToMode === opt.key ? c.success : c.border,
+                color:      form.validToMode === opt.key ? c.white    : c.textSecondary,
               }}>
               {opt.label}
             </button>
@@ -399,16 +400,16 @@ function handleSubmit() {
               onChange={e => set("monthsCount", e.target.value)}
               placeholder="np. 12" style={{ ...s.input, width: 100 }}
             />
-            <span style={{ color: "#64748b", fontSize: 13 }}>miesięcy</span>
+            <span style={{ color: c.textSecondary, fontSize: 13 }}>miesięcy</span>
             {form.monthsCount && form.validFrom && (
-              <span style={{ color: "#94a3b8", fontSize: 12 }}>
+              <span style={{ color: c.textTertiary, fontSize: 12 }}>
                 → do {computeValidTo(form.validFrom, parseInt(form.monthsCount), form.frequency, form.activeMonths)|| "—"}
               </span>
             )}
           </div>
         )}
         {form.validToMode === "yearend" && form.validFrom && (
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: c.textTertiary, marginTop: 6 }}>
             Zakres: {form.validFrom} → {form.validFrom.split("-")[0]}-12
             {form.frequency === "custom" && form.activeMonths.length > 0 && (() => {
               const vm = Number(form.validFrom.split("-")[1]);
@@ -418,7 +419,7 @@ function handleSubmit() {
                 <>
                   {" · "}{hitsThisYear.length} wystąpień
                   {outsideYear.length > 0 && (
-                    <span style={{ color: "#f59e0b", marginLeft: 6 }}>
+                    <span style={{ color: c.warning, marginLeft: 6 }}>
                       ⚠️ Miesiące {outsideYear.map(m => MONTH_NAMES[m-1]).join(", ")} 
                       {" "}poza zakresem (zaczynasz od {MONTH_NAMES[vm-1]})
                     </span>
@@ -440,12 +441,12 @@ function handleSubmit() {
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
         {onCancel && (
           <button onClick={onCancel}
-            style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", cursor: "pointer", fontWeight: 600 }}>
+            style={{ padding: "10px 20px", borderRadius: 8, border: `1px solid ${c.border}`, background: "transparent", color: c.textTertiary, cursor: "pointer", fontWeight: 600 }}>
             Anuluj
           </button>
         )}
         <button onClick={handleSubmit} disabled={isSaving}
-          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: isSaving ? "#1e293b" : "#10b981", color: "#fff", cursor: isSaving ? "not-allowed" : "pointer", fontWeight: 700, fontSize: 14 }}>
+          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: isSaving ? c.border : c.success, color: c.white, cursor: isSaving ? "not-allowed" : "pointer", fontWeight: 700, fontSize: 14 }}>
           {isSaving ? "Zapisuję…" : mode === "add" ? "➕ Dodaj cykliczny" : "💾 Zapisz zmiany"}
         </button>
       </div>

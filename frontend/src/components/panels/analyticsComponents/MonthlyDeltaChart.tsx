@@ -9,6 +9,7 @@
 // symmetric around zero so the divergence reads cleanly.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ReferenceLine, ResponsiveContainer,
 } from "recharts";
@@ -54,10 +55,10 @@ export function MonthlyDeltaChart({ data, topN = 10 }: Props) {
           fontSize={AXIS_FONT_SIZE}
           tickFormatter={plnTick}
         />
-        <YAxis type="category" dataKey="label" stroke="#cbd5e1" fontSize={12} width={140} />
-        <ReferenceLine x={0} stroke="#334155" />
+        <YAxis type="category" dataKey="label" stroke={c.textBody} fontSize={12} width={140} />
+        <ReferenceLine x={0} stroke={c.borderStrong} />
         <Tooltip
-          cursor={{ fill: "#1e293b22" }}
+          cursor={{ fill: alpha(c.border, "22") }}
           contentStyle={chartTooltipStyle}
           labelStyle={chartTooltipLabelStyle}
           itemStyle={chartTooltipItemStyle}

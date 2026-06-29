@@ -4,11 +4,13 @@
 // Returns null if no lock is active.
 // ============================================================
 
+import { c } from "../../styles/tokens";
+
 export function LockBanner({ isPastMonth, isMonthClosed, selectedMonth }) {
   const bannerStyle = {
     display: "flex", alignItems: "center", gap: 10,
     background: "#1e1a0e", border: "1px solid #92400e44", borderRadius: 12,
-    padding: "12px 16px", color: "#fbbf24", fontSize: 13, fontWeight: 600,
+    padding: "12px 16px", color: c.warningLight, fontSize: 13, fontWeight: 600,
     marginBottom: 16,
   };
 
@@ -31,7 +33,7 @@ export function LockBanner({ isPastMonth, isMonthClosed, selectedMonth }) {
         <span>
           Miesiąc <strong>{selectedMonth}</strong> został zamknięty. Aby edytować,
           otwórz go ponownie przyciskiem{" "}
-          <strong style={{ color: "#fbbf24" }}>🔒 {selectedMonth}</strong> w nagłówku.
+          <strong style={{ color: c.warningLight }}>🔒 {selectedMonth}</strong> w nagłówku.
         </span>
       </div>
     );

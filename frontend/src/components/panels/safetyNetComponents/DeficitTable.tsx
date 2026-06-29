@@ -11,6 +11,7 @@
 // split (full breakdown lives in the UpcomingPlanned card).
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { fmt } from "../../../utils/helpers";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { LEVEL_META } from "./types";
@@ -38,15 +39,15 @@ export function DeficitTable({
           const hasPlanned = d.plannedTarget > 0;
           const isCovered  = d.coveragePercent >= 100;
           const isWarning  = d.coveragePercent >= 50 && d.coveragePercent < 100;
-          const coverColor = isCovered ? "#10b981" : isWarning ? "#f59e0b" : "#ef4444";
+          const coverColor = isCovered ? c.success : isWarning ? c.warning : c.danger;
 
           return (
             <div
               key={d.level}
               onClick={() => onSelectLevel(d.level)}
               style={{
-                background:   isSelected ? meta.color + "11" : "#0d1424",
-                border:       `1px solid ${isSelected ? meta.color + "55" : "#1e293b"}`,
+                background:   isSelected ? meta.color + "11" : c.surface,
+                border:       `1px solid ${isSelected ? meta.color + "55" : c.border}`,
                 borderLeft:   `3px solid ${isSelected ? meta.color : "transparent"}`,
                 borderRadius: 10,
                 padding:      "12px 14px",
@@ -64,7 +65,7 @@ export function DeficitTable({
                     P1–P{d.level}
                   </span>
                   <span style={{
-                    fontSize: 12, color: "#94a3b8", fontWeight: 600,
+                    fontSize: 12, color: c.textTertiary, fontWeight: 600,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
                     {meta.modeLabel}
@@ -76,7 +77,7 @@ export function DeficitTable({
               </div>
 
               {/* Coverage bar */}
-              <div style={{ height: 5, background: "#1e293b", borderRadius: 2, overflow: "hidden", marginBottom: 10 }}>
+              <div style={{ height: 5, background: c.border, borderRadius: 2, overflow: "hidden", marginBottom: 10 }}>
                 <div style={{
                   width: `${Math.min(100, d.coveragePercent)}%`,
                   height: "100%", background: coverColor, transition: "width 0.3s",
@@ -89,7 +90,7 @@ export function DeficitTable({
                 <DeficitStat
                   label="Deficyt / mies."
                   value={d.monthlyDeficit > 0 ? fmt(d.monthlyDeficit) : "pokryty ✓"}
-                  color={d.monthlyDeficit > 0 ? "#ef4444" : "#10b981"}
+                  color={d.monthlyDeficit > 0 ? c.danger : c.success}
                 />
                 <DeficitStat
                   label={`Cel ×${horizonMonths}`}
@@ -99,7 +100,7 @@ export function DeficitTable({
 
               {hasPlanned && (
                 <div
-                  style={{ fontSize: 10, color: "#a78bfa", marginTop: 8 }}
+                  style={{ fontSize: 10, color: c.voucherLight, marginTop: 8 }}
                   title={`Cel życia: ${fmt(d.baseTarget)} + planowane: ${fmt(d.plannedTarget)}`}
                 >
                   📅 W tym {fmt(d.plannedTarget)} planowane
@@ -130,7 +131,7 @@ export function DeficitTable({
         const hasPlanned = d.plannedTarget > 0;
         const isCovered  = d.coveragePercent >= 100;
         const isWarning  = d.coveragePercent >= 50 && d.coveragePercent < 100;
-        const coverColor = isCovered ? "#10b981" : isWarning ? "#f59e0b" : "#ef4444";
+        const coverColor = isCovered ? c.success : isWarning ? c.warning : c.danger;
 
         return (
           <div
@@ -143,7 +144,7 @@ export function DeficitTable({
               cursor: "pointer",
             }}
             onMouseEnter={e => {
-              if (!isSelected) e.currentTarget.style.background = "#0d142488";
+              if (!isSelected) e.currentTarget.style.background = alpha(c.surface, "88");
             }}
             onMouseLeave={e => {
               if (!isSelected) e.currentTarget.style.background = "transparent";
@@ -162,22 +163,22 @@ export function DeficitTable({
               }}>
                 P1–P{d.level}
               </span>
-              <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
+              <span style={{ fontSize: 12, color: c.textTertiary, fontWeight: 600 }}>
                 {meta.modeLabel}
               </span>
             </div>
 
             {/* Monthly cost */}
-            <div style={{ textAlign: "right", fontSize: 13, color: "#e2e8f0", fontWeight: 700 }}>
+            <div style={{ textAlign: "right", fontSize: 13, color: c.text, fontWeight: 700 }}>
               {fmt(d.monthlyCost)}
             </div>
 
             {/* Monthly deficit */}
             <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700 }}>
               {d.monthlyDeficit > 0 ? (
-                <span style={{ color: "#ef4444" }}>{fmt(d.monthlyDeficit)}</span>
+                <span style={{ color: c.danger }}>{fmt(d.monthlyDeficit)}</span>
               ) : (
-                <span style={{ color: "#10b981", fontSize: 11, fontWeight: 600 }}>
+                <span style={{ color: c.success, fontSize: 11, fontWeight: 600 }}>
                   dochód pokrywa ✓
                 </span>
               )}
@@ -187,12 +188,12 @@ export function DeficitTable({
             <div style={{ textAlign: "right" }}>
               {d.targetCushion > 0 ? (
                 <>
-                  <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 700 }}>
+                  <div style={{ fontSize: 13, color: c.text, fontWeight: 700 }}>
                     {fmt(d.targetCushion)}
                   </div>
                   {hasPlanned && (
                     <div
-                      style={{ fontSize: 10, color: "#a78bfa", marginTop: 2 }}
+                      style={{ fontSize: 10, color: c.voucherLight, marginTop: 2 }}
                       title={`Cel życia: ${fmt(d.baseTarget)} + planowane: ${fmt(d.plannedTarget)}`}
                     >
                       📅 W tym {fmt(d.plannedTarget)} planowane
@@ -200,7 +201,7 @@ export function DeficitTable({
                   )}
                 </>
               ) : (
-                <span style={{ color: "#475569", fontSize: 12 }}>—</span>
+                <span style={{ color: c.textMuted, fontSize: 12 }}>—</span>
               )}
             </div>
 
@@ -212,7 +213,7 @@ export function DeficitTable({
                 {Math.min(999, Math.round(d.coveragePercent))}%
               </div>
               <div style={{
-                height: 4, background: "#1e293b",
+                height: 4, background: c.border,
                 borderRadius: 2, marginTop: 4, overflow: "hidden",
               }}>
                 <div style={{
@@ -231,7 +232,7 @@ export function DeficitTable({
 
 // ── Mobile stat cell ─────────────────────────────────────────
 
-function DeficitStat({ label, value, color = "#e2e8f0" }: {
+function DeficitStat({ label, value, color = c.text }: {
   label: string;
   value: string;
   color?: string;
@@ -239,7 +240,7 @@ function DeficitStat({ label, value, color = "#e2e8f0" }: {
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{
-        fontSize: 9, color: "#475569", fontWeight: 700,
+        fontSize: 9, color: c.textMuted, fontWeight: 700,
         textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 3,
       }}>
         {label}
@@ -256,10 +257,10 @@ const headerRowStyle: React.CSSProperties = {
   gridTemplateColumns: "minmax(140px, 1fr) 110px 130px 160px 110px",
   gap: 12,
   padding: "8px 10px",
-  borderBottom: "1px solid #1e293b",
+  borderBottom: `1px solid ${c.border}`,
   fontSize: 10,
   fontWeight: 700,
-  color: "#475569",
+  color: c.textMuted,
   textTransform: "uppercase",
   letterSpacing: "0.5px",
 };
@@ -270,6 +271,6 @@ const rowStyle: React.CSSProperties = {
   gap: 12,
   alignItems: "center",
   padding: "12px 10px",
-  borderBottom: "1px solid #1e293b",
+  borderBottom: `1px solid ${c.border}`,
   transition: "background 0.15s",
 };

@@ -27,7 +27,8 @@
 // Or render alongside real content when only PART of a panel is loading.
 // ============================================================
 
-import { CSSProperties, ReactNode, useEffect } from "react";
+import { c } from "../../styles/tokens";
+import { CSSProperties, ReactNode } from "react";
 
 // ── Inject pulse animation once ──────────────────────────────
 // Marked with an ID so we don't add it multiple times even with
@@ -67,7 +68,7 @@ export function Skeleton({
   width    = "100%",
   height   = 14,
   rounded  = 6,
-  color    = "#1e293b",
+  color    = c.border,
   style,
 }: SkeletonProps) {
   // Inject keyframes lazily. Hooks rules say useEffect, but we want this
@@ -138,8 +139,8 @@ interface SkeletonKpiCardProps {
 export function SkeletonKpiCard({ height = 90, style }: SkeletonKpiCardProps) {
   return (
     <div style={{
-      background:   "#0d1424",
-      border:       "1px solid #1e293b",
+      background:   c.surface,
+      border:       `1px solid ${c.border}`,
       borderRadius: 12,
       padding:      14,
       height,
@@ -193,7 +194,7 @@ export function SkeletonListRow({
           alignItems:     "center",
           gap:            12,
           padding:        "12px 0",
-          borderBottom:   rowIdx === rows.length - 1 ? "none" : "1px solid #1e293b",
+          borderBottom:   rowIdx === rows.length - 1 ? "none" : `1px solid ${c.border}`,
           height,
           boxSizing:      "border-box",
         }}>
@@ -253,8 +254,8 @@ interface SkeletonCardProps {
 export function SkeletonCard({ height = 120, title = true, children, style }: SkeletonCardProps) {
   return (
     <div style={{
-      background:   "#0d1424",
-      border:       "1px solid #1e293b",
+      background:   c.surface,
+      border:       `1px solid ${c.border}`,
       borderRadius: 14,
       padding:      18,
       ...style,

@@ -21,6 +21,7 @@
 //     "Archiwum" section. Avoids accidental loss of "Konto PKO 50 000 zł".
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useMemo, useState, useCallback, useRef } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { fmt } from "../../../utils/helpers";
@@ -141,13 +142,13 @@ export function AssetsPortfolio({ assets, onChange }: AssetsPortfolioProps) {
             <AssetsPieChart assets={activeAssets} total={total} />
             <div style={{
               marginTop: 10, paddingTop: 10,
-              borderTop: "1px solid #1e293b",
+              borderTop: `1px solid ${c.border}`,
               display: "flex", justifyContent: "space-between", alignItems: "baseline",
             }}>
-              <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 600 }}>
+              <span style={{ color: c.textTertiary, fontSize: 12, fontWeight: 600 }}>
                 Aktualny stan poduszki
               </span>
-              <span style={{ fontSize: 22, fontWeight: 800, color: "#10b981" }}>
+              <span style={{ fontSize: 22, fontWeight: 800, color: c.success }}>
                 {fmt(total)}
               </span>
             </div>
@@ -156,7 +157,7 @@ export function AssetsPortfolio({ assets, onChange }: AssetsPortfolioProps) {
           {/* Right: bucket list */}
           <Card style={{ padding: 14 }}>
             <div style={{
-              fontSize: 11, color: "#475569", fontWeight: 700,
+              fontSize: 11, color: c.textMuted, fontWeight: 700,
               textTransform: "uppercase", letterSpacing: "0.5px",
               marginBottom: 8,
             }}>
@@ -297,13 +298,13 @@ function AssetEditor({ initial, mode, onSave, onCancel }: AssetEditorProps) {
   return (
     <div style={{
       padding: 14,
-      background: "#0d1424",
-      border: `1px solid ${mode === "edit" ? "#3b82f644" : "#1e293b"}`,
+      background: c.surface,
+      border: `1px solid ${mode === "edit" ? alpha(c.info, "44") : c.border}`,
       borderRadius: 10,
     }}>
       <div style={{
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        fontSize: 11, color: "#475569", fontWeight: 700,
+        fontSize: 11, color: c.textMuted, fontWeight: 700,
         textTransform: "uppercase", letterSpacing: "0.5px",
         marginBottom: 12,
       }}>
@@ -352,7 +353,7 @@ function AssetEditor({ initial, mode, onSave, onCancel }: AssetEditorProps) {
         <label style={lblStyle}>
           Kwota w wybranej walucie
           {isForeign && (
-            <span style={{ color: "#475569", fontWeight: 400, marginLeft: 6, textTransform: "none" }}>
+            <span style={{ color: c.textMuted, fontWeight: 400, marginLeft: 6, textTransform: "none" }}>
               · zostanie przeliczona po kursie NBP
             </span>
           )}
@@ -385,10 +386,10 @@ function AssetEditor({ initial, mode, onSave, onCancel }: AssetEditorProps) {
         <div style={{
           marginBottom: 12,
           padding: "8px 12px",
-          background: "#10b98111",
-          border: "1px solid #10b98133",
+          background: alpha(c.success, "11"),
+          border: `1px solid ${alpha(c.success, "33")}`,
           borderRadius: 8,
-          fontSize: 12, color: "#10b981",
+          fontSize: 12, color: c.success,
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
           <span>
@@ -406,7 +407,7 @@ function AssetEditor({ initial, mode, onSave, onCancel }: AssetEditorProps) {
           onClick={handleSubmit}
           disabled={!canSave}
           style={{
-            background: "#10b981", color: "#fff", border: "none",
+            background: c.success, color: c.white, border: "none",
             borderRadius: 8, padding: "8px 18px",
             fontWeight: 700, fontSize: 13,
             cursor: canSave ? "pointer" : "not-allowed",
@@ -447,7 +448,7 @@ function AssetsPieChart({ assets, total }: AssetsPieChartProps) {
           cx="50%" cy="50%"
           outerRadius={80}
           innerRadius={42}
-          stroke="#0d1424"
+          stroke={c.surface}
           strokeWidth={2}
         >
           {data.map((d, i) => (
@@ -455,7 +456,7 @@ function AssetsPieChart({ assets, total }: AssetsPieChartProps) {
           ))}
         </Pie>
         <Tooltip
-          contentStyle={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8 }}
+          contentStyle={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8 }}
           formatter={(v: unknown) => {
               const num = typeof v === "number" ? v : Number(v) || 0;
               return [`${fmt(num)} (${((num / total) * 100).toFixed(1)}%)`, "Wartość"];
@@ -463,7 +464,7 @@ function AssetsPieChart({ assets, total }: AssetsPieChartProps) {
         />
         <Legend
           wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
-          formatter={(value: string) => <span style={{ color: "#cbd5e1" }}>{value}</span>}
+          formatter={(value: string) => <span style={{ color: c.textBody }}>{value}</span>}
         />
       </PieChart>
     </ResponsiveContainer>
@@ -498,8 +499,8 @@ function AssetRow({ asset, total, isEditing, onEdit, onArchive }: AssetRowProps)
       gridTemplateColumns: "auto 1fr auto auto auto",
       gap: 8, alignItems: "center",
       padding: "8px 10px",
-      background: isEditing ? "#0a1a2e" : "#090e1b",
-      border: `1px solid ${isEditing ? "#3b82f677" : meta.color + "33"}`,
+      background: isEditing ? "#0a1a2e" : c.bgDeepest,
+      border: `1px solid ${isEditing ? alpha(c.info, "77") : meta.color + "33"}`,
       borderRadius: 8,
     }}>
       <span style={{
@@ -508,18 +509,18 @@ function AssetRow({ asset, total, isEditing, onEdit, onArchive }: AssetRowProps)
 
       <div style={{ minWidth: 0 }}>
         <div style={{
-          fontSize: 13, fontWeight: 700, color: "#e2e8f0",
+          fontSize: 13, fontWeight: 700, color: c.text,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {asset.label}
         </div>
         <div style={{
-          fontSize: 10, color: "#475569",
+          fontSize: 10, color: c.textMuted,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {meta.label} · {pct.toFixed(1)}% poduszki
           {hasFx && (
-            <span style={{ color: fxIsStale ? "#f59e0b" : "#94a3b8", marginLeft: 6 }}>
+            <span style={{ color: fxIsStale ? c.warning : c.textTertiary, marginLeft: 6 }}>
               · {asset.originalAmount} {asset.originalCurrency}
               {" @ "}
               {asset.fxRate?.toFixed(4)}
@@ -530,7 +531,7 @@ function AssetRow({ asset, total, isEditing, onEdit, onArchive }: AssetRowProps)
       </div>
 
       <div style={{
-        fontSize: 13, fontWeight: 800, color: "#e2e8f0",
+        fontSize: 13, fontWeight: 800, color: c.text,
         textAlign: "right", minWidth: 80,
       }}>
         {fmt(asset.amount)}
@@ -541,9 +542,9 @@ function AssetRow({ asset, total, isEditing, onEdit, onArchive }: AssetRowProps)
         onClick={onEdit}
         title={isEditing ? "Zwiń edytor" : "Edytuj koszyk"}
         style={{
-          background: isEditing ? "#3b82f622" : "transparent",
-          border: `1px solid ${isEditing ? "#3b82f677" : "#1e293b"}`,
-          color: isEditing ? "#3b82f6" : "#94a3b8",
+          background: isEditing ? alpha(c.info, "22") : "transparent",
+          border: `1px solid ${isEditing ? alpha(c.info, "77") : c.border}`,
+          color: isEditing ? c.info : c.textTertiary,
           borderRadius: 6,
           width: 26, height: 26,
           cursor: "pointer", fontSize: 12,
@@ -558,8 +559,8 @@ function AssetRow({ asset, total, isEditing, onEdit, onArchive }: AssetRowProps)
         title="Archiwizuj (można przywrócić)"
         style={{
           background: "transparent",
-          border: "1px solid #1e293b",
-          color: "#64748b", borderRadius: 6,
+          border: `1px solid ${c.border}`,
+          color: c.textSecondary, borderRadius: 6,
           width: 26, height: 26,
           cursor: "pointer", fontSize: 12,
         }}
@@ -595,12 +596,12 @@ function ArchiveSection({ assets, expanded, onToggle, onRestore }: ArchiveSectio
         }}
       >
         <span style={{
-          fontSize: 11, color: "#475569", fontWeight: 700,
+          fontSize: 11, color: c.textMuted, fontWeight: 700,
           textTransform: "uppercase", letterSpacing: "0.5px",
         }}>
           🗄 Archiwum ({assets.length}) · {fmt(total)}
         </span>
-        <span style={{ color: "#475569", fontSize: 11 }}>
+        <span style={{ color: c.textMuted, fontSize: 11 }}>
           {expanded ? "− Zwiń" : "+ Rozwiń"}
         </span>
       </button>
@@ -615,8 +616,8 @@ function ArchiveSection({ assets, expanded, onToggle, onRestore }: ArchiveSectio
                 gridTemplateColumns: "auto 1fr auto auto",
                 gap: 8, alignItems: "center",
                 padding: "8px 10px",
-                background: "#090e1b",
-                border: "1px solid #1e293b",
+                background: c.bgDeepest,
+                border: `1px solid ${c.border}`,
                 borderRadius: 8,
                 opacity: 0.7,
               }}>
@@ -625,19 +626,19 @@ function ArchiveSection({ assets, expanded, onToggle, onRestore }: ArchiveSectio
                 }} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{
-                    fontSize: 12, fontWeight: 600, color: "#94a3b8",
+                    fontSize: 12, fontWeight: 600, color: c.textTertiary,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
                     {a.label}
                   </div>
                   {a.archivedAt && (
-                    <div style={{ fontSize: 10, color: "#475569" }}>
+                    <div style={{ fontSize: 10, color: c.textMuted }}>
                       Zarchiwizowano: {a.archivedAt.slice(0, 10)}
                     </div>
                   )}
                 </div>
                 <div style={{
-                  fontSize: 12, fontWeight: 700, color: "#94a3b8",
+                  fontSize: 12, fontWeight: 700, color: c.textTertiary,
                   textAlign: "right", minWidth: 80,
                 }}>
                   {fmt(a.amount)}
@@ -648,8 +649,8 @@ function ArchiveSection({ assets, expanded, onToggle, onRestore }: ArchiveSectio
                   title="Przywróć koszyk"
                   style={{
                     background: "transparent",
-                    border: "1px solid #10b98144",
-                    color: "#10b981", borderRadius: 6,
+                    border: `1px solid ${alpha(c.success, "44")}`,
+                    color: c.success, borderRadius: 6,
                     padding: "4px 10px",
                     cursor: "pointer", fontSize: 11, fontWeight: 600,
                   }}
@@ -680,7 +681,7 @@ function LiquiditySummary({
   return (
     <Card style={{ padding: 14 }}>
       <div style={{
-        fontSize: 11, color: "#475569", fontWeight: 700,
+        fontSize: 11, color: c.textMuted, fontWeight: 700,
         textTransform: "uppercase", letterSpacing: "0.5px",
         marginBottom: 10,
       }}>
@@ -689,8 +690,8 @@ function LiquiditySummary({
 
       <div style={{
         display: "flex", height: 10,
-        background: "#0d1424", borderRadius: 99, overflow: "hidden",
-        border: "1px solid #1e293b",
+        background: c.surface, borderRadius: 99, overflow: "hidden",
+        border: `1px solid ${c.border}`,
       }}>
         {(["instant", "fast", "slow"] as LiquidityLevel[]).map(lvl => {
           const pct = total > 0 ? (byLiquidity[lvl] / total) * 100 : 0;
@@ -709,7 +710,7 @@ function LiquiditySummary({
 
       <div style={{
         display: "flex", justifyContent: "space-between",
-        marginTop: 8, fontSize: 11, color: "#94a3b8",
+        marginTop: 8, fontSize: 11, color: c.textTertiary,
       }}>
         {(["instant", "fast", "slow"] as LiquidityLevel[]).map(lvl => {
           const pct = total > 0 ? (byLiquidity[lvl] / total) * 100 : 0;
@@ -719,7 +720,7 @@ function LiquiditySummary({
                 display: "inline-block", width: 8, height: 8, borderRadius: 2,
                 background: LIQUIDITY_META[lvl].color,
               }} />
-              {LIQUIDITY_META[lvl].label}: <strong style={{ color: "#e2e8f0" }}>{fmt(byLiquidity[lvl])}</strong>{" "}
+              {LIQUIDITY_META[lvl].label}: <strong style={{ color: c.text }}>{fmt(byLiquidity[lvl])}</strong>{" "}
               ({pct.toFixed(0)}%)
             </span>
           );
@@ -730,10 +731,10 @@ function LiquiditySummary({
         <div style={{
           marginTop: 10,
           padding: "8px 12px",
-          background: "#ef444411",
-          border: "1px solid #ef444444",
+          background: alpha(c.danger, "11"),
+          border: `1px solid ${alpha(c.danger, "44")}`,
           borderRadius: 8,
-          fontSize: 12, color: "#fca5a5", lineHeight: 1.5,
+          fontSize: 12, color: c.dangerSoft, lineHeight: 1.5,
         }}>
           ⚠️ <strong>{slowPct.toFixed(0)}%</strong> Twojej poduszki jest w trudno dostępnych aktywach.
           W razie nagłej awarii lub utraty dochodu wyciągnięcie tych środków może zająć tygodnie,
@@ -749,10 +750,10 @@ function LiquiditySummary({
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  background: "#0a0f1e",
-  border: "1px solid #1e293b",
+  background: c.bg,
+  border: `1px solid ${c.border}`,
   borderRadius: 8,
-  color: "#e2e8f0",
+  color: c.text,
   padding: "9px 12px",
   fontSize: 14,
   outline: "none",
@@ -762,7 +763,7 @@ const inputStyle: React.CSSProperties = {
 const lblStyle: React.CSSProperties = {
   display: "block",
   fontSize: 11,
-  color: "#64748b",
+  color: c.textSecondary,
   fontWeight: 700,
   textTransform: "uppercase",
   letterSpacing: "0.5px",
@@ -773,8 +774,8 @@ function btnGhost(disabled: boolean): React.CSSProperties {
   return {
     padding: "5px 10px",
     background: "transparent",
-    border: "1px solid #1e293b",
-    color: disabled ? "#334155" : "#94a3b8",
+    border: `1px solid ${c.border}`,
+    color: disabled ? c.borderStrong : c.textTertiary,
     borderRadius: 8,
     fontSize: 11,
     fontWeight: 600,

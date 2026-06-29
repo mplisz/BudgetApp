@@ -9,11 +9,9 @@
 // ============================================================
 
 import { useState, useCallback } from "react";
-import { useAuth }       from "../context/AuthContext";
 import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { useApi }        from "./useApi";
 
 // ── Domain types ──────────────────────────────────────────────
 
@@ -93,7 +91,7 @@ interface UseLimitsResult {
 }
 
 export function useLimits(): UseLimitsResult {
-  const { fetchWithAuth }          = useAuth() as { fetchWithAuth: typeof fetch };
+  const api                        = useApi();
   const { limits, setLimits }      = useAppContext() as {
     limits:    LimitDoc[];
     setLimits: (v: LimitDoc[] | ((prev: LimitDoc[]) => LimitDoc[])) => void;
@@ -111,16 +109,14 @@ export function useLimits(): UseLimitsResult {
   const loadLimits = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/limits`);
-      const data = await (res as Response).json() as LimitDoc[];
-      if (!(res as Response).ok) throw new Error((data as unknown as { error: string }).error || "Failed to load limits.");
+      const data = await api.get<LimitDoc[]>("/api/limits", { fallback: "Nie udało się pobrać limitów." });
       setLimits(data);
     } catch (err) {
       showError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [fetchWithAuth, setLimits, showError]);
+  }, [api, setLimits, showError]);
 
   // ── Save single limit entry (kept for compatibility) ───────
 
@@ -145,16 +141,13 @@ export function useLimits(): UseLimitsResult {
     if (changes.length === 0) return [];
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/limits/batch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ changes }),
-      });
-      const data = await (res as Response).json() as { saved: LimitDoc[]; errors: Array<{ categoryId: string; error: string }> };
-
-      if (!(res as Response).ok && (res as Response).status !== 207) {
-        throw new Error((data as unknown as { error: string }).error || "Batch save failed.");
-      }
+      // 207 = multi-status: some categories saved, some failed. Treat as
+      // success so we can read `saved`/`errors` and surface partial errors.
+      const data = await api.post<{ saved: LimitDoc[]; errors: Array<{ categoryId: string; error: string }> }>(
+        "/api/limits/batch",
+        { changes },
+        { okStatuses: [207], fallback: "Nie udało się zapisać limitów." },
+      );
 
       // Partial errors — show warning but don't throw
       if (data.errors?.length) {
@@ -183,7 +176,7 @@ export function useLimits(): UseLimitsResult {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setLimits, showSuccess, showError]);
+  }, [api, setLimits, showSuccess, showError]);
 
   // ── Remove a single limit entry ────────────────────────────
 

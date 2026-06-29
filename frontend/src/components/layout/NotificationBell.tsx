@@ -3,6 +3,7 @@
 // Bell dropdown with reminders for recurring and planned expenses.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useEffect, useRef } from "react";
 import { createPortal }          from "react-dom";
 import { useRecurring, getActiveCost } from "../../hooks/useRecurring";
@@ -14,7 +15,6 @@ import { PaymentConfirmModal }   from "../ui/PaymentConfirmModal";
 import { fmt, fmtAmount }        from "../../utils/helpers";
 import type { PlannedDoc }       from "../../hooks/usePlanned";
 
-import { useNavigate }   from "react-router-dom";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -32,14 +32,6 @@ interface RecurringDoc {
 function todayYMD(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
-function plannedDateYMD(doc: RecurringDoc): string {
-  const today = new Date();
-  const y   = today.getFullYear();
-  const m   = today.getMonth() + 1;
-  const day = Math.min(doc.plannedDay || 1, new Date(y, m, 0).getDate());
-  return `${y}-${String(m).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
 }
 
 // ── RecurringBellItem ─────────────────────────────────────────
@@ -98,26 +90,26 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }: RecurringBellItemProps
 
   return (
     <>
-      <div style={{ background: "#090e1b", border: `1px solid ${isPastDue ? "#ef444433" : "#1e293b"}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6 }}>
-        <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13, marginBottom: 2 }}>
+      <div style={{ background: c.bgDeepest, border: `1px solid ${isPastDue ? alpha(c.danger, "33") : c.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6 }}>
+        <div style={{ fontWeight: 700, color: c.text, fontSize: 13, marginBottom: 2 }}>
           {doc.description}
         </div>
-        <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: c.textSecondary, marginBottom: 6 }}>
           {doc.categoryName} · {amountStr}
-          <span style={{ marginLeft: 8, color: isPastDue ? "#ef4444" : isToday ? "#f59e0b" : "#475569" }}>
+          <span style={{ marginLeft: 8, color: isPastDue ? c.danger : isToday ? c.warning : c.textMuted }}>
             {dateLabel}
           </span>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           <button
             onClick={() => setShowModal(true)}
-            style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+            style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: c.success, color: c.white, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
           >
             ✅ Potwierdzam
           </button>
           <button
             onClick={() => onDismiss(doc)}
-            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #1e293b", background: "transparent", color: "#475569", fontSize: 12, cursor: "pointer" }}
+            style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted, fontSize: 12, cursor: "pointer" }}
             title="Pomiń"
           >
             ✕
@@ -142,19 +134,19 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }: RecurringBellItemProps
         extraInfo={
           <div>
             {isForeign && activeCost && (
-              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>
-                Kurs NBP: <strong style={{ color: "#10b981" }}>{liveRate.toFixed(4)}</strong>
+              <div style={{ fontSize: 11, color: c.textSecondary, marginBottom: 8 }}>
+                Kurs NBP: <strong style={{ color: c.success }}>{liveRate.toFixed(4)}</strong>
                 {" · "}{fmtAmount(activeCost.amount, activeCost.originalCurrency!)} {activeCost.originalCurrency}
               </div>
             )}
-            <label style={{ display: "block", fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 }}>
+            <label style={{ display: "block", fontSize: 11, color: c.textSecondary, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 }}>
               Data transakcji
             </label>
             <input
               type="date"
               value={modalDate}
               onChange={e => setModalDate(e.target.value)}
-              style={{ width: "100%", background: "#0a0f1e", border: "1px solid #1e293b", borderRadius: 8, color: "#e2e8f0", padding: "8px 12px", fontSize: 13, outline: "none", colorScheme: "dark", boxSizing: "border-box" }}
+              style={{ width: "100%", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 8, color: c.text, padding: "8px 12px", fontSize: 13, outline: "none", colorScheme: "dark", boxSizing: "border-box" }}
             />
           </div>
         }
@@ -181,7 +173,7 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }: PlannedBel
 
   const [showPayModal, setShowPayModal] = useState(false);
 
-  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter() as {
+  const { loadRate, activeRate } = useCurrencyConverter() as {
     loadRate:   (currency: string, date: string) => void;
     activeRate: number | null;
     isLoading:  boolean;
@@ -200,20 +192,20 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }: PlannedBel
 
   return (
     <>
-      <div style={{ background: "#090e1b", border: `1px solid ${ready ? "#10b98133" : "#3b82f633"}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6 }}>
-        <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13, marginBottom: 2 }}>
+      <div style={{ background: c.bgDeepest, border: `1px solid ${ready ? alpha(c.success, "33") : alpha(c.info, "33")}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6 }}>
+        <div style={{ fontWeight: 700, color: c.text, fontSize: 13, marginBottom: 2 }}>
           {doc.description}
-          <span style={{ fontSize: 10, marginLeft: 8, color: doc.mode === "envelope" ? "#3b82f6" : "#f59e0b", fontWeight: 400 }}>
+          <span style={{ fontSize: 10, marginLeft: 8, color: doc.mode === "envelope" ? c.info : c.warning, fontWeight: 400 }}>
             {doc.mode === "envelope" ? "Koperta" : "Jednorazowy"}
           </span>
         </div>
 
         {doc.mode === "envelope" && (
           <>
-            <div style={{ height: 4, background: "#1e293b", borderRadius: 99, overflow: "hidden", margin: "6px 0" }}>
-              <div style={{ height: "100%", width: `${progressPct}%`, background: ready ? "#10b981" : "#3b82f6", borderRadius: 99 }} />
+            <div style={{ height: 4, background: c.border, borderRadius: 99, overflow: "hidden", margin: "6px 0" }}>
+              <div style={{ height: "100%", width: `${progressPct}%`, background: ready ? c.success : c.info, borderRadius: 99 }} />
             </div>
-            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>
+            <div style={{ fontSize: 11, color: c.textSecondary, marginBottom: 6 }}>
               {fmt(paid)} / {fmt(totalPLN)} PLN · {progressPct}%
             </div>
           </>
@@ -223,7 +215,7 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }: PlannedBel
           {ready ? (
             <button
               onClick={() => onPurchase(doc)}
-              style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+              style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: c.success, color: c.white, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
             >
               🛍️ Kup teraz
             </button>
@@ -231,13 +223,13 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }: PlannedBel
             <>
               <button
                 onClick={() => setShowPayModal(true)}
-                style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+                style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: c.info, color: c.white, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
               >
                 💰 Odkładam {suggestion !== null ? fmt(suggestion) : "…"} PLN
               </button>
               <button
                 onClick={() => onDismiss(doc, currentMonth)}
-                style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #1e293b", background: "transparent", color: "#475569", fontSize: 12, cursor: "pointer" }}
+                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted, fontSize: 12, cursor: "pointer" }}
                 title="Pomiń ten miesiąc"
               >
                 ✕
@@ -246,7 +238,7 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }: PlannedBel
           ) : (
             <button
               onClick={() => onPurchase(doc)}
-              style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: "#f59e0b", color: "#000", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+              style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: c.warning, color: "#000", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
             >
               💳 Potwierdź zakup
             </button>
@@ -268,8 +260,8 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }: PlannedBel
         }}
         onCancel={() => setShowPayModal(false)}
         extraInfo={
-          <div style={{ fontSize: 11, color: "#475569" }}>
-            Pozostało: <strong style={{ color: "#e2e8f0" }}>{fmt(remaining)} PLN</strong>
+          <div style={{ fontSize: 11, color: c.textMuted }}>
+            Pozostało: <strong style={{ color: c.text }}>{fmt(remaining)} PLN</strong>
           </div>
         }
       />
@@ -299,8 +291,6 @@ export function NotificationBell() {
     dismissMonth,
     purchasePlanned,
   } = usePlanned();
-
-  const navigate = useNavigate();
 
   const [open,        setOpen]        = useState(false);
   const [purchaseDoc, setPurchaseDoc] = useState<PlannedDoc | null>(null);
@@ -362,15 +352,15 @@ export function NotificationBell() {
           onClick={() => setOpen(v => !v)}
           style={{
             position: "relative", background: "transparent",
-            border: `1px solid ${count > 0 ? "#f59e0b44" : "#1e293b"}`,
+            border: `1px solid ${count > 0 ? alpha(c.warning, "44") : c.border}`,
             borderRadius: 10, padding: "7px 10px", cursor: "pointer",
-            color: count > 0 ? "#f59e0b" : "#475569", fontSize: 18, lineHeight: 1,
+            color: count > 0 ? c.warning : c.textMuted, fontSize: 18, lineHeight: 1,
           }}
           title={count > 0 ? `${count} przypomnienie${count > 1 ? "ń" : ""}` : "Brak przypomnień"}
         >
           🔔
           {count > 0 && (
-            <span style={{ position: "absolute", top: -6, right: -6, background: "#f59e0b", color: "#000", borderRadius: "50%", width: 18, height: 18, fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ position: "absolute", top: -6, right: -6, background: c.warning, color: "#000", borderRadius: "50%", width: 18, height: 18, fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>
               {count}
             </span>
           )}
@@ -382,8 +372,8 @@ export function NotificationBell() {
                 top: 64,
                 right: 12,
                 left: "auto",
-                background: "#0d1424",
-                border: "1px solid #1e293b",
+                background: c.surface,
+                border: `1px solid ${c.border}`,
                 borderRadius: 12,
                 padding: 8,
                 width: "min(360px, calc(100vw - 24px))",
@@ -392,12 +382,12 @@ export function NotificationBell() {
                 boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
                 zIndex: 1000,
             }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", padding: "4px 8px 10px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: c.textSecondary, textTransform: "uppercase", letterSpacing: "0.6px", padding: "4px 8px 10px" }}>
               🔔 Przypomnienia
             </div>
 
             {count === 0 && (
-              <div style={{ color: "#334155", fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+              <div style={{ color: c.borderStrong, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
                 Brak aktywnych przypomnień
               </div>
             )}
@@ -412,7 +402,7 @@ export function NotificationBell() {
             ))}
 
             {safePlanned.length > 0 && (
-              <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", padding: "6px 4px 4px" }}>
+              <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", padding: "6px 4px 4px" }}>
                 📅 Planowane
               </div>
             )}

@@ -7,6 +7,7 @@
 // `emptyMessage` to tailor the empty-state wording.
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { fmt } from "../../../utils/helpers";
@@ -62,14 +63,14 @@ export function AnalyticsPieChart({ data, emptyMessage }: AnalyticsPieChartProps
       {/* Drill-down header */}
       {drillCategory && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ color: "#94a3b8", fontSize: 13, fontWeight: 600 }}>
+          <div style={{ color: c.textTertiary, fontSize: 13, fontWeight: 600 }}>
             {drillCategory.icon} {drillCategory.categoryName} — podkategorie
           </div>
           <button
             onClick={() => setDrillCategoryId(null)}
             style={{
-              background: "#1e293b", border: "1px solid #334155",
-              color: "#94a3b8", borderRadius: 8, padding: "4px 12px",
+              background: c.border, border: `1px solid ${c.borderStrong}`,
+              color: c.textTertiary, borderRadius: 8, padding: "4px 12px",
               cursor: "pointer", fontSize: 12, fontWeight: 600,
             }}
           >
@@ -79,7 +80,7 @@ export function AnalyticsPieChart({ data, emptyMessage }: AnalyticsPieChartProps
       )}
 
       {!drillCategory && (
-        <div style={{ color: "#475569", fontSize: 11, marginBottom: 8, textAlign: "center" }}>
+        <div style={{ color: c.textMuted, fontSize: 11, marginBottom: 8, textAlign: "center" }}>
           Kliknij wycinek aby zobaczyć podkategorie
         </div>
       )}
@@ -91,7 +92,7 @@ export function AnalyticsPieChart({ data, emptyMessage }: AnalyticsPieChartProps
             dataKey="value"
             cx="50%" cy="50%"
             outerRadius={110}
-            stroke="#0d1424"
+            stroke={c.surface}
             strokeWidth={2}
             onClick={(data: unknown) => {
               const payload = data as { _categoryId?: string };
@@ -119,7 +120,7 @@ export function AnalyticsPieChart({ data, emptyMessage }: AnalyticsPieChartProps
           />
           <Legend
             wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-            formatter={(value: string) => <span style={{ color: "#cbd5e1" }}>{value}</span>}
+            formatter={(value: string) => <span style={{ color: c.textBody }}>{value}</span>}
           />
         </PieChart>
       </ResponsiveContainer>

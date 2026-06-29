@@ -4,6 +4,7 @@
 // Supports day picker (default) and month picker (monthPicker prop).
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import type { CSSProperties, ReactElement } from "react";
 import DatePicker, { registerLocale } from "react-datepicker";
 import { pl } from "date-fns/locale";
@@ -84,10 +85,10 @@ export function AppDatePicker({
 }: AppDatePickerProps): ReactElement {
   const inputStyle: CSSProperties = {
     width:        "100%",
-    background:   "#0a0f1e",
-    border:       "1px solid #1e293b",
+    background:   c.bg,
+    border:       `1px solid ${c.border}`,
     borderRadius: 8,
-    color:        "#e2e8f0",
+    color:        c.text,
     padding:      "9px 12px",
     fontSize:     14,
     outline:      "none",
@@ -117,11 +118,6 @@ export function AppDatePicker({
   const resolvedMinDate: Date | undefined =
     minDate === null ? undefined : minDate ?? undefined;
 
-  // popperPlacement is a union of literal strings in react-datepicker types.
-  // We accept any string from callers and pass through unchecked — callers
-  // are responsible for passing valid values (e.g. "bottom-start").
-  const popperPlacementProp = popperPlacement as unknown as undefined;
-
   return (
     <>
       <DatePicker
@@ -145,43 +141,43 @@ export function AppDatePicker({
         .dp-full-width { width: 100%; }
         .dp-full-width .react-datepicker-wrapper { width: 100%; }
         .react-datepicker {
-          background: #0d1424 !important;
-          border: 1px solid #1e293b !important;
+          background: ${c.surface} !important;
+          border: 1px solid ${c.border} !important;
           border-radius: 12px !important;
           font-family: inherit !important;
         }
         .react-datepicker__header {
-          background: #0a0f1e !important;
-          border-bottom: 1px solid #1e293b !important;
+          background: ${c.bg} !important;
+          border-bottom: 1px solid ${c.border} !important;
           border-radius: 12px 12px 0 0 !important;
         }
         .react-datepicker__current-month,
-        .react-datepicker__day-name { color: #94a3b8 !important; }
+        .react-datepicker__day-name { color: ${c.textTertiary} !important; }
         .react-datepicker__day {
-          color: #e2e8f0 !important;
+          color: ${c.text} !important;
           border-radius: 6px !important;
         }
-        .react-datepicker__day:hover { background: #1e293b !important; }
+        .react-datepicker__day:hover { background: ${c.border} !important; }
         .react-datepicker__day--selected,
         .react-datepicker__month--selected {
-          background: #10b981 !important;
-          color: #fff !important;
+          background: ${c.success} !important;
+          color: ${c.white} !important;
           font-weight: 700 !important;
         }
         .react-datepicker__month-text {
-          color: #e2e8f0 !important;
+          color: ${c.text} !important;
           border-radius: 6px !important;
           padding: 4px 8px !important;
         }
-        .react-datepicker__month-text:hover { background: #1e293b !important; }
+        .react-datepicker__month-text:hover { background: ${c.border} !important; }
         .react-datepicker__day--today {
-          border: 1px solid #10b98166 !important;
+          border: 1px solid ${alpha(c.success, "66")} !important;
           background: transparent !important;
         }
-        .react-datepicker__day--disabled { color: #334155 !important; }
-        .react-datepicker__navigation-icon::before { border-color: #64748b !important; }
+        .react-datepicker__day--disabled { color: ${c.borderStrong} !important; }
+        .react-datepicker__navigation-icon::before { border-color: ${c.textSecondary} !important; }
         .react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
-          border-color: #10b981 !important;
+          border-color: ${c.success} !important;
         }
         .react-datepicker-popper { z-index: 9999 !important; }
         
@@ -190,27 +186,27 @@ export function AppDatePicker({
         .react-datepicker__year-read-view,
         .react-datepicker__month-read-view,
         .react-datepicker__month-year-read-view {
-          color: #e2e8f0 !important;
+          color: ${c.text} !important;
         }
         .react-datepicker__year-dropdown,
         .react-datepicker__month-dropdown,
         .react-datepicker__month-year-dropdown {
-          background: #0d1424 !important;
-          border: 1px solid #1e293b !important;
+          background: ${c.surface} !important;
+          border: 1px solid ${c.border} !important;
         }
         .react-datepicker__year-option,
         .react-datepicker__month-option,
         .react-datepicker__month-year-option {
-          color: #e2e8f0 !important;
+          color: ${c.text} !important;
         }
         .react-datepicker__year-option:hover,
         .react-datepicker__month-option:hover {
-          background: #1e293b !important;
+          background: ${c.border} !important;
         }
         /* The year shown in the month-picker header */
         .react-datepicker__current-month--hasMonthYearPicker,
         .react-datepicker-year-header {
-          color: #e2e8f0 !important;
+          color: ${c.text} !important;
         }
       `}</style>
     </>

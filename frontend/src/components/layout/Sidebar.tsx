@@ -11,6 +11,7 @@
 //     on /summary?m=2026-03 (not "today").
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { NavLink } from "react-router-dom";
 import { useAppContext } from "../../context/AppContext";
 import { PANEL_META } from "../../data/constants";
@@ -74,12 +75,12 @@ export function Sidebar() {
 
   return (
     <aside style={{
-      width: 220, background: "#0d1424", borderRight: "1px solid #1e293b",
+      width: 220, background: c.surface, borderRight: `1px solid ${c.border}`,
       display: "flex", flexDirection: "column",
       position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200,
     }}>
-      <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid #1e293b" }}>
-        <div style={{ fontSize: 17, fontWeight: 800, color: "#10b981", letterSpacing: "-0.5px" }}>
+      <div style={{ padding: "20px 16px 16px", borderBottom: `1px solid ${c.border}` }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: c.success, letterSpacing: "-0.5px" }}>
           💚 BudżetRodzinny
         </div>
       </div>
@@ -87,7 +88,7 @@ export function Sidebar() {
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
         {SIDEBAR_ITEMS.map((item, i) => item.section ? (
           <div key={`section-${i}`} style={{
-            padding: "12px 16px 4px", fontSize: 10, color: "#334155",
+            padding: "12px 16px 4px", fontSize: 10, color: c.borderStrong,
             textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700,
           }}>
             {item.section}
@@ -103,9 +104,9 @@ export function Sidebar() {
               width: "calc(100% - 16px)",
               borderRadius: 10, border: "none", textDecoration: "none",
               cursor: "pointer", textAlign: "left",
-              background:  isActive ? "#10b98122" : "transparent",
-              color:       isActive ? "#10b981"   : "#64748b",
-              borderLeft:  isActive ? "3px solid #10b981" : "3px solid transparent",
+              background:  isActive ? alpha(c.success, "22") : "transparent",
+              color:       isActive ? c.success   : c.textSecondary,
+              borderLeft:  isActive ? `3px solid ${c.success}` : "3px solid transparent",
               transition: "all 0.15s",
             })}
           >
@@ -121,7 +122,7 @@ export function Sidebar() {
                 </span>
                 {item.id === "vouchers" && expiringCount > 0 && (
                   <span style={{
-                    background: "#ef4444", color: "#fff",
+                    background: c.danger, color: c.white,
                     borderRadius: 99, padding: "1px 6px",
                     fontSize: 10, fontWeight: 800,
                   }}>

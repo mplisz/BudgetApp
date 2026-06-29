@@ -5,6 +5,7 @@
 // Shows running totals: full income, remaining income, lost income.
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { fmt } from "../../../utils/helpers";
 import { EmptyState } from "../../ui/summaryUi";
 import { ToggleRow, StatTile } from "./uiBits";
@@ -80,17 +81,17 @@ export function IncomeSourcesToggle({
                 <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                   <div style={{
                     fontSize: 13, fontWeight: 700,
-                    color: isLost ? "#ef4444" : "#e2e8f0",
+                    color: isLost ? c.danger : c.text,
                     textDecoration: isLost ? "line-through" : "none",
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
                     {src.label}
                   </div>
-                  <div style={{ fontSize: 10, color: "#475569" }}>
-                    Średnia: <span style={{ color: "#94a3b8", fontWeight: 600 }}>{fmt(src.avgMonthly)}</span>{" "}
+                  <div style={{ fontSize: 10, color: c.textMuted }}>
+                    Średnia: <span style={{ color: c.textTertiary, fontWeight: 600 }}>{fmt(src.avgMonthly)}</span>{" "}
                     / mies. · widoczne w {src.monthsSeen}/{lookbackMonths} mies.
                     {isLost && (
-                      <span style={{ color: "#ef4444", fontWeight: 700, marginLeft: 6 }}>
+                      <span style={{ color: c.danger, fontWeight: 700, marginLeft: 6 }}>
                         — UTRATA
                       </span>
                     )}
@@ -100,7 +101,7 @@ export function IncomeSourcesToggle({
               right={
                 <div style={{
                   fontSize: 13, fontWeight: 800,
-                  color: isLost ? "#ef4444" : "#10b981",
+                  color: isLost ? c.danger : c.success,
                   textDecoration: isLost ? "line-through" : "none",
                 }}>
                   {fmt(src.avgMonthly)}
@@ -117,19 +118,19 @@ export function IncomeSourcesToggle({
           label="Pełen dochód"
           value={fmt(totalIncome)}
           sub="/ mies."
-          color="#94a3b8"
+          color={c.textTertiary}
         />
         <StatTile
           label="Po utracie"
           value={fmt(remaining)}
           sub={excluded.size > 0 ? `${excluded.size} źródeł odznaczone` : "wszystko aktywne"}
-          color={excluded.size > 0 ? "#f59e0b" : "#10b981"}
+          color={excluded.size > 0 ? c.warning : c.success}
         />
         <StatTile
           label="Utracone"
           value={fmt(lostIncome)}
           sub={`${lostPct.toFixed(0)}% wpływów`}
-          color="#ef4444"
+          color={c.danger}
         />
       </div>
     </div>
@@ -142,8 +143,8 @@ function btnGhost(disabled: boolean): React.CSSProperties {
   return {
     padding: "5px 10px",
     background: "transparent",
-    border: "1px solid #1e293b",
-    color: disabled ? "#334155" : "#94a3b8",
+    border: `1px solid ${c.border}`,
+    color: disabled ? c.borderStrong : c.textTertiary,
     borderRadius: 8,
     fontSize: 11,
     fontWeight: 600,

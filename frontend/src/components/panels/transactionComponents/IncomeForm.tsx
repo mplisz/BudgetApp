@@ -14,6 +14,7 @@
 //   showBudgetHint  — shows budgetMonth hint below date (for edit mode)
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState, useCallback } from "react";
 import { SubcategorySelect }  from "../../ui/SubcategorySelect";
 import { AppDatePicker }      from "../../ui/AppDatePicker";
@@ -51,7 +52,7 @@ interface IncomeFormProps {
 const defaultLabel: React.CSSProperties = {
   display:       "block",
   fontSize:      11,
-  color:         "#64748b",
+  color:         c.textSecondary,
   textTransform: "uppercase",
   letterSpacing: "0.6px",
   fontWeight:    700,
@@ -61,10 +62,10 @@ const defaultLabel: React.CSSProperties = {
 const defaultInput: React.CSSProperties = {
   width:        "100%",
   boxSizing:    "border-box",
-  background:   "#0a0f1e",
-  border:       "1px solid #1e293b",
+  background:   c.bg,
+  border:       `1px solid ${c.border}`,
   borderRadius: 8,
-  color:        "#e2e8f0",
+  color:        c.text,
   padding:      "9px 12px",
   fontSize:     14,
   outline:      "none",
@@ -170,9 +171,9 @@ export function IncomeForm({
             style={inputStyle}
           />
           {showBudgetHint && budgetMonth && (
-            <div style={{ fontSize: 11, color: "#10b98199", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: alpha(c.success, "99"), marginTop: 4 }}>
               Miesiąc budżetowy: <strong>{budgetMonth}</strong>
-              <span style={{ color: "#475569" }}> (nieedytowalny)</span>
+              <span style={{ color: c.textMuted }}> (nieedytowalny)</span>
             </div>
           )}
         </div>
@@ -193,7 +194,7 @@ export function IncomeForm({
       </div>
 
       {error && (
-        <div style={{ color: "#f87171", fontSize: 12, marginBottom: 8 }}>
+        <div style={{ color: c.dangerLight, fontSize: 12, marginBottom: 8 }}>
           ⚠️ {error}
         </div>
       )}
@@ -206,8 +207,8 @@ export function IncomeForm({
             disabled={saving}
             style={{
               padding: "10px 20px", borderRadius: 8,
-              border: "1px solid #1e293b", background: "transparent",
-              color: "#94a3b8", cursor: saving ? "not-allowed" : "pointer",
+              border: `1px solid ${c.border}`, background: "transparent",
+              color: c.textTertiary, cursor: saving ? "not-allowed" : "pointer",
               fontWeight: 600,
               ...btnSecondaryStyle,
             }}
@@ -220,8 +221,8 @@ export function IncomeForm({
           disabled={readOnly || saving}
           style={{
             padding: "10px 24px", borderRadius: 8, border: "none",
-            background: readOnly || saving ? "#1e293b" : "#10b981",
-            color: "#fff", fontWeight: 700, fontSize: 14,
+            background: readOnly || saving ? c.border : c.success,
+            color: c.white, fontWeight: 700, fontSize: 14,
             cursor: readOnly || saving ? "not-allowed" : "pointer",
             ...btnPrimaryStyle,
           }}

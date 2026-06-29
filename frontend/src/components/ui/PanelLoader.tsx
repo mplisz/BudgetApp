@@ -16,7 +16,7 @@
 //   - User expects "Ładowanie..." in this context
 // ============================================================
 
-import { useEffect } from "react";
+import { c } from "../../styles/tokens";
 
 const SPIN_STYLE_ID = "panel-loader-spin-keyframes";
 const SPIN_CSS = `
@@ -49,13 +49,13 @@ export function PanelLoader() {
       <div style={{
         width:        28,
         height:       28,
-        border:       "3px solid #1e293b",
-        borderTop:    "3px solid #10b981",
+        border:       `3px solid ${c.border}`,
+        borderTop:    `3px solid ${c.success}`,
         borderRadius: "50%",
         animation:    "panel-loader-spin 0.8s linear infinite",
       }} />
       <div style={{
-        color:      "#64748b",
+        color:      c.textSecondary,
         fontSize:   13,
         fontWeight: 600,
       }}>

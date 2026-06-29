@@ -4,15 +4,12 @@
 
 import { useState, useEffect } from "react";
 import { useAppContext }  from "../context/AppContext";
-import { useAuth }        from "../context/AuthContext";
 import { useToast }       from "../hooks/useToast";
-import { translateError } from "../data/constants/errorMessages";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { useApi }         from "./useApi";
 
 export function useTagManager() {
   const { tags, setTags }          = useAppContext();
-  const { fetchWithAuth }          = useAuth();
+  const api                        = useApi();
   const { showError, showSuccess } = useToast();
 
   const [allTags,    setAllTags]    = useState([]);
@@ -28,9 +25,7 @@ export function useTagManager() {
       if (tags.length > 0) { setIsLoading(false); return; }
       setIsLoading(true);
       try {
-        const res = await fetchWithAuth(`${API_URL}/api/tags`);
-        if (!res.ok) throw new Error("Failed to fetch");
-        const data = await res.json();
+        const data = await api.get("/api/tags");
         setAllTags(data);
         setTags(data.filter(t => !t.isArchived));
       } catch (err) {
@@ -40,7 +35,7 @@ export function useTagManager() {
       }
     }
     loadTags();
-  }, [fetchWithAuth, setTags]);
+  }, [api, setTags]);
 
   // Keep allTags in sync with tags from AppContext (includes archived)
   useEffect(() => {
@@ -67,15 +62,7 @@ export function useTagManager() {
 
     setIsSaving(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/tags`, {
-        method: "POST",
-        body:   JSON.stringify({ name: cleanName, icon: newTagIcon }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(translateError(errData.error, "Nie można dodać tagu."));
-      }
-      const saved = await res.json();
+      const saved = await api.post("/api/tags", { name: cleanName, icon: newTagIcon }, { fallback: "Nie można dodać tagu." });
       setAllTags(prev => [...prev, saved]);
       setTags(prev => [...prev, saved]);
       setNewTagName("");
@@ -91,14 +78,7 @@ export function useTagManager() {
   // ── Archive ─────────────────────────────────────────────────
   async function handleArchiveTag(id) {
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/tags/update/${id}`, {
-        method: "PATCH",
-        body:   JSON.stringify({ isArchived: true }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(translateError(errData.error, "Nie udało się zarchiwizować tagu."));
-      }
+      await api.patch(`/api/tags/update/${id}`, { isArchived: true }, { fallback: "Nie udało się zarchiwizować tagu." });
       setAllTags(prev => prev.map(t => t.id === id ? { ...t, isArchived: true } : t));
       setTags(prev => prev.filter(t => t.id !== id));
       showSuccess("Tag zarchiwizowany.");
@@ -110,15 +90,7 @@ export function useTagManager() {
   // ── Restore ─────────────────────────────────────────────────
   async function handleRestoreTag(id) {
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/tags/update/${id}`, {
-        method: "PATCH",
-        body:   JSON.stringify({ isArchived: false }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(translateError(errData.error, "Nie udało się przywrócić tagu."));
-      }
-      const restored = await res.json();
+      const restored = await api.patch(`/api/tags/update/${id}`, { isArchived: false }, { fallback: "Nie udało się przywrócić tagu." });
       setAllTags(prev => prev.map(t => t.id === id ? restored : t));
       setTags(prev => [...prev, restored]);
       showSuccess("Tag przywrócony! ✅");
@@ -130,15 +102,7 @@ export function useTagManager() {
   // ── Update ──────────────────────────────────────────────────
   async function handleUpdateTag(id, updates) {
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/tags/update/${id}`, {
-        method: "PATCH",
-        body:   JSON.stringify(updates),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(translateError(errData.error, "Nie udało się zaktualizować tagu."));
-      }
-      const updated = await res.json();
+      const updated = await api.patch(`/api/tags/update/${id}`, updates, { fallback: "Nie udało się zaktualizować tagu." });
       setAllTags(prev => prev.map(t => t.id === id ? updated : t));
       setTags(prev => prev.map(t => t.id === id ? updated : t));
     } catch (err) {

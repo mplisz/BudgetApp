@@ -20,6 +20,7 @@
 //   user-requested one.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useEffect, useMemo } from "react";
 import { useAppContext }              from "../../context/AppContext";
 import { useNavigate }                from "react-router-dom";
@@ -513,7 +514,7 @@ export default function PanelAnalytics() {
       {/* Header — shows the CLAMPED range, not the user-requested one */}
       <div style={{ marginBottom: 20, marginTop: 8 }}>
         <div style={(s as any).sectionTitle}>📊 Analiza wielomiesięczna</div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>
+        <div style={{ fontSize: 13, color: c.textSecondary }}>
           {noDataAvailable ? (
             <>Brak danych dla wybranego zakresu</>
           ) : (
@@ -523,9 +524,9 @@ export default function PanelAnalytics() {
               {!isLoading && (
                 <>
                   {" · Wydatki łącznie: "}
-                  <strong style={{ color: "#ef4444" }}>{fmt(rangeTotals.expenses)} zł</strong>
+                  <strong style={{ color: c.danger }}>{fmt(rangeTotals.expenses)} zł</strong>
                   {" · Saldo: "}
-                  <strong style={{ color: rangeTotals.balance >= 0 ? "#10b981" : "#ef4444" }}>
+                  <strong style={{ color: rangeTotals.balance >= 0 ? c.success : c.danger }}>
                     {rangeTotals.balance >= 0 ? "+" : ""}{fmt(rangeTotals.balance)} zł
                   </strong>
                 </>
@@ -539,8 +540,8 @@ export default function PanelAnalytics() {
         {wasClamped && !noDataAvailable && (
           <div style={{
             marginTop: 8, padding: "6px 10px",
-            background: "#3b82f611", border: "1px solid #3b82f644",
-            borderRadius: 6, fontSize: 11, color: "#60a5fa",
+            background: alpha(c.info, "11"), border: `1px solid ${alpha(c.info, "44")}`,
+            borderRadius: 6, fontSize: 11, color: c.infoSky,
           }}>
             ℹ️ Pokazuję dane od <strong>{clampedFrom}</strong> (budżet zaczyna się od {floor}).
             Wybrany zakres został przycięty.
@@ -556,13 +557,13 @@ export default function PanelAnalytics() {
       {/* Empty state — entire range is before the floor */}
       {noDataAvailable && (
         <Card>
-          <div style={{ textAlign: "center", padding: "40px 20px", color: "#94a3b8" }}>
+          <div style={{ textAlign: "center", padding: "40px 20px", color: c.textTertiary }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", marginBottom: 6 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: c.text, marginBottom: 6 }}>
               Wybrany zakres jest przed startem budżetu
             </div>
             <div style={{ fontSize: 12, lineHeight: 1.6, maxWidth: 480, margin: "0 auto" }}>
-              Budżet rozpoczyna się od <strong style={{ color: "#10b981" }}>{floor}</strong>.
+              Budżet rozpoczyna się od <strong style={{ color: c.success }}>{floor}</strong>.
               Wybierz zakres obejmujący tę datę lub późniejszy.
             </div>
           </div>
@@ -570,7 +571,7 @@ export default function PanelAnalytics() {
       )}
 
       {isLoading && !noDataAvailable && (
-        <div style={{ color: "#475569", textAlign: "center", padding: 40 }}>Ładowanie…</div>
+        <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>
       )}
 
       {!isLoading && !noDataAvailable && (

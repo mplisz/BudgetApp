@@ -20,6 +20,7 @@
 // generic and testable — callers derive the list from their data.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useCallback } from "react";
 import type { ReactElement } from "react";
 
@@ -72,10 +73,10 @@ export function CategoryMultiSelect({
         onClick={() => !disabled && setOpen(o => !o)}
         disabled={disabled}
         style={{
-          background:   hasSelection ? "#3b82f620" : "#0a0f1e",
-          border:       `1px solid ${hasSelection ? "#3b82f644" : "#1e293b"}`,
+          background:   hasSelection ? alpha(c.info, "20") : c.bg,
+          border:       `1px solid ${hasSelection ? alpha(c.info, "44") : c.border}`,
           borderRadius: 8,
-          color:        hasSelection ? "#3b82f6" : "#94a3b8",
+          color:        hasSelection ? c.info : c.textTertiary,
           padding:      "6px 10px",
           fontSize:     12,
           cursor:       disabled ? "not-allowed" : "pointer",
@@ -91,12 +92,12 @@ export function CategoryMultiSelect({
           <span
             onClick={e => { e.stopPropagation(); clearAll(); }}
             title="Wyczyść"
-            style={{ color: "#64748b", fontSize: 11, lineHeight: 1, cursor: "pointer" }}
+            style={{ color: c.textSecondary, fontSize: 11, lineHeight: 1, cursor: "pointer" }}
           >
             ✕
           </span>
         )}
-        <span style={{ color: "#334155", fontSize: 10, marginLeft: 2 }}>
+        <span style={{ color: c.borderStrong, fontSize: 10, marginLeft: 2 }}>
           {open ? "▲" : "▼"}
         </span>
       </button>
@@ -115,8 +116,8 @@ export function CategoryMultiSelect({
             top:          "calc(100% + 4px)",
             left:         0,
             zIndex:       50,
-            background:   "#0d1424",
-            border:       "1px solid #1e293b",
+            background:   c.surface,
+            border:       `1px solid ${c.border}`,
             borderRadius: 8,
             minWidth:     180,
             maxHeight:    240,
@@ -124,7 +125,7 @@ export function CategoryMultiSelect({
             boxShadow:    "0 8px 24px #0008",
           }}>
             {categories.length === 0 && (
-              <div style={{ padding: "10px 14px", fontSize: 12, color: "#475569" }}>
+              <div style={{ padding: "10px 14px", fontSize: 12, color: c.textMuted }}>
                 Brak kategorii
               </div>
             )}
@@ -139,8 +140,8 @@ export function CategoryMultiSelect({
                     padding:        "8px 14px",
                     cursor:         "pointer",
                     fontSize:       13,
-                    color:          selected ? "#3b82f6" : "#e2e8f0",
-                    background:     selected ? "#3b82f611" : "transparent",
+                    color:          selected ? c.info : c.text,
+                    background:     selected ? alpha(c.info, "11") : "transparent",
                     display:        "flex",
                     alignItems:     "center",
                     justifyContent: "space-between",
@@ -152,7 +153,7 @@ export function CategoryMultiSelect({
                     {cat.icon && <span style={{ marginRight: 6 }}>{cat.icon}</span>}
                     {cat.name}
                   </span>
-                  {selected && <span style={{ fontSize: 11, color: "#3b82f6" }}>✓</span>}
+                  {selected && <span style={{ fontSize: 11, color: c.info }}>✓</span>}
                 </div>
               );
             })}
@@ -160,7 +161,7 @@ export function CategoryMultiSelect({
             {/* Footer: select all / clear */}
             {categories.length > 1 && (
               <div style={{
-                borderTop: "1px solid #1e293b",
+                borderTop: `1px solid ${c.border}`,
                 padding:   "6px 14px",
                 display:   "flex",
                 gap:       8,
@@ -169,19 +170,19 @@ export function CategoryMultiSelect({
                   onMouseDown={e => { e.preventDefault(); onChange(categories.map(c => c.name)); }}
                   style={{
                     background: "transparent", border: "none",
-                    color: "#475569", fontSize: 11, cursor: "pointer", padding: 0,
+                    color: c.textMuted, fontSize: 11, cursor: "pointer", padding: 0,
                   }}
                 >
                   Zaznacz wszystkie
                 </button>
                 {hasSelection && (
                   <>
-                    <span style={{ color: "#1e293b" }}>·</span>
+                    <span style={{ color: c.border }}>·</span>
                     <button
                       onMouseDown={e => { e.preventDefault(); clearAll(); }}
                       style={{
                         background: "transparent", border: "none",
-                        color: "#475569", fontSize: 11, cursor: "pointer", padding: 0,
+                        color: c.textMuted, fontSize: 11, cursor: "pointer", padding: 0,
                       }}
                     >
                       Wyczyść

@@ -5,6 +5,7 @@
 // Base currency(isBase: true) is always first and needs no rate
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useEffect }            from "react";
 import { useCurrencyConverter } from "../../hooks/useCurrencyConverter";
 import { useCurrencyManager }   from "../../hooks/useCurrencyManager";
@@ -73,12 +74,12 @@ export function CurrencyRateField({
 }, [currency, dropdownCurrencies]);
   // ── Styles ─────────────────────────────────────────────────────
   const inp = {
-    width: "100%", background: "#0a0f1e", border: "1px solid #1e293b",
-    borderRadius: 8, color: "#e2e8f0", padding: "9px 12px", fontSize: 14,
+    width: "100%", background: c.bg, border: `1px solid ${c.border}`,
+    borderRadius: 8, color: c.text, padding: "9px 12px", fontSize: 14,
     outline: "none", opacity: disabled ? 0.5 : 1,
     cursor: disabled ? "not-allowed" : undefined,
   };
-  const lbl  = { display: "block", fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 };
+  const lbl  = { display: "block", fontSize: 11, color: c.textSecondary, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 };
   const hint = { fontSize: 11, marginTop: 4 };
 
   return (
@@ -121,19 +122,19 @@ export function CurrencyRateField({
           <label style={lbl}>Kurs NBP z dnia transakcji</label>
 
           {isLoading && (
-            <div style={{ ...hint, color: "#3b82f6" }}>⏳ Pobieranie kursu…</div>
+            <div style={{ ...hint, color: c.info }}>⏳ Pobieranie kursu…</div>
           )}
 
           {!isLoading && rate && !error && (
-            <div style={{ ...hint, color: "#10b981" }}>
+            <div style={{ ...hint, color: c.success }}>
               1 {resolvedCurrency} = <strong>{rate.toFixed(4)}</strong> {baseCurrency.code}
               {effectiveDate !== date && table !== "B" && (
-                <span style={{ color: "#f59e0b" }}>
+                <span style={{ color: c.warning }}>
                   {` (kurs z ${effectiveDate} — brak publikacji NBP w dniu ${date})`}
                 </span>
               )}
               {table === "B" && (
-                <span style={{ color: "#a855f7" }}>
+                <span style={{ color: c.voucher }}>
                   {" · dane aktualizowane przez NBP raz w tygodniu "}
                   {`(ostatni kurs z ${effectiveDate})`}
                 </span>
@@ -142,12 +143,12 @@ export function CurrencyRateField({
           )}
 
           {error && (
-            <div style={{ ...hint, color: "#f87171", marginBottom: 8 }}>⚠️ {error}</div>
+            <div style={{ ...hint, color: c.dangerLight, marginBottom: 8 }}>⚠️ {error}</div>
           )}
 
           {!isLoading && (
             <div style={{ marginTop: 8 }}>
-              <label style={{ ...lbl, color: error ? "#f59e0b" : "#334155" }}>
+              <label style={{ ...lbl, color: error ? c.warning : c.borderStrong }}>
                 {error ? "Kurs ręczny (wymagany)" : "Nadpisz kurs ręcznie (opcjonalnie)"}
               </label>
               <input
@@ -156,7 +157,7 @@ export function CurrencyRateField({
                 onChange={e => setManualRate(e.target.value)}
                 placeholder={rate ? rate.toFixed(4) : `kurs ${baseCurrency.code}/${resolvedCurrency}`}
                 disabled={disabled}
-                style={{ ...inp, borderColor: error ? "#f59e0b" : "#1e293b" }}
+                style={{ ...inp, borderColor: error ? c.warning : c.border }}
               />
             </div>
           )}

@@ -4,6 +4,7 @@
 // Used in NotificationBell for both recurring and planned.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useEffect } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -76,26 +77,26 @@ export function PaymentConfirmModal({
     >
       <div
         style={{
-          background: "#0d1424", border: "1px solid #1e293b", borderRadius: 16,
+          background: c.surface, border: `1px solid ${c.border}`, borderRadius: 16,
           padding: 24, width: "100%", maxWidth: 400,
         }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ fontWeight: 800, color: "#e2e8f0", fontSize: 16, marginBottom: 4 }}>
+        <div style={{ fontWeight: 800, color: c.text, fontSize: 16, marginBottom: 4 }}>
           {title}
         </div>
-        <div style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>
+        <div style={{ fontSize: 13, color: c.textSecondary, marginBottom: 20 }}>
           {description}
           {categoryName && (
-            <span style={{ color: "#475569", marginLeft: 4 }}>· {categoryName}</span>
+            <span style={{ color: c.textMuted, marginLeft: 4 }}>· {categoryName}</span>
           )}
         </div>
 
         {/* Amount input */}
         <div style={{ marginBottom: 16 }}>
           <label style={{
-            display: "block", fontSize: 11, color: "#64748b",
+            display: "block", fontSize: 11, color: c.textSecondary,
             textTransform: "uppercase", letterSpacing: "0.6px",
             fontWeight: 700, marginBottom: 8,
           }}>
@@ -111,10 +112,10 @@ export function PaymentConfirmModal({
               autoFocus
               style={{
                 flex: 1,
-                background: "#0a0f1e",
-                border: `1px solid ${capped ? "#ef444466" : "#1e293b"}`,
+                background: c.bg,
+                border: `1px solid ${capped ? alpha(c.danger, "66") : c.border}`,
                 borderRadius: 8,
-                color: "#e2e8f0",
+                color: c.text,
                 padding: "10px 12px",
                 fontSize: 16,
                 fontWeight: 700,
@@ -126,8 +127,8 @@ export function PaymentConfirmModal({
                 onClick={() => setAmount(String(suggestedAmount))}
                 style={{
                   padding: "8px 12px", borderRadius: 8,
-                  border: "1px solid #10b98144",
-                  background: "transparent", color: "#10b981",
+                  border: `1px solid ${alpha(c.success, "44")}`,
+                  background: "transparent", color: c.success,
                   fontSize: 12, fontWeight: 700, cursor: "pointer",
                   whiteSpace: "nowrap",
                 }}
@@ -140,8 +141,8 @@ export function PaymentConfirmModal({
                 onClick={() => setAmount(String(maxAmount))}
                 style={{
                   padding: "8px 12px", borderRadius: 8,
-                  border: "1px solid #3b82f644",
-                  background: "transparent", color: "#3b82f6",
+                  border: `1px solid ${alpha(c.info, "44")}`,
+                  background: "transparent", color: c.info,
                   fontSize: 12, fontWeight: 700, cursor: "pointer",
                 }}
               >
@@ -150,7 +151,7 @@ export function PaymentConfirmModal({
             )}
           </div>
           {capped && maxAmount != null && (
-            <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: c.danger, marginTop: 4 }}>
               Maksymalna kwota: {fmt(maxAmount)} {amountLabel}
             </div>
           )}
@@ -158,7 +159,7 @@ export function PaymentConfirmModal({
             && suggestedAmount != null
             && parsed > 0
             && parsed !== suggestedAmount && (
-            <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: c.warning, marginTop: 4 }}>
               ⚠️ Inna kwota niż sugerowana — sugestia dla kolejnych miesięcy zostanie przeliczona
             </div>
           )}
@@ -174,8 +175,8 @@ export function PaymentConfirmModal({
             onClick={onCancel}
             style={{
               padding: "10px 20px", borderRadius: 8,
-              border: "1px solid #1e293b",
-              background: "transparent", color: "#94a3b8",
+              border: `1px solid ${c.border}`,
+              background: "transparent", color: c.textTertiary,
               cursor: "pointer", fontWeight: 600,
             }}
           >
@@ -187,8 +188,8 @@ export function PaymentConfirmModal({
             style={{
               padding: "10px 24px", borderRadius: 8,
               border: "none",
-              background: isValid ? "#10b981" : "#1e293b",
-              color: isValid ? "#fff" : "#475569",
+              background: isValid ? c.success : c.border,
+              color: isValid ? c.white : c.textMuted,
               cursor: isValid ? "pointer" : "not-allowed",
               fontWeight: 700, fontSize: 14,
             }}

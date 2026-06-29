@@ -3,6 +3,7 @@
 // Reusable dropdown for selecting emojis.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState } from "react";
 import { theme as s } from "../../styles/theme";
 import { POPULAR_EMOJIS } from "../../data/constants";
@@ -35,7 +36,7 @@ export function EmojiSelector({ currentEmoji, onSelect, disabled = false }) {
           justifyContent: "center",
           alignItems:     "center",
           cursor:         disabled ? "not-allowed" : "pointer",
-          border:         isOpen ? "1px solid #10b981" : "1px solid #334155",
+          border:         isOpen ? `1px solid ${c.success}` : `1px solid ${c.borderStrong}`,
           opacity:        disabled ? 0.5 : 1,
         }}>
         {currentEmoji}
@@ -47,8 +48,8 @@ export function EmojiSelector({ currentEmoji, onSelect, disabled = false }) {
           top:       "100%",
           left:      0,
           marginTop: 8,
-          background: "#0f172a",
-          border:    "1px solid #334155",
+          background: c.surfaceAlt,
+          border:    `1px solid ${c.borderStrong}`,
           borderRadius: 8,
           padding:   8,
           width:     220,
@@ -69,7 +70,7 @@ export function EmojiSelector({ currentEmoji, onSelect, disabled = false }) {
                 cursor:     "pointer",
                 padding:    "4px 6px",
                 borderRadius: 6,
-                background: currentEmoji === emoji ? "#10b98144" : "transparent",
+                background: currentEmoji === emoji ? alpha(c.success, "44") : "transparent",
                 transition: "background 0.2s",
               }}>
               {emoji}

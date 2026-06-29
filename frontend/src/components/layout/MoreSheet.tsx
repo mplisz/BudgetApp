@@ -17,6 +17,7 @@
 //   - z-index: nav is 300 → overlay 400, sheet 401.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { NavLink } from "react-router-dom";
@@ -117,8 +118,8 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
         style={{
           position: "fixed", left: 0, right: 0, bottom: 0,
           zIndex: 401,
-          background: "#0d1424",
-          borderTop: "1px solid #1e293b",
+          background: c.surface,
+          borderTop: `1px solid ${c.border}`,
           borderRadius: "16px 16px 0 0",
           padding: "10px 14px calc(16px + env(safe-area-inset-bottom, 0px))",
           maxHeight: "70vh",
@@ -129,14 +130,14 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
         {/* Grabber */}
         <div style={{
           width: 36, height: 4, borderRadius: 99,
-          background: "#1e293b", margin: "0 auto 12px",
+          background: c.border, margin: "0 auto 12px",
         }} />
 
         {SHEET_SECTIONS.map(sec => (
           <div key={sec.section} style={{ marginBottom: 14 }}>
             <div style={{
               padding: "0 2px 6px",
-              fontSize: 10, color: "#334155",
+              fontSize: 10, color: c.borderStrong,
               textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700,
             }}>
               {sec.section}
@@ -158,9 +159,9 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
                     padding: "12px 12px",
                     borderRadius: 12,
                     textDecoration: "none",
-                    background: isActive ? "#10b98122" : "#090e1b",
-                    border:     `1px solid ${isActive ? "#10b98155" : "#1e293b"}`,
-                    color:      isActive ? "#10b981"   : "#94a3b8",
+                    background: isActive ? alpha(c.success, "22") : c.bgDeepest,
+                    border:     `1px solid ${isActive ? alpha(c.success, "55") : c.border}`,
+                    color:      isActive ? c.success   : c.textTertiary,
                   })}
                 >
                   {({ isActive }) => (

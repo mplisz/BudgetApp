@@ -7,6 +7,7 @@
 //                   e.g. filter={sub => sub.canBeRecurring} for recurring panel
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useMemo } from "react";
 import { useAppContext } from "../../context/AppContext";
 
@@ -56,10 +57,10 @@ export function SubcategorySelect({
 
   const base = {
     width: "100%",
-    background: "#0a0f1e",
-    border: "1px solid #1e293b",
+    background: c.bg,
+    border: `1px solid ${c.border}`,
     borderRadius: 8,
-    color: "#e2e8f0",
+    color: c.text,
     padding: "9px 12px",
     fontSize: 14,
     outline: "none",

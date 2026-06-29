@@ -4,19 +4,12 @@
 
 import { useState, useEffect } from "react";
 import { useAppContext }   from "../context/AppContext";
-import { useAuth }         from "../context/AuthContext";
 import { useToast } from "./useToast";
-import { translateError }  from "../data/constants/errorMessages";
-
-const ENV_API = import.meta.env.VITE_API_URL;
-if (!ENV_API && import.meta.env.PROD) {
-  console.warn("CRITICAL: VITE_API_URL is missing in production environment!");
-}
-const API_URL = ENV_API || "http://localhost:5000";
+import { useApi }          from "./useApi";
 
 export function useCategoryManager() {
   const { categories, setCategories } = useAppContext();
-  const { fetchWithAuth }             = useAuth();
+  const api                           = useApi();
   const { showError, showSuccess }    = useToast();
 
   const [isLoadingCats, setIsLoadingCats] = useState(true);
@@ -29,10 +22,7 @@ export function useCategoryManager() {
       if (categories.length > 0) { setIsLoadingCats(false); return; }
       try {
         setIsLoadingCats(true);
-        const res = await fetchWithAuth(`${API_URL}/api/categories`);
-        if (!res.ok) throw new Error("Failed to fetch");
-
-        const dbCategories = await res.json();
+        const dbCategories = await api.get("/api/categories");
         const parents = dbCategories.filter(c => !c.parentCategoryId).map(parent => ({
           id:         parent.id,
           name:       parent.name,
@@ -64,20 +54,12 @@ export function useCategoryManager() {
       }
     }
     loadCategories();
-  }, [fetchWithAuth, setCategories]);
+  }, [api, setCategories]);
 
   // ── Patch ───────────────────────────────────────────────────
   async function executePatch(id, name, parentId, updates) {
     try {
-      const response = await fetchWithAuth(`${API_URL}/api/categories/update/${id}`, {
-        method: "PATCH",
-        body:   JSON.stringify(updates),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(translateError(errData.error, "Nie udało się zaktualizować."));
-      }
+      await api.patch(`/api/categories/update/${id}`, updates, { fallback: "Nie udało się zaktualizować." });
 
       setCategories(prev => prev.map(cat => {
         if (!parentId && cat.id === id) {
@@ -110,23 +92,13 @@ export function useCategoryManager() {
   ) {
     setIsSavingCat(true);
     try {
-      const response = await fetchWithAuth(`${API_URL}/api/categories`, {
-        method: "POST",
-        body:   JSON.stringify({
-          name: cleanName, icon: cleanIcon, type, parentCategoryId: parentId,
-          priority,
-          canBeRecurring: canBeRecurring ?? false,
-          isCritical:     isCritical     ?? false,
-          canBeLuxmed:    canBeLuxmed     ?? false,
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(translateError(errData.error, "Nie można dodać kategorii."));
-      }
-
-      const saved = await response.json();
+      const saved = await api.post("/api/categories", {
+        name: cleanName, icon: cleanIcon, type, parentCategoryId: parentId,
+        priority,
+        canBeRecurring: canBeRecurring ?? false,
+        isCritical:     isCritical     ?? false,
+        canBeLuxmed:    canBeLuxmed     ?? false,
+      }, { fallback: "Nie można dodać kategorii." });
 
       setCategories(prev => {
         if (!parentId) {

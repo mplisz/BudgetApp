@@ -7,6 +7,7 @@
 // so the wrapper scrolls horizontally instead of clipping/squeezing.
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { fmt } from "../../../utils/helpers";
 import type { MonthlyDataPoint } from "./MonthlyTrendChart";
 
@@ -22,19 +23,19 @@ export function MonthlyTable({ data, onClick }: MonthlyTableProps) {
   const sorted = [...data].sort((a, b) => b.month.localeCompare(a.month));
 
   const th: React.CSSProperties = {
-    padding: "8px 12px", fontSize: 10, color: "#475569",
+    padding: "8px 12px", fontSize: 10, color: c.textMuted,
     textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700,
-    textAlign: "left", borderBottom: "1px solid #1e293b", background: "#090e1b",
+    textAlign: "left", borderBottom: `1px solid ${c.border}`, background: c.bgDeepest,
     whiteSpace: "nowrap",
   };
 
   const td: React.CSSProperties = {
-    padding: "10px 12px", fontSize: 13, color: "#cbd5e1",
-    borderBottom: "1px solid #0f172a", whiteSpace: "nowrap",
+    padding: "10px 12px", fontSize: 13, color: c.textBody,
+    borderBottom: `1px solid ${c.surfaceAlt}`, whiteSpace: "nowrap",
   };
 
   return (
-    <div style={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 12, overflowX: "auto" }}>
+    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, overflowX: "auto" }}>
       <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -51,25 +52,25 @@ export function MonthlyTable({ data, onClick }: MonthlyTableProps) {
           {sorted.map(row => {
             const real    = row.income + row.transfers;
             const pct     = real > 0 ? (row.expenses / real) * 100 : 0;
-            const pctColor = pct > 90 ? "#ef4444" : pct > 70 ? "#f59e0b" : "#10b981";
+            const pctColor = pct > 90 ? c.danger : pct > 70 ? c.warning : c.success;
             return (
               <tr
                 key={row.month}
                 onClick={() => onClick(row.month)}
-                onMouseEnter={e => e.currentTarget.style.background = "#0a0f1e"}
+                onMouseEnter={e => e.currentTarget.style.background = c.bg}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                 style={{ cursor: "pointer", transition: "background 0.1s" }}
               >
-                <td style={{ ...td, fontWeight: 700, color: "#e2e8f0" }}>{row.month}</td>
-                <td style={{ ...td, textAlign: "right", color: "#10b981" }}>{fmt(row.income)}</td>
-                <td style={{ ...td, textAlign: "right", color: row.transfers > 0 ? "#22d3ee" : "#334155" }}>
+                <td style={{ ...td, fontWeight: 700, color: c.text }}>{row.month}</td>
+                <td style={{ ...td, textAlign: "right", color: c.success }}>{fmt(row.income)}</td>
+                <td style={{ ...td, textAlign: "right", color: row.transfers > 0 ? c.cyanLight : c.borderStrong }}>
                   {row.transfers > 0 ? fmt(row.transfers) : "—"}
                 </td>
-                <td style={{ ...td, textAlign: "right", color: "#ef4444" }}>{fmt(row.expenses)}</td>
-                <td style={{ ...td, textAlign: "right", color: row.savings > 0 ? "#3b82f6" : "#334155" }}>
+                <td style={{ ...td, textAlign: "right", color: c.danger }}>{fmt(row.expenses)}</td>
+                <td style={{ ...td, textAlign: "right", color: row.savings > 0 ? c.info : c.borderStrong }}>
                   {row.savings > 0 ? fmt(row.savings) : "—"}
                 </td>
-                <td style={{ ...td, textAlign: "right", fontWeight: 700, color: row.balance >= 0 ? "#10b981" : "#ef4444" }}>
+                <td style={{ ...td, textAlign: "right", fontWeight: 700, color: row.balance >= 0 ? c.success : c.danger }}>
                   {row.balance >= 0 ? "+" : ""}{fmt(row.balance)}
                 </td>
                 <td style={{ ...td, textAlign: "right", color: pctColor, fontWeight: 600 }}>

@@ -12,6 +12,7 @@
 // ============================================================
 
 
+import { c } from "../../styles/tokens";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { usePanelLock }     from "../../hooks/usePanelLock";
 import { useTransactions }  from "../../hooks/useTransactions";
@@ -39,7 +40,7 @@ export default function PanelAddIncome() {
         <div style={(s as any).sectionTitle}>💵 Dodaj wpływ</div>
         <div style={(s as any).sectionSub}>
           Wpływy i transfery dla miesiąca{" "}
-          <strong style={{ color: "#10b981" }}>{selectedMonth}</strong>
+          <strong style={{ color: c.success }}>{selectedMonth}</strong>
         </div>
       </div>
 
@@ -48,7 +49,7 @@ export default function PanelAddIncome() {
         <div style={{
           display: "flex", alignItems: "center", gap: 10,
           background: "#1e1a0e", border: "1px solid #92400e44", borderRadius: 12,
-          padding: "12px 16px", color: "#fbbf24", fontSize: 13, fontWeight: 600,
+          padding: "12px 16px", color: c.warningLight, fontSize: 13, fontWeight: 600,
         }}>
           <span style={{ fontSize: 20 }}>📅</span>
           <span>

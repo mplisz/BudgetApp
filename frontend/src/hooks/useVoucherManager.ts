@@ -8,12 +8,10 @@
 // ============================================================
 
 import { useState, useCallback, useMemo } from "react";
-import { useAuth }       from "../context/AuthContext";
 import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
+import { useApi }        from "./useApi";
 import type { Voucher }  from "../types/transaction";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 function todayYMD(): string {
   const d = new Date();
@@ -43,7 +41,7 @@ interface AppCtx {
 }
 
 export function useVoucherManager() {
-  const { fetchWithAuth }         = useAuth() as { fetchWithAuth: typeof fetch };
+  const api                       = useApi();
   const { vouchers, setVouchers } = useAppContext() as AppCtx;
   const { showSuccess, showError } = useToast() as {
     showSuccess: (m: string) => void;
@@ -57,18 +55,17 @@ export function useVoucherManager() {
   const loadVouchers = useCallback(async (includeArchived = false) => {
     setIsLoading(true);
     try {
-      const res  = await fetchWithAuth(
-        `${API_URL}/api/vouchers${includeArchived ? "?includeArchived=true" : ""}`,
+      const data = await api.get<Voucher[]>(
+        `/api/vouchers${includeArchived ? "?includeArchived=true" : ""}`,
+        { fallback: "Błąd ładowania voucherów." },
       );
-      const data = await (res as Response).json();
-      if (!(res as Response).ok) throw new Error(data.error || "Błąd ładowania voucherów.");
       setVouchers(data.map((v: Voucher) => ({ ...v, remainingValue: computeRemaining(v) })));
     } catch (err) {
       showError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [fetchWithAuth, setVouchers, showError]);
+  }, [api, setVouchers, showError]);
 
   // ── Derived ─────────────────────────────────────────────────
   const today = todayYMD();
@@ -90,11 +87,7 @@ export function useVoucherManager() {
   const addVoucher = useCallback(async (payload: Record<string, unknown>) => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/vouchers`, {
-        method: "POST", body: JSON.stringify(payload),
-      });
-      const data = await (res as Response).json();
-      if (!(res as Response).ok) throw new Error(data.error || "Błąd dodawania vouchera.");
+      const data = await api.post<Voucher>("/api/vouchers", payload, { fallback: "Błąd dodawania vouchera." });
       const enriched = { ...data, remainingValue: computeRemaining(data) };
       setVouchers(prev => [enriched, ...prev]);
       showSuccess("Voucher dodany! 🎫");
@@ -105,16 +98,12 @@ export function useVoucherManager() {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setVouchers, showSuccess, showError]);
+  }, [api, setVouchers, showSuccess, showError]);
 
   const updateVoucher = useCallback(async (id: string, patch: Record<string, unknown>) => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/vouchers/${id}`, {
-        method: "PATCH", body: JSON.stringify(patch),
-      });
-      const data = await (res as Response).json();
-      if (!(res as Response).ok) throw new Error(data.error || "Błąd aktualizacji vouchera.");
+      const data = await api.patch<Voucher>(`/api/vouchers/${id}`, patch, { fallback: "Błąd aktualizacji vouchera." });
       const enriched = { ...data, remainingValue: computeRemaining(data) };
       setVouchers(prev => prev.map(v => (v.id === id ? enriched : v)));
       showSuccess("Voucher zaktualizowany! ✅");
@@ -125,14 +114,12 @@ export function useVoucherManager() {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setVouchers, showSuccess, showError]);
+  }, [api, setVouchers, showSuccess, showError]);
 
   const archiveVoucher = useCallback(async (id: string) => {
     setIsSaving(true);
     try {
-      const res  = await fetchWithAuth(`${API_URL}/api/vouchers/${id}`, { method: "DELETE" });
-      const data = await (res as Response).json();
-      if (!(res as Response).ok) throw new Error(data.error || "Błąd archiwizacji.");
+      await api.del(`/api/vouchers/${id}`, undefined, { fallback: "Błąd archiwizacji." });
       setVouchers(prev => prev.map(v => (v.id === id ? { ...v, isArchived: true } : v)));
       showSuccess("Voucher zarchiwizowany.");
     } catch (err) {
@@ -140,7 +127,7 @@ export function useVoucherManager() {
     } finally {
       setIsSaving(false);
     }
-  }, [fetchWithAuth, setVouchers, showSuccess, showError]);
+  }, [api, setVouchers, showSuccess, showError]);
 
   return {
     vouchers, activeVouchers,

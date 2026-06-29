@@ -3,6 +3,7 @@
 // Collapsible, sortable, editable expenses table with refund support.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { theme as s } from "../../styles/theme";
@@ -85,7 +86,7 @@ function ExpensesTable() {
     <div style={{ ...s.card, marginTop: 4 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: collapsed ? 0 : 14, cursor: "pointer" }}
         onClick={() => setCollapsed(v => !v)}>
-        <div style={{ fontWeight: 700, color: "#94a3b8", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+        <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>
           📋 Wydatki – {MONTHS[month]} {year}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -99,25 +100,25 @@ function ExpensesTable() {
                   <option key={c} value={c}>{categories[c].icon} {c}</option>
                 ))}
               </select>
-              <span style={{ color: "#475569", fontSize: 12, whiteSpace: "nowrap" }}>{displayed.length} · {fmt(displayed.reduce((s,e)=>s+e.amount,0))}</span>
+              <span style={{ color: c.textMuted, fontSize: 12, whiteSpace: "nowrap" }}>{displayed.length} · {fmt(displayed.reduce((s,e)=>s+e.amount,0))}</span>
             </>
           )}
-          <span style={{ color: "#475569", fontSize: 16, transform: collapsed ? "rotate(-90deg)" : "rotate(0)", transition: "transform 0.2s" }}>▾</span>
+          <span style={{ color: c.textMuted, fontSize: 16, transform: collapsed ? "rotate(-90deg)" : "rotate(0)", transition: "transform 0.2s" }}>▾</span>
         </div>
       </div>
 
       {!collapsed && (<>
 
       {displayed.length === 0 && (
-        <div style={{ color: "#475569", textAlign: "center", padding: 24, fontSize: 13 }}>Brak wydatków w tym miesiącu</div>
+        <div style={{ color: c.textMuted, textAlign: "center", padding: 24, fontSize: 13 }}>Brak wydatków w tym miesiącu</div>
       )}
 
       {/* Header */}
       {displayed.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 100px 120px 88px", gap: 8, padding: "6px 8px", borderBottom: "1px solid #334155", marginBottom: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 100px 120px 88px", gap: 8, padding: "6px 8px", borderBottom: `1px solid ${c.borderStrong}`, marginBottom: 4 }}>
           {[["date","Data"],["desc","Opis / Typ"],["category","Kategoria"],["amount","Kwota"],["","Tagi"],["",""]].map(([col, h], i) => (
             <span key={i} onClick={() => col && toggleSort(col)}
-              style={{ color: sortCol === col ? "#10b981" : "#475569", fontSize: 10, fontWeight: 700,
+              style={{ color: sortCol === col ? c.success : c.textMuted, fontSize: 10, fontWeight: 700,
                 textTransform: "uppercase", letterSpacing: "0.5px", cursor: col ? "pointer" : "default",
                 display: "flex", alignItems: "center", gap: 3 }}>
               {h}{col && (sortCol === col ? (sortDir === "asc" ? " ↑" : " ↓") : " ↕")}
@@ -128,7 +129,7 @@ function ExpensesTable() {
 
       {displayed.map(e => editingId === e.id ? (
         // ── EDIT ROW ──
-        <div key={e.id} style={{ background: "#1e293b", borderRadius: 10, padding: "10px 8px", marginBottom: 6 }}>
+        <div key={e.id} style={{ background: c.border, borderRadius: 10, padding: "10px 8px", marginBottom: 6 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
             <div>
               <label style={{ ...s.label, marginBottom: 4 }}>Data</label>
@@ -158,17 +159,17 @@ function ExpensesTable() {
           </div>
           {/* Voucher toggle in edit */}
           <div style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: editForm.useVoucher ? "#f59e0b" : "#475569", fontSize: 12, fontWeight: 600, marginBottom: editForm.useVoucher ? 8 : 0 }}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: editForm.useVoucher ? c.warning : c.textMuted, fontSize: 12, fontWeight: 600, marginBottom: editForm.useVoucher ? 8 : 0 }}
               onClick={() => setEditForm(f => ({...f, useVoucher: !f.useVoucher, totalAmount: f.totalAmount || String(f.amount), voucherAmount: f.voucherAmount || ""}))}>
-              <div style={{ width: 30, height: 16, background: editForm.useVoucher ? "#f59e0b" : "#1e293b", border: `2px solid ${editForm.useVoucher ? "#f59e0b" : "#334155"}`, borderRadius: 99, position: "relative", flexShrink: 0 }}>
-                <div style={{ position: "absolute", top: 1, left: editForm.useVoucher ? 12 : 1, width: 10, height: 10, background: "#fff", borderRadius: "50%", transition: "left 0.2s" }} />
+              <div style={{ width: 30, height: 16, background: editForm.useVoucher ? c.warning : c.border, border: `2px solid ${editForm.useVoucher ? c.warning : c.borderStrong}`, borderRadius: 99, position: "relative", flexShrink: 0 }}>
+                <div style={{ position: "absolute", top: 1, left: editForm.useVoucher ? 12 : 1, width: 10, height: 10, background: c.white, borderRadius: "50%", transition: "left 0.2s" }} />
               </div>
               🎟️ Częściowo opłacono bonem
             </div>
             {editForm.useVoucher && (
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ ...s.label, marginBottom: 4, color: "#f59e0b" }}>Wartość bonu (PLN)</label>
+                  <label style={{ ...s.label, marginBottom: 4, color: c.warning }}>Wartość bonu (PLN)</label>
                   <BudgetInput style={s.input}
                     value={parseFloat(editForm.voucherAmount)||0}
                     onChange={v => {
@@ -178,8 +179,8 @@ function ExpensesTable() {
                     }} />
                 </div>
                 <div style={{ flex: 1, textAlign: "center", paddingTop: 20 }}>
-                  <span style={{ color: "#64748b", fontSize: 12 }}>Realna gotówka: </span>
-                  <span style={{ color: "#10b981", fontWeight: 700 }}>
+                  <span style={{ color: c.textSecondary, fontSize: 12 }}>Realna gotówka: </span>
+                  <span style={{ color: c.success, fontWeight: 700 }}>
                     {fmt(Math.max((parseFloat(editForm.totalAmount)||0)-(parseFloat(editForm.voucherAmount)||0),0))}
                   </span>
                 </div>
@@ -211,8 +212,8 @@ function ExpensesTable() {
                   return (
                     <button key={tag.id} onClick={() => setEditForm(f => ({
                       ...f, tags: active ? (f.tags||[]).filter(t=>t!==tag.id) : [...(f.tags||[]), tag.id]
-                    }))} style={{ padding: "4px 10px", borderRadius: 7, border: `1px solid ${active ? "#10b981" : "#334155"}`,
-                      background: active ? "#10b98122" : "transparent", color: active ? "#10b981" : "#64748b",
+                    }))} style={{ padding: "4px 10px", borderRadius: 7, border: `1px solid ${active ? c.success : c.borderStrong}`,
+                      background: active ? alpha(c.success, "22") : "transparent", color: active ? c.success : c.textSecondary,
                       fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                       {tag.icon} {tag.label}
                     </button>
@@ -223,20 +224,20 @@ function ExpensesTable() {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={saveEdit} style={{ ...s.btn(), width: "auto", padding: "8px 20px", marginTop: 0, fontSize: 13 }}>✅ Zapisz</button>
-            <button onClick={() => setEditingId(null)} style={{ ...s.btn("#475569"), width: "auto", padding: "8px 16px", marginTop: 0, fontSize: 13 }}>Anuluj</button>
+            <button onClick={() => setEditingId(null)} style={{ ...s.btn(c.textMuted), width: "auto", padding: "8px 16px", marginTop: 0, fontSize: 13 }}>Anuluj</button>
           </div>
         </div>
       ) : refundId === e.id ? (
         // ── REFUND ROW ──
-        <div key={e.id} style={{ background: "#f59e0b11", border: "1px solid #f59e0b44", borderRadius: 10, padding: "12px 14px", marginBottom: 6 }}>
-          <div style={{ fontWeight: 700, color: "#f59e0b", fontSize: 13, marginBottom: 10 }}>
+        <div key={e.id} style={{ background: alpha(c.warning, "11"), border: `1px solid ${alpha(c.warning, "44")}`, borderRadius: 10, padding: "12px 14px", marginBottom: 6 }}>
+          <div style={{ fontWeight: 700, color: c.warning, fontSize: 13, marginBottom: 10 }}>
             ↩️ Rejestruj zwrot – {e.desc || e.sub} ({fmt(e.amount)})
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
             <div>
-              <label style={{ ...s.label, marginBottom: 4, color: "#f59e0b" }}>Kwota zwrotu (PLN)</label>
+              <label style={{ ...s.label, marginBottom: 4, color: c.warning }}>Kwota zwrotu (PLN)</label>
               <input
-                style={{ ...s.input, borderColor: parseFloat(refundAmount) > e.amount ? "#ef4444" : "#f59e0b44" }}
+                style={{ ...s.input, borderColor: parseFloat(refundAmount) > e.amount ? c.danger : alpha(c.warning, "44") }}
                 type="number"
                 placeholder="0,00"
                 min="0"
@@ -253,7 +254,7 @@ function ExpensesTable() {
                   if (!isNaN(v) && v < 0) setRefundAmount("0");
                 }}
               />
-              <div style={{ color: parseFloat(refundAmount) > e.amount ? "#ef4444" : "#64748b", fontSize: 10, marginTop: 3 }}>
+              <div style={{ color: parseFloat(refundAmount) > e.amount ? c.danger : c.textSecondary, fontSize: 10, marginTop: 3 }}>
                 {parseFloat(refundAmount) > e.amount
                   ? `⚠️ Przekracza max: ${fmt(e.amount)}`
                   : `Max: ${fmt(e.amount)} (realna gotówka)`}
@@ -271,13 +272,13 @@ function ExpensesTable() {
               const valid = !!refundAmount && !isNaN(rAmt) && rAmt > 0 && rAmt <= e.amount;
               return (
                 <button onClick={() => applyRefund(e)} disabled={!valid}
-                  style={{ ...s.btn(valid ? "#10b981" : "#334155"), width: "auto", padding: "8px 18px", marginTop: 0, fontSize: 13, cursor: valid ? "pointer" : "not-allowed" }}>
+                  style={{ ...s.btn(valid ? c.success : c.borderStrong), width: "auto", padding: "8px 18px", marginTop: 0, fontSize: 13, cursor: valid ? "pointer" : "not-allowed" }}>
                   ✅ Zatwierdź zwrot
                 </button>
               );
             })()}
             <button onClick={() => { setRefundId(null); setRefundAmount(""); setRefundNote(""); }}
-              style={{ ...s.btn("#475569"), width: "auto", padding: "8px 14px", marginTop: 0, fontSize: 13 }}>
+              style={{ ...s.btn(c.textMuted), width: "auto", padding: "8px 14px", marginTop: 0, fontSize: 13 }}>
               Anuluj
             </button>
           </div>
@@ -285,25 +286,25 @@ function ExpensesTable() {
       ) : (
         // ── NORMAL ROW ──
         <div key={e.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 100px 120px 88px", gap: 8, alignItems: "center",
-          padding: "9px 8px", borderBottom: "1px solid #1e293b",
+          padding: "9px 8px", borderBottom: `1px solid ${c.border}`,
           transition: "background 0.15s" }}
-          onMouseEnter={ev => ev.currentTarget.style.background = "#1e293b44"}
+          onMouseEnter={ev => ev.currentTarget.style.background = alpha(c.border, "44")}
           onMouseLeave={ev => ev.currentTarget.style.background = "transparent"}>
-          <span style={{ color: "#475569", fontSize: 12 }}>{e.date.slice(5)}</span>
+          <span style={{ color: c.textMuted, fontSize: 12 }}>{e.date.slice(5)}</span>
           <div>
-            <div style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 500 }}>{e.desc || e.sub}</div>
-            <div style={{ color: "#475569", fontSize: 11 }}>{e.sub}</div>
+            <div style={{ color: c.text, fontSize: 13, fontWeight: 500 }}>{e.desc || e.sub}</div>
+            <div style={{ color: c.textMuted, fontSize: 11 }}>{e.sub}</div>
           </div>
           <span style={{ fontSize: 11 }}>
-            <span style={{ background: "#1e293b", color: "#64748b", borderRadius: 5, padding: "2px 7px" }}>
+            <span style={{ background: c.border, color: c.textSecondary, borderRadius: 5, padding: "2px 7px" }}>
               {categories[e.category]?.icon} {e.category}
             </span>
           </span>
           {/* Amount: show cash amount prominently; show voucher info below if applicable */}
           <div>
-            <span style={{ color: "#10b981", fontWeight: 700, fontSize: 14 }}>{fmt(e.amount)}</span>
+            <span style={{ color: c.success, fontWeight: 700, fontSize: 14 }}>{fmt(e.amount)}</span>
             {e.voucherAmount > 0 && (
-              <div style={{ color: "#f59e0b", fontSize: 9, marginTop: 1 }}>
+              <div style={{ color: c.warning, fontSize: 9, marginTop: 1 }}>
                 🎟️ Wartość: {fmt(e.totalAmount)} (Bon: {fmt(e.voucherAmount)})
               </div>
             )}
@@ -311,18 +312,18 @@ function ExpensesTable() {
           <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
             {(e.tags||[]).map(tid => {
               const tag = tags.find(t => t.id === tid);
-              return tag ? <span key={tid} style={{ fontSize: 10, background: "#a855f722", color: "#a855f7", borderRadius: 4, padding: "1px 5px" }}>{tag.icon}</span> : null;
+              return tag ? <span key={tid} style={{ fontSize: 10, background: alpha(c.voucher, "22"), color: c.voucher, borderRadius: 4, padding: "1px 5px" }}>{tag.icon}</span> : null;
             })}
-            {e.recurring && <span style={{ fontSize: 10, background: "#3b82f622", color: "#3b82f6", borderRadius: 4, padding: "1px 5px" }}>🔄</span>}
+            {e.recurring && <span style={{ fontSize: 10, background: alpha(c.info, "22"), color: c.info, borderRadius: 4, padding: "1px 5px" }}>🔄</span>}
           </div>
           <div style={{ display: "flex", gap: 3, justifyContent: "flex-end" }}>
             <button onClick={() => { setRefundId(e.id); setEditingId(null); setRefundAmount(""); setRefundNote(""); }}
-              style={{ background: "#f59e0b22", border: "1px solid #f59e0b44", color: "#f59e0b", borderRadius: 6, padding: "4px 6px", cursor: "pointer", fontSize: 11 }}
+              style={{ background: alpha(c.warning, "22"), border: `1px solid ${alpha(c.warning, "44")}`, color: c.warning, borderRadius: 6, padding: "4px 6px", cursor: "pointer", fontSize: 11 }}
               title="Zarejestruj zwrot">↩️</button>
             <button onClick={() => startEdit(e)}
-              style={{ background: "#1e293b", border: "1px solid #334155", color: "#94a3b8", borderRadius: 6, padding: "4px 6px", cursor: "pointer", fontSize: 12 }}>✏️</button>
+              style={{ background: c.border, border: `1px solid ${c.borderStrong}`, color: c.textTertiary, borderRadius: 6, padding: "4px 6px", cursor: "pointer", fontSize: 12 }}>✏️</button>
             <button onClick={() => deleteExpense(e.id)}
-              style={{ background: "#ef444422", border: "1px solid #ef444444", color: "#ef4444", borderRadius: 6, padding: "4px 6px", cursor: "pointer", fontSize: 12 }}>🗑️</button>
+              style={{ background: alpha(c.danger, "22"), border: `1px solid ${alpha(c.danger, "44")}`, color: c.danger, borderRadius: 6, padding: "4px 6px", cursor: "pointer", fontSize: 12 }}>🗑️</button>
           </div>
         </div>
       ))}

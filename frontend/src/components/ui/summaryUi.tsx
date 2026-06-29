@@ -5,6 +5,7 @@
 // other panels need them.
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import React from "react";
 
 // ── ProgressBar ───────────────────────────────────────────────
@@ -24,7 +25,7 @@ export function ProgressBar({
   percent,
   color,
   height = 6,
-  trackColor = "#0d1424",
+  trackColor = c.surface,
   style,
 }: ProgressBarProps) {
   const fill = Math.min(Math.max(percent, 0), 100);
@@ -95,7 +96,7 @@ interface EmptyStateProps {
 export function EmptyState({ message, icon, padding = 20 }: EmptyStateProps) {
   return (
     <div style={{
-      color: "#475569",
+      color: c.textMuted,
       fontSize: 13,
       textAlign: "center",
       padding: `${padding}px 0`,
@@ -117,17 +118,17 @@ interface CardProps {
 export function Card({ title, children, style }: CardProps) {
   return (
     <div style={{
-      background: "#1e293b",
+      background: c.border,
       borderRadius: 16,
       padding: 20,
-      border: "1px solid #334155",
+      border: `1px solid ${c.borderStrong}`,
       overflow: "hidden",
       ...style,
     }}>
       {title && (
         <div style={{
           fontWeight: 700,
-          color: "#f1f5f9",
+          color: c.textStrong,
           fontSize: 15,
           marginBottom: 16,
         }}>
@@ -151,7 +152,7 @@ interface DividerRowProps {
 export function DividerRow({ children, isLast, style }: DividerRowProps) {
   return (
     <div style={{
-      borderBottom: isLast ? "none" : "1px solid #1e293b",
+      borderBottom: isLast ? "none" : `1px solid ${c.border}`,
       ...style,
     }}>
       {children}

@@ -14,6 +14,7 @@
 //   where the app naturally lands on load.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useAppContext }    from "../../context/AppContext";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useMonthFromUrl, addMonthsToYM } from "../../hooks/useMonthFromUrl";
@@ -89,10 +90,10 @@ export function MonthNavigator() {
           onClick={goToCurrent}
           title="Wróć do bieżącego miesiąca budżetowego"
           style={{
-            background:   "#10b98118",
-            border:       "1px solid #10b98144",
+            background:   alpha(c.success, "18"),
+            border:       `1px solid ${alpha(c.success, "44")}`,
             borderRadius: 8,
-            color:        "#10b981",
+            color:        c.success,
             cursor:       "pointer",
             fontSize:     11,
             fontWeight:   700,
@@ -100,15 +101,15 @@ export function MonthNavigator() {
             whiteSpace:   "nowrap",
             transition:   "background 0.15s",
           }}
-          onMouseEnter={e => (e.currentTarget.style.background = "#10b98130")}
-          onMouseLeave={e => (e.currentTarget.style.background = "#10b98118")}
+          onMouseEnter={e => (e.currentTarget.style.background = alpha(c.success, "30"))}
+          onMouseLeave={e => (e.currentTarget.style.background = alpha(c.success, "18"))}
         >
           ⌂ Aktualny miesiąc
         </button>
       )}
 
       {/* Month navigation */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#1e293b", borderRadius: 10, padding: "4px 6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, background: c.border, borderRadius: 10, padding: "4px 6px" }}>
         <button
           onClick={goBack}
           disabled={!canGoBack}
@@ -116,7 +117,7 @@ export function MonthNavigator() {
           style={{
             background: "transparent",
             border:     "none",
-            color:      canGoBack ? "#94a3b8" : "#1e293b",
+            color:      canGoBack ? c.textTertiary : c.border,
             padding:    "4px 10px",
             cursor:     canGoBack ? "pointer" : "default",
             fontSize:   18,
@@ -126,10 +127,10 @@ export function MonthNavigator() {
         </button>
 
         <div style={{ textAlign: "center", minWidth: 100 }}>
-          <div style={{ color: "#10b981", fontWeight: 800, fontSize: 15 }}>
+          <div style={{ color: c.success, fontWeight: 800, fontSize: 15 }}>
             {(MONTHS as string[])[month]}
           </div>
-          <div style={{ color: "#475569", fontSize: 10 }}>{year}</div>
+          <div style={{ color: c.textMuted, fontSize: 10 }}>{year}</div>
         </div>
 
         <button
@@ -138,7 +139,7 @@ export function MonthNavigator() {
           style={{
             background: "transparent",
             border:     "none",
-            color:      "#94a3b8",
+            color:      c.textTertiary,
             padding:    "4px 10px",
             cursor:     "pointer",
             fontSize:   18,

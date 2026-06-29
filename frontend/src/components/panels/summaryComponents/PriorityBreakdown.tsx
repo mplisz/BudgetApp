@@ -2,6 +2,7 @@
 // File: src/components/panels/summaryComponents/PriorityBreakdown.tsx
 // ============================================================
 
+import { c } from "../../../styles/tokens";
 import { useMemo } from "react";
 import { fmt } from "../../../utils/helpers";
 import { ProgressBar, EmptyState } from "../../ui/summaryUi";
@@ -64,7 +65,7 @@ export function PriorityBreakdown({ monthTx, totalExpenses }: PriorityBreakdownP
 
               {/* Label — stretches to fill available space */}
               <span style={{
-                color:    "#64748b",
+                color:    c.textSecondary,
                 fontSize: 12,
                 flex:     1,
                 minWidth: 0,
@@ -74,7 +75,7 @@ export function PriorityBreakdown({ monthTx, totalExpenses }: PriorityBreakdownP
 
               {/* Percentage */}
               <span style={{
-                color:     isEmpty ? "#334155" : "#64748b",
+                color:     isEmpty ? c.borderStrong : c.textSecondary,
                 fontSize:  11,
                 flexShrink: 0,
               }}>
@@ -83,7 +84,7 @@ export function PriorityBreakdown({ monthTx, totalExpenses }: PriorityBreakdownP
 
               {/* Amount */}
               <span style={{
-                color:      isEmpty ? "#334155" : "#e2e8f0",
+                color:      isEmpty ? c.borderStrong : c.text,
                 fontSize:   13,
                 fontWeight: 700,
                 flexShrink: 0,
@@ -99,7 +100,7 @@ export function PriorityBreakdown({ monthTx, totalExpenses }: PriorityBreakdownP
               percent={pct}
               color={meta.color}
               height={5}
-              trackColor="#0d1424"
+              trackColor={c.surface}
             />
           </div>
         );
@@ -109,16 +110,16 @@ export function PriorityBreakdown({ monthTx, totalExpenses }: PriorityBreakdownP
       <div style={{
         marginTop:  2,
         paddingTop: 8,
-        borderTop:  "1px solid #1e293b",
+        borderTop:  `1px solid ${c.border}`,
         display:    "flex",
         alignItems: "center",
         gap:        6,
         fontSize:   11,
-        color:      "#475569",
+        color:      c.textMuted,
       }}>
         <span>P1+P2</span>
         <span style={{
-          color:      "#e2e8f0",
+          color:      c.text,
           fontWeight: 700,
         }}>
           {criticalPct}%

@@ -1,3 +1,4 @@
+import { c, alpha } from "../../../styles/tokens";
 import { AppDatePicker, toYMD, todayLocal } from "../../ui/AppDatePicker";
 import { s } from "./txStyles";
 import type { DateBounds } from "./dateBounds";
@@ -33,7 +34,7 @@ export function DateRangeFilter({
   if (disabled) {
     return (
       <div style={{ ...sx.filterBox, flexBasis: "100%" }}>
-        <div style={{ fontSize: 12, color: "#f59e0b", background: "#f59e0b11", border: "1px solid #f59e0b44", borderRadius: 8, padding: "8px 12px" }}>
+        <div style={{ fontSize: 12, color: c.warning, background: alpha(c.warning, "11"), border: `1px solid ${alpha(c.warning, "44")}`, borderRadius: 8, padding: "8px 12px" }}>
           ⚠️ {emptyMessage}
         </div>
       </div>

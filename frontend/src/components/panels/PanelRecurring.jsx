@@ -7,6 +7,7 @@
 //   - "Upcoming" highlight — expenses in the next 7 days
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal }          from "react-dom";
 import { useMonthStatus }        from "../../hooks/useMonthStatus";
@@ -33,8 +34,8 @@ const WEEKEND_DAYS = new Set(["Sob", "Nie"]);
 const FREQ_LABEL   = Object.fromEntries(FREQUENCY_OPTIONS.map(o => [o.value, o.label]));
 
 const CAT_COLORS = [
-  "#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6",
-  "#06b6d4", "#f97316", "#ec4899", "#84cc16", "#6366f1",
+  c.success, c.info, c.warning, c.danger, "#8b5cf6",
+  c.cyan, c.orange, c.pink, c.lime, c.indigo,
 ];
 
 const SORT_OPTIONS = [
@@ -51,9 +52,9 @@ const STATUS_OPTIONS = [
 ];
 
 const LEGEND_ITEMS = [
-  { bg: "#10b98118", border: "#10b98144", label: "Potwierdzony" },
-  { bg: "#3b82f618", border: "#3b82f655", label: "Oczekujący"  },
-  { bg: "#10b98110", border: "#10b98155", label: "Dziś"        },
+  { bg: alpha(c.success, "18"), border: alpha(c.success, "44"), label: "Potwierdzony" },
+  { bg: alpha(c.info, "18"), border: alpha(c.info, "55"), label: "Oczekujący"  },
+  { bg: alpha(c.success, "10"), border: alpha(c.success, "55"), label: "Dziś"        },
 ];
 
 // ── Pure helpers ──────────────────────────────────────────────
@@ -122,8 +123,8 @@ function CalPill({ doc, month, isLocked, onEdit }) {
       title={`${doc.description} — ${fmt(amountPLN)} PLN`}
       onClick={() => !isLocked && onEdit(doc)}
       style={{
-        background:   confirmed ? "#10b98118" : `${color}18`,
-        border:       `1px solid ${confirmed ? "#10b98144" : color + "55"}`,
+        background:   confirmed ? alpha(c.success, "18") : `${color}18`,
+        border:       `1px solid ${confirmed ? alpha(c.success, "44") : color + "55"}`,
         borderRadius: 6,
         padding:      "3px 6px",
         marginBottom: 3,
@@ -134,10 +135,10 @@ function CalPill({ doc, month, isLocked, onEdit }) {
         transition:   "background 0.15s",
       }}
     >
-      {confirmed && <span style={{ color: "#10b981", fontSize: 9 }}>✓</span>}
+      {confirmed && <span style={{ color: c.success, fontSize: 9 }}>✓</span>}
       <span style={{
         fontSize: 10, fontWeight: 600,
-        color:        confirmed ? "#10b981" : color,
+        color:        confirmed ? c.success : color,
         whiteSpace:   "nowrap",
         overflow:     "hidden",
         textOverflow: "ellipsis",
@@ -145,7 +146,7 @@ function CalPill({ doc, month, isLocked, onEdit }) {
       }}>
         {doc.description}
       </span>
-      <span style={{ fontSize: 9, color: "#64748b", marginLeft: "auto", whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: 9, color: c.textSecondary, marginLeft: "auto", whiteSpace: "nowrap" }}>
         {fmt(amountPLN)}
       </span>
     </div>
@@ -156,12 +157,12 @@ function CalendarLegend() {
   return (
     <div style={{ display: "flex", gap: 16, marginTop: 12, flexWrap: "wrap" }}>
       {LEGEND_ITEMS.map(({ bg, border, label }) => (
-        <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#475569" }}>
+        <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: c.textMuted }}>
           <div style={{ width: 10, height: 10, background: bg, border: `1px solid ${border}`, borderRadius: 3 }} />
           {label}
         </div>
       ))}
-      <div style={{ marginLeft: "auto", fontSize: 11, color: "#475569" }}>
+      <div style={{ marginLeft: "auto", fontSize: 11, color: c.textMuted }}>
         Kliknij kafelek, żeby edytować
       </div>
     </div>
@@ -185,8 +186,8 @@ function AgendaItem({ doc, month, isLocked, onEdit }) {
       title={`${doc.description} — ${fmt(amountPLN)} PLN`}
       onClick={() => !isLocked && onEdit(doc)}
       style={{
-        background:   confirmed ? "#10b98118" : `${color}18`,
-        border:       `1px solid ${confirmed ? "#10b98144" : color + "55"}`,
+        background:   confirmed ? alpha(c.success, "18") : `${color}18`,
+        border:       `1px solid ${confirmed ? alpha(c.success, "44") : color + "55"}`,
         borderRadius: 8,
         padding:      "8px 10px",
         marginBottom: 6,
@@ -196,18 +197,18 @@ function AgendaItem({ doc, month, isLocked, onEdit }) {
         cursor:       isLocked ? "default" : "pointer",
       }}
     >
-      {confirmed && <span style={{ color: "#10b981", fontSize: 11 }}>✓</span>}
+      {confirmed && <span style={{ color: c.success, fontSize: 11 }}>✓</span>}
       <span style={{
         flex: 1, minWidth: 0,
         fontSize: 13, fontWeight: 600,
-        color:        confirmed ? "#10b981" : "#e2e8f0",
+        color:        confirmed ? c.success : c.text,
         overflow:     "hidden",
         textOverflow: "ellipsis",
         whiteSpace:   "nowrap",
       }}>
         {doc.description}
       </span>
-      <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700, whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: 12, color: c.textTertiary, fontWeight: 700, whiteSpace: "nowrap" }}>
         {fmt(amountPLN)} PLN
       </span>
     </div>
@@ -224,7 +225,7 @@ function CalendarAgenda({ byDay, daysCount, month, todayDay, isLocked, onEdit })
  
   if (days.length === 0) {
     return (
-      <div style={{ textAlign: "center", padding: "30px 0", color: "#334155" }}>
+      <div style={{ textAlign: "center", padding: "30px 0", color: c.borderStrong }}>
         Brak pozycji w tym miesiącu.
       </div>
     );
@@ -244,22 +245,22 @@ function CalendarAgenda({ byDay, daysCount, month, todayDay, isLocked, onEdit })
             {/* Day header */}
             <div style={{
               display: "flex", alignItems: "baseline", gap: 8,
-              marginBottom: 6, paddingBottom: 4, borderBottom: "1px solid #1e293b",
+              marginBottom: 6, paddingBottom: 4, borderBottom: `1px solid ${c.border}`,
             }}>
-              <span style={{ fontSize: 16, fontWeight: 800, color: isToday ? "#10b981" : "#e2e8f0" }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: isToday ? c.success : c.text }}>
                 {day}
               </span>
-              <span style={{ fontSize: 12, color: isWeekend ? "#475569" : "#64748b" }}>{dow}</span>
+              <span style={{ fontSize: 12, color: isWeekend ? c.textMuted : c.textSecondary }}>{dow}</span>
               {isToday && (
                 <span style={{
-                  fontSize: 9, fontWeight: 800, color: "#10b981",
-                  background: "#10b98118", border: "1px solid #10b98144",
+                  fontSize: 9, fontWeight: 800, color: c.success,
+                  background: alpha(c.success, "18"), border: `1px solid ${alpha(c.success, "44")}`,
                   borderRadius: 20, padding: "1px 7px",
                 }}>
                   dziś
                 </span>
               )}
-              <span style={{ marginLeft: "auto", fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>
+              <span style={{ marginLeft: "auto", fontSize: 12, color: c.textTertiary, fontWeight: 700 }}>
                 {fmt(totalAmt)} PLN
               </span>
             </div>
@@ -321,7 +322,7 @@ function CalendarView({ items, month, isLocked, onEdit, onArchive }) {
         {DAY_NAMES.map(d => (
           <div key={d} style={{
             textAlign: "center", fontSize: 11, fontWeight: 700,
-            color: WEEKEND_DAYS.has(d) ? "#475569" : "#64748b",
+            color: WEEKEND_DAYS.has(d) ? c.textMuted : c.textSecondary,
             padding: "6px 0", textTransform: "uppercase", letterSpacing: "0.05em",
           }}>
             {d}
@@ -343,15 +344,15 @@ function CalendarView({ items, month, isLocked, onEdit, onArchive }) {
           return (
             <div key={cell.key} style={{
               minHeight:    80,
-              background:   isToday ? "#10b98110" : docs.length > 0 ? "#0d1424" : "#090e1b",
-              border:       `1px solid ${isToday ? "#10b98155" : docs.length > 0 ? "#1e293b" : "#0f172a"}`,
+              background:   isToday ? alpha(c.success, "10") : docs.length > 0 ? c.surface : c.bgDeepest,
+              border:       `1px solid ${isToday ? alpha(c.success, "55") : docs.length > 0 ? c.border : c.surfaceAlt}`,
               borderRadius: 8,
               padding:      "6px 6px 4px",
               opacity:      isPast && docs.length === 0 ? 0.35 : 1,
             }}>
               <div style={{
                 fontSize: 11, fontWeight: isToday ? 800 : 600,
-                color:          isToday ? "#10b981" : isPast ? "#334155" : "#475569",
+                color:          isToday ? c.success : isPast ? c.borderStrong : c.textMuted,
                 marginBottom:   docs.length > 0 ? 5 : 0,
                 display:        "flex",
                 alignItems:     "center",
@@ -359,7 +360,7 @@ function CalendarView({ items, month, isLocked, onEdit, onArchive }) {
               }}>
                 <span>{day}</span>
                 {docs.length > 0 && totalAmt > 0 && (
-                  <span style={{ fontSize: 9, color: "#64748b", fontWeight: 500 }}>{fmt(totalAmt)}</span>
+                  <span style={{ fontSize: 9, color: c.textSecondary, fontWeight: 500 }}>{fmt(totalAmt)}</span>
                 )}
               </div>
               {docs.map(doc => (
@@ -399,13 +400,13 @@ function UpcomingStrip({ items, month }) {
 
   return (
     <div style={{
-      background: "#0a0f1e", border: "1px solid #f59e0b44",
+      background: c.bg, border: `1px solid ${alpha(c.warning, "44")}`,
       borderRadius: 10, padding: "12px 14px", marginBottom: 16,
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b" }}>⚡ Najbliższe 7 dni</div>
-        <div style={{ fontSize: 12, color: "#64748b" }}>
-          łącznie <strong style={{ color: "#f59e0b" }}>{fmt(totalAmt)} PLN</strong>
+        <div style={{ fontSize: 12, fontWeight: 700, color: c.warning }}>⚡ Najbliższe 7 dni</div>
+        <div style={{ fontSize: 12, color: c.textSecondary }}>
+          łącznie <strong style={{ color: c.warning }}>{fmt(totalAmt)} PLN</strong>
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -418,15 +419,15 @@ function UpcomingStrip({ items, month }) {
 
           return (
             <div key={doc.id} style={{
-              background:   confirmed ? "#10b98112" : `${color}12`,
-              border:       `1px solid ${confirmed ? "#10b98144" : color + "44"}`,
+              background:   confirmed ? alpha(c.success, "12") : `${color}12`,
+              border:       `1px solid ${confirmed ? alpha(c.success, "44") : color + "44"}`,
               borderRadius: 8, padding: "8px 12px", minWidth: 140, flex: "0 0 auto",
             }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: confirmed ? "#10b981" : color, marginBottom: 2 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: confirmed ? c.success : color, marginBottom: 2 }}>
                 {confirmed ? "✓ " : ""}{doc.description}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#e2e8f0" }}>{fmt(amountPLN)} PLN</div>
-              <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: c.text }}>{fmt(amountPLN)} PLN</div>
+              <div style={{ fontSize: 10, color: c.textSecondary, marginTop: 2 }}>
                 {daysLeft === 0 ? "🔴 Dziś" : `📅 Za ${daysLeft} ${daysLeft === 1 ? "dzień" : "dni"} (${day}.)`}
               </div>
             </div>
@@ -453,11 +454,11 @@ function KpiBar({ items, month }) {
   const pct = totalPLN > 0 ? Math.round((confirmedPLN / totalPLN) * 100) : 0;
 
   const kpis = [
-    { icon: "🔄", label: "Aktywne",      value: items.length,   unit: "pozycji",           color: "#3b82f6" },
-    { icon: "✅", label: "Potwierdzone", value: confirmedCount, unit: `z ${items.length}`,  color: "#10b981" },
-    { icon: "💸", label: "Łącznie",      value: fmt(totalPLN),  unit: "PLN/mies.",          color: "#e2e8f0" },
+    { icon: "🔄", label: "Aktywne",      value: items.length,   unit: "pozycji",           color: c.info },
+    { icon: "✅", label: "Potwierdzone", value: confirmedCount, unit: `z ${items.length}`,  color: c.success },
+    { icon: "💸", label: "Łącznie",      value: fmt(totalPLN),  unit: "PLN/mies.",          color: c.text },
     { icon: "📊", label: "Realizacja",   value: `${pct}%`,      unit: fmt(confirmedPLN),
-      color: pct === 100 ? "#10b981" : pct > 50 ? "#f59e0b" : "#ef4444" },
+      color: pct === 100 ? c.success : pct > 50 ? c.warning : c.danger },
   ];
 
   return (
@@ -467,15 +468,15 @@ function KpiBar({ items, month }) {
     }}>
       {kpis.map(kpi => (
         <div key={kpi.label} style={{
-          background: "#0d1424", border: "1px solid #1e293b",
+          background: c.surface, border: `1px solid ${c.border}`,
           borderRadius: 10, padding: "12px 14px",
           display: "flex", alignItems: "center", gap: 10,
         }}>
           <span style={{ fontSize: 18 }}>{kpi.icon}</span>
           <div>
-            <div style={{ fontSize: 11, color: "#475569", marginBottom: 2 }}>{kpi.label}</div>
+            <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 2 }}>{kpi.label}</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
-            <div style={{ fontSize: 10, color: "#334155" }}>{kpi.unit}</div>
+            <div style={{ fontSize: 10, color: c.borderStrong }}>{kpi.unit}</div>
           </div>
         </div>
       ))}
@@ -493,11 +494,11 @@ function EditModal({ editTarget, month, isSaving, onSubmit, onClose }) {
       zIndex: 1000, padding: 16,
     }}>
       <div style={{
-        background: "#0a0f1e", border: "1px solid #1e293b",
+        background: c.bg, border: `1px solid ${c.border}`,
         borderRadius: 16, padding: 24,
         width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto",
       }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: "#e2e8f0", marginBottom: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 16 }}>
           ✏️ Edytuj wydatek cykliczny
         </div>
         <RecurringForm
@@ -533,7 +534,7 @@ function Toolbar({
 
   return (
     <div style={{
-      background: "#090e1b", border: "1px solid #1e293b",
+      background: c.bgDeepest, border: `1px solid ${c.border}`,
       borderRadius: 10, padding: "12px 14px", marginBottom: 16,
       display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
     }}>
@@ -543,10 +544,10 @@ function Toolbar({
         value={filterFreq}
         onChange={handleFreq}
         style={{
-          background:   filterFreq ? "#10b98120" : "#0a0f1e",
-          border:       `1px solid ${filterFreq ? "#10b98144" : "#1e293b"}`,
+          background:   filterFreq ? alpha(c.success, "20") : c.bg,
+          border:       `1px solid ${filterFreq ? alpha(c.success, "44") : c.border}`,
           borderRadius: 8,
-          color:        filterFreq ? "#10b981" : "#94a3b8",
+          color:        filterFreq ? c.success : c.textTertiary,
           padding:      "6px 10px",
           fontSize:     12,
           cursor:       "pointer",
@@ -584,8 +585,8 @@ function Toolbar({
         <button
           onClick={onClear}
           style={{
-            background: "transparent", border: "1px solid #334155",
-            borderRadius: 8, color: "#64748b",
+            background: "transparent", border: `1px solid ${c.borderStrong}`,
+            borderRadius: 8, color: c.textSecondary,
             padding: "5px 10px", cursor: "pointer", fontSize: 12,
           }}
         >
@@ -596,7 +597,7 @@ function Toolbar({
       {/* Sort (list view only) */}
       {viewMode === "list" && (
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 11, color: "#334155", marginRight: 4 }}>Sortuj:</span>
+          <span style={{ fontSize: 11, color: c.borderStrong, marginRight: 4 }}>Sortuj:</span>
           {SORT_OPTIONS.map(opt => (
             <ToggleBtn
               key={opt.id}
@@ -714,13 +715,13 @@ export default function PanelRecurring() {
         justifyContent: "space-between", flexWrap: "wrap", gap: 10,
       }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 }}>
             🔄 Wydatki cykliczne
           </div>
-          <div style={{ fontSize: 13, color: "#64748b" }}>
+          <div style={{ fontSize: 13, color: c.textSecondary }}>
             {month} · {activeThisMonth.length} aktywnych ·{" "}
-            <strong style={{ color: "#e2e8f0" }}>~{fmt(totalPLN)} PLN</strong>/miesiąc
-            <span style={{ color: "#334155", marginLeft: 4 }}>(orientacyjnie)</span>
+            <strong style={{ color: c.text }}>~{fmt(totalPLN)} PLN</strong>/miesiąc
+            <span style={{ color: c.borderStrong, marginLeft: 4 }}>(orientacyjnie)</span>
           </div>
         </div>
 
@@ -746,9 +747,9 @@ export default function PanelRecurring() {
 
       {isPastMonth && (
         <div style={{
-          background: "#1e293b", border: "1px solid #334155",
+          background: c.border, border: `1px solid ${c.borderStrong}`,
           borderRadius: 10, padding: "10px 14px", marginBottom: 16,
-          fontSize: 12, color: "#64748b",
+          fontSize: 12, color: c.textSecondary,
         }}>
           📅 Miesiąc {month} jest w przeszłości — dane są tylko do odczytu.
         </div>
@@ -772,17 +773,17 @@ export default function PanelRecurring() {
       />
 
       {!isLoading && hasFilters && (
-        <div style={{ fontSize: 12, color: "#475569", marginBottom: 10 }}>
-          Wyniki: <strong style={{ color: "#94a3b8" }}>{filtered.length}</strong> z {activeThisMonth.length}
+        <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 10 }}>
+          Wyniki: <strong style={{ color: c.textTertiary }}>{filtered.length}</strong> z {activeThisMonth.length}
         </div>
       )}
 
       {isLoading && (
-        <div style={{ color: "#475569", textAlign: "center", padding: 40 }}>Ładowanie…</div>
+        <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>
       )}
 
       {!isLoading && filtered.length === 0 && (
-        <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
+        <div style={{ textAlign: "center", padding: "40px 0", color: c.borderStrong }}>
           {hasFilters
             ? "Brak wyników dla wybranych filtrów."
             : `Brak aktywnych wydatków cyklicznych w ${month}.`}
@@ -801,7 +802,7 @@ export default function PanelRecurring() {
 
       {!isLoading && sorted.length > 0 && viewMode === "list" && (
         <>
-          <div style={{ color: "#475569", fontSize: 12, marginBottom: 8, textAlign: "right" }}>
+          <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {sorted.length} pozycji · strona {page} z {totalPages}
           </div>
           {paginated.map(r => (

@@ -3,6 +3,7 @@
 // Layout: nazwa + kwoty w jednym wierszu, pasek pełna szerokość pod spodem
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState } from "react";
 import { fmt } from "../../../utils/helpers";
 import { ProgressBar, EmptyState, DividerRow } from "../../ui/summaryUi";
@@ -18,10 +19,10 @@ interface SubcategoryListProps {
 }
 
 function getBarColor(percent: number): string {
-  if (percent >= 100) return "#ef4444";
-  if (percent >= 90)  return "#f97316";
-  if (percent >= 70)  return "#f59e0b";
-  return "#10b981";
+  if (percent >= 100) return c.danger;
+  if (percent >= 90)  return c.orange;
+  if (percent >= 70)  return c.warning;
+  return c.success;
 }
 
 function SubcategoryList({ subcategories }: SubcategoryListProps) {
@@ -31,10 +32,10 @@ function SubcategoryList({ subcategories }: SubcategoryListProps) {
   return (
     <div style={{
       marginTop: 6,
-      background: "#0a0f1e",
+      background: c.bg,
       borderRadius: 8,
       padding: "6px 10px",
-      border: "1px solid #1e293b",
+      border: `1px solid ${c.border}`,
     }}>
       {subcategories.map((sub, i) => (
         <DividerRow
@@ -42,10 +43,10 @@ function SubcategoryList({ subcategories }: SubcategoryListProps) {
           isLast={i === subcategories.length - 1}
           style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}
         >
-          <span style={{ color: "#64748b" }}>› {sub.subcategoryName}</span>
-          <span style={{ color: "#94a3b8" }}>
+          <span style={{ color: c.textSecondary }}>› {sub.subcategoryName}</span>
+          <span style={{ color: c.textTertiary }}>
             {fmt(sub.spent)}
-            <span style={{ color: "#475569", marginLeft: 5 }}>({sub.percentOfCategory.toFixed(1)}%)</span>
+            <span style={{ color: c.textMuted, marginLeft: 5 }}>({sub.percentOfCategory.toFixed(1)}%)</span>
           </span>
         </DividerRow>
       ))}
@@ -59,7 +60,7 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
   const hasLimit  = category.limit !== null && category.limit > 0;
   const rawPct    = category.percent ?? 0;
   const barPct    = Math.min(rawPct, 100);
-  const barColor  = hasLimit ? getBarColor(rawPct) : "#334155";
+  const barColor  = hasLimit ? getBarColor(rawPct) : c.borderStrong;
   const canExpand = subcategories.length > 0;
   const isOver    = hasLimit && rawPct > 100;
 
@@ -73,13 +74,13 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
           onClick={handleToggle}
           style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: canExpand ? "pointer" : "default", marginBottom: 4 }}
         >
-          <span style={{ color: "#64748b", fontSize: 13, display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ color: c.textSecondary, fontSize: 13, display: "flex", alignItems: "center", gap: 5 }}>
             {category.categoryIcon} {category.categoryName}
-            {canExpand && <span style={{ fontSize: 10, color: "#334155" }}>{expanded ? "▲" : "▼"}</span>}
+            {canExpand && <span style={{ fontSize: 10, color: c.borderStrong }}>{expanded ? "▲" : "▼"}</span>}
           </span>
-          <span style={{ color: "#94a3b8", fontSize: 13, fontWeight: 600 }}>{fmt(category.spent)}</span>
+          <span style={{ color: c.textTertiary, fontSize: 13, fontWeight: 600 }}>{fmt(category.spent)}</span>
         </div>
-        <div style={{ height: 3, background: "#1e293b", borderRadius: 99 }} />
+        <div style={{ height: 3, background: c.border, borderRadius: 99 }} />
         {expanded && <SubcategoryList subcategories={subcategories} />}
       </div>
     );
@@ -95,9 +96,9 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
         style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, cursor: canExpand ? "pointer" : "default" }}
       >
         {/* Icon + name */}
-        <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600, flex: 1, display: "flex", alignItems: "center", gap: 5 }}>
+        <span style={{ fontSize: 13, color: c.text, fontWeight: 600, flex: 1, display: "flex", alignItems: "center", gap: 5 }}>
           {category.categoryIcon} {category.categoryName}
-          {canExpand && <span style={{ fontSize: 10, color: "#475569" }}>{expanded ? "▲" : "▼"}</span>}
+          {canExpand && <span style={{ fontSize: 10, color: c.textMuted }}>{expanded ? "▲" : "▼"}</span>}
         </span>
 
         {/* Spent */}
@@ -106,10 +107,10 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
         </span>
 
         {/* Separator */}
-        <span style={{ fontSize: 12, color: "#334155" }}>/</span>
+        <span style={{ fontSize: 12, color: c.borderStrong }}>/</span>
 
         {/* Limit */}
-        <span style={{ fontSize: 12, color: "#475569" }}>
+        <span style={{ fontSize: 12, color: c.textMuted }}>
           {fmt(category.limit!)}
         </span>
 
@@ -117,9 +118,9 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
         <span style={{
           fontSize: 11,
           fontWeight: 700,
-          color: isOver ? "#ef4444" : barColor,
-          background: isOver ? "#ef444418" : `${barColor}18`,
-          border: `1px solid ${isOver ? "#ef444433" : `${barColor}33`}`,
+          color: isOver ? c.danger : barColor,
+          background: isOver ? alpha(c.danger, "18") : `${barColor}18`,
+          border: `1px solid ${isOver ? alpha(c.danger, "33") : `${barColor}33`}`,
           borderRadius: 6,
           padding: "1px 6px",
           minWidth: 46,
@@ -134,7 +135,7 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
         percent={barPct}
         color={barColor}
         height={6}
-        trackColor="#1e293b"
+        trackColor={c.border}
       />
 
       {/* Subcategory drill-down */}

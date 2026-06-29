@@ -13,10 +13,8 @@
 // ============================================================
 
 import { useState, useCallback, useRef } from "react";
-import { useAuth } from "../context/AuthContext";
 import { useToast } from "./useToast";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { useApi } from "./useApi";
 
 // Use a loose type — the panel computes its own enriched shape
 export type RangeTransaction = Record<string, unknown> & {
@@ -44,7 +42,7 @@ function rangeKey(from: string, to: string): string {
 }
 
 export function useTransactionsRange(): UseTransactionsRangeResult {
-  const { fetchWithAuth } = useAuth() as { fetchWithAuth: typeof fetch };
+  const api               = useApi();
   const { showError }     = useToast() as { showError: (m: string) => void };
 
   const [transactions, setTransactions] = useState<RangeTransaction[]>([]);
@@ -99,16 +97,10 @@ export function useTransactionsRange(): UseTransactionsRangeResult {
 
     // ── Fresh fetch ──────────────────────────────────────────
     setIsLoading(true);
-    const promise = (async () => {
-      const res  = await fetchWithAuth(
-        `${API_URL}/api/transactions/range?from=${fromMonth}&to=${toMonth}`,
-      );
-      const data = await (res as Response).json();
-      if (!(res as Response).ok) {
-        throw new Error(data.error || "Failed to fetch range.");
-      }
-      return data as RangeTransaction[];
-    })();
+    const promise = api.get<RangeTransaction[]>(
+      `/api/transactions/range?from=${fromMonth}&to=${toMonth}`,
+      { fallback: "Nie udało się pobrać zakresu transakcji." },
+    );
     inFlightRef.current.set(key, promise);
 
     try {
@@ -122,7 +114,7 @@ export function useTransactionsRange(): UseTransactionsRangeResult {
       inFlightRef.current.delete(key);
       setIsLoading(false);
     }
-  }, [fetchWithAuth, showError]);
+  }, [api, showError]);
 
   // Manual invalidation — e.g. after a user adds/edits/deletes a transaction
   // we want the next range fetch to bypass cache.

@@ -3,6 +3,7 @@
 // Managing currencies to be used in dropdowns
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState }             from "react";
 import { theme as s }           from "../../../styles/theme";
 import { CollapsibleSection }   from "../../ui/index";
@@ -75,8 +76,8 @@ export function CurrenciesSection() {
   // ── Style helpers ────────────────────────────────────────────
   const chip = (active) => ({
     display: "flex", alignItems: "center", gap: 8,
-    background: "#1e293b",
-    border:     `1px solid ${active ? "#334155" : "#1e293b"}`,
+    background: c.border,
+    border:     `1px solid ${active ? c.borderStrong : c.border}`,
     borderRadius: 8,
     padding:    "6px 12px",
     opacity:    active ? 1 : 0.5,
@@ -87,28 +88,28 @@ export function CurrenciesSection() {
       <CollapsibleSection title="💱 Waluty" defaultOpen={false}>
 
         {/* Licznik */}
-        <div style={{ fontSize: 11, color: atLimit ? "#f59e0b" : "#475569", marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: atLimit ? c.warning : c.textMuted, marginBottom: 14 }}>
           {activeCount}/10 aktywnych walut
           {atLimit && " — osiągnięto limit. Zarchiwizuj walutę żeby dodać nową."}
         </div>
 
         {/* Base currency */}
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>
+          <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>
             Waluta bazowa
           </div>
           <div style={chip(true)}>
-            <span style={{ fontWeight: 700, color: "#10b981", fontSize: 13, minWidth: 36 }}>
+            <span style={{ fontWeight: 700, color: c.success, fontSize: 13, minWidth: 36 }}>
               {baseCurrency.code}
             </span>
-            <span style={{ color: "#94a3b8", fontSize: 12 }}>{baseCurrency.name}</span>
-            <span style={{ marginLeft: "auto", fontSize: 10, color: "#334155" }}>bazowa</span>
+            <span style={{ color: c.textTertiary, fontSize: 12 }}>{baseCurrency.name}</span>
+            <span style={{ marginLeft: "auto", fontSize: 10, color: c.borderStrong }}>bazowa</span>
           </div>
         </div>
 
         {/* Active currencies */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <span style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase" }}>Aktywne</span>
+          <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Aktywne</span>
           <ArchiveToggleButton isShowingArchived={showArchived} onToggle={() => setShowArchived(!showArchived)} />
         </div>
 
@@ -128,38 +129,38 @@ export function CurrenciesSection() {
                 fontWeight={400}
               />
               <button onClick={() => confirmArchive(c)}
-                style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 14, marginLeft: 4 }}>
+                style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 14, marginLeft: 4 }}>
                 🗑️
               </button>
             </div>
           ))}
           {activeCurrencies.length === 0 && (
-            <div style={{ color: "#475569", fontSize: 13 }}>Brak aktywnych walut.</div>
+            <div style={{ color: c.textMuted, fontSize: 13 }}>Brak aktywnych walut.</div>
           )}
         </div>
 
         {/* Archive */}
         {showArchived && (
           <>
-            <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
               Archiwum
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
               {archivedCurrencies.map(c => (
                 <div key={c.code} style={chip(false)}>
-                  <span style={{ fontWeight: 700, color: "#64748b", fontSize: 13, minWidth: 36 }}>{c.code}</span>
-                  <span style={{ color: "#475569", fontSize: 12 }}>{c.name}</span>
+                  <span style={{ fontWeight: 700, color: c.textSecondary, fontSize: 13, minWidth: 36 }}>{c.code}</span>
+                  <span style={{ color: c.textMuted, fontSize: 12 }}>{c.name}</span>
                   <button
                     onClick={() => restoreCurrency(c.code)}
                     title="Przywróć"
                     disabled={atLimit}
-                    style={{ background: "none", border: "none", color: "#10b981", cursor: atLimit ? "not-allowed" : "pointer", fontSize: 14, marginLeft: 4, opacity: atLimit ? 0.4 : 1 }}>
+                    style={{ background: "none", border: "none", color: c.success, cursor: atLimit ? "not-allowed" : "pointer", fontSize: 14, marginLeft: 4, opacity: atLimit ? 0.4 : 1 }}>
                     🔄
                   </button>
                 </div>
               ))}
               {archivedCurrencies.length === 0 && (
-                <div style={{ color: "#475569", fontSize: 13 }}>Brak zarchiwizowanych walut.</div>
+                <div style={{ color: c.textMuted, fontSize: 13 }}>Brak zarchiwizowanych walut.</div>
               )}
             </div>
           </>
@@ -168,7 +169,7 @@ export function CurrenciesSection() {
         {/* Suggestions */}
         {!atLimit && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
               Szybkie dodanie
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -178,9 +179,9 @@ export function CurrenciesSection() {
                   <button key={sugg.code} onClick={() => handleSuggestion(sugg)}
                     style={{
                       padding: "4px 10px", borderRadius: 16,
-                      border:     `1px solid ${newCode === sugg.code ? "#3b82f6" : "#334155"}`,
-                      background: newCode === sugg.code ? "#3b82f622" : "transparent",
-                      color:      newCode === sugg.code ? "#3b82f6"   : "#64748b",
+                      border:     `1px solid ${newCode === sugg.code ? c.info : c.borderStrong}`,
+                      background: newCode === sugg.code ? alpha(c.info, "22") : "transparent",
+                      color:      newCode === sugg.code ? c.info   : c.textSecondary,
                       cursor: "pointer", fontSize: 12,
                     }}>
                     {sugg.code}

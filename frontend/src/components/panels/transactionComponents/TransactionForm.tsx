@@ -3,6 +3,7 @@
 // Shared transaction form — used in PanelExpenses and EditTransactionModal.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useAppContext }     from "../../../context/AppContext";
 import { useToast }          from "../../../hooks/useToast";
@@ -25,17 +26,17 @@ import type {
 // ── Styles ────────────────────────────────────────────────────
 
 const lbl: React.CSSProperties = {
-  display: "block", fontSize: 11, color: "#64748b",
+  display: "block", fontSize: 11, color: c.textSecondary,
   textTransform: "uppercase", letterSpacing: "0.6px",
   fontWeight: 700, marginBottom: 6,
 };
 const inp: React.CSSProperties = {
-  width: "100%", background: "#0a0f1e", border: "1px solid #1e293b",
-  borderRadius: 8, color: "#e2e8f0", padding: "9px 12px",
+  width: "100%", background: c.bg, border: `1px solid ${c.border}`,
+  borderRadius: 8, color: c.text, padding: "9px 12px",
   fontSize: 14, outline: "none", boxSizing: "border-box",
 };
 const frow: React.CSSProperties  = { marginBottom: 16 };
-const divider: React.CSSProperties = { borderTop: "1px solid #1e293b", margin: "20px 0" };
+const divider: React.CSSProperties = { borderTop: `1px solid ${c.border}`, margin: "20px 0" };
 
 // ── Default form values ───────────────────────────────────────
 
@@ -112,8 +113,7 @@ export function TransactionForm({
   cart = [],
   showVouchers = true,
 }: TransactionFormProps) {
-  const { tags, transactions, limits, settings } = useAppContext() as {
-    tags:         Array<{ id: string; name: string; icon: string; isArchived: boolean }>;
+  const { transactions, limits, settings } = useAppContext() as {
     transactions: Array<{ budgetMonth: string; categoryId: string; type: string; isArchived: boolean; amount: number }>;
     limits:       Array<{ categoryId: string; limits: Array<{ type: string; date: string; amount: number }> }>;
     settings:     { thresholds?: { warningPercent: number; criticalPercent: number } } | null;
@@ -383,10 +383,10 @@ export function TransactionForm({
       <div style={frow}>
         <label style={lbl}>Data</label>
         <AppDatePicker value={form.date} onChange={(date: Date) => set("date", date)} maxDate={null} />
-        <div style={{ fontSize: 11, color: "#10b98199", marginTop: 4 }}>
+        <div style={{ fontSize: 11, color: alpha(c.success, "99"), marginTop: 4 }}>
           Miesiąc budżetowy: <strong>{budgetMonth}</strong>
-          {mode === "edit" && <span style={{ color: "#475569" }}> (nieedytowalny)</span>}
-          {mode === "add"  && <span style={{ color: "#475569" }}> (z nawigatora)</span>}
+          {mode === "edit" && <span style={{ color: c.textMuted }}> (nieedytowalny)</span>}
+          {mode === "add"  && <span style={{ color: c.textMuted }}> (z nawigatora)</span>}
         </div>
       </div>
 
@@ -421,32 +421,32 @@ export function TransactionForm({
                   onChange={e => updateLineItem(idx, "originalAmount", e.target.value)}
                   style={{ ...inp, width: 110, padding: "7px 10px", fontSize: 13, textAlign: "right" }}
                 />
-                <span style={{ fontSize: 12, color: "#64748b", width: 38 }}>{rateInfo.resolvedCurrency}</span>
+                <span style={{ fontSize: 12, color: c.textSecondary, width: 38 }}>{rateInfo.resolvedCurrency}</span>
                 <button onClick={() => removeLineItem(idx)} title="Usuń pozycję"
-                  style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, padding: "0 4px" }}>×</button>
+                  style={{ background: "transparent", border: "none", color: c.danger, cursor: "pointer", fontSize: 18, padding: "0 4px" }}>×</button>
               </div>
             ))}
           </div>
 
           {/* Suma = kwota transakcji (read-only, na żywo) */}
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: "1px solid #1e293b" }}>
-            <span style={{ color: "#64748b", fontSize: 13 }}>Suma pozycji:</span>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${c.border}` }}>
+            <span style={{ color: c.textSecondary, fontSize: 13 }}>Suma pozycji:</span>
             <span style={{ textAlign: "right" }}>
               {rateInfo.resolvedCurrency !== "PLN" ? (
                 <>
-                  <span style={{ color: "#e2e8f0", fontWeight: 700 }}>
+                  <span style={{ color: c.text, fontWeight: 700 }}>
                     {fmtAmount(lineItemsSumOrig, rateInfo.resolvedCurrency)} {rateInfo.resolvedCurrency}
                   </span>
-                  <div style={{ color: "#10b981", fontWeight: 700, fontSize: 13 }}>= {fmt(lineItemsSumPLN)}</div>
+                  <div style={{ color: c.success, fontWeight: 700, fontSize: 13 }}>= {fmt(lineItemsSumPLN)}</div>
                 </>
               ) : (
-                <span style={{ color: "#10b981", fontWeight: 700 }}>{fmt(lineItemsSumPLN)}</span>
+                <span style={{ color: c.success, fontWeight: 700 }}>{fmt(lineItemsSumPLN)}</span>
               )}
             </span>
           </div>
 
           {form.lineItems.length === 2 && (
-            <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: c.warning, marginTop: 8 }}>
               Usunięcie pozostawi 1 pozycję → transakcja stanie się zwykła (bez rozbicia).
             </div>
           )}
@@ -459,7 +459,7 @@ export function TransactionForm({
             <label style={{ ...lbl, marginBottom: 0 }}>
               {discount.isOpen ? "Cena jednostkowa brutto" : "Kwota"} ({rateInfo.resolvedCurrency || "PLN"})
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: c.textSecondary, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
               Ilość
               {/* Changed to text numeric input mode to mitigate issues on mobile phone with changing the quantity */}
               <input
@@ -497,18 +497,18 @@ export function TransactionForm({
               />
               {/* Gross total (unit × qty) — shown only when qty > 1 */}
               {discount.qty > 1 && discount.summary && (
-                <span style={{ color: "#334155", fontSize: 12, flexShrink: 0 }}>
-                  ×{discount.qty} = <strong style={{ color: "#94a3b8" }}>{fmt(discount.summary.grossTotal)}</strong>
+                <span style={{ color: c.borderStrong, fontSize: 12, flexShrink: 0 }}>
+                  ×{discount.qty} = <strong style={{ color: c.textTertiary }}>{fmt(discount.summary.grossTotal)}</strong>
                 </span>
               )}
               {/* Arrow + net total */}
-              <span style={{ color: "#334155", fontSize: 13, flexShrink: 0 }}>→</span>
+              <span style={{ color: c.borderStrong, fontSize: 13, flexShrink: 0 }}>→</span>
               <input
                 type="text" readOnly
                 value={discount.summary && discount.summary.grossTotal > 0 ? String(round2(discount.summary.net)) : ""}
                 placeholder="suma netto"
                 title="Suma netto = (cena jedn. × ilość) − rabat"
-                style={{ ...inp, flex: 1, minWidth: 80, color: "#10b981", cursor: "not-allowed", opacity: 0.8, borderColor: "#10b98133" }}
+                style={{ ...inp, flex: 1, minWidth: 80, color: c.success, cursor: "not-allowed", opacity: 0.8, borderColor: alpha(c.success, "33") }}
               />
             </div>
           ) : (
@@ -523,11 +523,11 @@ export function TransactionForm({
               {/* Total preview when qty > 1 */}
               {discount.qty > 1 && (parseDecimal(form.amountOrig) || 0) > 0 && (
                 <>
-                  <span style={{ color: "#334155", fontSize: 13, flexShrink: 0 }}>×{discount.qty} =</span>
+                  <span style={{ color: c.borderStrong, fontSize: 13, flexShrink: 0 }}>×{discount.qty} =</span>
                   <input
                     type="text" readOnly
                     value={String(round2((parseDecimal(form.amountOrig) || 0) * discount.qty))}
-                    style={{ ...inp, flex: 1, color: "#10b981", cursor: "not-allowed", opacity: 0.8, borderColor: "#10b98133" }}
+                    style={{ ...inp, flex: 1, color: c.success, cursor: "not-allowed", opacity: 0.8, borderColor: alpha(c.success, "33") }}
                   />
                 </>
               )}
@@ -535,7 +535,7 @@ export function TransactionForm({
           )}
 
           {amountPLN > 0 && rateInfo.resolvedCurrency !== "PLN" && (
-            <div style={{ fontSize: 12, color: "#10b981", marginTop: 5 }}>
+            <div style={{ fontSize: 12, color: c.success, marginTop: 5 }}>
               = <strong>{fmt(amountPLN)}</strong> PLN
             </div>
           )}
@@ -554,9 +554,9 @@ export function TransactionForm({
                   }
                   discount.toggle(form.amountOrig, discount.amountGross);
                 }}
-                style={{ width: 14, height: 14, accentColor: "#f59e0b", cursor: "pointer" }}
+                style={{ width: 14, height: 14, accentColor: c.warning, cursor: "pointer" }}
               />
-              <span style={{ fontSize: 12, color: discount.isOpen ? "#f59e0b" : "#475569", fontWeight: 600 }}>
+              <span style={{ fontSize: 12, color: discount.isOpen ? c.warning : c.textMuted, fontWeight: 600 }}>
                 🏷️ Rabat
               </span>
             </label>
@@ -569,7 +569,7 @@ export function TransactionForm({
                   value={discount.discountAmount}
                   onChange={e => discount.setDiscount(e.target.value)}
                   placeholder="0,00"
-                  style={{ ...inp, width: 100, borderColor: "#f59e0b44", padding: "6px 10px", fontSize: 13 }}
+                  style={{ ...inp, width: 100, borderColor: alpha(c.warning, "44"), padding: "6px 10px", fontSize: 13 }}
                 />
 
                 {/* Mode toggle: per order / per unit — only relevant when qty > 1 */}
@@ -581,9 +581,9 @@ export function TransactionForm({
                         onClick={() => discount.setDiscountMode(m)}
                         style={{
                           padding: "3px 8px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600,
-                          background: discount.discountMode === m ? "#f59e0b22" : "transparent",
-                          border:     `1px solid ${discount.discountMode === m ? "#f59e0b" : "#334155"}`,
-                          color:      discount.discountMode === m ? "#f59e0b"   : "#475569",
+                          background: discount.discountMode === m ? alpha(c.warning, "22") : "transparent",
+                          border:     `1px solid ${discount.discountMode === m ? c.warning : c.borderStrong}`,
+                          color:      discount.discountMode === m ? c.warning   : c.textMuted,
                         }}
                       >
                         {m === "per_order" ? "Na zamówienie" : "Na sztukę"}
@@ -594,7 +594,7 @@ export function TransactionForm({
 
                 {/* Summary */}
                 {discount.summary && discount.summary.discount > 0 && (
-                  <span style={{ fontSize: 12, color: "#f59e0b" }}>
+                  <span style={{ fontSize: 12, color: c.warning }}>
                     −{fmt(discount.discountMode === "per_unit"
                       ? discount.summary.discount * discount.summary.qty
                       : discount.summary.discount
@@ -614,7 +614,7 @@ export function TransactionForm({
         <label style={lbl}>Subkategoria</label>
         <SubcategorySelect value={form.subcategoryId} onChange={handleSubcategoryChange} />
         {form.categoryName && (
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 5 }}>{form.categoryName}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 5 }}>{form.categoryName}</div>
         )}
       </div>
 
@@ -682,7 +682,7 @@ export function TransactionForm({
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
         {onCancel && (
           <button onClick={onCancel}
-            style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", cursor: "pointer", fontWeight: 600 }}>
+            style={{ padding: "10px 20px", borderRadius: 8, border: `1px solid ${c.border}`, background: "transparent", color: c.textTertiary, cursor: "pointer", fontWeight: 600 }}>
             Anuluj
           </button>
         )}
@@ -701,12 +701,12 @@ export function TransactionForm({
               });
             }}
             disabled={isSaving}
-            style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #3b82f644", background: "#3b82f611", color: "#3b82f6", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
+            style={{ padding: "10px 20px", borderRadius: 8, border: `1px solid ${alpha(c.info, "44")}`, background: alpha(c.info, "11"), color: c.info, cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
             🛒 Dodaj do koszyka
           </button>
         )}
         <button onClick={handleSubmit} disabled={isSaving}
-          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: isSaving ? "#1e293b" : "#10b981", color: "#fff", cursor: isSaving ? "not-allowed" : "pointer", fontWeight: 700, fontSize: 14 }}>
+          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: isSaving ? c.border : c.success, color: c.white, cursor: isSaving ? "not-allowed" : "pointer", fontWeight: 700, fontSize: 14 }}>
           {isSaving ? "Zapisywanie…" : mode === "add" ? "💾 Zapisz" : "💾 Aktualizuj"}
         </button>
       </div>

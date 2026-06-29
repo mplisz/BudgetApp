@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "../../../context/AuthContext";
+import { c } from "../../../styles/tokens";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -63,16 +64,16 @@ export function ReceiptModal({ txId, onClose }: ReceiptModalProps) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: "#0d1424", border: "1px solid #1e293b", borderRadius: 14,
+          background: c.surface, border: `1px solid ${c.border}`, borderRadius: 14,
           padding: 16, maxWidth: "90vw", maxHeight: "90vh",
           display: "flex", flexDirection: "column", gap: 12,
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14 }}>🧾 Paragon</span>
+          <span style={{ color: c.text, fontWeight: 700, fontSize: 14 }}>🧾 Paragon</span>
           <button
             onClick={onClose}
-            style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 18, padding: "0 4px" }}
+            style={{ background: "none", border: "none", color: c.textSecondary, cursor: "pointer", fontSize: 18, padding: "0 4px" }}
           >
             ✕
           </button>
@@ -80,7 +81,7 @@ export function ReceiptModal({ txId, onClose }: ReceiptModalProps) {
 
         <div style={{ overflow: "auto", display: "flex", justifyContent: "center", minHeight: 200, minWidth: 280 }}>
           {error ? (
-            <div style={{ color: "#f87171", fontSize: 13, alignSelf: "center" }}>⚠️ {error}</div>
+            <div style={{ color: c.dangerLight, fontSize: 13, alignSelf: "center" }}>⚠️ {error}</div>
           ) : imageUrl ? (
             <img
               src={imageUrl}
@@ -88,7 +89,7 @@ export function ReceiptModal({ txId, onClose }: ReceiptModalProps) {
               style={{ maxWidth: "100%", maxHeight: "75vh", borderRadius: 8, objectFit: "contain" }}
             />
           ) : (
-            <div style={{ color: "#64748b", fontSize: 13, alignSelf: "center" }}>⏳ Ładowanie…</div>
+            <div style={{ color: c.textSecondary, fontSize: 13, alignSelf: "center" }}>⏳ Ładowanie…</div>
           )}
         </div>
       </div>

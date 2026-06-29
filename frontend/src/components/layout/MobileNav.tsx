@@ -17,6 +17,7 @@
 // month context follows the user between screens.
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { PANEL_PATHS, panelIdFromPath } from "../../data/routes";
@@ -43,7 +44,7 @@ const slotStyle = (active: boolean): React.CSSProperties => ({
   textAlign: "center", cursor: "pointer",
   background: "none", border: "none",
   textDecoration: "none",
-  color: active ? "#10b981" : "#475569",
+  color: active ? c.success : c.textMuted,
   font: "inherit",
 });
 
@@ -64,7 +65,7 @@ export function MobileNav() {
     <>
       <nav style={{
         position: "fixed", bottom: 0, left: 0, right: 0,
-        background: "#0d1424", borderTop: "1px solid #1e293b",
+        background: c.surface, borderTop: `1px solid ${c.border}`,
         display: "flex", zIndex: 300,
       }}>
         {MOBILE_ITEMS.map(item => {

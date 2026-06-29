@@ -3,9 +3,10 @@
 // Desktop panel — view and management of planned expenses.
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useState, useEffect, useMemo } from "react";
 import { createPortal }   from "react-dom";
-import { usePlanned, sumPaid, isReadyToPurchase } from "../../hooks/usePlanned";
+import { usePlanned, sumPaid } from "../../hooks/usePlanned";
 import { useMonthStatus } from "../../hooks/useMonthStatus";
 import { ConfirmModal }   from "../ui/ConfirmModal";
 import { PlannedCard }    from "./plannedComponents/PlannedCard";
@@ -13,7 +14,7 @@ import { PlannedForm }    from "./plannedComponents/PlannedForm";
 import { fmt }            from "../../utils/helpers";
 import { theme as s }     from "../../styles/theme";
 import { RangePicker, type DateRange } from "../ui/RangePicker";
-import { AppDatePicker, fromYM, toYM } from "../ui/AppDatePicker";
+import { AppDatePicker, toYM } from "../ui/AppDatePicker";
 import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload } from "../../hooks/usePlanned";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -139,10 +140,10 @@ const filtered = useMemo<PlannedDoc[]>(() => {
       onClick={closeModal}
     >
       <div
-        style={{ background: "#0d1424", border: "1px solid #1e293b", borderRadius: 16, padding: "24px", maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto" }}
+        style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 16, padding: "24px", maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto" }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ fontWeight: 800, fontSize: 16, color: "#e2e8f0", marginBottom: 20 }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: c.text, marginBottom: 20 }}>
           ✏️ Edytuj planowany wydatek
         </div>
         <PlannedForm
@@ -167,11 +168,11 @@ const filtered = useMemo<PlannedDoc[]>(() => {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <div style={(s as any).sectionTitle}>📅 Planowane wydatki</div>
-          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: c.textSecondary, marginTop: 4 }}>
             {filtered.length} planowanych · cel:{" "}
-            <strong style={{ color: "#e2e8f0" }}>{fmt(totalGoal)} PLN</strong>
+            <strong style={{ color: c.text }}>{fmt(totalGoal)} PLN</strong>
             {totalCollected > 0 && (
-              <> · zebrano: <strong style={{ color: "#10b981" }}>{fmt(totalCollected)} PLN</strong></>
+              <> · zebrano: <strong style={{ color: c.success }}>{fmt(totalCollected)} PLN</strong></>
             )}
           </div>
         </div>
@@ -191,18 +192,18 @@ const filtered = useMemo<PlannedDoc[]>(() => {
             style={{
               padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer",
               fontWeight: 700, fontSize: 12,
-              background: filterMode === m ? "#3b82f6" : "#1e293b",
-              color:      filterMode === m ? "#fff"    : "#64748b",
+              background: filterMode === m ? c.info : c.border,
+              color:      filterMode === m ? c.white    : c.textSecondary,
             }}
           >
             {m === "all" ? "Wszystkie tryby" : m === "envelope" ? "🪙 Koperty" : "💳 Jednorazowe"}
           </button>
         ))}
 
-        <div style={{ width: 1, height: 20, background: "#1e293b" }} />
+        <div style={{ width: 1, height: 20, background: c.border }} />
 
         {/* Specific month filter — uses AppDatePicker (clickable anywhere in input) */}
-        <span style={{ fontSize: 11, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+        <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
           Konkretny miesiąc:
         </span>
         <AppDatePicker
@@ -212,17 +213,17 @@ const filtered = useMemo<PlannedDoc[]>(() => {
         />
         {filterMonth && (
           <button onClick={() => setFilterMonth(null)}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334155", background: "transparent", color: "#64748b", fontSize: 12, cursor: "pointer" }}>
+            style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textSecondary, fontSize: 12, cursor: "pointer" }}>
             ✕
           </button>
         )}
       </div>
 
       {/* List */}
-      {isLoading && <div style={{ color: "#475569", textAlign: "center", padding: 40 }}>Ładowanie…</div>}
+      {isLoading && <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>}
 
       {!isLoading && filtered.length === 0 && (
-        <div style={{ textAlign: "center", padding: "40px 0", color: "#334155" }}>
+        <div style={{ textAlign: "center", padding: "40px 0", color: c.borderStrong }}>
           Brak planowanych wydatków w tym okresie.
         </div>
       )}

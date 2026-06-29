@@ -4,6 +4,7 @@
 // Kept co-located — too domain-specific to live in /ui.
 // ============================================================
 
+import { c, alpha } from "../../../styles/tokens";
 import React from "react";
 
 // ── StatTile ──────────────────────────────────────────────────
@@ -19,19 +20,19 @@ interface StatTileProps {
 }
 
 export function StatTile({
-  label, value, sub, color = "#e2e8f0", align = "left", flex = 1,
+  label, value, sub, color = c.text, align = "left", flex = 1,
 }: StatTileProps) {
   return (
     <div style={{
       flex,
-      background:   "#0d1424",
-      border:       "1px solid #1e293b",
+      background:   c.surface,
+      border:       `1px solid ${c.border}`,
       borderRadius: 10,
       padding:      "10px 12px",
       minWidth:     0,
     }}>
       <div style={{
-        fontSize: 10, color: "#475569", fontWeight: 700,
+        fontSize: 10, color: c.textMuted, fontWeight: 700,
         textTransform: "uppercase", letterSpacing: "0.5px",
         marginBottom: 4, textAlign: align,
       }}>
@@ -45,7 +46,7 @@ export function StatTile({
       </div>
       {sub !== undefined && sub !== null && sub !== "" && (
         <div style={{
-          fontSize: 10, color: "#475569", marginTop: 3, textAlign: align,
+          fontSize: 10, color: c.textMuted, marginTop: 3, textAlign: align,
         }}>
           {sub}
         </div>
@@ -72,7 +73,7 @@ export function PillGroup<T extends string | number>({
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
       {options.map(opt => {
         const isActive = opt.value === value;
-        const activeColor = opt.color ?? "#10b981";
+        const activeColor = opt.color ?? c.success;
         return (
           <button
             key={String(opt.value)}
@@ -85,8 +86,8 @@ export function PillGroup<T extends string | number>({
               cursor:     "pointer",
               fontSize:   font,
               fontWeight: 700,
-              background: isActive ? activeColor : "#1e293b",
-              color:      isActive ? "#fff" : "#64748b",
+              background: isActive ? activeColor : c.border,
+              color:      isActive ? c.white : c.textSecondary,
               transition: "background 0.15s, color 0.15s",
             }}
           >
@@ -114,7 +115,7 @@ interface NumberStepperProps {
 
 export function NumberStepper({
   value, onChange, min, max, step, unit = "zł",
-  label, hint, color = "#10b981",
+  label, hint, color = c.success,
 }: NumberStepperProps) {
   // Clamp helper
   function set(v: number) {
@@ -129,7 +130,7 @@ export function NumberStepper({
         display: "flex", justifyContent: "space-between", alignItems: "baseline",
         marginBottom: 6,
       }}>
-        <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
+        <div style={{ fontSize: 12, color: c.textTertiary, fontWeight: 600 }}>
           {label}
         </div>
         <div style={{ fontSize: 14, color, fontWeight: 800 }}>
@@ -152,7 +153,7 @@ export function NumberStepper({
       />
 
       {hint && (
-        <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+        <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>
           {hint}
         </div>
       )}
@@ -173,14 +174,14 @@ interface ToggleRowProps {
 export function ToggleRow({
   checked, onChange, label, right, disabled = false,
 }: ToggleRowProps) {
-  const accent = checked ? "#10b981" : "#475569";
+  const accent = checked ? c.success : c.textMuted;
 
   return (
     <label style={{
       display: "flex", alignItems: "center", gap: 10,
       padding: "10px 12px",
-      background: "#0d1424",
-      border: `1px solid ${checked ? "#10b98144" : "#1e293b"}`,
+      background: c.surface,
+      border: `1px solid ${checked ? alpha(c.success, "44") : c.border}`,
       borderRadius: 10,
       cursor: disabled ? "not-allowed" : "pointer",
       opacity: disabled ? 0.5 : 1,

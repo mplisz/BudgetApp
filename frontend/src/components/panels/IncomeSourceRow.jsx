@@ -3,6 +3,7 @@
 // Inline-editable income source row + add form.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { theme as s } from "../../styles/theme";
@@ -18,16 +19,16 @@ export function IncomeSourceRow({ src, i }) {
       <button onClick={() => { setIncomeSources(prev => prev.map((src2, j) => j === i ? val : src2)); setEditing(false); }}
         style={{ ...s.btn(), width: "auto", padding: "8px 14px", marginTop: 0, fontSize: 12 }}>✅</button>
       <button onClick={() => setEditing(false)}
-        style={{ ...s.btn("#475569"), width: "auto", padding: "8px 10px", marginTop: 0, fontSize: 12 }}>✕</button>
+        style={{ ...s.btn(c.textMuted), width: "auto", padding: "8px 10px", marginTop: 0, fontSize: 12 }}>✕</button>
     </div>
   );
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #1e293b" }}>
-      <span style={{ flex: 1, color: "#e2e8f0", fontSize: 13 }}>{src}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: `1px solid ${c.border}` }}>
+      <span style={{ flex: 1, color: c.text, fontSize: 13 }}>{src}</span>
       <button onClick={() => setEditing(true)}
-        style={{ background: "#1e293b", border: "1px solid #334155", color: "#94a3b8", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}>✏️ Edytuj</button>
+        style={{ background: c.border, border: `1px solid ${c.borderStrong}`, color: c.textTertiary, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}>✏️ Edytuj</button>
       <button onClick={() => setIncomeSources(prev => prev.filter((_, j) => j !== i))}
-        style={{ background: "#ef444422", border: "1px solid #ef444444", color: "#ef4444", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}>🗑️</button>
+        style={{ background: alpha(c.danger, "22"), border: `1px solid ${alpha(c.danger, "44")}`, color: c.danger, borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}>🗑️</button>
     </div>
   );
 }

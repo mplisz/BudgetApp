@@ -3,6 +3,7 @@
 // "Podsumowanie miesiąca" panel — desktop only.
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useMemo, useEffect, useCallback, useState  } from "react";
 import { useAppContext }    from "../../context/AppContext";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
@@ -101,34 +102,24 @@ function sumByCategoryId(
     .reduce((acc, tx) => acc + tx.amount, 0);
 }
 
-function sumByCategoryNameMatch(
-  txList: Transaction[],
-  type: Transaction["type"],
-  keywords: string[],
-): number {
-  return txList
-    .filter(tx => tx.type === type && keywords.some(kw => tx.categoryName.toLowerCase().includes(kw)))
-    .reduce((acc, tx) => acc + tx.amount, 0);
-}
-
 // ── KPI Pill ──────────────────────────────────────────────────
 
-function KpiPill({ icon, label, value, color = "#e2e8f0", sub }: KpiPillProps) {
+function KpiPill({ icon, label, value, color = c.text, sub }: KpiPillProps) {
   return (
     <div style={{
-      background: "#1e293b",
-      border: "1px solid #334155",
+      background: c.border,
+      border: `1px solid ${c.borderStrong}`,
       borderRadius: 12,
       padding: "12px 18px",
       textAlign: "center",
       flex: 1,
       minWidth: 130,
     }}>
-      <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
+      <div style={{ fontSize: 11, color: c.textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
         {icon} {label}
       </div>
       <div style={{ fontSize: 20, fontWeight: 800, color }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -201,10 +192,6 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const balance        = totalIncome + totalTransfers - totalExpenses - totalSavings- virtualEnvelopePaid;;
 
   const limitMap   = useMemo(() => buildLimitMap(limits, activeBudgetMonth), [limits, activeBudgetMonth]);
-  const totalLimit = useMemo(
-    () => Object.values(limitMap).reduce((acc, l) => acc + (l?.amount ?? 0), 0),
-    [limitMap],
-  );
   // Budget % = expenses as share of real income (INCOME + TRANSFER),
   // not of the base budget total — that's only an approximation.
   const totalRealIncome = totalIncome + totalTransfers;
@@ -366,37 +353,37 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
         <>
           {/* KPI row */}
           <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-            <KpiPill icon="💰" label="Wpływy"    value={fmt(totalIncome)}   color="#10b981" />
+            <KpiPill icon="💰" label="Wpływy"    value={fmt(totalIncome)}   color={c.success} />
             {totalTransfers > 0 && (
-              <KpiPill icon="🔄" label="Transfery" value={fmt(totalTransfers)} color="#10b981" />
+              <KpiPill icon="🔄" label="Transfery" value={fmt(totalTransfers)} color={c.success} />
             )}
             <KpiPill
               icon="💸" label="Wydatki"
-              value={fmt(totalExpenses)} color="#ef4444"
+              value={fmt(totalExpenses)} color={c.danger}
               sub={budgetPct !== null ? `${budgetPct.toFixed(1)}% wpływów` : undefined}
             />
             <KpiPill
               icon="🏦" label="Oszczędności"
-              value={fmt(totalSavings)} color="#3b82f6"
+              value={fmt(totalSavings)} color={c.info}
               sub={totalIncome > 0 ? `${((totalSavings / totalIncome) * 100).toFixed(1)}% wpływów` : undefined}
             />
              {virtualEnvelopePaid > 0 && (
             <KpiPill
               icon="🪙" label="Koperty"
-              value={fmt(virtualEnvelopePaid)} color="#a855f7"
+              value={fmt(virtualEnvelopePaid)} color={c.voucher}
               sub="wirtualne raty"
             />
             )}
             <KpiPill
               icon="⚖️" label="Saldo"
               value={fmt(balance)}
-              color={balance >= 0 ? "#10b981" : "#ef4444"}
+              color={balance >= 0 ? c.success : c.danger}
             />
             {budgetPct !== null && (
               <KpiPill
                 icon="🎯" label="Wydatki / kwota dostępna"
                 value={`${budgetPct.toFixed(1)}%`}
-                color={budgetPct > 90 ? "#ef4444" : budgetPct > 70 ? "#f59e0b" : "#10b981"}
+                color={budgetPct > 90 ? c.danger : budgetPct > 70 ? c.warning : c.success}
                 sub={`${fmt(totalExpenses)} / ${fmt(totalRealIncome)}`}
               />
             )}
@@ -404,10 +391,10 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
           {/* Empty state */}
           {!hasData && (
-            <div style={{ textAlign: "center", padding: "60px 0", color: "#475569", fontSize: 15 }}>
+            <div style={{ textAlign: "center", padding: "60px 0", color: c.textMuted, fontSize: 15 }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
               Brak transakcji dla miesiąca{" "}
-              <strong style={{ color: "#64748b" }}>{activeBudgetMonth}</strong>
+              <strong style={{ color: c.textSecondary }}>{activeBudgetMonth}</strong>
             </div>
           )}
 
@@ -426,7 +413,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     minWidth: 0,
                   }}>
                   {categoriesWithLimit.length === 0 && categoriesWithoutLimit.length === 0 && (
-                    <div style={{ color: "#475569", fontSize: 13 }}>Brak wydatków.</div>
+                    <div style={{ color: c.textMuted, fontSize: 13 }}>Brak wydatków.</div>
                   )}
                   {categoriesWithLimit.map(cat => (
                     <CategoryLimitBar
@@ -437,7 +424,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                   ))}
                   {categoriesWithoutLimit.length > 0 && (
                     <>
-                      <div style={{ color: "#475569", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginTop: 16, marginBottom: 8, letterSpacing: "0.5px" }}>
+                      <div style={{ color: c.textMuted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginTop: 16, marginBottom: 8, letterSpacing: "0.5px" }}>
                         Bez limitu
                       </div>
                       {categoriesWithoutLimit.map(cat => (
@@ -459,7 +446,6 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                   <SpendingPieChart
                     categories={expenseCategories}
                     getSubcategories={getSubcategories}
-                    totalExpenses={totalExpenses}
                   />
                 </Card>
               </div>

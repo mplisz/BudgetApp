@@ -10,14 +10,15 @@
 //).
 // ============================================================
 
+import { c } from "../../styles/tokens";
 import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 
 const PRIORITIES = [
-  { value: 1, label: "P1 – Krytyczny", color: "#ef4444" },
-  { value: 2, label: "P2 – Ważny",     color: "#f97316" },
-  { value: 3, label: "P3 – Normalny",  color: "#eab308" },
-  { value: 4, label: "P4 – Niski",     color: "#22c55e" },
+  { value: 1, label: "P1 – Krytyczny", color: c.danger },
+  { value: 2, label: "P2 – Ważny",     color: c.orange },
+  { value: 3, label: "P3 – Normalny",  color: c.amber },
+  { value: 4, label: "P4 – Niski",     color: c.successBrite },
 ];
 
 export const PRIORITY_COLORS = Object.fromEntries(PRIORITIES.map(p => [p.value, p.color]));
@@ -63,7 +64,7 @@ export function PriorityPicker({
   }
 
   const lbl = {
-    display: "block", fontSize: 11, color: "#64748b",
+    display: "block", fontSize: 11, color: c.textSecondary,
     textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6,
   };
 
@@ -79,8 +80,8 @@ export function PriorityPicker({
             title={p.label}
             style={{
               flex: 1, textAlign: "center", fontSize: 10, padding: "2px 0", borderRadius: 4,
-              border:     `1px solid ${value === p.value ? p.color : "#334155"}`,
-              color:      value === p.value ? p.color : "#475569",
+              border:     `1px solid ${value === p.value ? p.color : c.borderStrong}`,
+              color:      value === p.value ? p.color : c.textMuted,
               background: value === p.value ? p.color + "22" : "transparent",
               cursor:     disabled ? "not-allowed" : "pointer",
               fontWeight: value === p.value ? 700 : 400,
@@ -99,7 +100,7 @@ export function PriorityPicker({
     <div>
       <label style={lbl}>
         Priorytet&nbsp;
-        <span style={{ color: "#334155", fontWeight: 400 }}>
+        <span style={{ color: c.borderStrong, fontWeight: 400 }}>
           {locked ? "(ręczny)" : "(sugerowany z kategorii/tagów)"}
         </span>
       </label>
@@ -111,9 +112,9 @@ export function PriorityPicker({
             disabled={disabled}
             style={{
               padding: "6px 14px", borderRadius: 20, cursor: disabled ? "not-allowed" : "pointer", fontSize: 12,
-              border:     `1px solid ${value === p.value ? p.color : "#1e293b"}`,
+              border:     `1px solid ${value === p.value ? p.color : c.border}`,
               background: value === p.value ? `${p.color}22` : "transparent",
-              color:      value === p.value ? p.color : "#475569",
+              color:      value === p.value ? p.color : c.textMuted,
               fontWeight: value === p.value ? 700 : 400,
               opacity:    disabled ? 0.5 : 1,
             }}>
@@ -123,7 +124,7 @@ export function PriorityPicker({
         {locked && !disabled && (
           <button
             onClick={handleAuto}
-            style={{ padding: "6px 10px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#475569", cursor: "pointer", fontSize: 11 }}>
+            style={{ padding: "6px 10px", borderRadius: 20, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textMuted, cursor: "pointer", fontSize: 11 }}>
             ↺ auto
           </button>
         )}

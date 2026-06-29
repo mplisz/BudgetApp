@@ -3,10 +3,11 @@
 // Add-expense panel with manual form, OCR receipt scan, and cart.
 // ============================================================
 
+import { c, alpha } from "../../styles/tokens";
 import { useState, useRef, useCallback, useMemo,useEffect  } from "react";
 import type { ChangeEvent } from "react";
 import { useAppContext }    from "../../context/AppContext";
-import { useAuth }          from "../../context/AuthContext";
+import { useApi }           from "../../hooks/useApi";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useToast }         from "../../hooks/useToast";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
@@ -17,7 +18,6 @@ import { CartPanel } from "./transactionComponents/CartPanel";
 import type { CartItem } from "./transactionComponents/CartPanel";
 import { computeSuggestedPriority } from "../ui/PriorityPicker";
 import { MerchantInput } from "../ui/MerchantInput";
-import { translateError } from "../../data/constants";
 import { fmt, round2,fmtAmount  }      from "../../utils/helpers";
 import { normalizeCurrency } from "../../utils/currencies";
 import { useCurrencyConverter } from "../../hooks/useCurrencyConverter";
@@ -71,7 +71,6 @@ interface OcrMeta {
 }
 
 const OCR_MAX_FILE_BYTES = 5 * 1024 * 1024;
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 
 // ── Component ─────────────────────────────────────────────────
@@ -93,9 +92,7 @@ export default function PanelExpenses() {
     activeBudgetMonth:   string;
     isFutureMonth:       boolean;
   };
-  const { fetchWithAuth } = useAuth() as {
-    fetchWithAuth: (url: string, opts?: RequestInit) => Promise<Response>;
-  };
+  const api = useApi();
   const { showError, showWarning } = useToast() as {
     showError:   (m: string) => void;
     showWarning: (m: string) => void;
@@ -237,17 +234,9 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
         reader.readAsDataURL(file);
       });
 
-      const res = await fetchWithAuth(`${API_URL}/api/ocr/receipt`, {
-        method: "POST",
-        body:   JSON.stringify({ image: dataUrl }),
+      const data = await api.post<any>("/api/ocr/receipt", { image: dataUrl }, {
+        fallback: "Nie udało się przeanalizować paragonu.",
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(translateError(err.error, "Nie udało się przeanalizować paragonu."));
-      }
-
-      const data = await res.json();
 
       if (!data.items?.length) {
         showWarning(data.warning || "Nie znaleziono pozycji na zdjęciu. Spróbuj wyraźniejszego ujęcia.");
@@ -273,7 +262,7 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
     } finally {
       setOcrLoading(false);
     }
-  }, [fetchWithAuth, showError, showWarning]);
+  }, [api, showError, showWarning]);
 
   // Selected OCR lines → cart items. Items WITHOUT a matched category
   // still go in — the user fixes them via the cart's ✏️ edit flow.
@@ -377,7 +366,7 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
     return (
       <div style={{ ...(s as any).panel, textAlign: "center", paddingTop: 60 }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
-        <div style={{ color: "#64748b", fontSize: 15 }}>
+        <div style={{ color: c.textSecondary, fontSize: 15 }}>
           Miesiąc {activeBudgetMonth} jest zamknięty.
         </div>
       </div>
@@ -388,10 +377,10 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
     return (
       <div style={{ ...(s as any).panel, textAlign: "center", paddingTop: 60 }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
-        <div style={{ color: "#64748b", fontSize: 15, marginBottom: 8 }}>
+        <div style={{ color: c.textSecondary, fontSize: 15, marginBottom: 8 }}>
           Ten miesiąc jest zbyt daleko w przyszłości.
         </div>
-        <div style={{ color: "#475569", fontSize: 13 }}>
+        <div style={{ color: c.textMuted, fontSize: 13 }}>
           Użyj planowanych wydatków do zaplanowania przyszłych miesięcy.
         </div>
       </div>
@@ -415,13 +404,13 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
         }}>
           <div style={{
             width: 44, height: 44, borderRadius: "50%",
-            border: "3px solid #1e293b", borderTopColor: "#10b981",
+            border: `3px solid ${c.border}`, borderTopColor: c.success,
             animation: "ocr-spin 0.8s linear infinite",
           }} />
-          <div style={{ color: "#10b981", fontWeight: 700, fontSize: 15 }}>
+          <div style={{ color: c.success, fontWeight: 700, fontSize: 15 }}>
             🤖 Analiza paragonu w toku…
           </div>
-          <div style={{ color: "#64748b", fontSize: 12 }}>
+          <div style={{ color: c.textSecondary, fontSize: 12 }}>
             To może potrwać kilkanaście sekund
           </div>
         </div>
@@ -439,13 +428,13 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
 
 
           {/* Mode toggle: manual / OCR */}
-          <div style={{ display: "flex", gap: 8, padding: 6, background: "#0d1424", border: "1px solid #1e293b", borderRadius: 10, marginBottom: 24 }}>
+          <div style={{ display: "flex", gap: 8, padding: 6, background: c.surface, border: `1px solid ${c.border}`, borderRadius: 10, marginBottom: 24 }}>
             <button onClick={() => setOcrMode(false)}
-              style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: !ocrMode ? "#10b981" : "transparent", color: !ocrMode ? "#fff" : "#64748b" }}>
+              style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: !ocrMode ? c.success : "transparent", color: !ocrMode ? c.white : c.textSecondary }}>
               ✏️ Ręcznie
             </button>
             <button onClick={() => { setOcrMode(true); setOcrLines([]); }}
-              style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: ocrMode ? "#10b981" : "transparent", color: ocrMode ? "#fff" : "#64748b" }}>
+              style={{ flex: 1, padding: "9px", borderRadius: 7, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, background: ocrMode ? c.success : "transparent", color: ocrMode ? c.white : c.textSecondary }}>
               📷 Skan paragonu
             </button>
           </div>
@@ -456,7 +445,7 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
               {ocrLines.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "32px 0" }}>
                   <div style={{ fontSize: 56, marginBottom: 16 }}>📷</div>
-                  <div style={{ color: "#64748b", marginBottom: 20, fontSize: 14 }}>
+                  <div style={{ color: c.textSecondary, marginBottom: 20, fontSize: 14 }}>
                     Zrób zdjęcie paragonu lub wybierz z galerii
                   </div>
                   {/* Camera input — capture forces the camera app on mobile,
@@ -479,11 +468,11 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
                     onChange={handleFileSelected}
                   />
                   <button onClick={() => fileRef.current?.click()} disabled={ocrLoading}
-                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: ocrLoading ? "#064e3b" : "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: ocrLoading ? "not-allowed" : "pointer", marginBottom: 8 }}>
+                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: ocrLoading ? c.successDark : c.success, color: c.white, fontWeight: 700, fontSize: 14, cursor: ocrLoading ? "not-allowed" : "pointer", marginBottom: 8 }}>
                     📷 Zrób zdjęcie
                   </button>
                   <button onClick={() => galleryRef.current?.click()} disabled={ocrLoading}
-                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: ocrLoading ? "#1e3a8a" : "#3b82f6", color: "#fff", fontWeight: 700, fontSize: 14, cursor: ocrLoading ? "not-allowed" : "pointer" }}>
+                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: ocrLoading ? "#1e3a8a" : c.info, color: c.white, fontWeight: 700, fontSize: 14, cursor: ocrLoading ? "not-allowed" : "pointer" }}>
                     🖼️ Wybierz z galerii
                   </button>
 
@@ -492,15 +481,15 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
                 <>
                   {/* Metadata bar: merchant (editable) / date / receipt total */}
                   {ocrMeta && (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0d1424", border: "1px solid #1e293b", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, gap: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, gap: 8 }}>
                       {!editingMerchant && ocrMeta.merchant ? (
                         // Known shop — click to correct
                         <span
                           onClick={() => setEditingMerchant(true)}
                           title="Kliknij, by poprawić nazwę sklepu"
-                          style={{ color: "#e2e8f0", fontWeight: 600, cursor: "pointer" }}
+                          style={{ color: c.text, fontWeight: 600, cursor: "pointer" }}
                         >
-                          🏪 {ocrMeta.merchant} <span style={{ color: "#475569", fontSize: 10 }}>✏️</span>
+                          🏪 {ocrMeta.merchant} <span style={{ color: c.textMuted, fontSize: 10 }}>✏️</span>
                         </span>
                       ) : (
                         // Editing OR unknown shop — type it with autocomplete.
@@ -515,32 +504,32 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
                             onChange={(v: string) => setOcrMeta(m => m && ({ ...m, merchant: v || null }))}
                             onBlur={() => setEditingMerchant(false)}
                             onEnter={() => setEditingMerchant(false)}
-                            style={{ flex: 1, minWidth: 0, background: "#1e293b", border: "1px solid #334155", borderRadius: 6, padding: "4px 8px", color: "#e2e8f0", fontSize: 12 }}
+                            style={{ flex: 1, minWidth: 0, background: c.border, border: `1px solid ${c.borderStrong}`, borderRadius: 6, padding: "4px 8px", color: c.text, fontSize: 12 }}
                           />
                         </span>
                       )}
-                      <span style={{ color: "#64748b", flexShrink: 0 }}>{ocrMeta.date || "—"}</span>
+                      <span style={{ color: c.textSecondary, flexShrink: 0 }}>{ocrMeta.date || "—"}</span>
                       {ocrMeta.totalSum != null && (
-                        <span style={{ color: "#10b981", fontWeight: 700, flexShrink: 0 }}>{fmtOcr(ocrMeta.totalSum,true)}</span>
+                        <span style={{ color: c.success, fontWeight: 700, flexShrink: 0 }}>{fmtOcr(ocrMeta.totalSum,true)}</span>
                       )}
                     </div>
                   )}
 
                   {/* Duplicate — its own red banner, independent of OCR quality notes */}
                   {ocrMeta?.duplicateWarning && (
-                    <div style={{ background: "#7f1d1d33", border: "1px solid #ef444477", borderRadius: 8, padding: "8px 12px", marginBottom: 12, color: "#fca5a5", fontSize: 12 }}>
+                    <div style={{ background: "#7f1d1d33", border: `1px solid ${alpha(c.danger, "77")}`, borderRadius: 8, padding: "8px 12px", marginBottom: 12, color: c.dangerSoft, fontSize: 12 }}>
                       🔁 {ocrMeta.duplicateWarning}
                     </div>
                   )}
 
                   {/* OCR quality warning (sum mismatch, unreadable parts, ...) */}
                   {ocrMeta?.warning && (
-                    <div style={{ background: "#78350f33", border: "1px solid #f59e0b55", borderRadius: 8, padding: "8px 12px", marginBottom: 12, color: "#fbbf24", fontSize: 12 }}>
+                    <div style={{ background: "#78350f33", border: `1px solid ${alpha(c.warning, "55")}`, borderRadius: 8, padding: "8px 12px", marginBottom: 12, color: c.warningLight, fontSize: 12 }}>
                       ⚠️ {ocrMeta.warning}
                     </div>
                   )}
                   {ocrIsForeign && (
-                    <div style={{ background: "#1e3a5f33", border: "1px solid #3b82f655", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#93c5fd" }}>
+                    <div style={{ background: "#1e3a5f33", border: `1px solid ${alpha(c.info, "55")}`, borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: c.infoLight }}>
                       <div>
                         💱 Paragon w <strong>{ocrMeta!.currency}</strong> — pozycje zostaną przeliczone na PLN.
                         {rateLoading && <span> · ⏳ pobieranie kursu…</span>}
@@ -550,25 +539,25 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
                               ? ` (NBP z ${effectiveDate})`
                               : ` (NBP z ${effectiveDate} — brak kursu z dnia paragonu)`}</span>
                         )}
-                        {rateError && <span style={{ color: "#fca5a5" }}> · ⚠️ brak kursu NBP — wpisz ręcznie</span>}
+                        {rateError && <span style={{ color: c.dangerSoft }}> · ⚠️ brak kursu NBP — wpisz ręcznie</span>}
                       </div>
                       <input
                         type="number" step="0.0001" min="0"
                         value={manualRate}
                         onChange={e => setManualRate(e.target.value)}
                         placeholder={rate ? rate.toFixed(4) : `kurs PLN/${ocrMeta!.currency}`}
-                        style={{ width: "100%", marginTop: 8, background: "#0a0f1e", border: `1px solid ${rateError ? "#f59e0b" : "#1e293b"}`, borderRadius: 6, color: "#e2e8f0", padding: "6px 10px", fontSize: 13 }}
+                        style={{ width: "100%", marginTop: 8, background: c.bg, border: `1px solid ${rateError ? c.warning : c.border}`, borderRadius: 6, color: c.text, padding: "6px 10px", fontSize: 13 }}
                       />
                     </div>
                   )}
-                  <div style={{ color: "#10b981", fontWeight: 700, marginBottom: 12 }}>✅ Znalezione pozycje:</div>
+                  <div style={{ color: c.success, fontWeight: 700, marginBottom: 12 }}>✅ Znalezione pozycje:</div>
                   {ocrLines.map((line, i) => {
                     const lowConf    = line.categoryConfidence < 0.75;
                     const noCategory = !line.subcategoryId;
                     return (
                       <div key={i} style={{
-                        background:   "#0d1424",
-                        border:       noCategory ? "1px solid #ef444455" : lowConf ? "1px solid #f59e0b55" : "1px solid #1e293b",
+                        background:   c.surface,
+                        border:       noCategory ? `1px solid ${alpha(c.danger, "55")}` : lowConf ? `1px solid ${alpha(c.warning, "55")}` : `1px solid ${c.border}`,
                         borderRadius: 8, padding: "10px 14px", marginBottom: 8,
                       }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -581,51 +570,51 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
                                 next[i] = { ...next[i], selected: e.target.checked };
                                 setOcrLines(next);
                               }}
-                              style={{ width: 18, height: 18, accentColor: "#10b981", marginTop: 2, flexShrink: 0 }}
+                              style={{ width: 18, height: 18, accentColor: c.success, marginTop: 2, flexShrink: 0 }}
                             />
                             <div style={{ minWidth: 0 }}>
-                              <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 14 }}>{line.description}</div>
-                              <div style={{ color: noCategory ? "#ef4444" : "#64748b", fontSize: 11, marginTop: 2 }}>
+                              <div style={{ color: c.text, fontWeight: 600, fontSize: 14 }}>{line.description}</div>
+                              <div style={{ color: noCategory ? c.danger : c.textSecondary, fontSize: 11, marginTop: 2 }}>
                                 {noCategory
                                   ? "❓ Brak kategorii — uzupełnisz w koszyku"
                                   : `${line.categoryName} › ${line.subcategoryName}`}
-                                {lowConf && !noCategory && <span style={{ color: "#f59e0b" }}> · sprawdź ⚠️</span>}
+                                {lowConf && !noCategory && <span style={{ color: c.warning }}> · sprawdź ⚠️</span>}
                               </div>
                               {line.discountAmount != null && line.discountAmount > 0 && (
-                                <div style={{ color: "#f59e0b", fontSize: 11, marginTop: 3 }}>
+                                <div style={{ color: c.warning, fontSize: 11, marginTop: 3 }}>
                                   🏷️ rabat −{fmtOcr(line.discountAmount)}
-                                  {line.mergeNote && <span style={{ color: "#92710a" }}> · {line.mergeNote}</span>}
+                                  {line.mergeNote && <span style={{ color: c.warningDark }}> · {line.mergeNote}</span>}
                                 </div>
                               )}
                             </div>
                           </div>
                           <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
                             {line.grossAmount != null && line.discountAmount != null && line.discountAmount > 0 && (
-                              <div style={{ color: "#64748b", fontSize: 11, textDecoration: "line-through" }}>{fmtOcr(line.grossAmount)}</div>
+                              <div style={{ color: c.textSecondary, fontSize: 11, textDecoration: "line-through" }}>{fmtOcr(line.grossAmount)}</div>
                             )}
-                            <div style={{ color: "#10b981", fontWeight: 700 }}>{fmtOcr(line.amount,true)}</div>
+                            <div style={{ color: c.success, fontWeight: 700 }}>{fmtOcr(line.amount,true)}</div>
                           </div>
                         </div>
                       </div>
                     );
                   })}
                   {/* Per-receipt warranty flag → longer blob retention */}
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", marginBottom: 4, background: ocrWarranty ? "#78350f22" : "#0d1424", border: `1px solid ${ocrWarranty ? "#f59e0b55" : "#1e293b"}`, borderRadius: 8, cursor: "pointer" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", marginBottom: 4, background: ocrWarranty ? "#78350f22" : c.surface, border: `1px solid ${ocrWarranty ? alpha(c.warning, "55") : c.border}`, borderRadius: 8, cursor: "pointer" }}>
                     <input
                       type="checkbox"
                       checked={ocrWarranty}
                       onChange={e => setOcrWarranty(e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: "#f59e0b", flexShrink: 0 }}
+                      style={{ width: 16, height: 16, accentColor: c.warning, flexShrink: 0 }}
                     />
-                    <span style={{ color: ocrWarranty ? "#fbbf24" : "#94a3b8", fontSize: 13, fontWeight: 600 }}>
+                    <span style={{ color: ocrWarranty ? c.warningLight : c.textTertiary, fontSize: 13, fontWeight: 600 }}>
                       🛡️ Paragon gwarancyjny
                     </span>
-                    <span style={{ color: "#64748b", fontSize: 11, marginLeft: "auto" }}>
+                    <span style={{ color: c.textSecondary, fontSize: 11, marginLeft: "auto" }}>
                       dłuższe przechowywanie
                     </span>
                   </label>
                   <div style={{ marginBottom: 12 }}>
-                    <label style={{ display: "block", fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 }}>
+                    <label style={{ display: "block", fontSize: 11, color: c.textSecondary, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 }}>
                       🏷️ Tagi dla całego paragonu
                     </label>
                     <TagMultiSelect
@@ -634,19 +623,19 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
                       placeholder="Dodaj tag do wszystkich pozycji…"
                     />
                   </div>                  
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid #1e293b", marginBottom: 12 }}>
-                    <span style={{ color: "#64748b" }}>Suma zaznaczonych:</span>
-                    <span style={{ color: "#10b981", fontWeight: 800, fontSize: 18 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: `1px solid ${c.border}`, marginBottom: 12 }}>
+                    <span style={{ color: c.textSecondary }}>Suma zaznaczonych:</span>
+                    <span style={{ color: c.success, fontWeight: 800, fontSize: 18 }}>
                       {fmtOcr(ocrLines.filter(l => l.selected).reduce((sum, l) => sum + l.amount, 0),true)}
                     </span>
                   </div>
                   <button onClick={handleAddOcrLines}
                     disabled={!ocrLines.some(l => l.selected)}
-                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8, opacity: ocrLines.some(l => l.selected) ? 1 : 0.5 }}>
+                    style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: c.success, color: c.white, fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8, opacity: ocrLines.some(l => l.selected) ? 1 : 0.5 }}>
                     🛒 Dodaj zaznaczone do koszyka ({ocrLines.filter(l => l.selected).length})
                   </button>
                   <button onClick={() => { setOcrLines([]); setOcrMeta(null); setOcrWarranty(false); setOcrTags([]);setEditingMerchant(false); }}
-                    style={{ display: "block", width: "100%", padding: 10, borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#64748b", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                    style={{ display: "block", width: "100%", padding: 10, borderRadius: 8, border: `1px solid ${c.border}`, background: "transparent", color: c.textSecondary, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                     🔄 Skanuj ponownie
                   </button>
                 </>

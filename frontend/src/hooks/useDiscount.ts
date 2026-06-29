@@ -72,12 +72,6 @@ export function useDiscount(): UseDiscountResult {
     };
   }, [isOpen, amountGross, discountAmount, discountMode, qty]);
 
-  // Effective amount without discount (just gross × qty)
-  const grossTotal = useMemo(() => {
-    const g = parseDecimal(amountGross) || 0;
-    return g * qty;
-  }, [amountGross, qty]);
-
   function effectiveAmount(amountOrig: string): string {
     if (!isOpen) {
       // No discount: total = unit price × qty
