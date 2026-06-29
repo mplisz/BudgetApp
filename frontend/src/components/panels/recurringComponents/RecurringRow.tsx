@@ -3,19 +3,12 @@
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { useEffect }              from "react";
-import {  MONTH_NAMES, getActiveCost } from "../../../hooks/useRecurring";
-import {FREQUENCY_OPTIONS} from  "../../../data/constants";
-import { useCurrencyConverter }   from "../../../hooks/useCurrencyConverter";
-import { fmt, fmtAmount }            from "../../../utils/helpers";
-import type { RecurringDoc } from "../../../types/appContext";
+import { MONTH_NAMES }            from "../../../hooks/useRecurring";
+import { FREQUENCY_OPTIONS }      from "../../../data/constants";
+import { useRecurringConfirm }    from "../../../hooks/useRecurringConfirm";
+import type { RecurringDoc }      from "../../../types/appContext";
 
 const FREQ_LABEL: Record<string, string> = Object.fromEntries(FREQUENCY_OPTIONS.map(o => [o.value, o.label]));
-
-function todayYMD() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
 
 interface RecurringRowProps {
   doc:               RecurringDoc;
@@ -26,26 +19,7 @@ interface RecurringRowProps {
 }
 
 export function RecurringRow({ doc, activeBudgetMonth, isLocked, onEdit, onArchive }: RecurringRowProps) {
-  const activeCost  = getActiveCost(doc, activeBudgetMonth);
-  const isForeign   = activeCost?.originalCurrency && activeCost.originalCurrency !== "PLN";
-  const { loadRate, activeRate, isLoading } = useCurrencyConverter();
-
-  useEffect(() => {
-    if (isForeign && activeCost?.originalCurrency) {
-      loadRate(activeCost.originalCurrency, todayYMD());
-    }
-  }, [activeCost?.originalCurrency, isForeign]);
-
-  const liveRate  = activeRate || activeCost?.fxRate || 1;
-  const amountPLN = isForeign
-    ? Math.round((activeCost?.amount || 0) * liveRate * 100) / 100
-    : (activeCost?.amount || 0);
-
-  const amountStr = activeCost
-    ? isForeign
-      ? `${fmtAmount(activeCost.amount, activeCost.originalCurrency)} ${activeCost.originalCurrency} ≈ ${isLoading ? "…" : fmt(amountPLN)} PLN`
-      : fmt(activeCost.amount)
-    : "—";
+  const { open, modal, amountStr } = useRecurringConfirm(doc, activeBudgetMonth);
 
   const isConfirmedThisMonth = doc.lastConfirmedMonth === activeBudgetMonth;
   const firstValidFrom = doc.costs?.[0]?.validFrom;
@@ -91,6 +65,12 @@ export function RecurringRow({ doc, activeBudgetMonth, isLocked, onEdit, onArchi
 
       {!isLocked && (
         <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "flex-start" }}>
+          {!isConfirmedThisMonth && (
+            <button onClick={open} title="Potwierdź płatność"
+              style={{ background: c.success, border: "none", color: c.white, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+              ✅ Potwierdzam
+            </button>
+          )}
           <button onClick={() => onEdit(doc)} title="Edytuj"
             style={{ background: "transparent", border: `1px solid ${alpha(c.info, "44")}`, color: c.info, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
             ✏️
@@ -101,6 +81,8 @@ export function RecurringRow({ doc, activeBudgetMonth, isLocked, onEdit, onArchi
           </button>
         </div>
       )}
+
+      {modal}
     </div>
   );
 }

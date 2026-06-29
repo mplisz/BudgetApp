@@ -1,14 +1,12 @@
 // ============================================================
 // File: src/components/panels/plannedComponents/PlannedCard.tsx
 // Card for a single planned expense. Shows progress for envelope,
-// planned date for oneoff. Actions: edit, archive, purchase.
+// planned date for oneoff. Actions: pay (envelope), edit, archive, purchase.
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { useEffect } from "react";
-import { useCurrencyConverter }  from "../../../hooks/useCurrencyConverter";
-import { sumPaid, computeSuggestion, isReadyToPurchase } from "../../../hooks/usePlanned";
-import { fmt }                   from "../../../utils/helpers";
+import { useEnvelopePay }         from "../../../hooks/useEnvelopePay";
+import { fmt }                    from "../../../utils/helpers";
 import type { PlannedDoc }       from "../../../hooks/usePlanned";
 
 interface PlannedCardProps {
@@ -39,24 +37,15 @@ function safeHttpUrl(raw: string): string | null {
 export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardProps) {
   const currentMonth = todayYMD().slice(0, 7);
   const isForeign    = doc.originalCurrency && doc.originalCurrency !== "PLN";
-  const ready        = isReadyToPurchase(doc);
-  const paid         = sumPaid(doc.virtualSavings);
-  const suggestion   = computeSuggestion(doc, currentMonth);
 
-  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter();
+  const {
+    open, modal, suggestion, canPay,
+    paid, totalPLN, progressPct, ready, rateLoading,
+  } = useEnvelopePay(doc);
 
-  useEffect(() => {
-    if (isForeign) loadRate(doc.originalCurrency, todayYMD());
-  }, [doc.originalCurrency, isForeign]);
-
-  const liveRate    = activeRate || doc.fxRate || 1;
-  const totalPLN    = isForeign
-    ? Math.round(doc.totalAmount * liveRate * 100) / 100
-    : doc.totalAmountPLN;
-  const progressPct = totalPLN > 0 ? Math.min(100, Math.round(paid / totalPLN * 100)) : 0;
   const progressColor = ready ? c.success : progressPct >= 80 ? c.warning : c.info;
 
-  // Current month virtual saving entry
+  // Current month virtual saving entry (for the "this month" hint)
   const thisMonthEntry = doc.mode === "envelope"
     ? (doc.virtualSavings || []).find(v => v.month === currentMonth)
     : null;
@@ -162,6 +151,12 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 6, marginTop: 12, justifyContent: "flex-end" }}>
+        {canPay && (
+          <button onClick={open}
+            style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.info, color: c.white, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+            💰 Odkładam {suggestion !== null ? fmt(suggestion) : "…"} PLN
+          </button>
+        )}
         {ready && (
           <button onClick={() => onPurchase(doc)}
             style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.success, color: c.white, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
@@ -177,6 +172,8 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
           🗑️
         </button>
       </div>
+
+      {modal}
     </div>
   );
 }
