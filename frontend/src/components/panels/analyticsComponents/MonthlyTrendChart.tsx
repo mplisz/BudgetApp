@@ -22,7 +22,8 @@ export interface MonthlyDataPoint {
   transfers: number;
   expenses:  number;
   savings:   number;
-  balance:   number;
+  envelopes: number;   // money set aside into virtual envelopes that month
+  balance:   number;   // income + transfers − expenses − savings − envelopes
   expensesMA?: number; // 3-month trailing average of expenses (#8)
 }
 

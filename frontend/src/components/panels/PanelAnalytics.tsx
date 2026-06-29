@@ -27,6 +27,7 @@ import { useNavigate }                from "react-router-dom";
 import { PANEL_PATHS }                from "../../data/routes";
 import { useTransactionsRange } from "../../hooks/useTransactionsRange";
 import { useLimits, getActiveLimit } from "../../hooks/useLimits";
+import { usePlanned } from "../../hooks/usePlanned";
 import { calculateEffectiveAmount } from "../../utils/returnUtils";
 import { RangePicker, resolveRange, type DateRange } from "../ui/RangePicker";
 import { Card } from "../ui/summaryUi";
@@ -93,6 +94,7 @@ export default function PanelAnalytics() {
 
   const { transactions, isLoading, loadRange } = useTransactionsRange();
   const { limits, loadLimits } = useLimits();
+  const { planned, loadAll: loadPlanned } = usePlanned();
 
   const [range, setRange] = useState<DateRange>({ months: 6, from: null, to: null });
 
@@ -137,6 +139,25 @@ export default function PanelAnalytics() {
   // active entry per month), so load once.
   useEffect(() => { loadLimits(); }, [loadLimits]);
 
+  // Planned expenses carry virtual-envelope contributions that never become
+  // transactions — load them so they can be subtracted from monthly balance.
+  useEffect(() => { loadPlanned(); }, [loadPlanned]);
+
+  // Money set aside into virtual envelopes, keyed by the saving month. These
+  // are NOT transactions, so without this the locked money would still show
+  // up as available balance.
+  const envelopeByMonth = useMemo<Record<string, number>>(() => {
+    const acc: Record<string, number> = {};
+    for (const doc of (planned || [])) {
+      if (doc.mode !== "envelope") continue;
+      for (const v of (doc.virtualSavings || [])) {
+        if (!v.paidByUser) continue;
+        acc[v.month] = (acc[v.month] ?? 0) + v.amountPLN;
+      }
+    }
+    return acc;
+  }, [planned]);
+
   // Months in range (oldest -> newest) — uses the CLAMPED from
   const monthsInRange = useMemo(
     () => (noDataAvailable ? [] : enumerateMonths(clampedFrom, effectiveTo)),
@@ -148,7 +169,7 @@ export default function PanelAnalytics() {
   const monthlyData = useMemo<MonthlyDataPoint[]>(() => {
     const byMonth: Record<string, MonthlyDataPoint> = {};
     for (const m of monthsInRange) {
-      byMonth[m] = { month: m, income: 0, transfers: 0, expenses: 0, savings: 0, balance: 0 };
+      byMonth[m] = { month: m, income: 0, transfers: 0, expenses: 0, savings: 0, envelopes: 0, balance: 0 };
     }
     for (const tx of (transactions as unknown as Transaction[])) {
       const row = byMonth[tx.budgetMonth];
@@ -161,10 +182,13 @@ export default function PanelAnalytics() {
       if (tx.type === "EXPENSE")  row.expenses  += effective;
       if (tx.type === "SAVING")   row.savings   += effective;
     }
-    // Balance = income + transfers − expenses − savings
+    // Balance = income + transfers − expenses − savings − envelopes.
+    // Envelope contributions aren't transactions, so they're subtracted here
+    // to stop locked money from inflating the available balance.
     for (const m of monthsInRange) {
       const r = byMonth[m];
-      r.balance = r.income + r.transfers - r.expenses - r.savings;
+      r.envelopes = envelopeByMonth[m] ?? 0;
+      r.balance = r.income + r.transfers - r.expenses - r.savings - r.envelopes;
     }
     const out = monthsInRange.map(m => byMonth[m]);
     // #8 — 3-month trailing moving average of expenses (smooths one-off spikes)
@@ -172,7 +196,7 @@ export default function PanelAnalytics() {
       out[i].expensesMA = (out[i].expenses + out[i - 1].expenses + out[i - 2].expenses) / 3;
     }
     return out;
-  }, [transactions, monthsInRange]);
+  }, [transactions, monthsInRange, envelopeByMonth]);
 
   // ── Aggregate per-category totals (EXPENSE only for pie/bar) ──
 
@@ -486,9 +510,10 @@ export default function PanelAnalytics() {
         transfers: acc.transfers + m.transfers,
         expenses:  acc.expenses  + m.expenses,
         savings:   acc.savings   + m.savings,
+        envelopes: acc.envelopes + m.envelopes,
         balance:   acc.balance   + m.balance,
       }),
-      { income: 0, transfers: 0, expenses: 0, savings: 0, balance: 0 },
+      { income: 0, transfers: 0, expenses: 0, savings: 0, envelopes: 0, balance: 0 },
     );
   }, [monthlyData]);
 
@@ -511,6 +536,12 @@ export default function PanelAnalytics() {
                 <>
                   {" · Wydatki łącznie: "}
                   <strong style={{ color: c.danger }}>{fmt(rangeTotals.expenses)} zł</strong>
+                  {rangeTotals.envelopes > 0 && (
+                    <>
+                      {" · W kopertach: "}
+                      <strong style={{ color: c.info }}>{fmt(rangeTotals.envelopes)} zł</strong>
+                    </>
+                  )}
                   {" · Saldo: "}
                   <strong style={{ color: rangeTotals.balance >= 0 ? c.success : c.danger }}>
                     {rangeTotals.balance >= 0 ? "+" : ""}{fmt(rangeTotals.balance)} zł

@@ -36,7 +36,7 @@ export function MonthlyTable({ data, onClick }: MonthlyTableProps) {
 
   return (
     <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, overflowX: "auto" }}>
-      <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", minWidth: 640, borderCollapse: "collapse" }}>
         <thead>
           <tr>
             <th style={th}>Miesiąc</th>
@@ -44,6 +44,7 @@ export function MonthlyTable({ data, onClick }: MonthlyTableProps) {
             <th style={{ ...th, textAlign: "right" }}>Transfery</th>
             <th style={{ ...th, textAlign: "right" }}>Wydatki</th>
             <th style={{ ...th, textAlign: "right" }}>Oszczędności</th>
+            <th style={{ ...th, textAlign: "right" }}>Koperty</th>
             <th style={{ ...th, textAlign: "right" }}>Saldo</th>
             <th style={{ ...th, textAlign: "right" }}>% wpływów</th>
           </tr>
@@ -69,6 +70,9 @@ export function MonthlyTable({ data, onClick }: MonthlyTableProps) {
                 <td style={{ ...td, textAlign: "right", color: c.danger }}>{fmt(row.expenses)}</td>
                 <td style={{ ...td, textAlign: "right", color: row.savings > 0 ? c.info : c.borderStrong }}>
                   {row.savings > 0 ? fmt(row.savings) : "—"}
+                </td>
+                <td style={{ ...td, textAlign: "right", color: row.envelopes > 0 ? c.info : c.borderStrong }}>
+                  {row.envelopes > 0 ? fmt(row.envelopes) : "—"}
                 </td>
                 <td style={{ ...td, textAlign: "right", fontWeight: 700, color: row.balance >= 0 ? c.success : c.danger }}>
                   {row.balance >= 0 ? "+" : ""}{fmt(row.balance)}
