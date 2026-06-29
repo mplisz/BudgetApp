@@ -11,10 +11,10 @@ import { useToast }       from "./useToast";
 import { useApi }         from "./useApi";
 import { ApiError }       from "../data/api/client";
 import type { TransactionPayload } from "../types/transaction";
+import type { Transaction } from "../types/appContext";
 
-// Stored transaction as returned by the API. Kept structurally loose — the
-// app treats transaction documents dynamically; only `id` is relied on here.
-export type StoredTx = { id: string; [key: string]: unknown };
+// Stored transaction as returned by the API — the canonical Transaction shape.
+export type StoredTx = Transaction;
 
 // Backend can answer 409 with a "please confirm" sentinel instead of a doc
 // (e.g. archiving a transaction that has linked returns/transfers).
@@ -22,11 +22,6 @@ type ConfirmSentinel = { _requiresConfirmation: true; [key: string]: unknown };
 
 type UpdateResult = StoredTx | ConfirmSentinel | null;
 type DeleteResult = ConfirmSentinel | { success: boolean; id: string } | null;
-
-interface AppCtx {
-  transactions:    StoredTx[];
-  setTransactions: (v: StoredTx[] | ((prev: StoredTx[]) => StoredTx[])) => void;
-}
 
 // Detects the backend's 409 "please confirm" sentinel on a thrown ApiError.
 function confirmSentinelFrom(err: unknown): ConfirmSentinel | null {
@@ -40,7 +35,7 @@ function confirmSentinelFrom(err: unknown): ConfirmSentinel | null {
 
 export function useTransactions() {
   const api                               = useApi();
-  const { transactions, setTransactions } = useAppContext() as AppCtx;
+  const { transactions, setTransactions } = useAppContext();
   const { showSuccess, showError }        = useToast() as {
     showSuccess: (m: string) => void;
     showError:   (m: string) => void;

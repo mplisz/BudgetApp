@@ -38,12 +38,14 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 
 // ── Types ─────────────────────────────────────────────────────
 
+// Local view type: context AppCategory enriched with a read-only flag for
+// archived categories that still carry limits.
 interface AppCategory {
   id: string;
   name: string;
-  icon: string;
+  icon?: string;
   type: string;
-  isArchived: boolean;
+  isArchived?: boolean;
   _readOnly?: boolean;
 }
 
@@ -574,23 +576,23 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true, isMobile }:
         borderBottom: `2px solid ${c.border}`,
         marginBottom: 4,
       }}>
-        <div style={(s as any).label}>Kategoria</div>
-        <div style={(s as any).label}>
+        <div style={s.label}>Kategoria</div>
+        <div style={s.label}>
           Baza
           <div style={{ fontSize: 10, color: c.borderStrong, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             od daty wzwyż
           </div>
         </div>
-        <div style={(s as any).label}>
+        <div style={s.label}>
           Nadpisanie
           <div style={{ fontSize: 10, color: c.borderStrong, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             tylko {activeBudgetMonth}
           </div>
         </div>
-        <div style={{ ...(s as any).label, textAlign: "right" }}>Aktywny</div>
+        <div style={{ ...s.label, textAlign: "right" }}>Aktywny</div>
 
         {/* Cykliczne — Estymata zone, EXPENSE only */}
-        <div style={{ ...(s as any).label, textAlign: "right", color: c.info, borderLeft: `1px solid ${c.borderStrong}`, paddingLeft: 12 }}>
+        <div style={{ ...s.label, textAlign: "right", color: c.info, borderLeft: `1px solid ${c.borderStrong}`, paddingLeft: 12 }}>
           {showExtra === true && (
             <>
               🔄 Cykliczne
@@ -600,12 +602,12 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true, isMobile }:
             </>
           )}
         </div>
-        <div style={{ ...(s as any).label, textAlign: "right", color: c.voucher }}>
+        <div style={{ ...s.label, textAlign: "right", color: c.voucher }}>
           {showExtra === true && "📅 Planowane"}
         </div>
 
         {/* Faktycznie wydano — rightmost, separator from Estymata zone */}
-        <div style={{ ...(s as any).label, textAlign: "right", color: c.text, ...SEPARATOR }}>
+        <div style={{ ...s.label, textAlign: "right", color: c.text, ...SEPARATOR }}>
           {showExtra && "Faktycznie wydano"}
         </div>
       </div>
@@ -616,10 +618,7 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true, isMobile }:
 // ── Main Panel ────────────────────────────────────────────────
 
 export default function PanelBaseBudget() {
-  const { categories, transactions } = useAppContext() as {
-    categories:   AppCategory[];
-    transactions: Transaction[];
-  };
+  const { categories, transactions } = useAppContext();
   const { activeBudgetMonth } = useMonthStatus() as { activeBudgetMonth: string };
   const { isPastMonth, isMonthClosed, isHistoricalLock } = usePanelLock(activeBudgetMonth) as {
     isPastMonth: boolean; isMonthClosed: boolean; isHistoricalLock: boolean;
@@ -851,7 +850,7 @@ export default function PanelBaseBudget() {
   return (
     <div style={{ padding: "0 0 40px 0", maxWidth: 1100, margin: "0 auto" }}>
       <div style={{ marginBottom: 20 }}>
-        <div style={(s as any).sectionTitle}>🏦 Baza budżetu</div>
+        <div style={s.sectionTitle}>🏦 Baza budżetu</div>
         <div style={{ fontSize: 13, color: c.textSecondary }}>
           {activeBudgetMonth} · planowanie wydatków i oszczędności
         </div>
@@ -1050,7 +1049,7 @@ export default function PanelBaseBudget() {
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                style={{ ...(s as any).btn(c.success), opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}
+                style={{ ...s.btn(c.success), opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}
               >
                 {isSaving ? "Zapisuję…" : "💾 Zapisz limity"}
               </button>

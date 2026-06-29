@@ -23,7 +23,7 @@ export default function PanelAddPlanned() {
   return (
     <div style={{ padding: "0 0 80px 0" }}>
       <div style={{ marginBottom: 20, marginTop: 8 }}>
-        <div style={(s as any).sectionTitle}>📅 Nowy planowany wydatek</div>
+        <div style={s.sectionTitle}>📅 Nowy planowany wydatek</div>
       </div>
 
       <PlannedForm

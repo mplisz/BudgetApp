@@ -35,14 +35,9 @@ function isUsable(v: Voucher): boolean {
     : computeRemaining(v) > 0;
 }
 
-interface AppCtx {
-  vouchers:    Voucher[];
-  setVouchers: (v: Voucher[] | ((prev: Voucher[]) => Voucher[])) => void;
-}
-
 export function useVoucherManager() {
   const api                       = useApi();
-  const { vouchers, setVouchers } = useAppContext() as AppCtx;
+  const { vouchers, setVouchers } = useAppContext();
   const { showSuccess, showError } = useToast() as {
     showSuccess: (m: string) => void;
     showError:   (m: string) => void;

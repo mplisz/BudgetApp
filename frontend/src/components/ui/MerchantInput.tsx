@@ -43,7 +43,7 @@ export function MerchantInput({
   onBlur,
   onEnter,
 }: MerchantInputProps) {
-  const { merchants } = useAppContext() as { merchants?: string[] };
+  const { merchants } = useAppContext();
   const options = Array.isArray(merchants) ? merchants : [];
 
   const [open, setOpen]           = useState(false);

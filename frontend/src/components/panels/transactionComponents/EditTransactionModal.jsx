@@ -10,7 +10,7 @@ import { useState }        from "react";
 import { useTransactions } from "../../../hooks/useTransactions";
 import { TransactionForm, txToFormValues } from "./TransactionForm";
 import { ConfirmModal }    from "../../ui/ConfirmModal";
-import { s }               from "./txStyles.jsx";
+import { s }               from "./txStyles";
 
 export function EditTransactionModal({ tx, onClose, onUpdated }) {
   const { updateTransaction, isSaving } = useTransactions();

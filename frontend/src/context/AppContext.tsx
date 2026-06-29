@@ -1,5 +1,5 @@
 // ============================================================
-// File: src/context/AppContext.jsx
+// File: src/context/AppContext.tsx
 // Central React Context — shared app data.
 //
 // Bootstrap (once per session, after auth): categories, tags,
@@ -15,53 +15,73 @@
 // ============================================================
 
 import { createContext, useContext, useState, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useAuth }  from "./AuthContext";
 import { MONTHS }   from "../data/constants";
 import { fmt }      from "../utils/helpers";
+import type {
+  AppContextValue, AppCategory, Tag, AppSettings,
+  PlannedDoc, RecurringDoc, LimitDoc, CartItem, Voucher, Transaction,
+} from "../types/appContext";
 
-const AppContext = createContext(null);
+const AppContext = createContext<AppContextValue | null>(null);
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-export function useAppContext() {
+export function useAppContext(): AppContextValue {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error("useAppContext must be used inside AppProvider");
   return ctx;
 }
 
-export function AppProvider({ children }) {
+// Raw category document as stored in Cosmos (flat: parents + children
+// linked via parentCategoryId). parseCategories nests them for the UI.
+interface DbCategory {
+  id:                string;
+  name:              string;
+  icon?:             string;
+  type?:             AppCategory["type"];
+  isArchived?:       boolean;
+  parentCategoryId?: string | null;
+  priority?:         number;
+  canBeRecurring?:   boolean;
+  isCritical?:       boolean;
+  canBeLuxmed?:      boolean;
+}
+
+export function AppProvider({ children }: { children: ReactNode }) {
   const { fetchWithAuth, accessToken } = useAuth();
 
   // ── Transactions ─────────────────────────────────────────────
-  const [transactions, setTransactions] = useState([]);
-  const [cart,         setCart]         = useState([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [cart,         setCart]         = useState<CartItem[]>([]);
 
   // ── Vouchers ─────────────────────────────────────────────────
-  const [vouchers, setVouchers] = useState([]);
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
 
   // ── Recurring (shared between PanelRecurring + NotificationBell) ──
-  const [recurring, setRecurring] = useState([]);
+  const [recurring, setRecurring] = useState<RecurringDoc[]>([]);
 
   // ── Limits (shared between PanelBaseBudget + Summary) ────────
-  const [limits, setLimits] = useState([]);
+  const [limits, setLimits] = useState<LimitDoc[]>([]);
 
   // ── Planned expenses ──────────────────────────────────────────
-  const [planned, setPlanned] = useState([]);
+  const [planned, setPlanned] = useState<PlannedDoc[]>([]);
 
   // ── Months / closed ──────────────────────────────────────────
-  const [closedMonths, setClosedMonths] = useState(new Set());
+  const [closedMonths, setClosedMonths] = useState<Set<string>>(new Set());
 
   // ── Categories / tags / settings ─────────────────────────────
-  const [categories,    setCategories]   = useState([]);
-  const [tags,          setTags]         = useState([]);
-  const [settings,      setSettings]     = useState(null);
+  const [categories,    setCategories]   = useState<AppCategory[]>([]);
+  const [tags,          setTags]         = useState<Tag[]>([]);
+  const [settings,      setSettings]     = useState<AppSettings | null>(null);
   const [bootstrapDone, setBootstrapDone] = useState(false);
-  const [merchants, setMerchants] = useState([]);
+  const [merchants, setMerchants] = useState<string[]>([]);
 
   // ── Parse categories from DB format ──────────────────────────
   // DB stores a flat list (parents + children via parentCategoryId).
   // We nest children under their parent's `sub[]` for the UI.
-  const parseCategories = (dbCategories) => {
-    const parents = dbCategories
+  const parseCategories = (dbCategories: DbCategory[]): AppCategory[] => {
+    const parents: AppCategory[] = dbCategories
       .filter(c => !c.parentCategoryId)
       .map(parent => ({
         id:         parent.id,
@@ -82,7 +102,7 @@ export function AppProvider({ children }) {
           isArchived:     child.isArchived      || false,
           canBeRecurring: child.canBeRecurring  ?? false,
           isCritical:     child.isCritical      ?? false,
-          canBeLuxmed:    child.canBeLuxmed      ?? false,  
+          canBeLuxmed:    child.canBeLuxmed      ?? false,
         });
       }
     });
@@ -91,7 +111,7 @@ export function AppProvider({ children }) {
   };
 
   // Remaining value on a voucher = initial minus sum of recorded usages.
-  function computeVoucherRemaining(v) {
+  function computeVoucherRemaining(v: Voucher): number {
     const used = (v.usedInTransactions || []).reduce((s, u) => s + u.amount, 0);
     return Math.max(0, v.initialValue - used);
   }
@@ -105,37 +125,36 @@ export function AppProvider({ children }) {
 
     async function bootstrap() {
       try {
-        const [catsRes, tagsRes, settingsRes,limitsRes] = await Promise.all([
+        const [catsRes, tagsRes, settingsRes, limitsRes] = await Promise.all([
           fetchWithAuth(`${API_URL}/api/categories`),
           fetchWithAuth(`${API_URL}/api/tags`),
           fetchWithAuth(`${API_URL}/api/settings`),
-          fetchWithAuth(`${API_URL}/api/limits`), 
+          fetchWithAuth(`${API_URL}/api/limits`),
         ]);
 
         if (catsRes.ok)     setCategories(parseCategories(await catsRes.json()));
-        if (tagsRes.ok)     setTags((await tagsRes.json()).filter(t => !t.isArchived));
+        if (tagsRes.ok)     setTags((await tagsRes.json() as Tag[]).filter(t => !t.isArchived));
         if (settingsRes.ok) setSettings(await settingsRes.json());
-        if (limitsRes.ok)   setLimits(await limitsRes.json());  
-        
+        if (limitsRes.ok)   setLimits(await limitsRes.json());
+
         //fetch current merchants/shops
         fetchWithAuth(`${API_URL}/api/merchants`)
-        .then(r => r.ok ? r.json() : [])
-        .then(setMerchants)
-        .catch(() => setMerchants([]));
-
+          .then(r => r.ok ? r.json() : [])
+          .then(setMerchants)
+          .catch(() => setMerchants([]));
 
         // Closed months — the URL/navigator logic reads this set to
         // decide the first open month and to lock closed months.
         const monthsRes = await fetchWithAuth(`${API_URL}/api/months`);
         if (monthsRes.ok) {
-          const data = await monthsRes.json();
+          const data = await monthsRes.json() as Array<{ budgetMonth: string }>;
           setClosedMonths(new Set(data.map(m => m.budgetMonth)));
         }
 
         // Vouchers — precompute remainingValue for display.
         const vouchersRes = await fetchWithAuth(`${API_URL}/api/vouchers`);
         if (vouchersRes.ok) {
-          const data = await vouchersRes.json();
+          const data = await vouchersRes.json() as Voucher[];
           setVouchers(data.map(v => ({ ...v, remainingValue: computeVoucherRemaining(v) })));
         }
       } catch (err) {
@@ -150,36 +169,19 @@ export function AppProvider({ children }) {
   }, [accessToken]);
 
   // ── Context value ─────────────────────────────────────────────
-  const value = {
-    // Transactions
+  const value: AppContextValue = {
     transactions, setTransactions,
     cart,         setCart,
-
-    // Vouchers
-    vouchers, setVouchers,
-
-    // Recurring (shared)
-    recurring, setRecurring,
-
-    // Limits (shared)
-    limits, setLimits,
-
-    // Planned expenses (shared)
-    planned, setPlanned,
-
-    // Months
+    vouchers,     setVouchers,
+    recurring,    setRecurring,
+    limits,       setLimits,
+    planned,      setPlanned,
     closedMonths, setClosedMonths,
-
-    // Merchants
-    merchants, setMerchants,
-    
-    // Categories / tags / settings
-    categories, setCategories,
-    tags,       setTags,
-    settings,   setSettings,
+    merchants,    setMerchants,
+    categories,   setCategories,
+    tags,         setTags,
+    settings,     setSettings,
     bootstrapDone,
-
-    // Utils
     fmt, MONTHS,
   };
 

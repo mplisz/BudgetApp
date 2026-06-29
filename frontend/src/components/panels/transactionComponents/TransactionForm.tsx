@@ -113,11 +113,7 @@ export function TransactionForm({
   cart = [],
   showVouchers = true,
 }: TransactionFormProps) {
-  const { transactions, limits, settings } = useAppContext() as {
-    transactions: Array<{ budgetMonth: string; categoryId: string; type: string; isArchived: boolean; amount: number }>;
-    limits:       Array<{ categoryId: string; limits: Array<{ type: string; date: string; amount: number }> }>;
-    settings:     { thresholds?: { warningPercent: number; criticalPercent: number } } | null;
-  };
+  const { transactions, limits, settings } = useAppContext();
 
   const { showError, showWarning } = useToast() as {
     showError:   (msg: string) => void;

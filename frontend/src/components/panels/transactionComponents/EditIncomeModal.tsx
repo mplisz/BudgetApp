@@ -8,7 +8,7 @@ import { useToast }   from "../../../hooks/useToast";
 import { useApi }     from "../../../hooks/useApi";
 import { IncomeForm } from "./IncomeForm";
 import { toYMD }      from "../../ui/AppDatePicker";
-import { s }          from "./txStyles.jsx";
+import { s }          from "./txStyles";
 import type { IncomeFormValues } from "./IncomeForm";
 
 interface Transaction {
@@ -82,12 +82,12 @@ export function EditIncomeModal({ tx, onClose, onUpdated }: EditIncomeModalProps
   };
 
   return (
-    <div style={(s as any).modal} onClick={onClose}>
+    <div style={s.modal} onClick={onClose}>
       <div
-        style={{ ...(s as any).modalBox, maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}
+        style={{ ...s.modalBox, maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
       >
-        <div style={(s as any).modalTitle}>✏️ Edytuj wpływ</div>
+        <div style={s.modalTitle}>✏️ Edytuj wpływ</div>
 
         <IncomeForm
           initialValues={initialValues}
@@ -98,8 +98,8 @@ export function EditIncomeModal({ tx, onClose, onUpdated }: EditIncomeModalProps
           showBudgetHint
           budgetMonth={tx.budgetMonth}
           inputStyle={modalInp}
-          btnPrimaryStyle={(s as any).btn("primary")}
-          btnSecondaryStyle={(s as any).btn("secondary")}
+          btnPrimaryStyle={s.btn("primary")}
+          btnSecondaryStyle={s.btn("secondary")}
         />
       </div>
     </div>

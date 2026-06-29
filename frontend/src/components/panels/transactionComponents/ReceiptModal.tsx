@@ -18,9 +18,7 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ txId, onClose }: ReceiptModalProps) {
-  const { fetchWithAuth } = useAuth() as {
-    fetchWithAuth: (url: string, opts?: RequestInit) => Promise<Response>;
-  };
+  const { fetchWithAuth } = useAuth();
 
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error,    setError]    = useState<string | null>(null);

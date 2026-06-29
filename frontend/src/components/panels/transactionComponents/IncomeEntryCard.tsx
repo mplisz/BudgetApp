@@ -43,7 +43,7 @@ export function IncomeEntryCard({ selectedMonth, readOnly = false, onSaved }: In
   useEffect(() => { setFormKey(k => k + 1); }, [selectedMonth]);
 
   const inp: React.CSSProperties = {
-    ...(s as any).input,
+    ...s.input,
     background: readOnly ? c.bg : c.border,
     color:      readOnly ? c.textMuted : c.text,
     cursor:     readOnly ? "not-allowed" : "text",
@@ -73,7 +73,7 @@ export function IncomeEntryCard({ selectedMonth, readOnly = false, onSaved }: In
   }
 
   return (
-    <div style={{ ...(s as any).card, marginTop: 8 }}>
+    <div style={{ ...s.card, marginTop: 8 }}>
       <div style={{
         fontWeight: 700, color: c.textTertiary, fontSize: 12,
         textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 14,
@@ -89,8 +89,8 @@ export function IncomeEntryCard({ selectedMonth, readOnly = false, onSaved }: In
         submitLabel="➕ Dodaj wpływ"
         readOnly={readOnly}
         inputStyle={inp}
-        labelStyle={(s as any).label}
-        btnPrimaryStyle={{ ...(s as any).btn(readOnly ? c.borderStrong : c.indigo) }}
+        labelStyle={s.label}
+        btnPrimaryStyle={{ ...s.btn(readOnly ? c.borderStrong : c.indigo) }}
       />
 
       <div style={{ height: 32 }} />

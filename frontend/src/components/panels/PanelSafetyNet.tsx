@@ -62,7 +62,7 @@ import { SavingAssistant }      from "./safetyNetComponents/SavingAssistant";
 import { PillGroup }            from "./safetyNetComponents/uiBits";
 import { DEFAULT_SAFETY_NET }   from "./safetyNetComponents/types";
 import type {
-  AssetBucket, PriorityLevel, SafetyNetSettings, SnTransaction, AppCategory,
+  AssetBucket, PriorityLevel, SafetyNetSettings, SnTransaction,
 } from "./safetyNetComponents/types";
 import { SkeletonKpiCard, SkeletonCard, SkeletonChart, SkeletonListRow } from "../ui/Skeleton";
 
@@ -71,7 +71,8 @@ import { SkeletonKpiCard, SkeletonCard, SkeletonChart, SkeletonListRow } from ".
 type PersistedSafetyNet = Omit<SafetyNetSettings, "selectedLevel">;
 
 interface AppSettings {
-  safetyNet?: Partial<SafetyNetSettings>;
+  safetyNet?:    Partial<SafetyNetSettings>;
+  [key: string]: unknown;
 }
 
 interface UseSettingsResult {
@@ -106,11 +107,7 @@ export default function PanelSafetyNet() {
 function PanelSafetyNetDesktop() {
   const { settings }                            = useSettings()  as UseSettingsResult;
   const api                                     = useApi();
-  const { setSettings, categories, settings: appSettings } = useAppContext() as {
-    setSettings: (v: AppSettings) => void;
-    categories:  AppCategory[];
-    settings:    { appStartMonth?: string } | null;
-  };
+  const { setSettings, categories, settings: appSettings } = useAppContext();
   const { transactions, isLoading, loadRange }  = useTransactionsRange();
   const { baseCurrency }                        = useCurrencyManager() as { baseCurrency: { code: string } };
   const { planned, loadAll: loadAllPlanned }    = usePlanned();
@@ -374,7 +371,7 @@ function PanelSafetyNetDesktop() {
     return (
     <div style={{ padding: "0 0 60px 0", maxWidth: 1400, margin: "0 auto" }}>
         <div style={{ marginBottom: 20, marginTop: 8 }}>
-          <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
+          <div style={s.sectionTitle}>🛡️ Poduszka finansowa</div>
           <div style={{ fontSize: 13, color: c.textSecondary }}>
             Analiza zostanie odblokowana po rozpoczęciu budżetu.
           </div>
@@ -421,7 +418,7 @@ function PanelSafetyNetDesktop() {
     return (
       <div style={{ padding: "0 0 40px 0", maxWidth: 1400, margin: "0 auto" }}>
         <div style={{ marginBottom: 20, marginTop: 8 }}>
-          <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
+          <div style={s.sectionTitle}>🛡️ Poduszka finansowa</div>
           <div style={{ fontSize: 13, color: c.textSecondary }}>
             Ładowanie danych z ostatnich {snState.lookbackMonths} miesięcy…
           </div>
@@ -457,7 +454,7 @@ function PanelSafetyNetDesktop() {
 
       {/* Header */}
       <div style={{ marginBottom: 20, marginTop: 8 }}>
-        <div style={(s as any).sectionTitle}>🛡️ Poduszka finansowa</div>
+        <div style={s.sectionTitle}>🛡️ Poduszka finansowa</div>
         <div style={{ fontSize: 13, color: c.textSecondary }}>
           {fromMonth} → {toMonth} · {windowMonths.length}-miesięczna baza ·
           horyzont przetrwania: {snState.horizonMonths} mies. · obecne aktywa:{" "}

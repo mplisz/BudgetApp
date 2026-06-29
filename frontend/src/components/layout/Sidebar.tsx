@@ -50,19 +50,8 @@ const SIDEBAR_ITEMS: SidebarItem[] = (() => {
   return items;
 })();
 
-interface Voucher {
-  isArchived:     boolean;
-  remainingValue: number;
-  expiresAt:      string | null;
-}
-
-interface AppCtxView {
-  vouchers: Voucher[];
-  settings: { voucherExpiryWarningDays?: number } | null;
-}
-
 export function Sidebar() {
-  const { vouchers, settings } = useAppContext() as AppCtxView;
+  const { vouchers, settings } = useAppContext();
   const linkWithMonth = useLinkWithMonth();
 
   // Badge: count active vouchers expiring within configured window

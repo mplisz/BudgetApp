@@ -35,18 +35,6 @@ import type { EnvelopeBreakdownItem } from "../ui/EnvelopeBreakdown";
 
 // ── Local types ───────────────────────────────────────────────
 
-interface AppCategory {
-  id: string;
-  name: string;
-  icon?: string;
-  type: string;
-  isArchived?: boolean;
-}
-
-interface AppSettings {
-  targets?: SettingsTargets;
-}
-
 interface KpiPillProps {
   icon: string;
   label: string;
@@ -132,12 +120,7 @@ export default function PanelSummary() {
     categories: rawCategories,
     settings: rawSettings,
     planned: rawPlanned 
-  } = useAppContext() as {
-    transactions: Transaction[];
-    categories: AppCategory[];
-    settings: AppSettings | null;
-    planned: any[] | undefined;
-  };
+  } = useAppContext();
 
   const { activeBudgetMonth }             = useMonthStatus() as { activeBudgetMonth: BudgetMonth };
    const { loadTransactions } = useTransactions() as { loadTransactions: (m: BudgetMonth) => Promise<void> };

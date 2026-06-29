@@ -39,10 +39,7 @@ function firstOpenMonth(closedMonths: Set<string>): string {
 }
 
 export function MonthNavigator() {
-  const { settings, closedMonths } = useAppContext() as {
-    settings:     { appStartMonth?: string } | null;
-    closedMonths: Set<string>;
-  };
+  const { settings, closedMonths } = useAppContext();
 
   const { budgetMonth, setBudgetMonth } = useMonthFromUrl();
   const { navigateToFirstOpenMonth }    = useMonthStatus() as {

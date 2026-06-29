@@ -64,14 +64,6 @@ interface Transaction {
   returns?:        Array<{ moneyReturnedInMonth: string; cashAmount?: number }>;
 }
 
-interface Category {
-  id:         string;
-  name:       string;
-  icon:       string;
-  type:       string;
-  isArchived: boolean;
-}
-
 // ── Helpers ───────────────────────────────────────────────────
 
 function enumerateMonths(fromYM: string, toYM: string): string[] {
@@ -90,13 +82,7 @@ function enumerateMonths(fromYM: string, toYM: string): string[] {
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelAnalytics() {
-  const { categories, settings } = useAppContext() as {
-    categories: Category[];
-    settings:   {
-      appStartMonth?: string;
-      targets?: { minRetirementPercent?: number; minSavingsPercent?: number };
-    } | null;
-  };
+  const { categories, settings } = useAppContext();
 
   const { budgetMonth: activeBudgetMonth, setBudgetMonth } = useMonthFromUrl();
   const navigate           = useNavigate();
@@ -513,7 +499,7 @@ export default function PanelAnalytics() {
 
       {/* Header — shows the CLAMPED range, not the user-requested one */}
       <div style={{ marginBottom: 20, marginTop: 8 }}>
-        <div style={(s as any).sectionTitle}>📊 Analiza wielomiesięczna</div>
+        <div style={s.sectionTitle}>📊 Analiza wielomiesięczna</div>
         <div style={{ fontSize: 13, color: c.textSecondary }}>
           {noDataAvailable ? (
             <>Brak danych dla wybranego zakresu</>

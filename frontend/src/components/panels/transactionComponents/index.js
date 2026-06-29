@@ -6,4 +6,4 @@ export { TransactionRow, TransactionCard }                              from "./
 export { ReturnModal }                                 from "./ReturnModal";
 export { EditTransactionModal }                        from "./EditTransactionModal";
 export { TransactionForm, emptyFormValues, txToFormValues } from "./TransactionForm";
-export { s, PRIO_COLORS, PrioBadge, calcReturns }     from "./txStyles.jsx";
+export { s, PRIO_COLORS, PrioBadge, calcReturns }     from "./txStyles";

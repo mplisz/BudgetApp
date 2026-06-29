@@ -35,10 +35,10 @@ export default function PanelAddIncome() {
   };
 
   return (
-    <div style={{ ...(s as any).panel, maxWidth: 520 }}>
+    <div style={{ ...s.panel, maxWidth: 520 }}>
       <div style={{ marginBottom: 16, marginTop: 8 }}>
-        <div style={(s as any).sectionTitle}>💵 Dodaj wpływ</div>
-        <div style={(s as any).sectionSub}>
+        <div style={s.sectionTitle}>💵 Dodaj wpływ</div>
+        <div style={s.sectionSub}>
           Wpływy i transfery dla miesiąca{" "}
           <strong style={{ color: c.success }}>{selectedMonth}</strong>
         </div>

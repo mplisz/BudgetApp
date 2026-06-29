@@ -233,7 +233,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
     <div>
       {/* Description */}
       <div style={frow}>
-        <label style={(s as any).label}>
+        <label style={s.label}>
           Opis *{" "}
           <span style={{ color: c.textMuted, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             (nazwa planowanego wydatku)
@@ -244,13 +244,13 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
           value={form.description}
           onChange={e => set("description", e.target.value)}
           placeholder="np. Laptop, wakacje, hulajnoga..."
-          style={{ ...(s as any).input, border: `1px solid ${!form.description?.trim() ? alpha(c.danger, "66") : c.border}` }}
+          style={{ ...s.input, border: `1px solid ${!form.description?.trim() ? alpha(c.danger, "66") : c.border}` }}
         />
       </div>
 
       {/* Mode toggle (disabled in edit) */}
       <div style={frow}>
-        <label style={(s as any).label}>Tryb</label>
+        <label style={s.label}>Tryb</label>
         <div style={{ display: "flex", gap: 8 }}>
           {([
             { key: "oneoff",   label: "💳 Jednorazowy",      sub: "płacę w całości"      },
@@ -278,7 +278,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
 
       {/* Target subcategory */}
       <div style={frow}>
-        <label style={(s as any).label}>Kategoria zakupu</label>
+        <label style={s.label}>Kategoria zakupu</label>
         <SubcategorySelect
           value={form.targetSubcategoryId}
           onChange={({ subcategoryId, subcategoryName, categoryId, categoryName }: {
@@ -301,7 +301,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
       </div>
       {/* URL (optional) */}
       <div style={frow}>
-        <label style={(s as any).label}>
+        <label style={s.label}>
           Link{" "}
           <span style={{ color: c.textMuted, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
             (opcjonalnie — np. strona produktu)
@@ -312,7 +312,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
           value={form.url}
           onChange={e => set("url", e.target.value)}
           placeholder="https://..."
-          style={(s as any).input}
+          style={s.input}
         />
       </div>
       {/* Currency + amount */}
@@ -328,13 +328,13 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
       </div>
 
       <div style={frow}>
-        <label style={(s as any).label}>Kwota docelowa ({rateInfo.resolvedCurrency || "PLN"})</label>
+        <label style={s.label}>Kwota docelowa ({rateInfo.resolvedCurrency || "PLN"})</label>
         <input
           type="number" min={0} step={0.01}
           value={form.totalAmount}
           onChange={e => set("totalAmount", e.target.value)}
           placeholder="0,00"
-          style={(s as any).input}
+          style={s.input}
         />
         {rateInfo.resolvedCurrency !== "PLN" && form.totalAmount && (
           <div style={{ fontSize: 12, color: c.success, marginTop: 4 }}>
@@ -345,7 +345,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
 
       {/* Planned month */}
       <div style={frow}>
-        <label style={(s as any).label}>
+        <label style={s.label}>
           {form.mode === "envelope" ? "Planowany miesiąc zakupu" : "Kiedy płacę?"}
         </label>
         <AppDatePicker
@@ -362,12 +362,12 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
       {form.mode === "envelope" && (
         <>
           <div style={frow}>
-            <label style={(s as any).label}>Dzień odkładania (1–31)</label>
+            <label style={s.label}>Dzień odkładania (1–31)</label>
             <input
               type="number" min={1} max={31}
               value={form.monthlySavingDay}
               onChange={e => set("monthlySavingDay", parseInt(e.target.value) || 1)}
-              style={{ ...(s as any).input, maxWidth: 100 }}
+              style={{ ...s.input, maxWidth: 100 }}
             />
           </div>
 
@@ -401,7 +401,7 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
 
       {/* Tags */}
       <div style={frow}>
-        <label style={(s as any).label}>Tagi</label>
+        <label style={s.label}>Tagi</label>
         <TagMultiSelect value={form.tags} onChange={(v: string[]) => set("tags", v)} />
       </div>
 

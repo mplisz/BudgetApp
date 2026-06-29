@@ -14,18 +14,8 @@ import { ConfirmModal }          from "../ui/ConfirmModal";
 import { PaymentConfirmModal }   from "../ui/PaymentConfirmModal";
 import { fmt, fmtAmount }        from "../../utils/helpers";
 import type { PlannedDoc }       from "../../hooks/usePlanned";
+import type { RecurringDoc }     from "../../types/appContext";
 
-
-// ── Types ─────────────────────────────────────────────────────
-
-interface RecurringDoc {
-  id:           string;
-  description:  string;
-  categoryName: string;
-  plannedDay?:  number;
-  costs?:       Array<{ validFrom: string; amount: number; originalCurrency?: string; fxRate?: number; amountPLN?: number }>;
-  [key: string]: unknown;
-}
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -277,12 +267,7 @@ export function NotificationBell() {
     loadAll: loadRecurring,
     confirmRecurring,
     markNotified,
-  } = useRecurring() as {
-    pendingNotifications: RecurringDoc[];
-    loadAll:          () => void;
-    confirmRecurring: (id: string, date: string, budgetMonth: string, fxRate: number, amountPLN: number) => Promise<unknown>;
-    markNotified:     (id: string) => Promise<unknown>;
-  };
+  } = useRecurring();
 
   const {
     pendingNotifications: plannedPending,

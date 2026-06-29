@@ -22,7 +22,7 @@ import {
   getReturnMonthBounds,
   isReturnMonthAllowed,
 } from "../../../utils/returnUtils";
-import { s, calcReturns } from "./txStyles.jsx";
+import { s, calcReturns } from "./txStyles";
 
 // ── Month input — free text YYYY-MM, min = minMonth, no upper limit ──
 function MonthInput({ value, onChange, minMonth }) {

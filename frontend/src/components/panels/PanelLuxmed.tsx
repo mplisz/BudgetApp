@@ -102,7 +102,7 @@ const s = {
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelLuxmed() {
-  const { categories, settings } = useAppContext() as any;
+  const { categories, settings } = useAppContext();
   const { activeBudgetMonth }    = useMonthStatus() as any;
   const api                      = useApi();
   const { showSuccess, showError } = useToast() as any;

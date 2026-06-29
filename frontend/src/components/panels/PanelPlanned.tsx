@@ -167,7 +167,7 @@ const filtered = useMemo<PlannedDoc[]>(() => {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={(s as any).sectionTitle}>📅 Planowane wydatki</div>
+          <div style={s.sectionTitle}>📅 Planowane wydatki</div>
           <div style={{ fontSize: 13, color: c.textSecondary, marginTop: 4 }}>
             {filtered.length} planowanych · cel:{" "}
             <strong style={{ color: c.text }}>{fmt(totalGoal)} PLN</strong>

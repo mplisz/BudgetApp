@@ -16,7 +16,7 @@ import { toYMD } from "../ui/AppDatePicker";
 import { ConfirmModal }    from "../ui/ConfirmModal";
 import { fmt }             from "../../utils/helpers";
 import { typeColor, typeLabel, typeIcon } from "../../data/constants/categoryTypes";
-import { s }               from "./transactionComponents/txStyles.jsx";
+import { s }               from "./transactionComponents/txStyles";
 import { EditIncomeModal }  from "./transactionComponents/EditIncomeModal";
 import { usePagination }   from "../../hooks/usePagination";
 import { Pagination }      from "../ui/Pagination";

@@ -76,11 +76,7 @@ const OCR_MAX_FILE_BYTES = 5 * 1024 * 1024;
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelExpenses() {
-  const { cart, setCart, categories } = useAppContext() as {
-    cart:       CartItem[];
-    setCart:    (v: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
-    categories: Array<{ sub?: Array<{ id: string; priority?: number }> }>;
-  };
+  const { cart, setCart, categories } = useAppContext();
   const { addTransaction, isSaving, loadTransactions  } = useTransactions() as {
     addTransaction: (p: TransactionPayload) => Promise<unknown>;
     isSaving:       boolean;
@@ -364,7 +360,7 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
 
   if (isActiveMonthClosed) {
     return (
-      <div style={{ ...(s as any).panel, textAlign: "center", paddingTop: 60 }}>
+      <div style={{ ...s.panel, textAlign: "center", paddingTop: 60 }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
         <div style={{ color: c.textSecondary, fontSize: 15 }}>
           Miesiąc {activeBudgetMonth} jest zamknięty.
@@ -375,7 +371,7 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
 
   if (isFutureMonth) {
     return (
-      <div style={{ ...(s as any).panel, textAlign: "center", paddingTop: 60 }}>
+      <div style={{ ...s.panel, textAlign: "center", paddingTop: 60 }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
         <div style={{ color: c.textSecondary, fontSize: 15, marginBottom: 8 }}>
           Ten miesiąc jest zbyt daleko w przyszłości.
@@ -421,7 +417,7 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
         {/* ════ FORM COLUMN ════ */}
         <div className="expenses-form-col">
           <div style={{ marginBottom: 20, marginTop: 8 }}>
-            <div style={(s as any).sectionTitle}>
+            <div style={s.sectionTitle}>
               ➕ Dodaj wydatek
             </div>
           </div>

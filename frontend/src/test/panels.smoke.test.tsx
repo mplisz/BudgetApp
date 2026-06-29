@@ -42,13 +42,11 @@ import PanelLuxmed             from "../components/panels/PanelLuxmed";
 // ── Browser API stubs jsdom lacks (recharts / responsive hooks) ──
 beforeAll(() => {
   class RO { observe() {} unobserve() {} disconnect() {} }
-  // @ts-expect-error test stub
-  global.ResizeObserver = RO;
-  // @ts-expect-error test stub
-  global.IntersectionObserver = RO;
+  const g = globalThis as any;
+  g.ResizeObserver = RO;
+  g.IntersectionObserver = RO;
   if (!window.matchMedia) {
-    // @ts-expect-error test stub
-    window.matchMedia = (q: string) => ({
+    g.matchMedia = (q: string) => ({
       matches: false, media: q,
       addEventListener() {}, removeEventListener() {},
       addListener() {}, removeListener() {}, dispatchEvent() { return false; },
@@ -60,7 +58,7 @@ beforeAll(() => {
 // token (jwtDecode throws on the empty body → caught), so AppProvider's
 // bootstrap is skipped and panels mount with empty initial state.
 beforeEach(() => {
-  global.fetch = vi.fn(() =>
+  globalThis.fetch = vi.fn(() =>
     Promise.resolve({
       ok: true,
       status: 200,

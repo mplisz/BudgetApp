@@ -78,7 +78,7 @@ function AuthenticatedLayout() {
   // Clamp ?m= to the configured floor (appStartMonth). If the URL month
   // is earlier than the floor, this redirects (replace) to the floor.
   // Protects against deep links like ?m=2026-04 when start is 2026-06.
-  const { settings } = useAppContext() as { settings: { appStartMonth?: string } | null };
+  const { settings } = useAppContext();
   useMonthGuard(settings?.appStartMonth);
   
   const panelId = panelIdFromPath(pathname);
@@ -90,7 +90,7 @@ function AuthenticatedLayout() {
   const showMonthTitle = panelId !== null && PANELS_WITH_MONTH_TITLE.has(panelId);
   
   const { isExplicit, setBudgetMonth } = useMonthFromUrl();
-  const { closedMonths } = useAppContext() as { closedMonths: Set<string> };
+  const { closedMonths } = useAppContext();
 
   // When ?m= is absent, land on the first OPEN budget month.
   // Runs once when no explicit month is in the URL.

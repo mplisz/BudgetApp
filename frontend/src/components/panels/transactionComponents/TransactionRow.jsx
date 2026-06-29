@@ -12,7 +12,7 @@ import { c } from "../../../styles/tokens";
 import { useState }           from "react";
 import { createPortal }       from "react-dom";
 import { fmt,fmtAmount  }                from "../../../utils/helpers";
-import { s, PrioBadge, calcReturns } from "./txStyles.jsx";
+import { s, PrioBadge, calcReturns } from "./txStyles";
 import { EditTransactionModal }      from "./EditTransactionModal";
 import { ReceiptModal } from "./ReceiptModal";
 

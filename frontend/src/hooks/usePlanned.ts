@@ -7,6 +7,7 @@ import { useState, useCallback, useMemo } from "react";
 import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
 import { useApi }        from "./useApi";
+import type { Transaction } from "../types/appContext";
 
 // ── Domain types ──────────────────────────────────────────────
 
@@ -187,12 +188,7 @@ interface UsePlannedResult {
 
 export function usePlanned(): UsePlannedResult {
   const api                                      = useApi();
-  const { planned, setPlanned, setTransactions, settings} = useAppContext() as {
-    planned:         PlannedDoc[];
-    setPlanned:      (v: PlannedDoc[] | ((p: PlannedDoc[]) => PlannedDoc[])) => void;
-    setTransactions: (v: unknown[] | ((p: unknown[]) => unknown[])) => void;
-    settings:        { notifyDaysBefore?: number } | null;
-  };
+  const { planned, setPlanned, setTransactions, settings } = useAppContext();
   const { showSuccess, showError } = useToast() as {
     showSuccess: (m: string) => void;
     showError:   (m: string) => void;
@@ -283,7 +279,7 @@ export function usePlanned(): UsePlannedResult {
       );
       replacePlanned(data);
       if (data.transactions) {
-        setTransactions(prev => [...(prev as unknown[]), ...data.transactions!]);
+        setTransactions(prev => [...(data.transactions as Transaction[]), ...prev]);
       }
       showSuccess("Zakup potwierdzony! 🛍️");
       return data;

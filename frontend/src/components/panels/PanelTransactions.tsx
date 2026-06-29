@@ -8,6 +8,7 @@
 import { c } from "../../styles/tokens";
 import { useState, useMemo } from "react";
 import { useAppContext }   from "../../context/AppContext";
+import type { Transaction } from "../../types/appContext";
 import { useTransactions } from "../../hooks/useTransactions";
 import { useMonthStatus }  from "../../hooks/useMonthStatus";
 import { toYMD } from "../ui/AppDatePicker";
@@ -34,54 +35,13 @@ const PAGE_SIZE = 25;
 
 // ── Types ─────────────────────────────────────────────────────
 
-interface Return {
-  moneyReturnedInMonth: string;
-  cashAmount?:          number;
-  voucherAmount?:       number;
-}
-
-interface Transaction {
-  id:              string;
-  type:            string;
-  date:            string;
-  budgetMonth:     string;
-  categoryId:      string;
-  categoryName:    string;
-  subcategoryId:   string;
-  subcategoryName: string;
-  amount:          number;
-  netAmount?:      number;
-  voucherAmount?:  number;
-  priority?:       number;
-  description?:    string;
-  tags?:           string[];
-  isRecurring?:    boolean;
-  returns?:        Return[];
-  receiptBlobPath?: string | null;
-  merchant?:        string | null;
-  // Enriched fields added in useMemo
-  tagNames?:        string[];
-  effectiveAmount?: number;
-  sameMonthReturned?: number;
-  isWarranty?:      boolean; 
-}
-
-interface Tag {
-  id:   string;
-  name: string;
-}
-
 interface DeleteModal { isOpen: boolean; txId: string | null; }
 interface LinkedModal { isOpen: boolean; txId: string | null; }
 
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelTransactions() {
-  const { transactions, setTransactions, tags } = useAppContext() as {
-    transactions:    Transaction[];
-    setTransactions: (v: Transaction[] | ((p: Transaction[]) => Transaction[])) => void;
-    tags:            Tag[];
-  };
+  const { transactions, setTransactions, tags } = useAppContext();
   const { deleteTransaction, loadTransactions } = useTransactions() as {
     deleteTransaction: (id: string, opts?: Record<string, unknown>) => Promise<unknown>;
     loadTransactions:  (month: string) => Promise<void>;
@@ -285,7 +245,7 @@ export default function PanelTransactions() {
                 <span style={{ marginLeft: 8, color: c.successLight }}>zwroty: -{fmt(totalReturnedSum)}</span>
               )}
               {isActiveMonthClosed && (
-                <span style={{ marginLeft: 10, ...(s as any).badge(c.danger) }}>🔒 zamknięty</span>
+                <span style={{ marginLeft: 10, ...s.badge(c.danger) }}>🔒 zamknięty</span>
               )}
             </>
           )}
@@ -306,11 +266,11 @@ export default function PanelTransactions() {
               </ToggleBtn>
             </div>
           </div>
-          <div style={(s as any).filterRow}>
+          <div style={s.filterRow}>
 
             {/* Category */}
-            <div style={(s as any).filterBox}>
-              <div style={(s as any).filterLabel}>Kategoria</div>
+            <div style={s.filterBox}>
+              <div style={s.filterLabel}>Kategoria</div>
               <CategoryMultiSelect
                 value={filters.categories}
                 onChange={v => { set("categories", v); set("subs", []); }}
@@ -321,8 +281,8 @@ export default function PanelTransactions() {
 
             {/* Subcategory — visible only when ≥1 category selected */}
             {filters.categories.length > 0 && uniqueSubs.length > 0 && (
-              <div style={(s as any).filterBox}>
-                <div style={(s as any).filterLabel}>Subkategoria</div>
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Subkategoria</div>
                 <CategoryMultiSelect
                   value={filters.subs}
                   onChange={v => set("subs", v)}
@@ -346,8 +306,8 @@ export default function PanelTransactions() {
             />
 
             {/* Priority */}
-            <div style={(s as any).filterBox}>
-              <div style={(s as any).filterLabel}>Priorytet</div>
+            <div style={s.filterBox}>
+              <div style={s.filterLabel}>Priorytet</div>
               <div style={{ display: "flex", gap: 4 }}>
                 {[1, 2, 3, 4].map(p => (
                   <button
@@ -368,8 +328,8 @@ export default function PanelTransactions() {
 
             {/* Tags */}
             {monthTagIds.length > 0 && (
-              <div style={(s as any).filterBox}>
-                <div style={(s as any).filterLabel}>Tagi</div>
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Tagi</div>
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                   {monthTagIds.map(tag => (
                     <button
@@ -391,19 +351,19 @@ export default function PanelTransactions() {
               </div>
             )}
             {/* Returns */}
-            <div style={(s as any).filterBox}>
-              <div style={(s as any).filterLabel}>Zwroty</div>
+            <div style={s.filterBox}>
+              <div style={s.filterLabel}>Zwroty</div>
               <TriFilterButton state={filters.hasReturn}  onChange={v => set("hasReturn", v)}  label="🔙 Zwroty"      color={c.successLight} />
             </div>
               {/* Receipts */}
-            <div style={(s as any).filterBox}>
-              <div style={(s as any).filterLabel}>Paragony</div>
+            <div style={s.filterBox}>
+              <div style={s.filterLabel}>Paragony</div>
               <TriFilterButton state={filters.hasReceipt} onChange={v => set("hasReceipt", v)} label="📎 Z paragonem" color={c.warning} />
             </div>
             {/* Merchant */}
             {uniqueMerchants.length > 0 && (
-              <div style={(s as any).filterBox}>
-                <div style={(s as any).filterLabel}>Sklep</div>
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Sklep</div>
                 <select
                   value={filters.merchant}
                   onChange={e => set("merchant", e.target.value)}
@@ -415,13 +375,13 @@ export default function PanelTransactions() {
               </div>
             )}
             {/* Warranty */}
-            <div style={(s as any).filterBox}>
-              <div style={(s as any).filterLabel}>Gwarancja</div>
+            <div style={s.filterBox}>
+              <div style={s.filterLabel}>Gwarancja</div>
               <TriFilterButton state={filters.warranty}   onChange={v => set("warranty", v)}   label="🛡️ Gwarancyjne" color={c.warning} />
             </div>
             {/* Clear */}
             {hasActiveFilters && (
-              <button onClick={clearFilters} style={{ ...(s as any).actionBtn(c.danger), alignSelf: "flex-end", marginBottom: 4 }}>
+              <button onClick={clearFilters} style={{ ...s.actionBtn(c.danger), alignSelf: "flex-end", marginBottom: 4 }}>
                 ✕ Wyczyść
               </button>
             )}
@@ -430,7 +390,7 @@ export default function PanelTransactions() {
       )}
 
       {isFirstLoad && (
-        <div style={(s as any).card}>
+        <div style={s.card}>
           <SkeletonListRow columns={6} count={8} height={48} />
         </div>
       )}
@@ -461,18 +421,18 @@ export default function PanelTransactions() {
                         ))}
                       </div>
                     ) : (
-                    <div style={(s as any).card}>
-                      <table style={(s as any).table}>
+                    <div style={s.card}>
+                      <table style={s.table}>
                         <thead>
                           <tr>
-                            <th style={(s as any).th}>Data</th>
-                            <th style={(s as any).th}>Kategoria</th>
-                            <th style={(s as any).th}>Opis</th>
-                            <th style={(s as any).th}>Tagi</th>
-                            <th style={(s as any).th}>Prio</th>
-                            <th style={{ ...(s as any).th, textAlign: "right" }}>Kwota</th>
-                            <th style={(s as any).th}>Autor</th>
-                            <th style={(s as any).th}>Akcje</th>
+                            <th style={s.th}>Data</th>
+                            <th style={s.th}>Kategoria</th>
+                            <th style={s.th}>Opis</th>
+                            <th style={s.th}>Tagi</th>
+                            <th style={s.th}>Prio</th>
+                            <th style={{ ...s.th, textAlign: "right" }}>Kwota</th>
+                            <th style={s.th}>Autor</th>
+                            <th style={s.th}>Akcje</th>
                           </tr>
                         </thead>
                           <tbody>
@@ -501,9 +461,9 @@ export default function PanelTransactions() {
             {groups.length} grup · strona {groupPage} z {groupTotalPages}
           </div>
           {paginatedGroups.map(group => (
-            <div key={group.key} style={(s as any).card}>
-              <div style={(s as any).groupHeader} onClick={() => toggleGroup(group.key)}>
-                <div style={(s as any).groupTitle}>
+            <div key={group.key} style={s.card}>
+              <div style={s.groupHeader} onClick={() => toggleGroup(group.key)}>
+                <div style={s.groupTitle}>
                   <span style={{ color: c.textSecondary }}>{collapsed[group.key] ? "▶" : "▼"}</span>
                   {group.name}
                   <span style={{ color: c.textMuted, fontSize: 12, fontWeight: 400 }}>
@@ -517,7 +477,7 @@ export default function PanelTransactions() {
                   {group.voucherSum > 0 && (
                     <span style={{ fontSize: 12, color: c.voucherLight }}>voucher: {fmt(group.voucherSum)}</span>
                   )}
-                  <span style={(s as any).groupSum}>{fmt(group.sum)} PLN</span>
+                  <span style={s.groupSum}>{fmt(group.sum)} PLN</span>
                 </div>
               </div>
               {!collapsed[group.key] && (isMobile ? (
@@ -534,17 +494,17 @@ export default function PanelTransactions() {
                               ))}
                             </div>
                           ) : (
-                            <table style={(s as any).table}>
+                            <table style={s.table}>
                               <thead>
                                 <tr>
-                                  <th style={(s as any).th}>Data</th>
-                                  <th style={(s as any).th}>Kategoria</th>
-                                  <th style={(s as any).th}>Opis</th>
-                                  <th style={(s as any).th}>Tagi</th>
-                                  <th style={(s as any).th}>Prio</th>
-                                  <th style={{ ...(s as any).th, textAlign: "right" }}>Kwota</th>
-                                  <th style={(s as any).th}>Autor</th>
-                                  <th style={(s as any).th}>Akcje</th>
+                                  <th style={s.th}>Data</th>
+                                  <th style={s.th}>Kategoria</th>
+                                  <th style={s.th}>Opis</th>
+                                  <th style={s.th}>Tagi</th>
+                                  <th style={s.th}>Prio</th>
+                                  <th style={{ ...s.th, textAlign: "right" }}>Kwota</th>
+                                  <th style={s.th}>Autor</th>
+                                  <th style={s.th}>Akcje</th>
                                 </tr>
                               </thead>
                               <tbody>

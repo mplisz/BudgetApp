@@ -92,10 +92,7 @@ interface UseLimitsResult {
 
 export function useLimits(): UseLimitsResult {
   const api                        = useApi();
-  const { limits, setLimits }      = useAppContext() as {
-    limits:    LimitDoc[];
-    setLimits: (v: LimitDoc[] | ((prev: LimitDoc[]) => LimitDoc[])) => void;
-  };
+  const { limits, setLimits }      = useAppContext();
   const { showSuccess, showError } = useToast() as {
     showSuccess: (msg: string) => void;
     showError:   (msg: string) => void;

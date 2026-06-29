@@ -7,6 +7,15 @@ export type BudgetMonth = string; // "YYYY-MM"
 
 export type TransactionType = "EXPENSE" | "INCOME" | "TRANSFER" | "SAVING";
 
+// A returned portion of a transaction (cross-month refund splits cash/voucher).
+export interface Return {
+  moneyReturnedInMonth: string;
+  cashAmount?:    number;
+  voucherAmount?: number;
+}
+
+// Canonical transaction document. Superset of every shape the panels read —
+// required fields are present on all real docs, the rest are optional.
 export interface Transaction {
   id: string;
   type: TransactionType;
@@ -16,12 +25,26 @@ export interface Transaction {
   subcategoryName: string;
   amount: number;
   budgetMonth: BudgetMonth;
-  isArchived: boolean;
-  // Optional fields present on real transaction documents
-  date?: string;
+  date: string;
+  isArchived?: boolean;
   description?: string;
   tags?: string[];          // array of tagIds (e.g. "tag_raty_MMs")
+  tagNames?: string[];      // resolved names — enriched client-side
   priority?: 1 | 2 | 3 | 4;
+  netAmount?: number;
+  voucherAmount?: number;
+  isRecurring?: boolean;
+  recurringId?: string | null;
+  returns?: Return[];
+  receiptBlobPath?: string | null;
+  merchant?: string | null;
+  originalAmount?: number;
+  originalCurrency?: string;
+  fxRate?: number;
+  isWarranty?: boolean;
+  // Derived client-side (PanelTransactions useMemo), not stored server-side.
+  effectiveAmount?: number;
+  sameMonthReturned?: number;
 }
 
 

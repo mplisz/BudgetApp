@@ -8,13 +8,6 @@ import { useState } from "react";
 import type { ReactElement } from "react";
 import { useAppContext } from "../../context/AppContext";
 
-interface Tag {
-  id:         string;
-  name:       string;
-  icon?:      string;
-  isArchived: boolean;
-}
-
 export interface TagMultiSelectProps {
   /** Array of selected tag IDs. */
   value:        string[];
@@ -30,7 +23,7 @@ export function TagMultiSelect({
   disabled = false,
   placeholder = "Szukaj tagów…",
 }: TagMultiSelectProps): ReactElement {
-  const { tags } = useAppContext() as { tags: Tag[] };
+  const { tags } = useAppContext();
   const [search, setSearch] = useState("");
   const [open,   setOpen]   = useState(false);
 
