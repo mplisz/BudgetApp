@@ -43,7 +43,7 @@ function rangeKey(from: string, to: string): string {
 
 export function useTransactionsRange(): UseTransactionsRangeResult {
   const api               = useApi();
-  const { showError }     = useToast() as { showError: (m: string) => void };
+  const { showError }     = useToast();
 
   const [transactions, setTransactions] = useState<RangeTransaction[]>([]);
   const [isLoading,    setIsLoading]    = useState(false);

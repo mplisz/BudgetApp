@@ -18,13 +18,7 @@ export function MonthStatusButton() {
   const {
     isActiveMonthClosed, closeMonth, openMonth,
     activeBudgetMonth, isFutureMonth,
-  } = useMonthStatus() as {
-    isActiveMonthClosed: boolean;
-    closeMonth:          (m: string) => Promise<unknown>;
-    openMonth:           (m: string) => Promise<unknown>;
-    activeBudgetMonth:   string;
-    isFutureMonth:       boolean;
-  };
+  } = useMonthStatus();
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSaving,    setIsSaving]    = useState(false);

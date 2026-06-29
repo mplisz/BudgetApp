@@ -109,7 +109,7 @@ function PanelSafetyNetDesktop() {
   const api                                     = useApi();
   const { setSettings, categories, settings: appSettings } = useAppContext();
   const { transactions, isLoading, loadRange }  = useTransactionsRange();
-  const { baseCurrency }                        = useCurrencyManager() as { baseCurrency: { code: string } };
+  const { baseCurrency }                        = useCurrencyManager();
   const { planned, loadAll: loadAllPlanned }    = usePlanned();
 
   // ── State split ───────────────────────────────────────────

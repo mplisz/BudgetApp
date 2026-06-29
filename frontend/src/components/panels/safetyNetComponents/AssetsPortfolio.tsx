@@ -225,9 +225,7 @@ interface AssetEditorProps {
 }
 
 function AssetEditor({ initial, mode, onSave, onCancel }: AssetEditorProps) {
-  const { baseCurrency } = useCurrencyManager() as {
-    baseCurrency: { code: string; name: string };
-  };
+  const { baseCurrency } = useCurrencyManager();
   const baseCode = baseCurrency.code;
 
   const initialCurrency =

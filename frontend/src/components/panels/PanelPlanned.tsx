@@ -53,7 +53,7 @@ export default function PanelPlanned() {
     loadAll, updatePlanned, archivePlanned, purchasePlanned,
   } = usePlanned();
 
-  const { activeBudgetMonth } = useMonthStatus() as { activeBudgetMonth: string };
+  const { activeBudgetMonth } = useMonthStatus();
 
   const [range,         setRange]         = useState<DateRange>({ months: 3, from: null, to: null });
   const [filterMode,    setFilterMode]    = useState<"all" | "envelope" | "oneoff">("all");

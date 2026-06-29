@@ -12,7 +12,7 @@ import type { PlannedPostPayload, PlannedPatchPayload } from "../../hooks/usePla
 
 export default function PanelAddPlanned() {
   const { createPlanned, isSaving } = usePlanned();
-  const { activeBudgetMonth }       = useMonthStatus() as { activeBudgetMonth: string };
+  const { activeBudgetMonth }       = useMonthStatus();
   const [formKey, setFormKey]       = useState(0);
 
   async function handleSubmit(payload: PlannedPostPayload | PlannedPatchPayload) {

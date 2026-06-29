@@ -6,6 +6,23 @@ import { useState, useEffect } from "react";
 import { useAppContext }   from "../context/AppContext";
 import { useToast } from "./useToast";
 import { useApi }          from "./useApi";
+import type { AppCategory } from "../types/appContext";
+
+// Flat category document as stored server-side (parents + children).
+interface DbCategory {
+  id:                string;
+  name:              string;
+  icon?:             string;
+  type?:             AppCategory["type"];
+  isArchived?:       boolean;
+  parentCategoryId?: string | null;
+  priority?:         number;
+  canBeRecurring?:   boolean;
+  isCritical?:       boolean;
+  canBeLuxmed?:      boolean;
+}
+
+type CategoryUpdates = { isArchived?: boolean; [key: string]: unknown };
 
 export function useCategoryManager() {
   const { categories, setCategories } = useAppContext();
@@ -22,8 +39,8 @@ export function useCategoryManager() {
       if (categories.length > 0) { setIsLoadingCats(false); return; }
       try {
         setIsLoadingCats(true);
-        const dbCategories = await api.get("/api/categories");
-        const parents = dbCategories.filter(c => !c.parentCategoryId).map(parent => ({
+        const dbCategories = await api.get<DbCategory[]>("/api/categories");
+        const parents: AppCategory[] = dbCategories.filter(c => !c.parentCategoryId).map(parent => ({
           id:         parent.id,
           name:       parent.name,
           icon:       parent.icon || "📦",
@@ -57,7 +74,7 @@ export function useCategoryManager() {
   }, [api, setCategories]);
 
   // ── Patch ───────────────────────────────────────────────────
-  async function executePatch(id, name, parentId, updates) {
+  async function executePatch(id: string, _name: string, parentId: string | null, updates: CategoryUpdates) {
     try {
       await api.patch(`/api/categories/update/${id}`, updates, { fallback: "Nie udało się zaktualizować." });
 
@@ -75,7 +92,7 @@ export function useCategoryManager() {
         return cat;
       }));
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
     }
   }
 
@@ -83,16 +100,16 @@ export function useCategoryManager() {
   // Note: parameter list grew organically; default args keep call sites that
   // don't care about the new flags backwards-compatible.
   async function addCategoryToDb(
-    cleanName, cleanIcon, type,
-    parentId = null, parentName = null,
+    cleanName: string, cleanIcon: string, type: string,
+    parentId: string | null = null, _parentName: string | null = null,
     priority = 2,
     canBeRecurring = false,
     isCritical = false,
-    canBeLuxmed = false, 
+    canBeLuxmed = false,
   ) {
     setIsSavingCat(true);
     try {
-      const saved = await api.post("/api/categories", {
+      const saved = await api.post<DbCategory>("/api/categories", {
         name: cleanName, icon: cleanIcon, type, parentCategoryId: parentId,
         priority,
         canBeRecurring: canBeRecurring ?? false,
@@ -103,9 +120,9 @@ export function useCategoryManager() {
       setCategories(prev => {
         if (!parentId) {
           return [...prev, {
-            id: saved.id, name: saved.name, icon: saved.icon, type: saved.type,
+            id: saved.id, name: saved.name, icon: saved.icon,
+            type: saved.type ?? "EXPENSE",
             isArchived: false,
-            canBeRecurring: saved.canBeRecurring ?? false,
             sub: [],
           }];
         }
@@ -130,7 +147,7 @@ export function useCategoryManager() {
       showSuccess("Dodano! ✅");
       return true;
     } catch (error) {
-      showError(error.message);
+      showError((error as Error).message);
       return false;
     } finally {
       setIsSavingCat(false);

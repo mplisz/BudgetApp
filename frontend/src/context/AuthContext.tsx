@@ -76,7 +76,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading,   setIsLoading]   = useState(true);
   const [error,       setError]       = useState<string | null>(null);
 
-  const { showWarning } = useToast() as { showWarning: (msg: string) => void };
+  const { showWarning } = useToast();
 
   // Ref mirrors the access token so fetchWithAuth always reads the latest
   // value without needing accessToken in its closure.

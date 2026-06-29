@@ -93,10 +93,7 @@ interface UseLimitsResult {
 export function useLimits(): UseLimitsResult {
   const api                        = useApi();
   const { limits, setLimits }      = useAppContext();
-  const { showSuccess, showError } = useToast() as {
-    showSuccess: (msg: string) => void;
-    showError:   (msg: string) => void;
-  };
+  const { showSuccess, showError } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving,  setIsSaving]  = useState(false);

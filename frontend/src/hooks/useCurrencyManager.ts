@@ -15,8 +15,9 @@ import { useCallback } from "react";
 import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
 import { useApi }        from "./useApi";
+import type { Currency, AppSettings } from "../types/appContext";
 
-export const DEFAULT_CURRENCIES = [
+export const DEFAULT_CURRENCIES: Currency[] = [
   { code: "PLN", name: "Polski złoty",     isArchived: false, isBase: true  },
   { code: "EUR", name: "Euro",             isArchived: false, isBase: false },
   { code: "USD", name: "Dolar amerykański", isArchived: false, isBase: false },
@@ -41,7 +42,7 @@ export function useCurrencyManager() {
   const dropdownCurrencies = [baseCurrency, ...activeCurrencies];
 
   // ── Save helper ──────────────────────────────────────────────
-  const saveCurrencies = useCallback(async (newList) => {
+  const saveCurrencies = useCallback(async (newList: Currency[]) => {
     const activeNonBase = newList.filter(c => !c.isBase && !c.isArchived).length;
     if (activeNonBase > 10) {
       showError("Maksymalnie 10 aktywnych walut.");
@@ -49,17 +50,17 @@ export function useCurrencyManager() {
     }
 
     try {
-      const saved = await api.patch("/api/settings", { currencies: newList }, { fallback: "Nie udało się zapisać walut." });
+      const saved = await api.patch<AppSettings>("/api/settings", { currencies: newList }, { fallback: "Nie udało się zapisać walut." });
       setSettings(saved);
       return true;
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
       return false;
     }
   }, [api, setSettings, showError]);
 
   // ── Add ──────────────────────────────────────────────────────
-  async function addCurrency(code, name) {
+  async function addCurrency(code: string, name: string) {
     const cleanCode = code.trim().toUpperCase();
     const cleanName = name.trim();
 
@@ -96,7 +97,7 @@ export function useCurrencyManager() {
   }
 
   // ── Archive ──────────────────────────────────────────────────
-  async function archiveCurrency(code) {
+  async function archiveCurrency(code: string) {
     const currency = allCurrencies.find(c => c.code === code);
     if (currency?.isBase) {
       showError("Waluta bazowa nie może być zarchiwizowana.");
@@ -111,7 +112,7 @@ export function useCurrencyManager() {
   }
 
   // ── Update code or name ─────────────────────────────────────
-  async function updateCurrency(code, patch) {
+  async function updateCurrency(code: string, patch: Partial<Currency>) {
     const newCode = patch.code ? patch.code.trim().toUpperCase() : undefined;
     const newName = patch.name !== undefined ? patch.name.trim() : undefined;
 
@@ -137,7 +138,7 @@ export function useCurrencyManager() {
   }
 
   // ── Restore ──────────────────────────────────────────────────
-  async function restoreCurrency(code) {
+  async function restoreCurrency(code: string) {
     if (activeCurrencies.length >= 10) {
       showError("Osiągnięto limit 10 aktywnych walut. Zarchiwizuj inną walutę.");
       return false;

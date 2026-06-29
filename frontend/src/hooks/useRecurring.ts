@@ -10,13 +10,16 @@ import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
 import { useApi }        from "./useApi";
 import { MONTHS }        from "../data/constants";
+import type { RecurringDoc, Transaction } from "../types/appContext";
+
+type RecurringCost = NonNullable<RecurringDoc["costs"]>[number];
 
 
 // Short month names from constants (DRY)
 export const MONTH_NAMES = MONTHS.map(m => m.slice(0, 3));
 
 // Get the cost entry active for a given month
-export function getActiveCost(doc, month) {
+export function getActiveCost(doc: RecurringDoc | null | undefined, month: string): RecurringCost | null {
   if (!doc?.costs?.length) return null;
   const eligible = doc.costs.filter(c => c.validFrom <= month);
   if (!eligible.length) return doc.costs[0];
@@ -24,7 +27,7 @@ export function getActiveCost(doc, month) {
 }
 
 // Check if recurring doc is active in given month (frequency + validFrom/To)
-export function isActiveInMonth(doc, month) {
+export function isActiveInMonth(doc: RecurringDoc | null | undefined, month: string): boolean {
   if (!doc) return false;
   // Archived — only hide from archivedFrom onwards, still show in past months
   if (doc.isArchived && doc.archivedFrom && doc.archivedFrom <= month) return false;
@@ -58,7 +61,7 @@ export function isActiveInMonth(doc, month) {
 }
 
 // Bell notification logic
-export function shouldNotify(doc, todayStr, daysBefore = 3){
+export function shouldNotify(doc: RecurringDoc | null | undefined, todayStr: string, daysBefore = 3): boolean {
   if (!doc || doc.isArchived) return false;
 
   const [ty, tm, td] = todayStr.split("-").map(Number);
@@ -78,10 +81,10 @@ export function shouldNotify(doc, todayStr, daysBefore = 3){
  * For periodic frequencies, counts N actual occurrences (every 3/6/12 months).
  * For "monthly", original simple math is correct.
  */
-export function computeValidTo(validFrom, monthsCount, frequency = "monthly", activeMonths = []) {
-  if (!monthsCount || monthsCount <= 0 || !validFrom) return null;
- 
-  const count = parseInt(monthsCount);
+export function computeValidTo(validFrom: string, monthsCount: number | string, frequency: string = "monthly", activeMonths: number[] = []): string | null {
+  if (!monthsCount || Number(monthsCount) <= 0 || !validFrom) return null;
+
+  const count = Number(monthsCount);
   const [startY, startM] = validFrom.split("-").map(Number);
  
   // monthly — simple math, unchanged
@@ -142,33 +145,33 @@ export function useRecurring() {
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await api.get("/api/recurring/all", { fallback: "Nie udało się pobrać wydatków cyklicznych." });
+      const data = await api.get<RecurringDoc[]>("/api/recurring/all", { fallback: "Nie udało się pobrać wydatków cyklicznych." });
       setRecurring(data);
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
   }, [api, showError, setRecurring]);
 
-  const loadForMonth = useCallback(async (month) => {
+  const loadForMonth = useCallback(async (month: string) => {
     try {
-      return await api.get(`/api/recurring?month=${month}`, { fallback: "Nie udało się pobrać wydatków cyklicznych." });
+      return await api.get<RecurringDoc[]>(`/api/recurring?month=${month}`, { fallback: "Nie udało się pobrać wydatków cyklicznych." });
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
       return [];
     }
   }, [api, showError]);
 
-  const addRecurring = useCallback(async (payload) => {
+  const addRecurring = useCallback(async (payload: Partial<RecurringDoc>) => {
     setIsSaving(true);
     try {
-      const data = await api.post("/api/recurring", payload, { fallback: "Nie udało się utworzyć wydatku cyklicznego." });
+      const data = await api.post<RecurringDoc>("/api/recurring", payload, { fallback: "Nie udało się utworzyć wydatku cyklicznego." });
       setRecurring(prev => [data, ...prev]);
       showSuccess("Wydatek cykliczny dodany! 🔄");
       return data;
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
       return null;
     } finally {
       setIsSaving(false);
@@ -177,22 +180,22 @@ export function useRecurring() {
 
   // Update — always patches the single document
   // For cost change: pass updated costs[] with new entry
-  const updateRecurring = useCallback(async (id, patch) => {
+  const updateRecurring = useCallback(async (id: string, patch: Partial<RecurringDoc>) => {
     setIsSaving(true);
     try {
-      const data = await api.patch(`/api/recurring/${id}`, patch, { fallback: "Nie udało się zaktualizować wydatku cyklicznego." });
+      const data = await api.patch<RecurringDoc>(`/api/recurring/${id}`, patch, { fallback: "Nie udało się zaktualizować wydatku cyklicznego." });
       setRecurring(prev => prev.map(r => r.id === id ? data : r));
       showSuccess("Zaktualizowano! ✅");
       return data;
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
       return null;
     } finally {
       setIsSaving(false);
     }
   }, [api, showSuccess, showError, setRecurring]);
 
-  const archiveRecurring = useCallback(async (id, archivedFrom) => {
+  const archiveRecurring = useCallback(async (id: string, archivedFrom: string) => {
     setIsSaving(true);
     try {
       await api.del(`/api/recurring/${id}`, { archivedFrom }, { fallback: "Nie udało się zarchiwizować wydatku cyklicznego." });
@@ -202,17 +205,17 @@ export function useRecurring() {
       showSuccess("Zarchiwizowano od " + archivedFrom);
       return true;
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
       return false;
     } finally {
       setIsSaving(false);
     }
   }, [api, showSuccess, showError, setRecurring]);
 
-  const confirmRecurring = useCallback(async (id, date, budgetMonth, liveRate, amountPLN) => {
+  const confirmRecurring = useCallback(async (id: string, date: string, budgetMonth: string, liveRate: number, amountPLN: number) => {
     setIsSaving(true);
     try {
-      const data = await api.post(
+      const data = await api.post<{ transaction: Transaction }>(
         `/api/recurring/${id}/confirm`,
         { date, budgetMonth, fxRate: liveRate, amountPLN },
         { fallback: "Nie udało się zapisać wydatku." },
@@ -224,20 +227,20 @@ export function useRecurring() {
       showSuccess("Wydatek zapisany! ✅");
       return data.transaction;
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
       return null;
     } finally {
       setIsSaving(false);
     }
   }, [api, setTransactions, showSuccess, showError, setRecurring]);
 
-  const markNotified = useCallback(async (id) => {
+  const markNotified = useCallback(async (id: string) => {
     try {
       await api.post(`/api/recurring/${id}/notify`);
       setRecurring(prev => prev.map(r =>
         r.id === id ? { ...r, notifiedAt: new Date().toISOString() } : r
       ));
-    } catch (_) {}
+    } catch { /* notify is best-effort */ }
   }, [api, setRecurring]);
 
   // Pending notifications — one per doc (no grouping needed anymore)

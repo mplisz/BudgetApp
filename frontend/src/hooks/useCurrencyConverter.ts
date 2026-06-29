@@ -11,10 +11,16 @@ import { round2 } from "../utils/helpers";
 
 const LOOKBACK_DAYS = 14;
 
-// Module-level cache: "EUR_2025-01-15" → { rate, effectiveDate, table }
-const rateCache = {};
+interface NbpRate {
+  rate:          number;
+  effectiveDate: string;
+  table:         string;
+}
 
-function subtractDays(dateStr, days) {
+// Module-level cache: "EUR_2025-01-15" → { rate, effectiveDate, table }
+const rateCache: Record<string, NbpRate> = {};
+
+function subtractDays(dateStr: string, days: number) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() - days);
   return d.toISOString().slice(0, 10);
@@ -25,7 +31,7 @@ function subtractDays(dateStr, days) {
  * Tries table A first, falls back to table B for exotic currencies.
  * Returns { rate, effectiveDate, table }
  */
-async function fetchNbpRate(currency, date) {
+async function fetchNbpRate(currency: string, date: string): Promise<NbpRate> {
   const cacheKey = `${currency}_${date}`;
   if (rateCache[cacheKey]) return rateCache[cacheKey];
 
@@ -61,7 +67,7 @@ async function fetchNbpRate(currency, date) {
       return result;
 
     } catch (err) {
-      if (err.message.startsWith("NBP HTTP")) throw err; // hard error, don't retry
+      if ((err as Error).message.startsWith("NBP HTTP")) throw err; // hard error, don't retry
       // Network error — throw after both tables fail
       if (table === "b") throw err;
     }
@@ -88,17 +94,17 @@ async function fetchNbpRate(currency, date) {
  *   convertToPln(amount)     – returns amount in base currency using activeRate
  */
 export function useCurrencyConverter() {
-  const [rate,          setRate]          = useState(null);
-  const [effectiveDate, setEffectiveDate] = useState(null);
-  const [table,         setTable]         = useState(null);
+  const [rate,          setRate]          = useState<number | null>(null);
+  const [effectiveDate, setEffectiveDate] = useState<string | null>(null);
+  const [table,         setTable]         = useState<string | null>(null);
   const [isLoading,     setIsLoading]     = useState(false);
-  const [error,         setError]         = useState(null);
+  const [error,         setError]         = useState<string | null>(null);
   const [manualRate,    setManualRate]    = useState("");
 
   // Abort token — prevents stale fetch from overwriting newer state
   const fetchId = useRef(0);
 
-  const loadRate = useCallback(async (currency, date) => {
+  const loadRate = useCallback(async (currency: string, date: string) => {
     if (!currency || !date) return;
 
     const myId = ++fetchId.current;
@@ -117,7 +123,7 @@ export function useCurrencyConverter() {
       setTable(result.table);
     } catch (err) {
       if (myId !== fetchId.current) return;
-      setError(err.message);
+      setError((err as Error).message);
     } finally {
       if (myId === fetchId.current) setIsLoading(false);
     }
@@ -126,7 +132,7 @@ export function useCurrencyConverter() {
   const parsedManual = parseFloat(String(manualRate).replace(",", "."));
   const activeRate   = (!isNaN(parsedManual) && parsedManual > 0) ? parsedManual : rate;
 
-  const convertToPln = useCallback((amount) => {
+  const convertToPln = useCallback((amount: string) => {
     if (!activeRate || !amount) return 0;
     return round2(parseFloat(amount) * activeRate);
   }, [activeRate]);

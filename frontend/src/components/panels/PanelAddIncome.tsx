@@ -21,18 +21,11 @@ import { LockBanner }       from "../ui/LockBanner";
 import { IncomeEntryCard }  from "./transactionComponents/IncomeEntryCard";
 
 export default function PanelAddIncome() {
-  const { loadTransactions } = useTransactions() as { loadTransactions: (m: string) => void };
-  const { activeBudgetMonth, isFutureMonth } = useMonthStatus() as {
-    activeBudgetMonth: string;
-    isFutureMonth:     boolean;
-  };
+  const { loadTransactions } = useTransactions();
+  const { activeBudgetMonth, isFutureMonth } = useMonthStatus();
 
   const selectedMonth = activeBudgetMonth;
-  const { isHistoricalLock, isPastMonth, isMonthClosed } = usePanelLock(selectedMonth) as {
-    isHistoricalLock: boolean;
-    isPastMonth:      boolean;
-    isMonthClosed:    boolean;
-  };
+  const { isHistoricalLock, isPastMonth, isMonthClosed } = usePanelLock(selectedMonth);
 
   return (
     <div style={{ ...s.panel, maxWidth: 520 }}>

@@ -77,22 +77,10 @@ const OCR_MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 export default function PanelExpenses() {
   const { cart, setCart, categories } = useAppContext();
-  const { addTransaction, isSaving, loadTransactions  } = useTransactions() as {
-    addTransaction: (p: TransactionPayload) => Promise<unknown>;
-    isSaving:       boolean;
-    loadTransactions: (month: string) => Promise<void>;
-
-  };
-  const { isActiveMonthClosed, activeBudgetMonth, isFutureMonth } = useMonthStatus() as {
-    isActiveMonthClosed: boolean;
-    activeBudgetMonth:   string;
-    isFutureMonth:       boolean;
-  };
+  const { addTransaction, isSaving, loadTransactions  } = useTransactions();
+  const { isActiveMonthClosed, activeBudgetMonth, isFutureMonth } = useMonthStatus();
   const api = useApi();
-  const { showError, showWarning } = useToast() as {
-    showError:   (m: string) => void;
-    showWarning: (m: string) => void;
-  };
+  const { showError, showWarning } = useToast();
   // Single source: the URL-derived active month
   const budgetMonth = activeBudgetMonth;
 
@@ -113,16 +101,11 @@ export default function PanelExpenses() {
   const [ocrMode,         setOcrMode]         = useState(false);
   const [formKey,         setFormKey]         = useState(0);
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
-  const { baseCurrency  } = useCurrencyManager() as { baseCurrency: { code: string }};
+  const { baseCurrency  } = useCurrencyManager();
   const {
     loadRate, activeRate, rate, isLoading: rateLoading,
     error: rateError, manualRate, setManualRate, effectiveDate,
-  } = useCurrencyConverter() as {
-    loadRate: (c: string, d: string) => void;
-    activeRate: number | null; rate: number | null; isLoading: boolean;
-    error: string | null; manualRate: string;
-    setManualRate: (v: string) => void; effectiveDate: string | null;
-  };
+  } = useCurrencyConverter();
 
   const ocrIsForeign = !!(ocrMeta?.currency && ocrMeta.currency !== baseCurrency.code);
   const fmtOcr = (amt: number, withPln = false) => {

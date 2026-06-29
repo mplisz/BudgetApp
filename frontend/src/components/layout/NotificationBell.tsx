@@ -43,11 +43,7 @@ function RecurringBellItem({ doc, onConfirm, onDismiss }: RecurringBellItemProps
   const [modalDate, setModalDate] = useState(todayYMD());
 
 
-  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter() as {
-    loadRate:   (currency: string, date: string) => void;
-    activeRate: number | null;
-    isLoading:  boolean;
-  };
+  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter();
 
   useEffect(() => {
     if (isForeign && activeCost?.originalCurrency) {
@@ -163,11 +159,7 @@ function PlannedBellItem({ doc, onPaySaving, onPurchase, onDismiss }: PlannedBel
 
   const [showPayModal, setShowPayModal] = useState(false);
 
-  const { loadRate, activeRate } = useCurrencyConverter() as {
-    loadRate:   (currency: string, date: string) => void;
-    activeRate: number | null;
-    isLoading:  boolean;
-  };
+  const { loadRate, activeRate } = useCurrencyConverter();
 
   useEffect(() => {
     if (isForeign) loadRate(doc.originalCurrency, todayYMD());

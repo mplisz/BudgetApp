@@ -138,15 +138,8 @@ function toPayload(item: CartItem): TransactionPayload {
 
 export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
   const { cart, setCart } = useAppContext();
-  const { addTransaction, addTransactionBatch } = useTransactions() as {
-    addTransaction:      (p: TransactionPayload) => Promise<unknown>;
-    addTransactionBatch: (b: { transactions: TransactionPayload[]; voucherIds: string[] }) => Promise<unknown[] | null>;
-  };
-  const { showSuccess, showError, showInfo } = useToast() as {
-    showSuccess: (m: string) => void;
-    showError:   (m: string) => void;
-    showInfo:    (m: string) => void;
-  };
+  const { addTransaction, addTransactionBatch } = useTransactions();
+  const { showSuccess, showError, showInfo } = useToast();
 
   const [statuses,   setStatuses]   = useState<Record<string, ItemStatus>>({});
   const [saving,     setSaving]     = useState(false);

@@ -42,14 +42,8 @@ interface LinkedModal { isOpen: boolean; txId: string | null; }
 
 export default function PanelTransactions() {
   const { transactions, setTransactions, tags } = useAppContext();
-  const { deleteTransaction, loadTransactions } = useTransactions() as {
-    deleteTransaction: (id: string, opts?: Record<string, unknown>) => Promise<unknown>;
-    loadTransactions:  (month: string) => Promise<void>;
-  };
-  const { isActiveMonthClosed, activeBudgetMonth } = useMonthStatus() as {
-    isActiveMonthClosed: boolean;
-    activeBudgetMonth:   string;
-  };
+  const { deleteTransaction, loadTransactions } = useTransactions();
+  const { isActiveMonthClosed, activeBudgetMonth } = useMonthStatus();
 
   // ── Filter state ──────────────────────────────────────────
 

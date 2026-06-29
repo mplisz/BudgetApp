@@ -43,11 +43,7 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
   const paid         = sumPaid(doc.virtualSavings);
   const suggestion   = computeSuggestion(doc, currentMonth);
 
-  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter() as {
-    loadRate:  (currency: string, date: string) => void;
-    activeRate: number | null;
-    isLoading: boolean;
-  };
+  const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter();
 
   useEffect(() => {
     if (isForeign) loadRate(doc.originalCurrency, todayYMD());

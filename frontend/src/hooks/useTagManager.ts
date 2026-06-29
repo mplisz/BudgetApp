@@ -6,13 +6,14 @@ import { useState, useEffect } from "react";
 import { useAppContext }  from "../context/AppContext";
 import { useToast }       from "../hooks/useToast";
 import { useApi }         from "./useApi";
+import type { Tag } from "../types/appContext";
 
 export function useTagManager() {
   const { tags, setTags }          = useAppContext();
   const api                        = useApi();
   const { showError, showSuccess } = useToast();
 
-  const [allTags,    setAllTags]    = useState([]);
+  const [allTags,    setAllTags]    = useState<Tag[]>([]);
   const [newTagIcon, setNewTagIcon] = useState("🏷️");
   const [newTagName, setNewTagName] = useState("");
   const [isLoading,  setIsLoading]  = useState(true);
@@ -25,7 +26,7 @@ export function useTagManager() {
       if (tags.length > 0) { setIsLoading(false); return; }
       setIsLoading(true);
       try {
-        const data = await api.get("/api/tags");
+        const data = await api.get<Tag[]>("/api/tags");
         setAllTags(data);
         setTags(data.filter(t => !t.isArchived));
       } catch (err) {
@@ -62,51 +63,51 @@ export function useTagManager() {
 
     setIsSaving(true);
     try {
-      const saved = await api.post("/api/tags", { name: cleanName, icon: newTagIcon }, { fallback: "Nie można dodać tagu." });
+      const saved = await api.post<Tag>("/api/tags", { name: cleanName, icon: newTagIcon }, { fallback: "Nie można dodać tagu." });
       setAllTags(prev => [...prev, saved]);
       setTags(prev => [...prev, saved]);
       setNewTagName("");
       setNewTagIcon("🏷️");
       showSuccess("Tag dodany! ✅");
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
     } finally {
       setIsSaving(false);
     }
   }
 
   // ── Archive ─────────────────────────────────────────────────
-  async function handleArchiveTag(id) {
+  async function handleArchiveTag(id: string) {
     try {
       await api.patch(`/api/tags/update/${id}`, { isArchived: true }, { fallback: "Nie udało się zarchiwizować tagu." });
       setAllTags(prev => prev.map(t => t.id === id ? { ...t, isArchived: true } : t));
       setTags(prev => prev.filter(t => t.id !== id));
       showSuccess("Tag zarchiwizowany.");
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
     }
   }
 
   // ── Restore ─────────────────────────────────────────────────
-  async function handleRestoreTag(id) {
+  async function handleRestoreTag(id: string) {
     try {
-      const restored = await api.patch(`/api/tags/update/${id}`, { isArchived: false }, { fallback: "Nie udało się przywrócić tagu." });
+      const restored = await api.patch<Tag>(`/api/tags/update/${id}`, { isArchived: false }, { fallback: "Nie udało się przywrócić tagu." });
       setAllTags(prev => prev.map(t => t.id === id ? restored : t));
       setTags(prev => [...prev, restored]);
       showSuccess("Tag przywrócony! ✅");
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
     }
   }
 
   // ── Update ──────────────────────────────────────────────────
-  async function handleUpdateTag(id, updates) {
+  async function handleUpdateTag(id: string, updates: Partial<Tag>) {
     try {
-      const updated = await api.patch(`/api/tags/update/${id}`, updates, { fallback: "Nie udało się zaktualizować tagu." });
+      const updated = await api.patch<Tag>(`/api/tags/update/${id}`, updates, { fallback: "Nie udało się zaktualizować tagu." });
       setAllTags(prev => prev.map(t => t.id === id ? updated : t));
       setTags(prev => prev.map(t => t.id === id ? updated : t));
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
     }
   }
 

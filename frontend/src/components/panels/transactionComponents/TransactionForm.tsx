@@ -115,10 +115,7 @@ export function TransactionForm({
 }: TransactionFormProps) {
   const { transactions, limits, settings } = useAppContext();
 
-  const { showError, showWarning } = useToast() as {
-    showError:   (msg: string) => void;
-    showWarning: (msg: string) => void;
-  };
+  const { showError, showWarning } = useToast();
 
   // ── State / hooks (declare before any derived value that reads them) ──
   const [form,     setForm]     = useState<FormValues>(initialValues ?? emptyFormValues());

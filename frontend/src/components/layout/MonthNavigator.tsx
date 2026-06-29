@@ -42,9 +42,7 @@ export function MonthNavigator() {
   const { settings, closedMonths } = useAppContext();
 
   const { budgetMonth, setBudgetMonth } = useMonthFromUrl();
-  const { navigateToFirstOpenMonth }    = useMonthStatus() as {
-    navigateToFirstOpenMonth: () => void;
-  };
+  const { navigateToFirstOpenMonth }    = useMonthStatus();
 
   // budgetMonth is "YYYY-MM". Derive display parts.
   const [yearStr, monthStr] = budgetMonth.split("-");

@@ -9,7 +9,7 @@ import { useMemo } from "react";
 import { useMonthStatus }       from "./useMonthStatus";
 import { currentCalendarMonth } from "../utils/helpers";
 
-export function usePanelLock(selectedMonth) {
+export function usePanelLock(selectedMonth: string) {
   const { isClosedMonth } = useMonthStatus();
 
   const isPastMonth      = useMemo(() => selectedMonth < currentCalendarMonth(), [selectedMonth]);

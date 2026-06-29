@@ -103,9 +103,9 @@ const s = {
 
 export default function PanelLuxmed() {
   const { categories, settings } = useAppContext();
-  const { activeBudgetMonth }    = useMonthStatus() as any;
+  const { activeBudgetMonth }    = useMonthStatus();
   const api                      = useApi();
-  const { showSuccess, showError } = useToast() as any;
+  const { showSuccess, showError } = useToast();
   const { transactions, isLoading, loadRange, invalidate } = useTransactionsRange();
 
   // ── Quarter ───────────────────────────────────────────────

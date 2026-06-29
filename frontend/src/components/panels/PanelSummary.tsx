@@ -122,12 +122,9 @@ export default function PanelSummary() {
     planned: rawPlanned 
   } = useAppContext();
 
-  const { activeBudgetMonth }             = useMonthStatus() as { activeBudgetMonth: BudgetMonth };
-   const { loadTransactions } = useTransactions() as { loadTransactions: (m: BudgetMonth) => Promise<void> };
-  const { limits: rawLimits, loadLimits } = useLimits() as {
-    limits: Parameters<typeof buildLimitMap>[0];
-    loadLimits: () => void;
-  };
+  const { activeBudgetMonth }             = useMonthStatus();
+  const { loadTransactions } = useTransactions();
+  const { limits: rawLimits, loadLimits } = useLimits();
 const [loadedMonth, setLoadedMonth] = useState<string | null>(null);
 const isFirstLoad = loadedMonth !== activeBudgetMonth;
 

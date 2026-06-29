@@ -34,9 +34,7 @@ function emptyForm(): IncomeFormValues {
 
 export function IncomeEntryCard({ selectedMonth, readOnly = false, onSaved }: IncomeEntryCardProps) {
   const api                         = useApi();
-  const { showSuccess }             = useToast() as {
-    showSuccess: (m: string) => void;
-  };
+  const { showSuccess }             = useToast();
   const [formKey, setFormKey] = useState(0);
 
   // Reset form when month changes

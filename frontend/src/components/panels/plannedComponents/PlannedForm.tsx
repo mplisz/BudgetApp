@@ -83,8 +83,8 @@ function monthsBetween(from: string, to: string): number {
 // ── Component ─────────────────────────────────────────────────
 
 export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isSaving = false, mode = "add" }: PlannedFormProps) {
-  const { showError }          = useToast() as { showError: (m: string) => void };
-  const { dropdownCurrencies } = useCurrencyManager() as { dropdownCurrencies: Array<{ code: string }> };
+  const { showError }          = useToast();
+  const { dropdownCurrencies } = useCurrencyManager();
 
   function resolveInitialCurrency(stored?: string): { currency: string; customCurrency: string } {
     if (!stored || stored === "PLN") return { currency: "PLN", customCurrency: "" };

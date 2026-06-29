@@ -38,10 +38,7 @@ function isUsable(v: Voucher): boolean {
 export function useVoucherManager() {
   const api                       = useApi();
   const { vouchers, setVouchers } = useAppContext();
-  const { showSuccess, showError } = useToast() as {
-    showSuccess: (m: string) => void;
-    showError:   (m: string) => void;
-  };
+  const { showSuccess, showError } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving,  setIsSaving]  = useState(false);

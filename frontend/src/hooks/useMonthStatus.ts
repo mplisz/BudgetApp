@@ -23,7 +23,7 @@ export function useMonthStatus() {
 
   // ── Derived state ─────────────────────────────────────────
 
-  const isClosedMonth = useCallback((budgetMonth) => {
+  const isClosedMonth = useCallback((budgetMonth: string) => {
     return closedMonths.has(budgetMonth);
   }, [closedMonths]);
 
@@ -34,7 +34,27 @@ export function useMonthStatus() {
 
   // ── Close month ───────────────────────────────────────────
 
-  const closeMonth = useCallback(async (budgetMonth) => {
+  // ── Auto-navigate to first open month ────────────────────
+  // Starting from current calendar month, find first non-closed month
+
+  const navigateToFirstOpenMonth = useCallback((closed: Set<string> = closedMonths) => {
+   const now = new Date();
+   let y = now.getFullYear();
+   let m = now.getMonth();
+
+   for (let i = 0; i < 24; i++) {
+     const bm = `${y}-${String(m + 1).padStart(2, "0")}`;
+     if (!closed.has(bm)) {
+      setBudgetMonth(bm);
+      return;
+     }     m++;
+     if (m > 11) { m = 0; y++; }
+    }
+  }, [closedMonths, setBudgetMonth]);
+
+  // ── Close month ───────────────────────────────────────────
+
+  const closeMonth = useCallback(async (budgetMonth: string) => {
     try {
       const saved = await api.post("/api/months", { budgetMonth }, { fallback: "Nie udało się zamknąć miesiąca." });
 
@@ -47,14 +67,14 @@ export function useMonthStatus() {
 
       return saved;
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
       return null;
     }
-  }, [api, closedMonths, setClosedMonths, showSuccess, showError]);
+  }, [api, closedMonths, setClosedMonths, showSuccess, showError, navigateToFirstOpenMonth]);
 
   // ── Reopen month ──────────────────────────────────────────
 
-  const openMonth = useCallback(async (budgetMonth) => {
+  const openMonth = useCallback(async (budgetMonth: string) => {
     try {
       await api.del(`/api/months/${budgetMonth}`, undefined, { fallback: "Nie udało się otworzyć miesiąca." });
 
@@ -67,28 +87,10 @@ export function useMonthStatus() {
       showSuccess(`Miesiąc ${budgetMonth} ponownie otwarty! 🔓`);
       return true;
     } catch (err) {
-      showError(err.message);
+      showError((err as Error).message);
       return false;
     }
   }, [api, setClosedMonths, showSuccess, showError]);
-
-  // ── Auto-navigate to first open month ────────────────────
-  // Starting from current calendar month, find first non-closed month
-
- const navigateToFirstOpenMonth = useCallback((closed = closedMonths) => {
-   const now = new Date();
-   let y = now.getFullYear();
-   let m = now.getMonth();
-
-   for (let i = 0; i < 24; i++) {
-     const bm = `${y}-${String(m + 1).padStart(2, "0")}`;
-     if (!closed.has(bm)) {
-      setBudgetMonth(bm);
-      return;
-     }     m++;
-     if (m > 11) { m = 0; y++; } 
-    }
-  }, [closedMonths, setBudgetMonth]);
 
   return {
     closedMonths,

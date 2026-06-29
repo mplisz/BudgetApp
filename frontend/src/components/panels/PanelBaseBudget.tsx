@@ -619,10 +619,8 @@ function SectionHeader({ title, activeBudgetMonth, showExtra = true, isMobile }:
 
 export default function PanelBaseBudget() {
   const { categories, transactions } = useAppContext();
-  const { activeBudgetMonth } = useMonthStatus() as { activeBudgetMonth: string };
-  const { isPastMonth, isMonthClosed, isHistoricalLock } = usePanelLock(activeBudgetMonth) as {
-    isPastMonth: boolean; isMonthClosed: boolean; isHistoricalLock: boolean;
-  };
+  const { activeBudgetMonth } = useMonthStatus();
+  const { isPastMonth, isMonthClosed, isHistoricalLock } = usePanelLock(activeBudgetMonth);
 
   // Single source of truth for the responsive switch — threaded to subcomponents.
   const isMobile = useIsMobile();
@@ -632,19 +630,10 @@ export default function PanelBaseBudget() {
     loadLimits, saveLimitsBatch, getLimitDoc,
   } = useLimits();
 
-  const { recurring, loadAll: loadRecurring } = useRecurring() as {
-    recurring: unknown[];
-    loadAll: () => void;
-  };
+  const { recurring, loadAll: loadRecurring } = useRecurring();
+  const { planned, loadAll: loadPlanned } = usePlanned();
 
-  const { planned, loadAll: loadPlanned } = usePlanned() as {
-    planned: unknown[];
-    loadAll: () => void;
-  };
-
-  const { loadTransactions } = useTransactions() as {
-    loadTransactions: (month: string) => void;
-  };
+  const { loadTransactions } = useTransactions();
 
   const [baseEdits,     setBaseEdits]     = useState<Record<string, number | "">>({});
   const [overrideEdits, setOverrideEdits] = useState<Record<string, number | "">>({});

@@ -189,10 +189,7 @@ interface UsePlannedResult {
 export function usePlanned(): UsePlannedResult {
   const api                                      = useApi();
   const { planned, setPlanned, setTransactions, settings } = useAppContext();
-  const { showSuccess, showError } = useToast() as {
-    showSuccess: (m: string) => void;
-    showError:   (m: string) => void;
-  };
+  const { showSuccess, showError } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving,  setIsSaving]  = useState(false);

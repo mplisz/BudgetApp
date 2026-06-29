@@ -8,7 +8,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 
-export function usePagination(items, pageSize = 25) {
+export function usePagination<T>(items: T[], pageSize = 25) {
   const [page, setPage] = useState(1);
 
   // Reset to page 1 whenever the source data changes

@@ -33,9 +33,7 @@ interface EditIncomeModalProps {
 
 export function EditIncomeModal({ tx, onClose, onUpdated }: EditIncomeModalProps) {
   const api                        = useApi();
-  const { showSuccess } = useToast() as {
-    showSuccess: (m: string) => void;
-  };
+  const { showSuccess } = useToast();
 
   const [y, m, d] = tx.date.split("-").map(Number);
 

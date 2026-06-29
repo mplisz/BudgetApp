@@ -67,17 +67,23 @@ export interface AppSettings {
   [key: string]:             unknown;
 }
 
-// useRecurring is still .js, so this is the de-facto recurring shape the
-// typed consumers (NotificationBell) read. Index signature keeps it honest
-// about the many server fields not enumerated here.
+// The recurring-expense document. Index signature keeps it honest about
+// server fields not enumerated here.
 export interface RecurringDoc {
-  id:           string;
-  description:  string;
-  categoryName: string;
-  plannedDay?:  number;
-  isArchived?:  boolean;
-  costs?:       Array<{ validFrom: string; amount: number; originalCurrency?: string; fxRate?: number; amountPLN?: number }>;
-  [key: string]: unknown;
+  id:                  string;
+  description:         string;
+  categoryName:        string;
+  categoryId?:         string;
+  plannedDay?:         number;
+  isArchived?:         boolean;
+  archivedFrom?:       string;
+  validTo?:            string;
+  frequency?:          "monthly" | "quarterly" | "biannual" | "yearly" | "custom";
+  activeMonths?:       number[];
+  lastConfirmedMonth?: string;
+  notifiedAt?:         string | null;
+  costs?:              Array<{ validFrom: string; amount: number; originalCurrency?: string; fxRate?: number; amountPLN?: number }>;
+  [key: string]:       unknown;
 }
 
 type Setter<T> = (value: T | ((prev: T) => T)) => void;
