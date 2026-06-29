@@ -56,7 +56,7 @@ export interface Currency {
 // Settings is an open-ended user document — known keys are typed, but the
 // index signature keeps it honest about server-driven extra fields.
 export interface AppSettings {
-  appStartMonth?:            string;
+  appStartMonth?:            string | null;
   notifyDaysBefore?:         number;
   voucherExpiryWarningDays?: number;
   thresholds?:               { warningPercent: number; criticalPercent: number };
@@ -74,6 +74,8 @@ export interface RecurringDoc {
   description:         string;
   categoryName:        string;
   categoryId?:         string;
+  subcategoryName?:    string;
+  subcategoryId?:      string;
   plannedDay?:         number;
   isArchived?:         boolean;
   archivedFrom?:       string;

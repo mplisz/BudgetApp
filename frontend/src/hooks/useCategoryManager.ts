@@ -22,7 +22,7 @@ interface DbCategory {
   canBeLuxmed?:      boolean;
 }
 
-type CategoryUpdates = { isArchived?: boolean; [key: string]: unknown };
+export type CategoryUpdates = { isArchived?: boolean; [key: string]: unknown };
 
 export function useCategoryManager() {
   const { categories, setCategories } = useAppContext();
@@ -100,7 +100,7 @@ export function useCategoryManager() {
   // Note: parameter list grew organically; default args keep call sites that
   // don't care about the new flags backwards-compatible.
   async function addCategoryToDb(
-    cleanName: string, cleanIcon: string, type: string,
+    cleanName: string, cleanIcon: string, type: string | null,
     parentId: string | null = null, _parentName: string | null = null,
     priority = 2,
     canBeRecurring = false,

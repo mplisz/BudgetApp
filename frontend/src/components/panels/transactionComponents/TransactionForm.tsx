@@ -615,7 +615,7 @@ export function TransactionForm({
       <div style={frow}>
         <PriorityPicker
           value={form.priority}
-          onChange={(v: 1 | 2 | 3 | 4) => set("priority", v)}
+          onChange={(v) => set("priority", v as 1 | 2 | 3 | 4)}
           subcategoryId={form.subcategoryId}
         />
       </div>

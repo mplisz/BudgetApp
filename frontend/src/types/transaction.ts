@@ -24,7 +24,10 @@ export interface Voucher {
   isArchived:          boolean;
   initialValue:        number;
   currency?:           string;
-  usedInTransactions?: Array<{ amount: number }>;
+  notes?:              string;
+  createdAt?:          string;
+  sourceTransactionId?: string | null;
+  usedInTransactions?: Array<{ amount: number; usedAt?: string; description?: string }>;
 }
 
 export interface CartItem {

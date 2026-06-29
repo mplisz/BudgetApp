@@ -14,6 +14,15 @@ export interface Return {
   voucherAmount?: number;
 }
 
+// One scanned/merged receipt line. A transaction with ≥2 line items shows a
+// breakdown row in the UI.
+export interface TxLineItem {
+  description?:      string;
+  amount:           number;
+  originalAmount?:   number;
+  originalCurrency?: string;
+}
+
 // Canonical transaction document. Superset of every shape the panels read —
 // required fields are present on all real docs, the rest are optional.
 export interface Transaction {
@@ -42,6 +51,9 @@ export interface Transaction {
   originalCurrency?: string;
   fxRate?: number;
   isWarranty?: boolean;
+  author?: string;
+  useVoucher?: boolean;
+  lineItems?: TxLineItem[];
   // Derived client-side (PanelTransactions useMemo), not stored server-side.
   effectiveAmount?: number;
   sameMonthReturned?: number;

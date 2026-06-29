@@ -10,20 +10,7 @@ import { IncomeForm } from "./IncomeForm";
 import { toYMD }      from "../../ui/AppDatePicker";
 import { s }          from "./txStyles";
 import type { IncomeFormValues } from "./IncomeForm";
-
-interface Transaction {
-  id:              string;
-  type:            "INCOME" | "TRANSFER";
-  date:            string;
-  budgetMonth:     string;
-  subcategoryId:   string;
-  subcategoryName: string;
-  categoryId:      string;
-  categoryName:    string;
-  amount:          number;
-  originalAmount?: number;
-  description?:    string;
-}
+import type { Transaction } from "../../../types/appContext";
 
 interface EditIncomeModalProps {
   tx:         Transaction;
@@ -42,7 +29,7 @@ export function EditIncomeModal({ tx, onClose, onUpdated }: EditIncomeModalProps
     subcategoryName: tx.subcategoryName || "",
     categoryId:      tx.categoryId      || "",
     categoryName:    tx.categoryName    || "",
-    categoryType:    tx.type            || "INCOME",
+    categoryType:    (tx.type === "TRANSFER" ? "TRANSFER" : "INCOME"),
     amount:          String(tx.originalAmount ?? tx.amount ?? ""),
     date:            new Date(y, m - 1, d),
     description:     tx.description     || "",
