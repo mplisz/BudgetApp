@@ -441,8 +441,15 @@ router.post("/:id/purchase", async (req, res) => {
   const idParsed = IdParamSchema.safeParse(req.params.id);
   if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
 
-  const { date, budgetMonth } = req.body;
+  // `override` carries the edited expense-form fields (#2). Every field is
+  // optional — anything omitted falls back to the planned doc's own values,
+  // so the legacy one-click purchase (no override) behaves exactly as before.
+  const { date, budgetMonth, override } = req.body;
   if (!date || !budgetMonth) return res.status(400).json({ error: "date and budgetMonth are required." });
+  if (override && typeof override !== "object") return res.status(400).json({ error: "override must be an object." });
+  if (override && override.amount != null && !(Number(override.amount) > 0)) {
+    return res.status(400).json({ error: "override.amount must be greater than 0." });
+  }
 
   try {
     const id       = idParsed.data;
@@ -458,31 +465,40 @@ router.post("/:id/purchase", async (req, res) => {
       : sumPaid(existing.virtualSavings);
     const ts        = Date.now();
 
+    // Resolve the expense fields: edited override values win, otherwise the
+    // planned doc's defaults. The actual amount paid can differ from the plan.
+    const ov          = override || {};
+    const expenseAmount   = ov.amount   != null ? round2(Number(ov.amount))         : existing.totalAmountPLN;
+    const expenseOrigAmt  = ov.originalAmount != null ? Number(ov.originalAmount)    : (ov.amount != null ? round2(Number(ov.amount)) : existing.totalAmount);
+    const expenseCurrency = ov.originalCurrency || existing.originalCurrency;
+    const expenseFxRate   = ov.fxRate   != null ? Number(ov.fxRate)                 : existing.fxRate;
+
     // EXPENSE — target category
     const expense = {
       id:               `tx_${familyId}_${date.replace(/-/g,"")}_planned_exp_${ts}`,
       userId:           familyId,
       type:             "EXPENSE",
-      categoryId:       existing.targetCategoryId,
-      categoryName:     existing.targetCategoryName,
-      subcategoryId:    existing.targetSubcategoryId,
-      subcategoryName:  existing.targetSubcategoryName,
-      amount:           existing.totalAmountPLN,
-      originalAmount:   existing.totalAmount,
-      originalCurrency: existing.originalCurrency,
-      fxRate:           existing.fxRate,
+      categoryId:       ov.categoryId      || existing.targetCategoryId,
+      categoryName:     ov.categoryName    || existing.targetCategoryName,
+      subcategoryId:    ov.subcategoryId   || existing.targetSubcategoryId,
+      subcategoryName:  ov.subcategoryName || existing.targetSubcategoryName,
+      amount:           expenseAmount,
+      originalAmount:   expenseOrigAmt,
+      originalCurrency: expenseCurrency,
+      fxRate:           expenseFxRate,
       date,
       budgetMonth,
-      description:      existing.description,
-      tags:             existing.tags || [],
-      priority:         existing.priority,
+      description:      ov.description != null ? ov.description : existing.description,
+      tags:             Array.isArray(ov.tags) ? ov.tags : (existing.tags || []),
+      priority:         ov.priority != null ? ov.priority : existing.priority,
       isRecurring:      false,
       recurringId:      null,
       plannedExpenseId: existing.id,
+      merchant:         ov.merchant ? String(ov.merchant).trim() : null,
       useVoucher:       false,
       voucherId:        null,
       voucherAmount:    0,
-      netAmount:        existing.totalAmountPLN,
+      netAmount:        expenseAmount,
       returns:          [],
       author:           req.user.name || req.user.email,
       authorId:         req.user.id,

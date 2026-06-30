@@ -3,7 +3,7 @@
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { MONTH_NAMES }            from "../../../hooks/useRecurring";
+import { MONTH_NAMES, isConfirmedInMonth } from "../../../hooks/useRecurring";
 import { FREQUENCY_OPTIONS }      from "../../../data/constants";
 import { useRecurringConfirm }    from "../../../hooks/useRecurringConfirm";
 import type { RecurringDoc }      from "../../../types/appContext";
@@ -21,7 +21,7 @@ interface RecurringRowProps {
 export function RecurringRow({ doc, activeBudgetMonth, isLocked, onEdit, onArchive }: RecurringRowProps) {
   const { open, modal, amountStr } = useRecurringConfirm(doc, activeBudgetMonth);
 
-  const isConfirmedThisMonth = doc.lastConfirmedMonth === activeBudgetMonth;
+  const isConfirmedThisMonth = isConfirmedInMonth(doc, activeBudgetMonth);
   const firstValidFrom = doc.costs?.[0]?.validFrom;
 
   return (

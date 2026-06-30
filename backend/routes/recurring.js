@@ -145,7 +145,36 @@ router.get("/all", async (req, res) => {
         parameters: [{ name: "@userId", value: familyId }],
       })
       .fetchAll();
-    res.json(resources);
+
+    // Source of truth for "confirmed" is the existence of a recurring
+    // transaction for that budget month. Derive the confirmed-month set from
+    // existing transactions and union it with any stored confirmedMonths —
+    // this self-heals docs whose legacy single lastConfirmedMonth was
+    // overwritten by confirming a different month.
+    const { resources: recTx } = await transactionsContainer.items
+      .query({
+        query: `SELECT c.recurringId, c.budgetMonth FROM c
+                WHERE c.userId = @userId AND c.isRecurring = true
+                AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))`,
+        parameters: [{ name: "@userId", value: familyId }],
+      })
+      .fetchAll();
+
+    const monthsByRec = {};
+    for (const t of recTx) {
+      if (!t.recurringId || !t.budgetMonth) continue;
+      (monthsByRec[t.recurringId] ||= new Set()).add(t.budgetMonth);
+    }
+
+    const enriched = resources.map(doc => {
+      const merged = new Set([
+        ...(doc.confirmedMonths || []),
+        ...(monthsByRec[doc.id] || []),
+      ]);
+      return { ...doc, confirmedMonths: [...merged].sort() };
+    });
+
+    res.json(enriched);
   } catch (err) {
     console.error("[RECURRING ALL]", err);
     res.status(500).json({ error: "Failed to fetch recurring transactions." });
@@ -358,9 +387,16 @@ router.post("/:id/confirm", async (req, res) => {
 
     const { resource: savedTx } = await transactionsContainer.items.create(tx);
 
+    // Track every confirmed budget month independently (one transaction =
+    // one confirmed month). Confirming one month must not unconfirm another.
+    const confirmedMonths = Array.from(
+      new Set([...(rec.confirmedMonths || []), budgetMonth])
+    ).sort();
+
     const updatedRec = {
       ...rec,
-      lastConfirmedMonth: budgetMonth,
+      confirmedMonths,
+      lastConfirmedMonth: budgetMonth,   // kept for back-compat
       notifiedAt:         null,
       updatedAt:          new Date().toISOString(),
     };

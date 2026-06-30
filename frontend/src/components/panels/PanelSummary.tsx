@@ -369,6 +369,19 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
             )}
           </div>
 
+          {/* Virtual envelopes — shown regardless of whether the month has
+              transactions, so monthly rates are visible even before any
+              expense is booked. */}
+          {envelopeBreakdown.length > 0 && (
+            <EnvelopeBreakdown
+              items={envelopeBreakdown}
+              total={envelopeTotal}
+              activeBudgetMonth={activeBudgetMonth}
+              style={{ marginBottom: 16 }}
+              variant="card"
+            />
+          )}
+
           {/* Empty state */}
           {!hasData && (
             <div style={{ textAlign: "center", padding: "60px 0", color: c.textMuted, fontSize: 15 }}>
@@ -479,15 +492,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     minSavingsPercent={targets.minSavingsPercent}
                   />
                 </Card>
-              </div>  
-              {/* ROW 4: Virtual envelopes */}
-                <EnvelopeBreakdown
-                  items={envelopeBreakdown}
-                  total={envelopeTotal}
-                  activeBudgetMonth={activeBudgetMonth}
-                  style={{ marginTop: 16 }}  
-                  variant="card"                
-                />
+              </div>
             </>
           )}
         </>

@@ -82,7 +82,8 @@ export interface RecurringDoc {
   validTo?:            string;
   frequency?:          "monthly" | "quarterly" | "biannual" | "yearly" | "custom";
   activeMonths?:       number[];
-  lastConfirmedMonth?: string;
+  lastConfirmedMonth?: string;   // legacy single-month marker (kept for back-compat)
+  confirmedMonths?:    string[];  // every budget month this recurring was confirmed in
   notifiedAt?:         string | null;
   costs?:              Array<{ validFrom: string; amount: number; originalCurrency?: string; fxRate?: number; amountPLN?: number }>;
   [key: string]:       unknown;

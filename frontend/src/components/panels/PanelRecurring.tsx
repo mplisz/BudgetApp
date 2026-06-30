@@ -13,7 +13,7 @@ import { createPortal }          from "react-dom";
 import { useMonthStatus }        from "../../hooks/useMonthStatus";
 import { usePanelLock }          from "../../hooks/usePanelLock";
 import { usePagination }         from "../../hooks/usePagination";
-import { useRecurring, isActiveInMonth, getActiveCost } from "../../hooks/useRecurring";
+import { useRecurring, isActiveInMonth, getActiveCost, isConfirmedInMonth } from "../../hooks/useRecurring";
 import { FREQUENCY_OPTIONS }     from "../../data/constants";
 import { ConfirmModal }          from "../ui/ConfirmModal";
 import { LockBanner }            from "../ui/LockBanner";
@@ -100,7 +100,7 @@ function clampDay(doc: RecurringDoc, daysInMonth: number) {
 }
 
 function isConfirmed(doc: RecurringDoc, month: string) {
-  return doc.lastConfirmedMonth === month;
+  return isConfirmedInMonth(doc, month);
 }
 
 /** Deterministic color from category name — stable across renders. */

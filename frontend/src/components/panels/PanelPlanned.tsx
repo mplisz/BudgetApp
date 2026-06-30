@@ -11,11 +11,13 @@ import { useMonthStatus } from "../../hooks/useMonthStatus";
 import { ConfirmModal }   from "../ui/ConfirmModal";
 import { PlannedCard }    from "./plannedComponents/PlannedCard";
 import { PlannedForm }    from "./plannedComponents/PlannedForm";
+import { TransactionForm, emptyFormValues } from "./transactionComponents/TransactionForm";
 import { fmt }            from "../../utils/helpers";
 import { theme as s }     from "../../styles/theme";
 import { RangePicker, type DateRange } from "../ui/RangePicker";
 import { AppDatePicker, toYM } from "../ui/AppDatePicker";
 import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload } from "../../hooks/usePlanned";
+import type { FormValues, TransactionPayload, Priority } from "../../types/transaction";
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -28,6 +30,23 @@ function addMonths(monthStr: string, n: number): string {
   const [y, m] = monthStr.split("-").map(Number);
   const total  = (y * 12 + m - 1) + n;
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+}
+
+// Pre-fill the expense form from a planned expense, so realizing it opens an
+// editable transaction (the real amount/date can differ from the plan).
+function plannedToFormValues(doc: PlannedDoc): FormValues {
+  return {
+    ...emptyFormValues(),
+    currency:        doc.originalCurrency || "PLN",
+    amountOrig:      String(doc.totalAmount ?? doc.totalAmountPLN ?? ""),
+    subcategoryId:   doc.targetSubcategoryId,
+    subcategoryName: doc.targetSubcategoryName,
+    categoryId:      doc.targetCategoryId,
+    categoryName:    doc.targetCategoryName,
+    priority:        (doc.priority ?? 2) as Priority,
+    description:     doc.description,
+    tags:            doc.tags || [],
+  };
 }
 
 // ── Archive modal state ───────────────────────────────────────
@@ -125,10 +144,22 @@ const filtered = useMemo<PlannedDoc[]>(() => {
     setArchiveModal({ isOpen: false, id: null, name: "", doc: null, paidSoFar: 0 });
   }
 
-  async function handlePurchase() {
+  async function handleRealize(payload: TransactionPayload) {
     if (!purchaseModal.doc) return;
-    const today = new Date().toISOString().slice(0, 10);
-    await purchasePlanned(purchaseModal.doc.id, today, activeBudgetMonth);
+    await purchasePlanned(purchaseModal.doc.id, payload.date, payload.budgetMonth, {
+      amount:           payload.amount,
+      originalAmount:   payload.originalAmount,
+      originalCurrency: payload.originalCurrency,
+      fxRate:           payload.fxRate,
+      categoryId:       payload.categoryId,
+      categoryName:     payload.categoryName,
+      subcategoryId:    payload.subcategoryId,
+      subcategoryName:  payload.subcategoryName,
+      description:      payload.description,
+      tags:             payload.tags,
+      priority:         payload.priority,
+      merchant:         payload.merchant ?? null,
+    });
     setPurchaseModal({ isOpen: false, doc: null });
   }
 
@@ -257,22 +288,36 @@ const filtered = useMemo<PlannedDoc[]>(() => {
         onCancel={() => setArchiveModal({ isOpen: false, id: null, name: "", doc: null, paidSoFar: 0 })}
       />
 
-      {/* Purchase confirm */}
+      {/* Purchase / realize — editable expense form pre-filled from the plan */}
       {purchaseModal.doc && createPortal(
-        <ConfirmModal
-          isOpen={!!purchaseModal.doc}
-          title="🛍️ Potwierdź zakup"
-          message={
-            `Czy potwierdzasz zakup:\n` +
-            `${purchaseModal.doc.description} — ${fmt(purchaseModal.doc.totalAmountPLN)} PLN?\n\n` +
-            `Zebrano: ${fmt(sumPaid(purchaseModal.doc.virtualSavings))} PLN\n\n` +
-            `Zostaną utworzone:\n` +
-            `• Wydatek ${fmt(purchaseModal.doc.totalAmountPLN)} PLN → ${purchaseModal.doc.targetCategoryName}\n` +
-            `• Transfer ${fmt(sumPaid(purchaseModal.doc.virtualSavings))} PLN → Środki własne`
-          }
-          onConfirm={handlePurchase}
-          onCancel={() => setPurchaseModal({ isOpen: false, doc: null })}
-        />,
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+          onClick={() => setPurchaseModal({ isOpen: false, doc: null })}
+        >
+          <div
+            style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 16, padding: "24px", maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 800, fontSize: 16, color: c.text, marginBottom: 6 }}>
+              🛍️ Zrealizuj zakup
+            </div>
+            <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 16 }}>
+              {purchaseModal.doc.description} · plan {fmt(purchaseModal.doc.totalAmountPLN)} PLN
+              {purchaseModal.doc.mode === "envelope" && (
+                <> · zebrano {fmt(sumPaid(purchaseModal.doc.virtualSavings))} PLN (zostanie odblokowane)</>
+              )}
+            </div>
+            <TransactionForm
+              key={purchaseModal.doc.id}
+              initialValues={plannedToFormValues(purchaseModal.doc)}
+              budgetMonth={activeBudgetMonth}
+              showVouchers={false}
+              isSaving={isSaving}
+              onSubmit={handleRealize}
+              onCancel={() => setPurchaseModal({ isOpen: false, doc: null })}
+            />
+          </div>
+        </div>,
         document.body
       )}
     </div>

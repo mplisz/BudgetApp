@@ -170,6 +170,23 @@ export function generateSavingsMonths(
   return months;
 }
 
+// Edited expense fields sent when realizing a planned expense through the
+// transaction form (#2). All optional — omitted fields fall back to the doc.
+export interface PurchaseOverride {
+  amount?:           number;
+  originalAmount?:   number;
+  originalCurrency?: string;
+  fxRate?:           number;
+  categoryId?:       string;
+  categoryName?:     string;
+  subcategoryId?:    string;
+  subcategoryName?:  string;
+  description?:      string;
+  tags?:             string[];
+  priority?:         number;
+  merchant?:         string | null;
+}
+
 // ── Hook ─────────────────────────────────────────────────────
 
 interface UsePlannedResult {
@@ -181,7 +198,7 @@ interface UsePlannedResult {
   createPlanned:   (payload: PlannedPostPayload) => Promise<PlannedDoc | null>;
   updatePlanned:   (id: string, patch: PlannedPatchPayload) => Promise<PlannedDoc | null>;
   archivePlanned:  (id: string) => Promise<boolean>;
-  purchasePlanned: (id: string, date: string, budgetMonth: string) => Promise<PlannedDoc | null>;
+  purchasePlanned: (id: string, date: string, budgetMonth: string, override?: PurchaseOverride) => Promise<PlannedDoc | null>;
   payMonth:        (id: string, month: string, amountPLN: number, amount: number, fxRate: number) => Promise<PlannedDoc | null>;
   dismissMonth:    (id: string, month: string) => Promise<PlannedDoc | null>;
 }
@@ -266,20 +283,21 @@ export function usePlanned(): UsePlannedResult {
 
   // ── Purchase ───────────────────────────────────────────────
 
-  const purchasePlanned = useCallback(async (id: string, date: string, budgetMonth: string): Promise<PlannedDoc | null> => {
+  const purchasePlanned = useCallback(async (id: string, date: string, budgetMonth: string, override?: PurchaseOverride): Promise<PlannedDoc | null> => {
     setIsSaving(true);
     try {
-      const data = await api.post<PlannedDoc & { transactions?: unknown[] }>(
+      const data = await api.post<{ planned: PlannedDoc; expense?: Transaction; transfer?: Transaction }>(
         `/api/planned/${id}/purchase`,
-        { date, budgetMonth },
+        override ? { date, budgetMonth, override } : { date, budgetMonth },
         { fallback: "Nie udało się potwierdzić zakupu." },
       );
-      replacePlanned(data);
-      if (data.transactions) {
-        setTransactions(prev => [...(data.transactions as Transaction[]), ...prev]);
+      replacePlanned(data.planned);
+      const newTx = [data.expense, data.transfer].filter(Boolean) as Transaction[];
+      if (newTx.length) {
+        setTransactions(prev => [...newTx, ...prev]);
       }
       showSuccess("Zakup potwierdzony! 🛍️");
-      return data;
+      return data.planned;
     } catch (err) {
       showError((err as Error).message);
       return null;

@@ -60,6 +60,15 @@ export function isActiveInMonth(doc: RecurringDoc | null | undefined, month: str
   }
 }
 
+// Whether a recurring was confirmed for a given budget month. Uses the
+// confirmedMonths[] set (one entry per confirmed month); falls back to the
+// legacy single lastConfirmedMonth so docs not yet migrated still read right.
+export function isConfirmedInMonth(doc: RecurringDoc | null | undefined, month: string): boolean {
+  if (!doc) return false;
+  if (doc.confirmedMonths?.includes(month)) return true;
+  return doc.lastConfirmedMonth === month;
+}
+
 // Bell notification logic
 export function shouldNotify(doc: RecurringDoc | null | undefined, todayStr: string, daysBefore = 3): boolean {
   if (!doc || doc.isArchived) return false;
@@ -68,7 +77,7 @@ export function shouldNotify(doc: RecurringDoc | null | undefined, todayStr: str
   const currentMonth  = `${ty}-${String(tm).padStart(2, "0")}`;
 
   if (!isActiveInMonth(doc, currentMonth)) return false;
-  if (doc.lastConfirmedMonth === currentMonth) return false;
+  if (isConfirmedInMonth(doc, currentMonth)) return false;
   if (doc.notifiedAt && doc.notifiedAt.slice(0, 7) === currentMonth) return false;
 
   const triggerDay = Math.max(1, (doc.plannedDay || 1) - daysBefore);
@@ -222,7 +231,14 @@ export function useRecurring() {
       );
       setTransactions(prev => [data.transaction, ...prev]);
       setRecurring(prev => prev.map(r =>
-        r.id === id ? { ...r, lastConfirmedMonth: budgetMonth, notifiedAt: null } : r
+        r.id === id
+          ? {
+              ...r,
+              confirmedMonths: Array.from(new Set([...(r.confirmedMonths || []), budgetMonth])).sort(),
+              lastConfirmedMonth: budgetMonth,
+              notifiedAt: null,
+            }
+          : r
       ));
       showSuccess("Wydatek zapisany! ✅");
       return data.transaction;
