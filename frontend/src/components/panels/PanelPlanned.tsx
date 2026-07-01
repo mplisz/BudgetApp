@@ -138,8 +138,26 @@ const filtered = useMemo<PlannedDoc[]>(() => {
 
   // ── Totals ────────────────────────────────────────────────
 
-  const totalGoal      = useMemo(() => filtered.reduce((s, d) => s + d.totalAmountPLN, 0), [filtered]);
-  const totalCollected = useMemo(() => filtered.reduce((s, d) => s + sumPaid(d.virtualSavings), 0), [filtered]);
+  // Header summary over the CURRENT FILTERED view (archived already excluded):
+  //   one-offs  → total planned vs. actually realized (purchased)
+  //   envelopes → this month's rate total vs. actually paid (shown only in the
+  //               "Bieżący miesiąc" view, since rates are month-specific)
+  const summary = useMemo(() => {
+    let oneoffTotal = 0, oneoffSpent = 0, envRateTotal = 0, envRateCollected = 0;
+    for (const p of filtered) {
+      if (p.mode === "oneoff") {
+        oneoffTotal += p.totalAmountPLN;
+        if (p.isPurchased) oneoffSpent += p.totalAmountPLN;
+      } else {
+        const entry = (p.virtualSavings || []).find(v => v.month === cur && !v.dismissedByUser);
+        if (!entry) continue;
+        const rate = entry.amountPLN || entry.amount || 0;
+        envRateTotal += rate;
+        if (entry.paidByUser) envRateCollected += rate;
+      }
+    }
+    return { oneoffTotal, oneoffSpent, envRateTotal, envRateCollected };
+  }, [filtered, cur]);
 
   // Overdue = unrealized plans whose planned month is already in the past.
   // They surface in the "Bieżący miesiąc" view; flag which months they're from.
@@ -233,10 +251,22 @@ const filtered = useMemo<PlannedDoc[]>(() => {
         <div>
           <div style={s.sectionTitle}>📅 Planowane wydatki</div>
           <div style={{ fontSize: 13, color: c.textSecondary, marginTop: 4 }}>
-            {filtered.length} planowanych · cel:{" "}
-            <strong style={{ color: c.text }}>{fmt(totalGoal)} PLN</strong>
-            {totalCollected > 0 && (
-              <> · zebrano: <strong style={{ color: c.success }}>{fmt(totalCollected)} PLN</strong></>
+            {filtered.length} planowanych w widoku
+          </div>
+          <div style={{ fontSize: 12, color: c.textSecondary, marginTop: 8, display: "flex", flexDirection: "column", gap: 3 }}>
+            <span>
+              💳 Jednorazowe — Suma:{" "}
+              <strong style={{ color: c.text }}>{fmt(summary.oneoffTotal)} zł</strong>
+              {" / "}Faktycznie wydano:{" "}
+              <strong style={{ color: c.success }}>{fmt(summary.oneoffSpent)} zł</strong>
+            </span>
+            {currentMonthOnly && (
+              <span>
+                🪙 Koperty ({cur}) — Suma rat:{" "}
+                <strong style={{ color: c.text }}>{fmt(summary.envRateTotal)} zł</strong>
+                {" / "}Faktycznie zebrano:{" "}
+                <strong style={{ color: c.success }}>{fmt(summary.envRateCollected)} zł</strong>
+              </span>
             )}
           </div>
         </div>
@@ -256,7 +286,7 @@ const filtered = useMemo<PlannedDoc[]>(() => {
           📅 Bieżący miesiąc
         </button>
         <RangePicker
-          value={range}
+          value={currentMonthOnly ? { months: -1, from: null, to: null } : range}
           onChange={r => { setRange(r); setCurrentMonthOnly(false); }}
         />
       </div>

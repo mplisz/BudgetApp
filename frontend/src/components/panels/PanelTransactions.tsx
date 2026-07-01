@@ -14,7 +14,7 @@ import { useMonthStatus }  from "../../hooks/useMonthStatus";
 import { toYMD } from "../ui/AppDatePicker";
 import { ConfirmModal }    from "../ui/ConfirmModal";
 import { fmt }             from "../../utils/helpers";
-import { calculateEffectiveAmount } from "../../utils/returnUtils";
+import { calculateNetAmount } from "../../utils/returnUtils";
 import { TransactionRow, ReturnModal, s, PRIO_COLORS, TransactionCard  } from "./transactionComponents";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
@@ -81,16 +81,19 @@ export default function PanelTransactions() {
     transactions
       .filter(tx => tx.type !== "INCOME" && tx.type !== "TRANSFER")
       .map(tx => {
-        const cashReturnedThisMonth = (tx.returns || [])
-          .filter(r => r.moneyReturnedInMonth === activeBudgetMonth)
+        // Net of ALL cash returns (incl. cross-month) so the header total
+        // matches the category sums in PanelSummary. `sameMonthReturned` now
+        // carries total cash returned (any month) — drives the "zwroty" line
+        // and the has-return filter.
+        const totalCashReturned = (tx.returns || [])
           .reduce((sum, r) => sum + (r.cashAmount || 0), 0);
         return {
           ...tx,
           tagNames: (tx.tags || [])
             .map(id => tags.find(t => t.id === id)?.name)
             .filter(Boolean) as string[],
-          effectiveAmount:   calculateEffectiveAmount(tx, activeBudgetMonth),
-          sameMonthReturned: cashReturnedThisMonth,
+          effectiveAmount:   calculateNetAmount(tx),
+          sameMonthReturned: totalCashReturned,
         };
       }),
     [transactions, tags, activeBudgetMonth]
