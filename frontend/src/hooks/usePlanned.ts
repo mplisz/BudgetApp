@@ -41,6 +41,7 @@ export interface PlannedDoc {
   isPurchased:          boolean;
   purchasedMonth:       string | null;
   isArchived:           boolean;
+  notifiedAt?:          string | null;   // bell reminder dismissed at (ISO)
   createdAt?:           string;
   updatedAt?:           string;
   url?: string;
@@ -112,11 +113,15 @@ export function isReadyToPurchase(doc: PlannedDoc): boolean {
 
 export function shouldNotifyPlanned(doc: PlannedDoc, todayStr: string, daysBefore = 3): boolean {
   if (doc.isArchived || doc.isPurchased) return false;
-  if (isReadyToPurchase(doc)) return true;   // ← zawsze pokazuj gdy gotowe do zakupu
 
   const [ty, tm, td] = todayStr.split("-").map(Number);
   const today = new Date(ty, tm - 1, td);
   const currentMonth = `${ty}-${String(tm).padStart(2, "0")}`;
+
+  // Bell ✕ dismissed this month's reminder — hide until next month.
+  if (doc.notifiedAt && doc.notifiedAt.slice(0, 7) === currentMonth) return false;
+
+  if (isReadyToPurchase(doc)) return true;   // ← zawsze pokazuj gdy gotowe do zakupu
 
   // oneoff mode
   if (doc.mode === "oneoff") {
@@ -201,6 +206,7 @@ interface UsePlannedResult {
   purchasePlanned: (id: string, date: string, budgetMonth: string, override?: PurchaseOverride) => Promise<PlannedDoc | null>;
   payMonth:        (id: string, month: string, amountPLN: number, amount: number, fxRate: number) => Promise<PlannedDoc | null>;
   dismissMonth:    (id: string, month: string) => Promise<PlannedDoc | null>;
+  markNotified:    (id: string) => Promise<void>;
 }
 
 export function usePlanned(): UsePlannedResult {
@@ -348,6 +354,18 @@ export function usePlanned(): UsePlannedResult {
     }
   }, [api, setPlanned, showError]);
 
+  // ── Dismiss bell reminder (✕) ──────────────────────────────
+  // Suppresses this month's notification without touching the plan.
+
+  const markNotified = useCallback(async (id: string): Promise<void> => {
+    try {
+      await api.post(`/api/planned/${id}/notify`);
+      setPlanned(prev => prev.map(p =>
+        p.id === id ? { ...p, notifiedAt: new Date().toISOString() } : p
+      ));
+    } catch { /* best-effort */ }
+  }, [api, setPlanned]);
+
   const today = new Date().toISOString().slice(0, 10);
 
   const daysBefore = settings?.notifyDaysBefore ?? 3;
@@ -361,6 +379,6 @@ export function usePlanned(): UsePlannedResult {
     pendingNotifications,
     loadAll, createPlanned, updatePlanned,
     archivePlanned, purchasePlanned,
-    payMonth, dismissMonth,
+    payMonth, dismissMonth, markNotified,
   };
 }

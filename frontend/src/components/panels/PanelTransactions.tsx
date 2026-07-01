@@ -407,7 +407,6 @@ export default function PanelTransactions() {
                           <TransactionCard
                             key={tx.id}
                             tx={tx}
-                            isMonthClosed={isActiveMonthClosed}
                             onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
                             onReturn={() => setReturnTarget(tx)}
                             onUpdated={handleUpdated}
@@ -434,7 +433,6 @@ export default function PanelTransactions() {
                               <TransactionRow
                                 key={tx.id}
                                 tx={tx}
-                                isMonthClosed={isActiveMonthClosed}
                                 onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
                                 onReturn={() => setReturnTarget(tx)}
                                 onUpdated={handleUpdated}
@@ -480,7 +478,6 @@ export default function PanelTransactions() {
                                 <TransactionCard
                                   key={tx.id}
                                   tx={tx}
-                                  isMonthClosed={isActiveMonthClosed}
                                   onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
                                   onReturn={() => setReturnTarget(tx)}
                                   onUpdated={handleUpdated}
@@ -506,7 +503,6 @@ export default function PanelTransactions() {
                                   <TransactionRow
                                     key={tx.id}
                                     tx={tx}
-                                    isMonthClosed={isActiveMonthClosed}
                                     onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
                                     onReturn={() => setReturnTarget(tx)}
                                     onUpdated={handleUpdated}

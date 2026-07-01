@@ -12,6 +12,7 @@ import {
   calculateTotalVoucherReturned,
   calculateCashReturnedInMonth,
   calculateEffectiveAmount,
+  calculateNetAmount,
   isFullyReturned,
   isPartiallyReturned,
   remainingToReturn,
@@ -96,6 +97,40 @@ describe("calculateEffectiveAmount", () => {
       { amount: 80, cashAmount: 80, moneyReturnedInMonth: "2026-03" },
     ] });
     expect(calculateEffectiveAmount(t, "2026-03")).toBe(0);
+  });
+});
+
+describe("calculateNetAmount", () => {
+  it("subtracts cash returns from ANY month (unlike effectiveAmount)", () => {
+    const t = tx({ amount: 100, budgetMonth: "2026-03", returns: [
+      { amount: 90, cashAmount: 90, moneyReturnedInMonth: "2026-04" },  // cross-month
+    ] });
+    // effectiveAmount for the purchase month ignores the cross-month return…
+    expect(calculateEffectiveAmount(t, "2026-03")).toBe(100);
+    // …but net cost reflects it — this is what category sums use.
+    expect(calculateNetAmount(t)).toBe(10);
+  });
+
+  it("sums same-month and cross-month cash returns", () => {
+    const t = tx({ amount: 100, returns: [
+      { amount: 30, cashAmount: 30, moneyReturnedInMonth: "2026-03" },
+      { amount: 20, cashAmount: 20, moneyReturnedInMonth: "2026-05" },
+    ] });
+    expect(calculateNetAmount(t)).toBe(50);
+  });
+
+  it("ignores voucher returns (cash only)", () => {
+    const t = tx({ amount: 100, returns: [
+      { amount: 40, voucherAmount: 40, moneyReturnedInMonth: "2026-04" },
+    ] });
+    expect(calculateNetAmount(t)).toBe(100);
+  });
+
+  it("uses netAmount as the base and never goes below zero", () => {
+    const t = tx({ amount: 100, netAmount: 80, returns: [
+      { amount: 200, cashAmount: 200, moneyReturnedInMonth: "2026-09" },
+    ] });
+    expect(calculateNetAmount(t)).toBe(0);
   });
 });
 

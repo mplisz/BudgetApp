@@ -11,13 +11,8 @@ import { c } from "../styles/tokens";
 import { useRecurring, getActiveCost } from "./useRecurring";
 import { useCurrencyConverter }        from "./useCurrencyConverter";
 import { PaymentConfirmModal }         from "../components/ui/PaymentConfirmModal";
-import { fmt, fmtAmount }              from "../utils/helpers";
+import { fmt, fmtAmount, todayYMD }    from "../utils/helpers";
 import type { RecurringDoc }           from "../types/appContext";
-
-function todayYMD(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export interface UseRecurringConfirm {
   /** Open the confirm modal. */

@@ -12,16 +12,24 @@ import { useRecurringConfirm }   from "../../hooks/useRecurringConfirm";
 import { useEnvelopePay }        from "../../hooks/useEnvelopePay";
 
 import { ConfirmModal }          from "../ui/ConfirmModal";
-import { fmt }                   from "../../utils/helpers";
+import { fmt, todayYMD }         from "../../utils/helpers";
 import type { PlannedDoc }       from "../../hooks/usePlanned";
 import type { RecurringDoc }     from "../../types/appContext";
 
 
-// ── Helpers ───────────────────────────────────────────────────
+// ── DismissButton ─────────────────────────────────────────────
+// The ✕ used across bell items to dismiss a reminder.
 
-function todayYMD(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+function DismissButton({ onClick, title }: { onClick: () => void; title: string }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted, fontSize: 12, cursor: "pointer" }}
+    >
+      ✕
+    </button>
+  );
 }
 
 // ── RecurringBellItem ─────────────────────────────────────────
@@ -67,13 +75,7 @@ function RecurringBellItem({ doc, onClose, onDismiss }: RecurringBellItemProps) 
           >
             ✅ Potwierdzam
           </button>
-          <button
-            onClick={() => onDismiss(doc)}
-            style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted, fontSize: 12, cursor: "pointer" }}
-            title="Pomiń"
-          >
-            ✕
-          </button>
+          <DismissButton onClick={() => onDismiss(doc)} title="Pomiń" />
         </div>
       </div>
 
@@ -85,13 +87,12 @@ function RecurringBellItem({ doc, onClose, onDismiss }: RecurringBellItemProps) 
 // ── PlannedBellItem ───────────────────────────────────────────
 
 interface PlannedBellItemProps {
-  doc:        PlannedDoc;
-  onPurchase: (doc: PlannedDoc) => void;
-  onDismiss:  (doc: PlannedDoc, month: string) => void;
+  doc:             PlannedDoc;
+  onPurchase:      (doc: PlannedDoc) => void;
+  onDismissNotify: (doc: PlannedDoc) => void;
 }
 
-function PlannedBellItem({ doc, onPurchase, onDismiss }: PlannedBellItemProps) {
-  const currentMonth = todayYMD().slice(0, 7);
+function PlannedBellItem({ doc, onPurchase, onDismissNotify }: PlannedBellItemProps) {
   const { open, modal, suggestion, paid, totalPLN, progressPct, ready } = useEnvelopePay(doc);
 
   return (
@@ -117,12 +118,15 @@ function PlannedBellItem({ doc, onPurchase, onDismiss }: PlannedBellItemProps) {
 
         <div style={{ display: "flex", gap: 6 }}>
           {ready ? (
-            <button
-              onClick={() => onPurchase(doc)}
-              style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: c.success, color: c.white, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
-            >
-              🛍️ Kup teraz
-            </button>
+            <>
+              <button
+                onClick={() => onPurchase(doc)}
+                style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: c.success, color: c.white, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+              >
+                🛍️ Kup teraz
+              </button>
+              <DismissButton onClick={() => onDismissNotify(doc)} title="Pomiń przypomnienie" />
+            </>
           ) : doc.mode === "envelope" ? (
             <>
               <button
@@ -131,21 +135,18 @@ function PlannedBellItem({ doc, onPurchase, onDismiss }: PlannedBellItemProps) {
               >
                 💰 Odkładam {suggestion !== null ? fmt(suggestion) : "…"} PLN
               </button>
-              <button
-                onClick={() => onDismiss(doc, currentMonth)}
-                style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted, fontSize: 12, cursor: "pointer" }}
-                title="Pomiń ten miesiąc"
-              >
-                ✕
-              </button>
+              <DismissButton onClick={() => onDismissNotify(doc)} title="Pomiń przypomnienie" />
             </>
           ) : (
-            <button
-              onClick={() => onPurchase(doc)}
-              style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: c.warning, color: "#000", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
-            >
-              💳 Potwierdź zakup
-            </button>
+            <>
+              <button
+                onClick={() => onPurchase(doc)}
+                style={{ flex: 1, padding: "6px 0", borderRadius: 6, border: "none", background: c.warning, color: "#000", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+              >
+                💳 Potwierdź zakup
+              </button>
+              <DismissButton onClick={() => onDismissNotify(doc)} title="Pomiń przypomnienie" />
+            </>
           )}
         </div>
       </div>
@@ -167,8 +168,8 @@ export function NotificationBell() {
   const {
     pendingNotifications: plannedPending,
     loadAll: loadPlanned,
-    dismissMonth,
     purchasePlanned,
+    markNotified: markPlannedNotified,
   } = usePlanned();
 
   const [open,        setOpen]        = useState(false);
@@ -197,8 +198,8 @@ export function NotificationBell() {
     await markNotified(doc.id);
   }
 
-  async function handleDismissPlanned(doc: PlannedDoc, month: string) {
-    await dismissMonth(doc.id, month);
+  async function handleDismissNotifyPlanned(doc: PlannedDoc) {
+    await markPlannedNotified(doc.id);
   }
 
   async function handlePurchasePlanned() {
@@ -278,7 +279,7 @@ export function NotificationBell() {
                 key={doc.id}
                 doc={doc}
                 onPurchase={d => setPurchaseDoc(d)}
-                onDismiss={handleDismissPlanned}
+                onDismissNotify={handleDismissNotifyPlanned}
               />
             ))}
           </div>

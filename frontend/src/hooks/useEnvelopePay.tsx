@@ -11,17 +11,14 @@ import { c } from "../styles/tokens";
 import { usePlanned, sumPaid, computeSuggestion, isReadyToPurchase } from "./usePlanned";
 import { useCurrencyConverter }                   from "./useCurrencyConverter";
 import { PaymentConfirmModal }                     from "../components/ui/PaymentConfirmModal";
-import { fmt }                                     from "../utils/helpers";
+import { fmt, todayYMD }                            from "../utils/helpers";
 import type { PlannedDoc }                         from "./usePlanned";
-
-function todayYMD(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export interface UseEnvelopePay {
   /** Open the contribution modal. */
   open:        () => void;
+  /** Skip this month's rate (marks it dismissed, recomputes the suggestion). */
+  dismiss:     () => void;
   /** The modal element — render it once in the consumer's tree. */
   modal:       React.ReactNode;
   /** Suggested monthly contribution (PLN), or null for non-envelope docs. */
@@ -58,7 +55,7 @@ export function useEnvelopePay(doc: PlannedDoc): UseEnvelopePay {
 
   const [showModal, setShowModal] = useState(false);
 
-  const { payMonth } = usePlanned();
+  const { payMonth, dismissMonth } = usePlanned();
   const { loadRate, activeRate, isLoading: rateLoading } = useCurrencyConverter();
 
   useEffect(() => {
@@ -96,6 +93,7 @@ export function useEnvelopePay(doc: PlannedDoc): UseEnvelopePay {
 
   return {
     open: () => setShowModal(true),
+    dismiss: () => { dismissMonth(doc.id, currentMonth); },
     modal, suggestion, remaining, canPay,
     paid, totalPLN, progressPct, ready, isForeign, rateLoading,
   };

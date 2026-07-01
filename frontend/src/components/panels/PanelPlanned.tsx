@@ -3,7 +3,7 @@
 // Desktop panel — view and management of planned expenses.
 // ============================================================
 
-import { c } from "../../styles/tokens";
+import { c, alpha } from "../../styles/tokens";
 import { useState, useEffect, useMemo } from "react";
 import { createPortal }   from "react-dom";
 import { usePlanned, sumPaid, isReadyToPurchase } from "../../hooks/usePlanned";
@@ -12,7 +12,7 @@ import { ConfirmModal }   from "../ui/ConfirmModal";
 import { PlannedCard }    from "./plannedComponents/PlannedCard";
 import { PlannedForm }    from "./plannedComponents/PlannedForm";
 import { TransactionForm, emptyFormValues } from "./transactionComponents/TransactionForm";
-import { fmt }            from "../../utils/helpers";
+import { fmt, currentCalendarMonth } from "../../utils/helpers";
 import { theme as s }     from "../../styles/theme";
 import { RangePicker, type DateRange } from "../ui/RangePicker";
 import { AppDatePicker, toYM } from "../ui/AppDatePicker";
@@ -20,11 +20,6 @@ import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload } from "../../
 import type { FormValues, TransactionPayload, Priority } from "../../types/transaction";
 
 // ── Helpers ───────────────────────────────────────────────────
-
-function currentMonthStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-}
 
 function addMonths(monthStr: string, n: number): string {
   const [y, m] = monthStr.split("-").map(Number);
@@ -89,7 +84,7 @@ export default function PanelPlanned() {
 
   useEffect(() => { loadAll(); }, []);
 
-  const cur = currentMonthStr();
+  const cur = currentCalendarMonth();
 
   // ── Filter ────────────────────────────────────────────────
 
@@ -112,7 +107,8 @@ const filtered = useMemo<PlannedDoc[]>(() => {
     // This is where confirming happens and confirmed items stay as read-only.
     if (currentMonthOnly) {
       if (doc.mode === "oneoff") {
-        return doc.plannedMonth === cur || doc.purchasedMonth === cur;
+        // Due now or overdue (unrealized), plus anything realized this month.
+        return (!doc.isPurchased && doc.plannedMonth <= cur) || doc.purchasedMonth === cur;
       }
       const hasCurRate = (doc.virtualSavings || []).some(v => v.month === cur && !v.dismissedByUser);
       return hasCurRate || isReadyToPurchase(doc) || doc.purchasedMonth === cur;
@@ -133,6 +129,8 @@ const filtered = useMemo<PlannedDoc[]>(() => {
 
     if (fromMonth && doc.plannedMonth < fromMonth) return false;
     if (toMonth   && doc.plannedMonth > toMonth)   return false;
+    // Preset ranges are a forward window: current month … current + N months.
+    if (maxMonth  && doc.plannedMonth < cur)       return false;
     if (maxMonth  && doc.plannedMonth > maxMonth)  return false;
     return true;
   }).sort((a, b) => a.plannedMonth.localeCompare(b.plannedMonth));
@@ -142,6 +140,17 @@ const filtered = useMemo<PlannedDoc[]>(() => {
 
   const totalGoal      = useMemo(() => filtered.reduce((s, d) => s + d.totalAmountPLN, 0), [filtered]);
   const totalCollected = useMemo(() => filtered.reduce((s, d) => s + sumPaid(d.virtualSavings), 0), [filtered]);
+
+  // Overdue = unrealized plans whose planned month is already in the past.
+  // They surface in the "Bieżący miesiąc" view; flag which months they're from.
+  const overdueMonths = useMemo(() => {
+    if (!currentMonthOnly) return [];
+    const set = new Set<string>();
+    for (const d of filtered) {
+      if (!d.isPurchased && d.plannedMonth < cur) set.add(d.plannedMonth);
+    }
+    return [...set].sort();
+  }, [filtered, currentMonthOnly, cur]);
 
   // ── Handlers ─────────────────────────────────────────────
 
@@ -235,10 +244,6 @@ const filtered = useMemo<PlannedDoc[]>(() => {
 
       {/* Filters */}
       <div style={{ marginBottom: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <RangePicker
-          value={range}
-          onChange={r => { setRange(r); setCurrentMonthOnly(false); }}
-        />
         <button
           onClick={() => { setCurrentMonthOnly(true); setFilterMonth(null); }}
           style={{
@@ -250,6 +255,10 @@ const filtered = useMemo<PlannedDoc[]>(() => {
         >
           📅 Bieżący miesiąc
         </button>
+        <RangePicker
+          value={range}
+          onChange={r => { setRange(r); setCurrentMonthOnly(false); }}
+        />
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
@@ -287,6 +296,17 @@ const filtered = useMemo<PlannedDoc[]>(() => {
           </button>
         )}
       </div>
+
+      {/* Overdue warning — unrealized plans from past months */}
+      {overdueMonths.length > 0 && (
+        <div style={{
+          marginBottom: 16, padding: "10px 14px",
+          background: alpha(c.danger, "11"), border: `1px solid ${alpha(c.danger, "55")}`,
+          borderRadius: 10, fontSize: 13, color: c.danger, fontWeight: 600,
+        }}>
+          ⚠️ Zaległe (niezrealizowane) z: {overdueMonths.join(", ")}
+        </div>
+      )}
 
       {/* List */}
       {isLoading && <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>}

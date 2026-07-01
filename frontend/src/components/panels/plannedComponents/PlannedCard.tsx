@@ -6,7 +6,7 @@
 
 import { c, alpha } from "../../../styles/tokens";
 import { useEnvelopePay }         from "../../../hooks/useEnvelopePay";
-import { fmt }                    from "../../../utils/helpers";
+import { fmt, todayYMD }          from "../../../utils/helpers";
 import type { PlannedDoc }       from "../../../hooks/usePlanned";
 
 interface PlannedCardProps {
@@ -16,10 +16,6 @@ interface PlannedCardProps {
   onPurchase: (doc: PlannedDoc) => void;
 }
 
-function todayYMD(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
 function safeHttpUrl(raw: string): string | null {
   const trimmed = (raw || "").trim();
   if (!trimmed) return null;
@@ -39,7 +35,7 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
   const isForeign    = doc.originalCurrency && doc.originalCurrency !== "PLN";
 
   const {
-    open, modal, suggestion, canPay,
+    open, dismiss, modal, suggestion, canPay,
     paid, totalPLN, progressPct, ready, rateLoading,
   } = useEnvelopePay(doc);
 
@@ -160,6 +156,13 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
             </div>
           )}
 
+          {/* This month's rate skipped — read-only */}
+          {thisMonthEntry?.dismissedByUser && (
+            <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 6 }}>
+              ⊘ Rata {currentMonth}: pominięta
+            </div>
+          )}
+
           {suggestion !== null && !ready && (
             <div style={{ fontSize: 11, color: c.textMuted }}>
               Sugerowana rata: <strong style={{ color: c.success }}>{fmt(suggestion)} PLN/mies.</strong>
@@ -182,6 +185,12 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
               <button onClick={open}
                 style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.info, color: c.white, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
                 💰 Odkładam {suggestion !== null ? fmt(suggestion) : "…"} PLN
+              </button>
+            )}
+            {canPay && (
+              <button onClick={dismiss} title="Pomiń ratę tego miesiąca"
+                style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textMuted, cursor: "pointer", fontSize: 12 }}>
+                ✕ Pomiń ratę
               </button>
             )}
             {isOneoffDueThisMonth && (

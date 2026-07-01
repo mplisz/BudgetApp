@@ -38,10 +38,22 @@ export function calculateCashReturnedInMonth(tx, budgetMonth) {
 
 // The amount that "counts" as expense in the given budgetMonth.
 // Subtracts only cash returns in that month — voucher returns are separate assets.
+// Use for CASH-FLOW / balance: a cross-month return is handled by a TRANSFER in
+// the return month, so it must NOT be deducted here (would double-count).
 export function calculateEffectiveAmount(tx, budgetMonth) {
   const cashReturnedThisMonth = calculateCashReturnedInMonth(tx, budgetMonth);
   const base = tx.netAmount ?? tx.amount;
   return Math.max(0, base - cashReturnedThisMonth);
+}
+
+// The net cost of a purchase after EVERY cash return, regardless of the month
+// the money came back. Use for CATEGORY-COST views ("ile faktycznie kosztowała
+// kategoria") — this is the figure the category/limit/pie breakdowns should show.
+// Not for balance: cross-month cash returns are represented by a TRANSFER, so
+// mixing this into the balance would double-count.
+export function calculateNetAmount(tx) {
+  const base = tx.netAmount ?? tx.amount;
+  return Math.max(0, base - calculateTotalCashReturned(tx));
 }
 
 // ── Status flags ──────────────────────────────────────────────

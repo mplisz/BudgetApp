@@ -6,12 +6,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useApi } from "./useApi";
+import { todayYMD } from "../utils/helpers";
 import type { Voucher, CartItem } from "../types/transaction";
-
-function todayYMD(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
 
 const isPercent = (v: Voucher) => v.valueType === "percent" || v.percentValue != null;
 

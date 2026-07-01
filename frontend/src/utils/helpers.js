@@ -150,6 +150,12 @@ export function currentCalendarMonth() {
   const now = new Date();
   return formatBudgetMonth(now.getMonth(), now.getFullYear());
 }
+
+// Returns today as "YYYY-MM-DD" (local time)
+export function todayYMD() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
  
 // Returns true if budgetMonth a is strictly after b ("YYYY-MM" strings)
 export function budgetMonthAfter(a, b) {

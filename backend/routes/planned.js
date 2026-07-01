@@ -564,4 +564,33 @@ router.post("/:id/purchase", async (req, res) => {
   }
 });
 
+// ── POST /api/planned/:id/notify ─────────────────────────────
+// Dismiss this month's bell reminder (the ✕) without changing the plan.
+// Reappears next month. shouldNotifyPlanned suppresses while notifiedAt is
+// within the current month.
+
+router.post("/:id/notify", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
+  try {
+    const id       = idParsed.data;
+    const familyId = req.user.familyId;
+
+    const { resource: existing, etag } = await readItemWithEtag(plannedContainer, id, familyId);
+    if (!existing) return res.status(404).json({ error: "Planned expense not found." });
+
+    await plannedContainer.items.upsert(
+      { ...existing, notifiedAt: new Date().toISOString() },
+      { accessCondition: { type: "IfMatch", condition: etag } },
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === 412) return res.status(409).json({ error: "Data was modified by another user. Please refresh and try again." });
+    console.error("[PLANNED NOTIFY]", err);
+    res.status(500).json({ error: "Failed to mark notification." });
+  }
+});
+
 module.exports = router;

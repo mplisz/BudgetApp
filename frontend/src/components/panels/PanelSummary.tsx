@@ -9,7 +9,7 @@ import { useAppContext }    from "../../context/AppContext";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useLimits, buildLimitMap } from "../../hooks/useLimits";
-import { calculateEffectiveAmount } from "../../utils/returnUtils";
+import { calculateEffectiveAmount, calculateNetAmount } from "../../utils/returnUtils";
 import { fmt }              from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
 import { Card }             from "../ui/summaryUi";
@@ -158,8 +158,11 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const totalExpenses  = useMemo(() => sumTx(monthTx, "EXPENSE",  activeBudgetMonth), [monthTx, activeBudgetMonth]);
   const totalSavings   = useMemo(() => sumTx(monthTx, "SAVING",   activeBudgetMonth), [monthTx, activeBudgetMonth]);
   const virtualEnvelopePaid = useMemo(() => {
+    // Include purchased envelopes: their paid rates locked money in the month
+    // they were set aside, so past-month balance stays stable after purchase
+    // (matches PanelAnalytics). Only paidByUser entries count.
     return (planned as any[])
-      .filter(p => p.mode === "envelope" && !p.isPurchased && !p.isArchived)
+      .filter(p => p.mode === "envelope" && !p.isArchived)
       .reduce((sum, p) => {
         const entry = (p.virtualSavings || []).find(
           (v: any) => v.month === activeBudgetMonth && v.paidByUser,
@@ -193,7 +196,9 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
           percent:      null,
         });
       }
-      catMap.get(tx.categoryId)!.spent += calculateEffectiveAmount(tx, activeBudgetMonth);
+      // Category cost is NET of every cash return (incl. cross-month), so the
+      // bars reflect what the category actually cost — not the gross outflow.
+      catMap.get(tx.categoryId)!.spent += calculateNetAmount(tx);
     }
     for (const cat of catMap.values()) {
       if (cat.limit !== null && cat.limit > 0) {
@@ -205,6 +210,12 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
   const categoriesWithLimit    = useMemo(() => expenseCategories.filter(c => c.limit !== null), [expenseCategories]);
   const categoriesWithoutLimit = useMemo(() => expenseCategories.filter(c => c.limit === null),  [expenseCategories]);
+
+  // Net total across categories — denominator for the category breakdown %.
+  const totalExpensesNet = useMemo(
+    () => expenseCategories.reduce((sum, cat) => sum + cat.spent, 0),
+    [expenseCategories],
+  );
 
   // ── Subcategory drill-down ────────────────────────────────
   const getSubcategories = useCallback((categoryId: string): SubcategorySummary[] => {
@@ -222,14 +233,14 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
           percentOfTotal:    0,
         });
       }
-      subMap.get(tx.subcategoryId)!.spent += calculateEffectiveAmount(tx, activeBudgetMonth);;
+      subMap.get(tx.subcategoryId)!.spent += calculateNetAmount(tx);
     }
     for (const sub of subMap.values()) {
-      sub.percentOfCategory = catTotal      > 0 ? (sub.spent / catTotal)      * 100 : 0;
-      sub.percentOfTotal    = totalExpenses > 0 ? (sub.spent / totalExpenses) * 100 : 0;
+      sub.percentOfCategory = catTotal          > 0 ? (sub.spent / catTotal)          * 100 : 0;
+      sub.percentOfTotal    = totalExpensesNet  > 0 ? (sub.spent / totalExpensesNet)  * 100 : 0;
     }
     return Array.from(subMap.values()).sort((a, b) => b.spent - a.spent);
-  }, [monthTx, expenseCategories, totalExpenses]);
+  }, [monthTx, expenseCategories, totalExpensesNet]);
 
   // ── Target indicators ─────────────────────────────────────
   const targets: SettingsTargets = rawSettings?.targets ?? DEFAULT_TARGETS;
@@ -244,11 +255,13 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const envelopeBreakdown = useMemo<EnvelopeBreakdownItem[]>(() => {
     const items: EnvelopeBreakdownItem[] = [];
     for (const p of (planned as any[])) {
-      if (p.isArchived || p.isPurchased || p.mode !== "envelope") continue;
+      if (p.isArchived || p.mode !== "envelope") continue;
       const entry = (p.virtualSavings || []).find(
         (v: any) => v.month === activeBudgetMonth && !v.dismissedByUser,
       );
       if (!entry) continue;
+      // A purchased envelope only shows historically paid rates — no "○ not yet".
+      if (p.isPurchased && !entry.paidByUser) continue;
       items.push({
         categoryName: p.targetCategoryName,
         description:  p.description,
@@ -263,6 +276,29 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
     () => envelopeBreakdown.reduce((s, i) => s + i.amount, 0),
     [envelopeBreakdown],
   );
+
+  // ── Returns booked against THIS month's expenses ──────────────
+  // Category sums are net of every cash return; the headline "Wydatki"
+  // (cash-flow) only nets same-month returns. The difference is exactly the
+  // cross-month cash returns (they spawn a TRANSFER in the return month), so
+  // this box explains why category totals sit below the headline.
+  const returnsInfo = useMemo(() => {
+    let sameMonth = 0, crossMonth = 0, voucher = 0;
+    for (const tx of monthTx) {
+      if (tx.type !== "EXPENSE") continue;
+      const rets = (tx as unknown as {
+        returns?: Array<{ moneyReturnedInMonth: string; cashAmount?: number; voucherAmount?: number }>;
+      }).returns || [];
+      for (const r of rets) {
+        voucher += r.voucherAmount || 0;
+        const cash = r.cashAmount || 0;
+        if (cash <= 0) continue;
+        if (r.moneyReturnedInMonth === activeBudgetMonth) sameMonth += cash;
+        else crossMonth += cash;
+      }
+    }
+    return { sameMonth, crossMonth, voucher, total: sameMonth + crossMonth };
+  }, [monthTx, activeBudgetMonth]);
 
 
 
@@ -393,6 +429,34 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
           {hasData && (
             <>
+              {/* Returns info — explains net category sums vs headline expenses */}
+              {(returnsInfo.total > 0 || returnsInfo.voucher > 0) && (
+                <Card title="🔙 Zwroty" style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, color: c.textSecondary, lineHeight: 1.7 }}>
+                    {returnsInfo.total > 0 && (
+                      <>
+                        Zwroty gotówkowe z wydatków tego miesiąca:{" "}
+                        <strong style={{ color: c.orange }}>{fmt(returnsInfo.total)} PLN</strong>{" "}
+                        — odjęte od sum kategorii.
+                      </>
+                    )}
+                    {returnsInfo.crossMonth > 0 && (
+                      <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
+                        W tym <strong style={{ color: c.text }}>{fmt(returnsInfo.crossMonth)} PLN</strong>{" "}
+                        odebrane w innym miesiącu → utworzono TRANSFER. Dlatego sumy kategorii są o tę
+                        kwotę niższe niż nagłówkowe „Wydatki" (Saldo tego miesiąca bez zmian).
+                      </div>
+                    )}
+                    {returnsInfo.voucher > 0 && (
+                      <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
+                        Zwroty na voucher: <strong style={{ color: c.voucher }}>{fmt(returnsInfo.voucher)} PLN</strong>{" "}
+                        — osobny środek, nie zmniejsza wydatku gotówkowego.
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+
               {/* ROW 1: Limits and Pie Chart*/}
               <div style={{
                   display: "flex",

@@ -18,14 +18,13 @@ import { ReceiptModal } from "./ReceiptModal";
 import type { Transaction } from "../../../types/appContext";
 
 interface TransactionRowProps {
-  tx:            Transaction;
-  isMonthClosed: boolean;
-  onDelete:      () => void;
-  onReturn:      () => void;
-  onUpdated:     (tx: Transaction) => void;
+  tx:        Transaction;
+  onDelete:  () => void;
+  onReturn:  () => void;
+  onUpdated: (tx: Transaction) => void;
 }
 
-export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdated }: TransactionRowProps) {
+export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: TransactionRowProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lineItemsOpen, setLineItemsOpen] = useState(false);
@@ -119,38 +118,36 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
               📎
             </button>
           )}
-          {!isMonthClosed && (
-            <>
-              {/* Edit —  ⚠ indicator if has returns */}
-                <button
-                  style={{ ...s.actionBtn(c.info), marginRight: 4, position: "relative" }}
-                  onClick={() => setEditOpen(true)}
-                  title={hasReturns ? "Edytuj — powiązane transfery i vouchery zostaną zarchiwizowane" : "Edytuj"}
-                >
-                  ✏️
-                {hasReturns && (
-                    <span style={{
-                      position: "absolute", top: -4, right: -4,
-                      fontSize: 9, color: c.warning, fontWeight: 800,
-                    }}>⚠</span>
-                  )}
-                </button>
+          {/* Edit / return / archive stay available even in a closed month —
+              only adding NEW expenses is blocked (in PanelExpenses). */}
+          {/* Edit —  ⚠ indicator if has returns */}
+          <button
+            style={{ ...s.actionBtn(c.info), marginRight: 4, position: "relative" }}
+            onClick={() => setEditOpen(true)}
+            title={hasReturns ? "Edytuj — powiązane transfery i vouchery zostaną zarchiwizowane" : "Edytuj"}
+          >
+            ✏️
+            {hasReturns && (
+              <span style={{
+                position: "absolute", top: -4, right: -4,
+                fontSize: 9, color: c.warning, fontWeight: 800,
+              }}>⚠</span>
+            )}
+          </button>
 
-              {/* Return — hidden for fully returned */}
-              {!isFullyReturned && (
-                <button
-                  style={{ ...s.actionBtn(c.orange), marginRight: 4 }}
-                  onClick={onReturn}
-                  title="Zwróć"
-                >
-                  🔙
-                </button>
-              )}
-
-              {/* Archive */}
-              <button style={s.actionBtn(c.danger)} onClick={onDelete} title="Archiwizuj">🗑️</button>
-            </>
+          {/* Return — hidden for fully returned */}
+          {!isFullyReturned && (
+            <button
+              style={{ ...s.actionBtn(c.orange), marginRight: 4 }}
+              onClick={onReturn}
+              title="Zwróć"
+            >
+              🔙
+            </button>
           )}
+
+          {/* Archive */}
+          <button style={s.actionBtn(c.danger)} onClick={onDelete} title="Archiwizuj">🗑️</button>
         </td>
       </tr>
 
@@ -203,7 +200,7 @@ export function TransactionRow({ tx, isMonthClosed, onDelete, onReturn, onUpdate
 // EditTransactionModal, ReceiptModal, createPortal, useState).
 
 
-export function TransactionCard({ tx, isMonthClosed, onDelete, onReturn, onUpdated }: TransactionRowProps) {
+export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: TransactionRowProps) {
   const [editOpen, setEditOpen]           = useState(false);
   const [receiptOpen, setReceiptOpen]     = useState(false);
   const [lineItemsOpen, setLineItemsOpen] = useState(false);
@@ -304,34 +301,29 @@ export function TransactionCard({ tx, isMonthClosed, onDelete, onReturn, onUpdat
         </div>
       )}
 
-      {/* Actions — receipt visible even in closed months; rest only when open */}
-      {(tx.receiptBlobPath || !isMonthClosed) && (
-        <div style={{
-          display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap",
-          marginTop: 12, paddingTop: 10, borderTop: `1px solid ${c.surfaceAlt}`,
-        }}>
-          {tx.receiptBlobPath && (
-            <button style={{ ...s.actionBtn(c.warning), padding: "6px 12px" }} onClick={() => setReceiptOpen(true)}>
-              📎 Paragon
-            </button>
-          )}
-          {!isMonthClosed &&  (
-            <button style={{ ...s.actionBtn(c.info), padding: "6px 12px" }} onClick={() => setEditOpen(true)}>
-              ✏️ Edytuj{hasReturns ? " ⚠" : ""}
-            </button>
-          )}
-          {!isMonthClosed && !isFullyReturned && (
-            <button style={{ ...s.actionBtn(c.orange), padding: "6px 12px" }} onClick={onReturn}>
-              🔙 Zwróć
-            </button>
-          )}
-          {!isMonthClosed && (
-            <button style={{ ...s.actionBtn(c.danger), padding: "6px 12px" }} onClick={onDelete}>
-              🗑️ Usuń
-            </button>
-          )}
-        </div>
-      )}
+      {/* Actions — edit/return/archive stay available even in a closed month;
+          only adding NEW expenses is blocked (in PanelExpenses). */}
+      <div style={{
+        display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap",
+        marginTop: 12, paddingTop: 10, borderTop: `1px solid ${c.surfaceAlt}`,
+      }}>
+        {tx.receiptBlobPath && (
+          <button style={{ ...s.actionBtn(c.warning), padding: "6px 12px" }} onClick={() => setReceiptOpen(true)}>
+            📎 Paragon
+          </button>
+        )}
+        <button style={{ ...s.actionBtn(c.info), padding: "6px 12px" }} onClick={() => setEditOpen(true)}>
+          ✏️ Edytuj{hasReturns ? " ⚠" : ""}
+        </button>
+        {!isFullyReturned && (
+          <button style={{ ...s.actionBtn(c.orange), padding: "6px 12px" }} onClick={onReturn}>
+            🔙 Zwróć
+          </button>
+        )}
+        <button style={{ ...s.actionBtn(c.danger), padding: "6px 12px" }} onClick={onDelete}>
+          🗑️ Usuń
+        </button>
+      </div>
 
       {editOpen && createPortal(
         <EditTransactionModal

@@ -28,7 +28,7 @@ import { PANEL_PATHS }                from "../../data/routes";
 import { useTransactionsRange } from "../../hooks/useTransactionsRange";
 import { useLimits, getActiveLimit } from "../../hooks/useLimits";
 import { usePlanned } from "../../hooks/usePlanned";
-import { calculateEffectiveAmount } from "../../utils/returnUtils";
+import { calculateEffectiveAmount, calculateNetAmount } from "../../utils/returnUtils";
 import { RangePicker, resolveRange, type DateRange } from "../ui/RangePicker";
 import { Card } from "../ui/summaryUi";
 import { theme as s } from "../../styles/theme";
@@ -204,7 +204,9 @@ export default function PanelAnalytics() {
     const byCat: Record<string, CategoryTotal & { subcategories: Map<string, { id: string; name: string; total: number }> }> = {};
     for (const tx of (transactions as unknown as Transaction[])) {
       if (tx.type !== "EXPENSE") continue;
-      const effective = calculateEffectiveAmount(tx, tx.budgetMonth);
+      // Per-category cost is NET of all returns (incl. cross-month) — matches
+      // PanelSummary. Monthly totals/balance stay cash-flow (see monthlyData).
+      const effective = calculateNetAmount(tx);
       if (!byCat[tx.categoryId]) {
         const cat = categories.find(c => c.id === tx.categoryId);
         byCat[tx.categoryId] = {
@@ -265,7 +267,7 @@ export default function PanelAnalytics() {
       if (tx.type !== "EXPENSE") continue;
       const shop = (tx.merchant ?? "").trim();
       if (!shop) continue;
-      const eff = calculateEffectiveAmount(tx, tx.budgetMonth);
+      const eff = calculateNetAmount(tx);  // net of all returns (per-merchant cost)
       if (!byShop[shop]) {
         byShop[shop] = { categoryId: shop, categoryName: shop, total: 0, share: 0 };
       }
@@ -405,7 +407,7 @@ export default function PanelAnalytics() {
     const byCat: Record<string, HeatmapRow> = {};
     for (const tx of (transactions as unknown as Transaction[])) {
       if (tx.type !== "EXPENSE") continue;
-      const effective = calculateEffectiveAmount(tx, tx.budgetMonth);
+      const effective = calculateNetAmount(tx);  // net of all returns (heatmap)
       if (!byCat[tx.categoryId]) {
         const cat = categories.find(c => c.id === tx.categoryId);
         byCat[tx.categoryId] = {
@@ -447,7 +449,7 @@ export default function PanelAnalytics() {
       const isCur   = tx.budgetMonth === cur;
       const isPrior = priorSet.has(tx.budgetMonth);
       if (!isCur && !isPrior) continue;
-      const eff = calculateEffectiveAmount(tx, tx.budgetMonth);
+      const eff = calculateNetAmount(tx);  // net of all returns (per-category delta)
       let row = acc[tx.categoryId];
       if (!row) {
         row = {
