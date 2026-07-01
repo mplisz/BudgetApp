@@ -10,10 +10,12 @@ import { fmt, todayYMD }          from "../../../utils/helpers";
 import type { PlannedDoc }       from "../../../hooks/usePlanned";
 
 interface PlannedCardProps {
-  doc:        PlannedDoc;
-  onEdit:     (doc: PlannedDoc) => void;
-  onArchive:  (doc: PlannedDoc) => void;
-  onPurchase: (doc: PlannedDoc) => void;
+  doc:         PlannedDoc;
+  onEdit:      (doc: PlannedDoc) => void;
+  onArchive:   (doc: PlannedDoc) => void;
+  onPurchase:  (doc: PlannedDoc) => void;
+  /** Actual booked expense for a realized plan (from the transaction). */
+  actualSpent?: number;
 }
 
 function safeHttpUrl(raw: string): string | null {
@@ -30,7 +32,7 @@ function safeHttpUrl(raw: string): string | null {
     return null;
   }
 }
-export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardProps) {
+export function PlannedCard({ doc, onEdit, onArchive, onPurchase, actualSpent }: PlannedCardProps) {
   const currentMonth = todayYMD().slice(0, 7);
   const isForeign    = doc.originalCurrency && doc.originalCurrency !== "PLN";
 
@@ -118,6 +120,11 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
           {isForeign && (
             <div style={{ fontSize: 11, color: c.textMuted }}>
               ≈ {rateLoading ? "…" : fmt(totalPLN)} PLN
+            </div>
+          )}
+          {isPurchased && actualSpent != null && (
+            <div style={{ fontSize: 11, color: c.success, fontWeight: 700, marginTop: 2 }} title="Kwota faktycznie zaksięgowana">
+              ✅ zapłacono: {fmt(actualSpent)} PLN
             </div>
           )}
         </div>

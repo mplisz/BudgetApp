@@ -544,10 +544,14 @@ router.post("/:id/purchase", async (req, res) => {
       createdAt:        new Date().toISOString(),
     };
 
-    const [{ resource: savedExpense }, { resource: savedTransfer }] = await Promise.all([
-      transactionsContainer.items.create(expense),
-      transactionsContainer.items.create(transfer),
-    ]);
+    // Envelopes accumulate virtual savings, so at purchase we release the
+    // collected amount back as a TRANSFER. One-offs have no savings — a transfer
+    // there would be a phantom income cancelling the expense, so skip it.
+    const { resource: savedExpense } = await transactionsContainer.items.create(expense);
+    let savedTransfer = null;
+    if (existing.mode === "envelope" && collected > 0) {
+      ({ resource: savedTransfer } = await transactionsContainer.items.create(transfer));
+    }
 
     // Mark planned expense as purchased
     const { resource: updatedPlanned } = await plannedContainer.items.upsert(
@@ -555,7 +559,7 @@ router.post("/:id/purchase", async (req, res) => {
       { accessCondition: { type: "IfMatch", condition: etag } }
     );
 
-    console.log(`[PLANNED PURCHASE] expense: ${savedExpense.id}, transfer: ${savedTransfer.id}`);
+    console.log(`[PLANNED PURCHASE] expense: ${savedExpense.id}${savedTransfer ? `, transfer: ${savedTransfer.id}` : " (no transfer)"}`);
     res.status(201).json({ planned: updatedPlanned, expense: savedExpense, transfer: savedTransfer });
   } catch (err) {
     if (err.code === 412) return res.status(409).json({ error: "Data was modified by another user. Please refresh and try again." });

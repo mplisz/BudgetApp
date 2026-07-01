@@ -90,9 +90,11 @@ export default function PanelPlanned() {
 
   const cur = currentCalendarMonth();
 
-  // Current-month transactions carry the ACTUAL spent amount for realized
-  // one-offs (linked via plannedExpenseId), which can differ from the plan.
-  useEffect(() => { loadTransactions(cur); }, [cur, loadTransactions]);
+  // Transactions carry the ACTUAL spent amount for realized plans (linked via
+  // plannedExpenseId), which can differ from the plan. Load the explicitly
+  // filtered month when set (historical review), otherwise the current month.
+  const txMonth = filterMonth ? toYM(filterMonth) : cur;
+  useEffect(() => { loadTransactions(txMonth); }, [txMonth, loadTransactions]);
 
   // planId → actual booked expense amount, from the real transactions.
   const actualSpentByPlan = useMemo(() => {
@@ -132,18 +134,26 @@ const filtered = useMemo<PlannedDoc[]>(() => {
       return hasCurRate || isReadyToPurchase(doc) || doc.purchasedMonth === cur;
     }
 
-    // ── Range / explicit-month views are forward-looking: hide purchased.
-    if (doc.isPurchased) return false;
+    // Historical review: an explicit month, or a custom range whose upper
+    // bound (Do) is at or before the current month, may include realized
+    // (purchased) plans. Forward-looking presets stay purchase-free.
+    const historicalView =
+      (!!filterMonthStr && filterMonthStr <= cur) ||
+      (toMonth != null && toMonth <= cur);
+
+    if (doc.isPurchased && !historicalView) return false;
 
     // An explicit month filter is authoritative — respect it exactly.
     if (filterMonthStr) return doc.plannedMonth === filterMonthStr;
 
-    // Otherwise always surface envelopes with an outstanding contribution for
-    // the current month: you pay the monthly rate now even when the purchase
-    // is months away, so the range filter on plannedMonth must not hide them.
-    const hasDueRateThisMonth = doc.mode === "envelope" &&
-      (doc.virtualSavings || []).some(v => v.month === cur && !v.paidByUser && !v.dismissedByUser);
-    if (hasDueRateThisMonth) return true;
+    // In forward-looking views, always surface envelopes with an outstanding
+    // contribution for the current month (pay the rate now even when the
+    // purchase is months away). Skipped in historical views to avoid noise.
+    if (!historicalView) {
+      const hasDueRateThisMonth = doc.mode === "envelope" &&
+        (doc.virtualSavings || []).some(v => v.month === cur && !v.paidByUser && !v.dismissedByUser);
+      if (hasDueRateThisMonth) return true;
+    }
 
     if (fromMonth && doc.plannedMonth < fromMonth) return false;
     if (toMonth   && doc.plannedMonth > toMonth)   return false;
@@ -371,6 +381,7 @@ const filtered = useMemo<PlannedDoc[]>(() => {
         <PlannedCard
           key={doc.id}
           doc={doc}
+          actualSpent={actualSpentByPlan[doc.id]}
           onEdit={openEdit}
           onArchive={d => setArchiveModal({
             isOpen: true, id: d.id, name: d.description,
