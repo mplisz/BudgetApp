@@ -55,10 +55,9 @@ interface ReturnResponse {
 }
 
 interface ReturnModalProps {
-  tx:                Transaction;
-  activeBudgetMonth: string;
-  onClose:           () => void;
-  onSaved:           (transaction: Transaction, sideEffects?: ReturnSideEffects) => void;
+  tx:      Transaction;
+  onClose: () => void;
+  onSaved: (transaction: Transaction, sideEffects?: ReturnSideEffects) => void;
 }
 
 // ── Month input — free text YYYY-MM, min = minMonth, no upper limit ──
@@ -92,7 +91,7 @@ function MonthInput({ value, onChange, minMonth }: MonthInputProps) {
 // ─────────────────────────────────────────────────────────────
 // ReturnModal
 // ─────────────────────────────────────────────────────────────
-export function ReturnModal({ tx, activeBudgetMonth, onClose, onSaved }: ReturnModalProps) {
+export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
   const api                        = useApi();
   const { showError, showSuccess } = useToast();
 
@@ -105,9 +104,8 @@ export function ReturnModal({ tx, activeBudgetMonth, onClose, onSaved }: ReturnM
     voucherAmount:        0,
     cashAmount:           0,
     hasVoucher:           false,
-    moneyReturnedInMonth: activeBudgetMonth >= minMonth
-      ? activeBudgetMonth
-      : currentMonth,
+    // Return month always defaults to the current calendar month.
+    moneyReturnedInMonth: currentMonth,
     returnedAt:           todayLocal(),
     reason:               "",
     // Voucher creation

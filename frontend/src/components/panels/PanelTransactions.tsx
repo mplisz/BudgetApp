@@ -557,7 +557,6 @@ export default function PanelTransactions() {
       {returnTarget && (
         <ReturnModal
           tx={returnTarget}
-          activeBudgetMonth={activeBudgetMonth}
           onClose={() => setReturnTarget(null)}
           onSaved={handleReturnSavedWithRefresh}
         />

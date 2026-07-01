@@ -6,7 +6,7 @@
 import { c, alpha } from "../../styles/tokens";
 import { useState, useEffect, useRef } from "react";
 import { createPortal }          from "react-dom";
-import { useRecurring }          from "../../hooks/useRecurring";
+import { useRecurring, frequencyLabel } from "../../hooks/useRecurring";
 import { usePlanned, sumPaid }   from "../../hooks/usePlanned";
 import { useRecurringConfirm }   from "../../hooks/useRecurringConfirm";
 import { useEnvelopePay }        from "../../hooks/useEnvelopePay";
@@ -64,6 +64,7 @@ function RecurringBellItem({ doc, onClose, onDismiss }: RecurringBellItemProps) 
         </div>
         <div style={{ fontSize: 11, color: c.textSecondary, marginBottom: 6 }}>
           {doc.categoryName} · {amountStr}
+          {doc.frequency && doc.frequency !== "monthly" ? ` · ${frequencyLabel(doc)}` : ""}
           <span style={{ marginLeft: 8, color: isPastDue ? c.danger : isToday ? c.warning : c.textMuted }}>
             {dateLabel}
           </span>

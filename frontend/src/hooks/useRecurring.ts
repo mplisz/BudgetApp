@@ -18,6 +18,39 @@ type RecurringCost = NonNullable<RecurringDoc["costs"]>[number];
 // Short month names from constants (DRY)
 export const MONTH_NAMES = MONTHS.map(m => m.slice(0, 3));
 
+// Short frequency label, e.g. "co roku", "co kwartał".
+export function frequencyLabel(doc: RecurringDoc | null | undefined): string {
+  switch (doc?.frequency) {
+    case "quarterly": return "co kwartał";
+    case "biannual":  return "co pół roku";
+    case "yearly":    return "co roku";
+    case "custom":    return "wybrane mies.";
+    case "monthly":
+    default:          return "co miesiąc";
+  }
+}
+
+// Human schedule for a recurring doc — reflects the actual frequency, not
+// always "każdego miesiąca". e.g. "2. Sty · co roku", "10. dnia · co kwartał".
+export function scheduleLabel(doc: RecurringDoc): string {
+  const day = doc.plannedDay || 1;
+  switch (doc.frequency) {
+    case "quarterly": return `${day}. dnia · co kwartał`;
+    case "biannual":  return `${day}. dnia · co pół roku`;
+    case "yearly": {
+      const fm   = doc.costs?.[0]?.validFrom?.split("-")[1];
+      const name = fm ? MONTH_NAMES[Number(fm) - 1] : "";
+      return name ? `${day}. ${name} · co roku` : `${day}. dnia · co roku`;
+    }
+    case "custom": {
+      const months = (doc.activeMonths || []).map(m => MONTH_NAMES[m - 1]).join(", ");
+      return months ? `${day}. dnia · ${months}` : `${day}. dnia`;
+    }
+    case "monthly":
+    default: return `${day}. każdego miesiąca`;
+  }
+}
+
 // Get the cost entry active for a given month
 export function getActiveCost(doc: RecurringDoc | null | undefined, month: string): RecurringCost | null {
   if (!doc?.costs?.length) return null;

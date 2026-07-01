@@ -3,7 +3,7 @@
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { MONTH_NAMES, isConfirmedInMonth } from "../../../hooks/useRecurring";
+import { MONTH_NAMES, isConfirmedInMonth, scheduleLabel } from "../../../hooks/useRecurring";
 import { FREQUENCY_OPTIONS }      from "../../../data/constants";
 import { useRecurringConfirm }    from "../../../hooks/useRecurringConfirm";
 import type { RecurringDoc }      from "../../../types/appContext";
@@ -51,7 +51,7 @@ export function RecurringRow({ doc, activeBudgetMonth, isLocked, onEdit, onArchi
         </div>
 
         <div style={{ display: "flex", gap: 16, fontSize: 12, color: c.textMuted, flexWrap: "wrap" }}>
-          <span>💳 {doc.plannedDay}. każdego miesiąca</span>
+          <span>💳 {scheduleLabel(doc)}</span>
           <span style={{ color: c.text, fontWeight: 700 }}>{amountStr}</span>
           {firstValidFrom && <span style={{ color: c.borderStrong }}>od {firstValidFrom}</span>}
           {/* Show cost history count if more than one */}
