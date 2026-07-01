@@ -8,6 +8,8 @@ import { useState, useEffect, useMemo } from "react";
 import { createPortal }   from "react-dom";
 import { usePlanned, sumPaid, isReadyToPurchase } from "../../hooks/usePlanned";
 import { useMonthStatus } from "../../hooks/useMonthStatus";
+import { useTransactions } from "../../hooks/useTransactions";
+import { useAppContext }  from "../../context/AppContext";
 import { ConfirmModal }   from "../ui/ConfirmModal";
 import { PlannedCard }    from "./plannedComponents/PlannedCard";
 import { PlannedForm }    from "./plannedComponents/PlannedForm";
@@ -68,6 +70,8 @@ export default function PanelPlanned() {
   } = usePlanned();
 
   const { activeBudgetMonth } = useMonthStatus();
+  const { transactions }      = useAppContext();
+  const { loadTransactions }  = useTransactions();
 
   const [range,         setRange]         = useState<DateRange>({ months: 3, from: null, to: null });
   const [filterMode,    setFilterMode]    = useState<"all" | "envelope" | "oneoff">("all");
@@ -85,6 +89,20 @@ export default function PanelPlanned() {
   useEffect(() => { loadAll(); }, []);
 
   const cur = currentCalendarMonth();
+
+  // Current-month transactions carry the ACTUAL spent amount for realized
+  // one-offs (linked via plannedExpenseId), which can differ from the plan.
+  useEffect(() => { loadTransactions(cur); }, [cur, loadTransactions]);
+
+  // planId → actual booked expense amount, from the real transactions.
+  const actualSpentByPlan = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const tx of (transactions || []) as Array<{ type?: string; amount?: number; plannedExpenseId?: string; isArchived?: boolean }>) {
+      if (tx.type !== "EXPENSE" || tx.isArchived || !tx.plannedExpenseId) continue;
+      m[tx.plannedExpenseId] = (m[tx.plannedExpenseId] || 0) + (tx.amount || 0);
+    }
+    return m;
+  }, [transactions]);
 
   // ── Filter ────────────────────────────────────────────────
 
@@ -147,7 +165,9 @@ const filtered = useMemo<PlannedDoc[]>(() => {
     for (const p of filtered) {
       if (p.mode === "oneoff") {
         oneoffTotal += p.totalAmountPLN;
-        if (p.isPurchased) oneoffSpent += p.totalAmountPLN;
+        // Actual booked amount (from the transaction), not the planned one;
+        // fall back to the plan if its transaction isn't loaded.
+        if (p.isPurchased) oneoffSpent += actualSpentByPlan[p.id] ?? p.totalAmountPLN;
       } else {
         const entry = (p.virtualSavings || []).find(v => v.month === cur && !v.dismissedByUser);
         if (!entry) continue;
@@ -157,7 +177,7 @@ const filtered = useMemo<PlannedDoc[]>(() => {
       }
     }
     return { oneoffTotal, oneoffSpent, envRateTotal, envRateCollected };
-  }, [filtered, cur]);
+  }, [filtered, cur, actualSpentByPlan]);
 
   // Overdue = unrealized plans whose planned month is already in the past.
   // They surface in the "Bieżący miesiąc" view; flag which months they're from.
