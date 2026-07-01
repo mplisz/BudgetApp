@@ -6,7 +6,7 @@
 import { c } from "../../styles/tokens";
 import { useState, useEffect, useMemo } from "react";
 import { createPortal }   from "react-dom";
-import { usePlanned, sumPaid } from "../../hooks/usePlanned";
+import { usePlanned, sumPaid, isReadyToPurchase } from "../../hooks/usePlanned";
 import { useMonthStatus } from "../../hooks/useMonthStatus";
 import { ConfirmModal }   from "../ui/ConfirmModal";
 import { PlannedCard }    from "./plannedComponents/PlannedCard";
@@ -77,6 +77,7 @@ export default function PanelPlanned() {
   const [range,         setRange]         = useState<DateRange>({ months: 3, from: null, to: null });
   const [filterMode,    setFilterMode]    = useState<"all" | "envelope" | "oneoff">("all");
   const [filterMonth,   setFilterMonth]   = useState<Date | null>(null);
+  const [currentMonthOnly, setCurrentMonthOnly] = useState(false);
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState<PlannedDoc | null>(null);
   const [archiveModal,  setArchiveModal]  = useState<ArchiveModalState>({
@@ -106,13 +107,36 @@ const filtered = useMemo<PlannedDoc[]>(() => {
   return planned.filter(doc => {
     if (doc.isArchived) return false;
     if (filterMode !== "all" && doc.mode !== filterMode) return false;
-    if (filterMonthStr && doc.plannedMonth !== filterMonthStr) return false;
+
+    // ── "Bieżący miesiąc" view — everything actionable / done this month.
+    // This is where confirming happens and confirmed items stay as read-only.
+    if (currentMonthOnly) {
+      if (doc.mode === "oneoff") {
+        return doc.plannedMonth === cur || doc.purchasedMonth === cur;
+      }
+      const hasCurRate = (doc.virtualSavings || []).some(v => v.month === cur && !v.dismissedByUser);
+      return hasCurRate || isReadyToPurchase(doc) || doc.purchasedMonth === cur;
+    }
+
+    // ── Range / explicit-month views are forward-looking: hide purchased.
+    if (doc.isPurchased) return false;
+
+    // An explicit month filter is authoritative — respect it exactly.
+    if (filterMonthStr) return doc.plannedMonth === filterMonthStr;
+
+    // Otherwise always surface envelopes with an outstanding contribution for
+    // the current month: you pay the monthly rate now even when the purchase
+    // is months away, so the range filter on plannedMonth must not hide them.
+    const hasDueRateThisMonth = doc.mode === "envelope" &&
+      (doc.virtualSavings || []).some(v => v.month === cur && !v.paidByUser && !v.dismissedByUser);
+    if (hasDueRateThisMonth) return true;
+
     if (fromMonth && doc.plannedMonth < fromMonth) return false;
     if (toMonth   && doc.plannedMonth > toMonth)   return false;
     if (maxMonth  && doc.plannedMonth > maxMonth)  return false;
     return true;
   }).sort((a, b) => a.plannedMonth.localeCompare(b.plannedMonth));
-}, [planned, range, filterMode, filterMonth, cur]);
+}, [planned, range, filterMode, filterMonth, currentMonthOnly, cur]);
 
   // ── Totals ────────────────────────────────────────────────
 
@@ -210,8 +234,22 @@ const filtered = useMemo<PlannedDoc[]>(() => {
       </div>
 
       {/* Filters */}
-      <div style={{ marginBottom: 16 }}>
-        <RangePicker value={range} onChange={setRange} />
+      <div style={{ marginBottom: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <RangePicker
+          value={range}
+          onChange={r => { setRange(r); setCurrentMonthOnly(false); }}
+        />
+        <button
+          onClick={() => { setCurrentMonthOnly(true); setFilterMonth(null); }}
+          style={{
+            padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer",
+            fontWeight: 700, fontSize: 12,
+            background: currentMonthOnly ? c.success : c.border,
+            color:      currentMonthOnly ? c.white     : c.textSecondary,
+          }}
+        >
+          📅 Bieżący miesiąc
+        </button>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
@@ -239,7 +277,7 @@ const filtered = useMemo<PlannedDoc[]>(() => {
         </span>
         <AppDatePicker
           value={filterMonth}
-          onChange={(d: Date) => { setFilterMonth(d); setRange({ months: 0, from: null, to: null }); }}
+          onChange={(d: Date) => { setFilterMonth(d); setRange({ months: 0, from: null, to: null }); setCurrentMonthOnly(false); }}
           monthPicker
         />
         {filterMonth && (

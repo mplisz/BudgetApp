@@ -50,6 +50,13 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
     ? (doc.virtualSavings || []).find(v => v.month === currentMonth)
     : null;
 
+  // Confirmation is a current-month action: a one-off can be realized only in
+  // its planned month; other months are edit/delete only. Confirmed items
+  // (purchased, or this month's paid rate) render read-only, not as buttons.
+  const isPurchased          = !!doc.isPurchased;
+  const isOneoffDueThisMonth = doc.mode === "oneoff" && !isPurchased && doc.plannedMonth === currentMonth;
+  const ratePaidThisMonth    = !!thisMonthEntry?.paidByUser;
+
   //safe url - make sure only https/http links are actually rendered
   const safeUrl = doc.url ? safeHttpUrl(doc.url) : null;
 
@@ -87,9 +94,14 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
             }}>
               {doc.mode === "envelope" ? "Koperta" : "Jednorazowy"}
             </span>
-            {ready && (
+            {ready && !isPurchased && (
               <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: alpha(c.success, "22"), color: c.success, fontWeight: 700 }}>
                 ✅ Gotowe do zakupu
+              </span>
+            )}
+            {isPurchased && (
+              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: alpha(c.success, "22"), color: c.success, fontWeight: 700 }}>
+                ✅ Zrealizowany{doc.purchasedMonth ? ` · ${doc.purchasedMonth}` : ""}
               </span>
             )}
           </div>
@@ -141,6 +153,13 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
             </div>
           )}
 
+          {/* This month's rate already paid — read-only confirmation */}
+          {ratePaidThisMonth && thisMonthEntry && (
+            <div style={{ fontSize: 12, color: c.success, marginBottom: 6 }}>
+              ✅ Rata {currentMonth}: opłacona <strong>{fmt(thisMonthEntry.amountPLN || thisMonthEntry.amount)}</strong> PLN
+            </div>
+          )}
+
           {suggestion !== null && !ready && (
             <div style={{ fontSize: 11, color: c.textMuted }}>
               Sugerowana rata: <strong style={{ color: c.success }}>{fmt(suggestion)} PLN/mies.</strong>
@@ -151,26 +170,42 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase }: PlannedCardP
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 6, marginTop: 12, justifyContent: "flex-end" }}>
-        {canPay && (
-          <button onClick={open}
-            style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.info, color: c.white, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
-            💰 Odkładam {suggestion !== null ? fmt(suggestion) : "…"} PLN
+        {isPurchased ? (
+          /* Realized — read-only, only archiving stays available */
+          <button onClick={() => onArchive(doc)}
+            style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textMuted, cursor: "pointer", fontSize: 12 }}>
+            🗑️
           </button>
+        ) : (
+          <>
+            {canPay && (
+              <button onClick={open}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.info, color: c.white, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+                💰 Odkładam {suggestion !== null ? fmt(suggestion) : "…"} PLN
+              </button>
+            )}
+            {isOneoffDueThisMonth && (
+              <button onClick={() => onPurchase(doc)}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.warning, color: "#000", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+                💳 Potwierdź zakup
+              </button>
+            )}
+            {ready && (
+              <button onClick={() => onPurchase(doc)}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.success, color: c.white, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+                🛍️ Kup
+              </button>
+            )}
+            <button onClick={() => onEdit(doc)}
+              style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textTertiary, cursor: "pointer", fontSize: 12 }}>
+              ✏️ Edytuj
+            </button>
+            <button onClick={() => onArchive(doc)}
+              style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textMuted, cursor: "pointer", fontSize: 12 }}>
+              🗑️
+            </button>
+          </>
         )}
-        {ready && (
-          <button onClick={() => onPurchase(doc)}
-            style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.success, color: c.white, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
-            🛍️ Kup
-          </button>
-        )}
-        <button onClick={() => onEdit(doc)}
-          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textTertiary, cursor: "pointer", fontSize: 12 }}>
-          ✏️ Edytuj
-        </button>
-        <button onClick={() => onArchive(doc)}
-          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textMuted, cursor: "pointer", fontSize: 12 }}>
-          🗑️
-        </button>
       </div>
 
       {modal}
