@@ -38,6 +38,7 @@ import PanelSummary            from "../components/panels/PanelSummary";
 import PanelAnalytics          from "../components/panels/PanelAnalytics";
 import PanelSafetyNet          from "../components/panels/PanelSafetyNet";
 import PanelLuxmed             from "../components/panels/PanelLuxmed";
+import PanelBottleDeposits     from "../components/panels/PanelBottleDeposits";
 
 // ── Browser API stubs jsdom lacks (recharts / responsive hooks) ──
 beforeAll(() => {
@@ -100,6 +101,7 @@ const PANELS: Array<[string, () => ReactElement]> = [
   ["PanelAnalytics",          () => <PanelAnalytics />],
   ["PanelSafetyNet",          () => <PanelSafetyNet />],
   ["PanelLuxmed",             () => <PanelLuxmed />],
+  ["PanelBottleDeposits",     () => <PanelBottleDeposits />],
 ];
 
 describe("panels mount without throwing", () => {

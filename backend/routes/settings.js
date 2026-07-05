@@ -78,6 +78,9 @@ const SettingsSchema = z.object({
     maxPercent: z.number().int().min(1).max(100).optional(),
     maxTotal:   z.number().min(0).max(99999).optional(),
   }).optional(),
+  // Subcategory whose EXPENSE transactions are bottle/can deposits, returned
+  // via the dedicated Bottle Deposits panel. null clears it.
+  depositSubcategoryId: z.string().min(1).max(200).nullable().optional(),
 }).refine(
   data => data.thresholds
        || data.targets
@@ -86,7 +89,8 @@ const SettingsSchema = z.object({
        || data.voucherExpiryWarningDays !== undefined
        || data.safetyNet !== undefined
        || data.notifyDaysBefore !== undefined
-       || data.luxmed !== undefined,
+       || data.luxmed !== undefined
+       || data.depositSubcategoryId !== undefined,
   { message: "No valid fields provided for update." }
 );
 
@@ -117,6 +121,7 @@ const DEFAULT_SETTINGS = {
   notifyDaysBefore: 3,
   appStartMonth: null,  // null = no restriction
   safetyNet:     null,  // null = user hasn't configured the panel yet
+  depositSubcategoryId: null,  // null = Kaucja panel not configured
 };
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -154,6 +159,7 @@ router.get('/', async (req, res) => {
     if (!("voucherExpiryWarningDays" in doc)) doc.voucherExpiryWarningDays = 14;
     if (!("safetyNet"                in doc)) doc.safetyNet = null;
     if (!("luxmed"    in doc)) doc.luxmed    = { maxPercent: 90, maxTotal: 500 };
+    if (!("depositSubcategoryId"        in doc)) doc.depositSubcategoryId = null;
 
     res.json(doc);
   } catch (error) {
@@ -220,6 +226,9 @@ router.patch('/', async (req, res) => {
       luxmed: parsed.data.luxmed !== undefined
         ? { ...(existing.luxmed || { maxPercent: 90, maxTotal: 500 }), ...parsed.data.luxmed }
         : (existing.luxmed ?? { maxPercent: 90, maxTotal: 500 }),
+      depositSubcategoryId: parsed.data.depositSubcategoryId !== undefined
+        ? parsed.data.depositSubcategoryId
+        : (existing.depositSubcategoryId ?? null),
       updatedAt:     new Date().toISOString(),
       updatedBy:     req.user.id,
       updatedByName: req.user.name,

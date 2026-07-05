@@ -37,7 +37,8 @@ export const PANEL_PATHS: Record<string, string> = {
   safetynet:          "/safetynet",
   analytics:          "/analytics",
   luxmed:             "/luxmed",
-  
+  bottledeposits:     "/bottle-deposits",
+
   // Admin
   settings:           "/settings",
   admin:              "/admin",
