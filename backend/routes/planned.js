@@ -22,6 +22,7 @@ const { requireAuth }        = require("../middleware/auth");
 const {
   readItemWithEtag, IdParamSchema, BUDGET_MONTH_REGEX, currentServerMonth,round2
 } = require("../utils/helpers");
+const { resolveTransferTarget } = require("../utils/transferCategory");
 
 router.use(requireAuth);
 
@@ -465,6 +466,16 @@ router.post("/:id/purchase", async (req, res) => {
       : sumPaid(existing.virtualSavings);
     const ts        = Date.now();
 
+    // Envelope release spawns a TRANSFER — require the configured envelope
+    // transfer subcategory (no env fallback). One-offs create no transfer.
+    const needsTransfer = existing.mode === "envelope" && collected > 0;
+    let transferTarget = null;
+    if (needsTransfer) {
+      const t = await resolveTransferTarget(familyId, "envelopeTransferSubcategoryId");
+      if (!t.ok) return res.status(400).json({ error: "Wybierz kategorię transferu dla kopert w Ustawieniach → Mapowanie kategorii." });
+      transferTarget = t.target;
+    }
+
     // Resolve the expense fields: edited override values win, otherwise the
     // planned doc's defaults. The actual amount paid can differ from the plan.
     const ov          = override || {};
@@ -509,15 +520,15 @@ router.post("/:id/purchase", async (req, res) => {
       createdAt:        new Date().toISOString(),
     };
 
-    // TRANSFER — release collected savings back to budget
-    const transfer = {
+    // TRANSFER — release collected savings back to budget (envelope only)
+    const transfer = needsTransfer ? {
       id:               `tx_${familyId}_${date.replace(/-/g,"")}_planned_tr_${ts}`,
       userId:           familyId,
       type:             "TRANSFER",
-      categoryId:       process.env.RETURN_CATEGORY_ID   || "cat_srodki",
-      categoryName:     process.env.RETURN_CATEGORY_NAME || "Środki własne",
-      subcategoryId:    process.env.RETURN_SUBCATEGORY_ID   || "cat_root_srodki_gotowka_MMs",
-      subcategoryName:  process.env.RETURN_SUBCATEGORY_NAME || "Gotówka",
+      categoryId:       transferTarget.categoryId,
+      categoryName:     transferTarget.categoryName,
+      subcategoryId:    transferTarget.subcategoryId,
+      subcategoryName:  transferTarget.subcategoryName,
       amount:           collected,
       originalAmount:   collected,
       originalCurrency: "PLN",
@@ -542,14 +553,13 @@ router.post("/:id/purchase", async (req, res) => {
       archivedBy:       null,
       archivedById:     null,
       createdAt:        new Date().toISOString(),
-    };
+    } : null;
 
-    // Envelopes accumulate virtual savings, so at purchase we release the
-    // collected amount back as a TRANSFER. One-offs have no savings — a transfer
-    // there would be a phantom income cancelling the expense, so skip it.
+    // One-offs have no savings — a transfer there would be phantom income
+    // cancelling the expense, so it's only built (and created) for envelopes.
     const { resource: savedExpense } = await transactionsContainer.items.create(expense);
     let savedTransfer = null;
-    if (existing.mode === "envelope" && collected > 0) {
+    if (transfer) {
       ({ resource: savedTransfer } = await transactionsContainer.items.create(transfer));
     }
 

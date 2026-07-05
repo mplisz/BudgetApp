@@ -44,6 +44,7 @@ const {
 const { getReceiptBlobContainer, setReceiptRetention } = require("../utils/receiptStorage");
 router.use(requireAuth);
 const { cleanMerchant, merchantExists, rememberMerchant } = require("../utils/merchant");
+const { resolveTransferTarget } = require("../utils/transferCategory");
 
 
 // ── Schemas ───────────────────────────────────────────────────
@@ -654,7 +655,7 @@ router.delete("/:id", async (req, res) => {
 
 router.post("/deposit-return", async (req, res) => {
   const { returns, surplus, budgetMonth, date, reason } = req.body;
-  if (!Array.isArray(returns) || returns.length === 0)      return res.status(400).json({ error: "returns array is required." });
+  if (!Array.isArray(returns))                               return res.status(400).json({ error: "returns must be an array." });
   if (!budgetMonth || !BUDGET_MONTH_REGEX.test(budgetMonth)) return res.status(400).json({ error: "budgetMonth is required (YYYY-MM)." });
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date))            return res.status(400).json({ error: "date is required (YYYY-MM-DD)." });
 
@@ -662,53 +663,72 @@ router.post("/deposit-return", async (req, res) => {
   const surplusAmt = Math.max(0, roundMoney(Number(surplus) || 0));
   const desc       = reason || "Zwrot butelek";
 
-  try {
-    let pastSum = 0;
-    const updated = [];
-    let failed = 0;
+  // Pure surplus (returned bottles you never logged) is valid — only reject
+  // when there's genuinely nothing to do.
+  if (returns.length === 0 && surplusAmt <= 0) return res.status(400).json({ error: "Nie ma nic do zwrócenia." });
 
-    // STEP 1 — record the returns on each deposit transaction.
+  try {
+    // STEP 1 — read + validate every selected deposit, compute how much feeds
+    // the transfer (past-month returns + surplus). No writes yet, so we can
+    // gate on config before touching anything.
+    const items = [];
+    let pastSum = 0;
+    let failed  = 0;
     for (const r of returns) {
       const amt = roundMoney(Number(r?.amount));
       if (!r?.txId || !(amt > 0)) { failed++; continue; }
       try {
         const { resource: tx, etag } = await readItemWithEtag(transactionsContainer, r.txId, familyId);
         if (!tx || tx.isArchived) { failed++; continue; }
-
         const alreadyReturned = (tx.returns || []).reduce((s, x) => s + (x.cashAmount || 0) + (x.voucherAmount || 0), 0);
         if (roundMoney(alreadyReturned + amt) > tx.amount + 0.01) { failed++; continue; }
-
-        const entry = {
-          amount: amt, cashAmount: amt, voucherAmount: 0,
-          moneyReturnedInMonth: budgetMonth,   // current month
-          returnedAt: date, reason: desc,
-          returnedBy: req.user.name || req.user.email, returnedById: req.user.id,
-          createdAt: new Date().toISOString(),
-        };
-
-        const { resource } = await transactionsContainer.items.upsert(
-          { ...tx, returns: [...(tx.returns || []), entry], updatedAt: new Date().toISOString() },
-          { accessCondition: { type: "IfMatch", condition: etag } },
-        );
-        updated.push(resource);
+        items.push({ tx, etag, amt });
         // Past-month returns don't reduce that month (cross-month) — they feed
         // the consolidated transfer instead.
         if (tx.budgetMonth < budgetMonth) pastSum = roundMoney(pastSum + amt);
       } catch { failed++; }
     }
 
-    // STEP 2 — one consolidated transfer for past-month returns + surplus.
-    let transfer = null;
     const transferAmt = roundMoney(pastSum + surplusAmt);
+
+    // A transfer is needed → require the configured return-transfer subcategory.
+    let target = null;
     if (transferAmt > 0) {
+      const t = await resolveTransferTarget(familyId, "returnTransferSubcategoryId");
+      if (!t.ok) return res.status(400).json({ error: "Wybierz kategorię transferu dla zwrotów w Ustawieniach → Mapowanie kategorii." });
+      target = t.target;
+    }
+
+    // STEP 2 — record the returns.
+    const updated = [];
+    for (const it of items) {
+      const entry = {
+        amount: it.amt, cashAmount: it.amt, voucherAmount: 0,
+        moneyReturnedInMonth: budgetMonth,   // current month
+        returnedAt: date, reason: desc,
+        returnedBy: req.user.name || req.user.email, returnedById: req.user.id,
+        createdAt: new Date().toISOString(),
+      };
+      try {
+        const { resource } = await transactionsContainer.items.upsert(
+          { ...it.tx, returns: [...(it.tx.returns || []), entry], updatedAt: new Date().toISOString() },
+          { accessCondition: { type: "IfMatch", condition: it.etag } },
+        );
+        updated.push(resource);
+      } catch { failed++; }
+    }
+
+    // STEP 3 — one consolidated transfer for past-month returns + surplus.
+    let transfer = null;
+    if (transferAmt > 0 && target) {
       const doc = {
         id:               `tx_${familyId}_${budgetMonth.replace("-", "")}_kaucja_${Date.now()}`,
         userId:           familyId,
         type:             "TRANSFER",
-        categoryId:       process.env.RETURN_CATEGORY_ID      || "cat_srodki",
-        categoryName:     process.env.RETURN_CATEGORY_NAME    || "Środki własne",
-        subcategoryId:    process.env.RETURN_SUBCATEGORY_ID   || "cat_root_srodki_zwroty_MMs",
-        subcategoryName:  process.env.RETURN_SUBCATEGORY_NAME || "Zwroty",
+        categoryId:       target.categoryId,
+        categoryName:     target.categoryName,
+        subcategoryId:    target.subcategoryId,
+        subcategoryName:  target.subcategoryName,
         amount:           transferAmt,
         originalAmount:   transferAmt,
         originalCurrency: "PLN",
@@ -815,6 +835,7 @@ router.post("/:id/returns", async (req, res) => {
     // Resolve transfer target month and validate it BEFORE saving anything
     const isCrossMonth = data.moneyReturnedInMonth !== existing.budgetMonth;
     let transferBudgetMonth = null;
+    let transferTarget = null;
 
     if (isCrossMonth && cashAmount > 0) {
       transferBudgetMonth = data.moneyReturnedInMonth < serverNow
@@ -831,6 +852,14 @@ router.post("/:id/returns", async (req, res) => {
           return res.status(403).json({ error: "Target month is closed." });
         }
       }
+
+      // A cross-month cash return spawns a TRANSFER — require the configured
+      // return-transfer subcategory (no env fallback).
+      const t = await resolveTransferTarget(familyId, "returnTransferSubcategoryId");
+      if (!t.ok) {
+        return res.status(400).json({ error: "Wybierz kategorię transferu dla zwrotów w Ustawieniach → Mapowanie kategorii." });
+      }
+      transferTarget = t.target;
     }
 
     // ── STEP 1: Save the parent transaction (PRIMARY) ─────────
@@ -873,10 +902,10 @@ router.post("/:id/returns", async (req, res) => {
           id:               transferId,
           userId:           familyId,
           type:             "TRANSFER",
-          categoryId:       process.env.RETURN_CATEGORY_ID      || "cat_srodki",
-          categoryName:     process.env.RETURN_CATEGORY_NAME    || "Środki własne",
-          subcategoryId:    process.env.RETURN_SUBCATEGORY_ID   || "cat_root_srodki_zwroty_MMs",
-          subcategoryName:  process.env.RETURN_SUBCATEGORY_NAME || "Zwroty",
+          categoryId:       transferTarget.categoryId,
+          categoryName:     transferTarget.categoryName,
+          subcategoryId:    transferTarget.subcategoryId,
+          subcategoryName:  transferTarget.subcategoryName,
           amount:           cashAmount,
           originalAmount:   cashAmount,
           originalCurrency: "PLN",

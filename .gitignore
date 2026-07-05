@@ -39,3 +39,5 @@ setup-db-prod.js
 seed-tags.js
 seed-categories.js
 setup-db.js
+
+.claude/

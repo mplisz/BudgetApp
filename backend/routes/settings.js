@@ -78,9 +78,14 @@ const SettingsSchema = z.object({
     maxPercent: z.number().int().min(1).max(100).optional(),
     maxTotal:   z.number().min(0).max(99999).optional(),
   }).optional(),
-  // Subcategory whose EXPENSE transactions are bottle/can deposits, returned
-  // via the dedicated Bottle Deposits panel. null clears it.
-  depositSubcategoryId: z.string().min(1).max(200).nullable().optional(),
+  // Category mapping (all store a single subcategoryId; backend resolves the
+  // rest). null clears the mapping.
+  //  - depositSubcategoryId          : EXPENSE subcategory recognised as deposits
+  //  - returnTransferSubcategoryId   : TRANSFER subcategory for auto-transfers on returns
+  //  - envelopeTransferSubcategoryId : TRANSFER subcategory for envelope-purchase release
+  depositSubcategoryId:          z.string().min(1).max(200).nullable().optional(),
+  returnTransferSubcategoryId:   z.string().min(1).max(200).nullable().optional(),
+  envelopeTransferSubcategoryId: z.string().min(1).max(200).nullable().optional(),
 }).refine(
   data => data.thresholds
        || data.targets
@@ -90,7 +95,9 @@ const SettingsSchema = z.object({
        || data.safetyNet !== undefined
        || data.notifyDaysBefore !== undefined
        || data.luxmed !== undefined
-       || data.depositSubcategoryId !== undefined,
+       || data.depositSubcategoryId !== undefined
+       || data.returnTransferSubcategoryId !== undefined
+       || data.envelopeTransferSubcategoryId !== undefined,
   { message: "No valid fields provided for update." }
 );
 
@@ -121,7 +128,9 @@ const DEFAULT_SETTINGS = {
   notifyDaysBefore: 3,
   appStartMonth: null,  // null = no restriction
   safetyNet:     null,  // null = user hasn't configured the panel yet
-  depositSubcategoryId: null,  // null = Kaucja panel not configured
+  depositSubcategoryId: null,          // null = Bottle Deposits panel not configured
+  returnTransferSubcategoryId: null,   // null = transfers on returns not configured
+  envelopeTransferSubcategoryId: null, // null = envelope-release transfer not configured
 };
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -159,7 +168,9 @@ router.get('/', async (req, res) => {
     if (!("voucherExpiryWarningDays" in doc)) doc.voucherExpiryWarningDays = 14;
     if (!("safetyNet"                in doc)) doc.safetyNet = null;
     if (!("luxmed"    in doc)) doc.luxmed    = { maxPercent: 90, maxTotal: 500 };
-    if (!("depositSubcategoryId"        in doc)) doc.depositSubcategoryId = null;
+    if (!("depositSubcategoryId"          in doc)) doc.depositSubcategoryId = null;
+    if (!("returnTransferSubcategoryId"   in doc)) doc.returnTransferSubcategoryId = null;
+    if (!("envelopeTransferSubcategoryId" in doc)) doc.envelopeTransferSubcategoryId = null;
 
     res.json(doc);
   } catch (error) {
@@ -229,6 +240,12 @@ router.patch('/', async (req, res) => {
       depositSubcategoryId: parsed.data.depositSubcategoryId !== undefined
         ? parsed.data.depositSubcategoryId
         : (existing.depositSubcategoryId ?? null),
+      returnTransferSubcategoryId: parsed.data.returnTransferSubcategoryId !== undefined
+        ? parsed.data.returnTransferSubcategoryId
+        : (existing.returnTransferSubcategoryId ?? null),
+      envelopeTransferSubcategoryId: parsed.data.envelopeTransferSubcategoryId !== undefined
+        ? parsed.data.envelopeTransferSubcategoryId
+        : (existing.envelopeTransferSubcategoryId ?? null),
       updatedAt:     new Date().toISOString(),
       updatedBy:     req.user.id,
       updatedByName: req.user.name,

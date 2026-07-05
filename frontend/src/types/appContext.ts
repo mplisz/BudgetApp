@@ -63,7 +63,9 @@ export interface AppSettings {
   targets?:                  SettingsTargets;
   currencies?:               Currency[];
   luxmed?:                   { maxPercent?: number; maxTotal?: number };
-  depositSubcategoryId?:     string | null;
+  depositSubcategoryId?:         string | null;
+  returnTransferSubcategoryId?:  string | null;
+  envelopeTransferSubcategoryId?: string | null;
   safetyNet?:                unknown;
   [key: string]:             unknown;
 }
