@@ -90,13 +90,13 @@ function computeSimulation(
 // ── Styles ────────────────────────────────────────────────────
 
 const s = {
-  panel:    { padding: "0 0 120px 0", maxWidth: 860, margin: "0 auto" } as React.CSSProperties,
+  panel:    { padding: "0 0 40px 0", maxWidth: 860, margin: "0 auto" } as React.CSSProperties,
   card:     { background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, overflow: "hidden" } as React.CSSProperties,
   th:       { padding: "10px 12px", textAlign: "left"  as const, color: c.textMuted, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.5px", borderBottom: `1px solid ${c.border}`, background: c.bg, whiteSpace: "nowrap" as const } as React.CSSProperties,
   thR:      { padding: "10px 12px", textAlign: "right" as const, color: c.textMuted, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.5px", borderBottom: `1px solid ${c.border}`, background: c.bg, whiteSpace: "nowrap" as const } as React.CSSProperties,
   td:       { padding: "10px 12px", borderBottom: `1px solid ${c.surfaceAlt}`, color: c.text, verticalAlign: "middle" as const } as React.CSSProperties,
   tdR:      { padding: "10px 12px", borderBottom: `1px solid ${c.surfaceAlt}`, color: c.text, textAlign: "right" as const, fontVariantNumeric: "tabular-nums" as const, verticalAlign: "middle" as const } as React.CSSProperties,
-  bar:      { position: "fixed" as const, bottom: 0, left: 0, right: 0, background: c.bg, borderTop: `1px solid ${c.border}`, padding: "10px 16px", zIndex: 100, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const } as React.CSSProperties,
+  bar:      { marginTop: 16, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const } as React.CSSProperties,
 };
 
 // ── Component ─────────────────────────────────────────────────

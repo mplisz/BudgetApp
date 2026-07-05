@@ -43,9 +43,11 @@ function monthsBack(ym: string, n: number): string {
 // ── Styles ────────────────────────────────────────────────────
 
 const st = {
-  panel: { padding: "0 0 120px 0", maxWidth: 760, margin: "0 auto" } as React.CSSProperties,
+  panel: { padding: "0 0 40px 0", maxWidth: 760, margin: "0 auto" } as React.CSSProperties,
   card:  { background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 8 } as React.CSSProperties,
-  bar:   { position: "fixed" as const, bottom: 0, left: 0, right: 0, background: c.bg, borderTop: `1px solid ${c.border}`, padding: "10px 16px", zIndex: 100, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const },
+  // Inline action bar (in normal flow) — a fixed bar would sit under the
+  // mobile bottom nav and hide the button.
+  bar:   { marginTop: 16, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const },
 };
 
 // ── Component ─────────────────────────────────────────────────
