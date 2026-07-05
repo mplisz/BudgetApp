@@ -643,60 +643,105 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// ── POST /surplus-transfer ────────────────────────────────────
-// Standalone cash TRANSFER (no source transaction) — used by the Kaucja
-// panel when the deposit returned exceeds logged deposit expenses (you
-// returned more bottles than you bought). Uses the same "Środki własne ›
-// Zwroty" bucket as cross-month return transfers.
+// ── POST /deposit-return ──────────────────────────────────────
+// Bottle-deposit batch return (Zwroty butelek). Appends a return entry to
+// each selected deposit expense WITHOUT the per-transaction cross-month
+// transfer, then creates ONE consolidated TRANSFER in the current month =
+// (returns applied to past months) + surplus. Current-month returns just
+// reduce that month's expense, so they don't feed the transfer.
+//
+// body: { returns: [{ txId, amount }], surplus, budgetMonth, date, reason }
 
-router.post("/surplus-transfer", async (req, res) => {
-  const { amount, budgetMonth, date, reason } = req.body;
-  const amt = roundMoney(Number(amount));
-  if (!(amt > 0))                                     return res.status(400).json({ error: "amount must be greater than 0." });
+router.post("/deposit-return", async (req, res) => {
+  const { returns, surplus, budgetMonth, date, reason } = req.body;
+  if (!Array.isArray(returns) || returns.length === 0)      return res.status(400).json({ error: "returns array is required." });
   if (!budgetMonth || !BUDGET_MONTH_REGEX.test(budgetMonth)) return res.status(400).json({ error: "budgetMonth is required (YYYY-MM)." });
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date))     return res.status(400).json({ error: "date is required (YYYY-MM-DD)." });
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date))            return res.status(400).json({ error: "date is required (YYYY-MM-DD)." });
+
+  const familyId   = req.user.familyId;
+  const surplusAmt = Math.max(0, roundMoney(Number(surplus) || 0));
+  const desc       = reason || "Zwrot butelek";
 
   try {
-    const familyId = req.user.familyId;
-    const tx = {
-      id:               `tx_${familyId}_${budgetMonth.replace("-", "")}_kaucja_${Date.now()}`,
-      userId:           familyId,
-      type:             "TRANSFER",
-      categoryId:       process.env.RETURN_CATEGORY_ID      || "cat_srodki",
-      categoryName:     process.env.RETURN_CATEGORY_NAME    || "Środki własne",
-      subcategoryId:    process.env.RETURN_SUBCATEGORY_ID   || "cat_root_srodki_zwroty_MMs",
-      subcategoryName:  process.env.RETURN_SUBCATEGORY_NAME || "Zwroty",
-      amount:           amt,
-      originalAmount:   amt,
-      originalCurrency: "PLN",
-      fxRate:           1,
-      date,
-      budgetMonth,
-      description:      reason || "Zwrot kaucji — nadwyżka",
-      tags:             [],
-      priority:         2,
-      isRecurring:      false,
-      recurringId:      null,
-      useVoucher:       false,
-      voucherId:        null,
-      voucherAmount:    0,
-      netAmount:        amt,
-      returns:          [],
-      author:           req.user.name || req.user.email,
-      authorId:         req.user.id,
-      isArchived:       false,
-      archivedAt:       null,
-      archivedBy:       null,
-      archivedById:     null,
-      createdAt:        new Date().toISOString(),
-    };
+    let pastSum = 0;
+    const updated = [];
+    let failed = 0;
 
-    const { resource } = await transactionsContainer.items.create(tx);
-    console.log(`[TX SURPLUS-TRANSFER] ${resource.id} → ${budgetMonth} (${amt})`);
-    res.status(201).json(resource);
+    // STEP 1 — record the returns on each deposit transaction.
+    for (const r of returns) {
+      const amt = roundMoney(Number(r?.amount));
+      if (!r?.txId || !(amt > 0)) { failed++; continue; }
+      try {
+        const { resource: tx, etag } = await readItemWithEtag(transactionsContainer, r.txId, familyId);
+        if (!tx || tx.isArchived) { failed++; continue; }
+
+        const alreadyReturned = (tx.returns || []).reduce((s, x) => s + (x.cashAmount || 0) + (x.voucherAmount || 0), 0);
+        if (roundMoney(alreadyReturned + amt) > tx.amount + 0.01) { failed++; continue; }
+
+        const entry = {
+          amount: amt, cashAmount: amt, voucherAmount: 0,
+          moneyReturnedInMonth: budgetMonth,   // current month
+          returnedAt: date, reason: desc,
+          returnedBy: req.user.name || req.user.email, returnedById: req.user.id,
+          createdAt: new Date().toISOString(),
+        };
+
+        const { resource } = await transactionsContainer.items.upsert(
+          { ...tx, returns: [...(tx.returns || []), entry], updatedAt: new Date().toISOString() },
+          { accessCondition: { type: "IfMatch", condition: etag } },
+        );
+        updated.push(resource);
+        // Past-month returns don't reduce that month (cross-month) — they feed
+        // the consolidated transfer instead.
+        if (tx.budgetMonth < budgetMonth) pastSum = roundMoney(pastSum + amt);
+      } catch { failed++; }
+    }
+
+    // STEP 2 — one consolidated transfer for past-month returns + surplus.
+    let transfer = null;
+    const transferAmt = roundMoney(pastSum + surplusAmt);
+    if (transferAmt > 0) {
+      const doc = {
+        id:               `tx_${familyId}_${budgetMonth.replace("-", "")}_kaucja_${Date.now()}`,
+        userId:           familyId,
+        type:             "TRANSFER",
+        categoryId:       process.env.RETURN_CATEGORY_ID      || "cat_srodki",
+        categoryName:     process.env.RETURN_CATEGORY_NAME    || "Środki własne",
+        subcategoryId:    process.env.RETURN_SUBCATEGORY_ID   || "cat_root_srodki_zwroty_MMs",
+        subcategoryName:  process.env.RETURN_SUBCATEGORY_NAME || "Zwroty",
+        amount:           transferAmt,
+        originalAmount:   transferAmt,
+        originalCurrency: "PLN",
+        fxRate:           1,
+        date,
+        budgetMonth,
+        description:      desc,
+        tags:             [],
+        priority:         2,
+        isRecurring:      false,
+        recurringId:      null,
+        useVoucher:       false,
+        voucherId:        null,
+        voucherAmount:    0,
+        netAmount:        transferAmt,
+        returns:          [],
+        author:           req.user.name || req.user.email,
+        authorId:         req.user.id,
+        isArchived:       false,
+        archivedAt:       null,
+        archivedBy:       null,
+        archivedById:     null,
+        createdAt:        new Date().toISOString(),
+      };
+      const { resource } = await transactionsContainer.items.create(doc);
+      transfer = resource;
+    }
+
+    console.log(`[TX DEPOSIT-RETURN] ${updated.length} returns, transfer ${transferAmt}, ${failed} failed`);
+    res.status(201).json({ updated, transfer, failed });
   } catch (err) {
-    console.error("[TX SURPLUS-TRANSFER]", err);
-    res.status(500).json({ error: "Failed to create surplus transfer." });
+    console.error("[TX DEPOSIT-RETURN]", err);
+    res.status(500).json({ error: "Failed to process deposit return." });
   }
 });
 

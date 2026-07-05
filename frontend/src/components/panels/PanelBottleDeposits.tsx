@@ -116,28 +116,29 @@ export default function PanelBottleDeposits() {
   async function handleReturn() {
     setConfirmOpen(false);
     setIsSaving(true);
-    let fail = 0;
-    for (const r of sim.rows) {
-      try {
-        await api.post(`/api/transactions/${r.tx.id}/returns`, {
-          amount: r.willReturn, cashAmount: r.willReturn, voucherAmount: 0,
-          moneyReturnedInMonth: cur, returnedAt: todayYMD(), reason: "Zwrot butelek",
-        });
-      } catch { fail++; }
+    try {
+      // One batch call → returns recorded per tx + a single consolidated
+      // transfer (past-month returns + surplus) created server-side.
+      const res = await api.post<{ failed?: number }>(`/api/transactions/deposit-return`, {
+        returns: sim.rows.map(r => ({ txId: r.tx.id, amount: r.willReturn })),
+        surplus: sim.surplus,
+        budgetMonth: cur,
+        date: todayYMD(),
+        reason: "Zwrot butelek",
+      });
+      invalidate(fromMonth, cur);
+      await loadRange(fromMonth, cur);
+      setAmountStr("");
+      if (res?.failed && res.failed > 0) {
+        showError(`Zwrócono część — ${res.failed} pozycji nie przeszło. Odśwież i sprawdź.`);
+      } else {
+        showSuccess(`✅ Zwrócono ${fmt(sim.totalReturn)}${sim.surplus > 0 ? ` + nadwyżka ${fmt(sim.surplus)}` : ""}`);
+      }
+    } catch (err) {
+      showError((err as Error).message);
+    } finally {
+      setIsSaving(false);
     }
-    if (sim.surplus > 0 && fail === 0) {
-      try {
-        await api.post(`/api/transactions/surplus-transfer`, {
-          amount: sim.surplus, budgetMonth: cur, date: todayYMD(), reason: "Zwrot butelek — nadwyżka",
-        });
-      } catch { fail++; }
-    }
-    invalidate(fromMonth, cur);
-    await loadRange(fromMonth, cur);
-    setAmountStr("");
-    setIsSaving(false);
-    if (fail === 0) showSuccess(`✅ Zwrócono ${fmt(sim.totalReturn)}${sim.surplus > 0 ? ` + nadwyżka ${fmt(sim.surplus)}` : ""}`);
-    else showError(`Wystąpiły błędy (${fail}). Odśwież i sprawdź stan.`);
   }
 
   const canReturn = amount > 0 && !isSaving && !!depositSubcategoryId && (sim.rows.length > 0 || sim.surplus > 0);
@@ -188,14 +189,12 @@ export default function PanelBottleDeposits() {
           <div style={{ fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
             Zwrot transakcji: <strong style={{ color: c.cyan }}>{fmt(sim.totalReturn)} PLN</strong>
             {" "}({sim.rows.length} poz.)
-            {sim.pastReturn > 0 && (
+            {(sim.pastReturn > 0 || sim.surplus > 0) && (
               <div style={{ fontSize: 12, color: c.textMuted }}>
-                W tym z przeszłych miesięcy <strong style={{ color: c.text }}>{fmt(sim.pastReturn)} PLN</strong> → utworzą się transfery w {cur}.
-              </div>
-            )}
-            {sim.surplus > 0 && (
-              <div style={{ fontSize: 12, color: c.warning }}>
-                Nadwyżka <strong>{fmt(sim.surplus)} PLN</strong> (więcej niż zalogowane kaucje) → dodatkowy transfer w {cur}.
+                + jeden transfer w {cur}:{" "}
+                <strong style={{ color: c.text }}>{fmt(round2(sim.pastReturn + sim.surplus))} PLN</strong>
+                {" "}(przeszłe miesiące {fmt(sim.pastReturn)}
+                {sim.surplus > 0 && <> + nadwyżka <strong style={{ color: c.warning }}>{fmt(sim.surplus)}</strong></>})
               </div>
             )}
           </div>
@@ -253,8 +252,10 @@ export default function PanelBottleDeposits() {
         title="🍾 Potwierdź zwrot butelek"
         message={
           `Zwrócić ${fmt(sim.totalReturn)} PLN z ${sim.rows.length} transakcji?` +
-          (sim.pastReturn > 0 ? `\n\nZ przeszłych miesięcy: ${fmt(sim.pastReturn)} PLN — system utworzy transfery w ${cur}.` : "") +
-          (sim.surplus > 0 ? `\n\nNadwyżka: ${fmt(sim.surplus)} PLN — dodatkowy transfer w ${cur}.` : "")
+          ((sim.pastReturn + sim.surplus) > 0
+            ? `\n\nPowstanie jeden transfer w ${cur}: ${fmt(round2(sim.pastReturn + sim.surplus))} PLN` +
+              ` (przeszłe miesiące ${fmt(sim.pastReturn)}${sim.surplus > 0 ? ` + nadwyżka ${fmt(sim.surplus)}` : ""}).`
+            : "")
         }
         onConfirm={handleReturn}
         onCancel={() => setConfirmOpen(false)}
@@ -288,7 +289,7 @@ function Header() {
     <div style={{ marginBottom: 20, marginTop: 8 }}>
       <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 }}>🍾 Zwroty butelek</div>
       <div style={{ fontSize: 13, color: c.textSecondary }}>
-        Podaj jedną kwotę — zwrócę najstarsze nierozliczone kaucje do tej kwoty (ostatnia częściowo), z transferami za przeszłe miesiące.
+        Podaj jedną kwotę — zwrócę najstarsze nierozliczone kaucje do tej kwoty (ostatnia częściowo). Za przeszłe miesiące i nadwyżkę powstanie jeden zbiorczy transfer.
       </div>
     </div>
   );
