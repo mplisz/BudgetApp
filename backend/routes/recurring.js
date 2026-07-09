@@ -61,6 +61,8 @@ const RecurringPatchSchema = z.object({
   subcategoryName:  z.string().min(1).optional(),
   categoryId:       z.string().min(1).optional(),
   categoryName:     z.string().min(1).optional(),
+  frequency:        FrequencyEnum.optional(),
+  activeMonths:     z.array(z.number().int().min(1).max(12)).nullable().optional(),
   plannedDay:       z.number().int().min(1).max(31).optional(),
   tags:             z.array(z.string()).optional(),
   priority:         z.number().int().min(1).max(4).optional(),
