@@ -49,7 +49,7 @@ export const MONTH_SELECTOR_PANELS = [
   "expenses", "addincome", "addrecurring", "addplanned",
   "transactions", "incometransactions",
   "recurring",
-  "summary", "basebudget", "luxmed"
+  "summary", "basebudget"
 ];
 
 // Panels whose page title includes the active month name.
@@ -60,5 +60,5 @@ export const MONTH_TITLE_PANELS = [
   "expenses", "addincome", "addrecurring", "addplanned",
   "transactions", "incometransactions",
   "recurring",
-  "summary", "basebudget", "luxmed"
+  "summary", "basebudget"
 ];

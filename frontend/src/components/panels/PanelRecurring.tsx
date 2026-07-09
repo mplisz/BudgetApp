@@ -744,9 +744,30 @@ export default function PanelRecurring() {
 
   const handleSubmit = useCallback(async (payload: RecurringFormPayload) => {
     if (!editTarget) return;
-    // payload is form/wire-shaped (newCostEntry, validTo…), not a stored doc —
-    // the backend transforms it, so cast through unknown.
-    await updateRecurring(editTarget.id, payload as unknown as Partial<RecurringDoc>);
+    // The form emits a single `newCostEntry`; the PATCH endpoint stores the full
+    // `costs[]`. Merge the entry into the existing history: replace the entry with
+    // the same validFrom (correcting that month's cost) or append a new price point.
+    const { newCostEntry, ...rest } = payload;
+    const existingCosts = editTarget.costs ?? [];
+
+    // Guard: if the cost for the edited month is unchanged (e.g. only the
+    // description was touched), leave the history untouched — otherwise we'd
+    // append a redundant same-value entry. Other fields still patch via `rest`.
+    const active = getActiveCost(editTarget, month);
+    const costUnchanged =
+      !!active &&
+      active.amount === newCostEntry.amount &&
+      active.originalCurrency === newCostEntry.originalCurrency &&
+      active.fxRate === newCostEntry.fxRate;
+
+    const costs = costUnchanged
+      ? existingCosts
+      : [
+          ...existingCosts.filter(c => c.validFrom !== newCostEntry.validFrom),
+          newCostEntry,
+        ].sort((a, b) => a.validFrom.localeCompare(b.validFrom));
+
+    await updateRecurring(editTarget.id, { ...rest, costs } as unknown as Partial<RecurringDoc>);
     closeModal();
     loadAll();
   }, [editTarget, updateRecurring, closeModal, loadAll]);

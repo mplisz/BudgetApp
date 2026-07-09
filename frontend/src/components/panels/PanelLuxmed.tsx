@@ -1,17 +1,21 @@
 // ============================================================
 // File: src/components/panels/PanelLuxmed.tsx
 // RWD-first: cards mobile, table on desktops
+//
+// Returns are ALWAYS booked in the current calendar month (like
+// PanelBottleDeposits) — this panel has no month navigator. The default
+// view is the last COMPLETED quarter (the one you claim now); older
+// quarters are reachable via archive-only pills for viewing.
 // ============================================================
 
 import { c, alpha } from "../../styles/tokens";
 import { useState, useMemo, useEffect } from "react";
 import { useAppContext }        from "../../context/AppContext";
 import { useTransactionsRange } from "../../hooks/useTransactionsRange";
-import { useMonthStatus }       from "../../hooks/useMonthStatus";
 import { useApi }               from "../../hooks/useApi";
 import { useToast }             from "../../hooks/useToast";
 import { ConfirmModal }         from "../ui/ConfirmModal";
-import { fmt, round2 }         from "../../utils/helpers";
+import { fmt, round2, currentCalendarMonth, todayYMD } from "../../utils/helpers";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -42,11 +46,18 @@ interface SimRow {
   willReturn:      number;
 }
 
+interface Quarter { q: number; year: number }
+
 // ── Helpers ───────────────────────────────────────────────────
 
-function currentQuarter(): { q: number; year: number } {
+function currentQuarter(): Quarter {
   const now = new Date();
   return { q: Math.floor(now.getMonth() / 3) + 1, year: now.getFullYear() };
+}
+
+// The quarter immediately before the given one (wraps Q1 → Q4 of prev year).
+function prevQuarter({ q, year }: Quarter): Quarter {
+  return q === 1 ? { q: 4, year: year - 1 } : { q: q - 1, year };
 }
 
 function quarterBounds(q: number, year: number) {
@@ -97,22 +108,43 @@ const s = {
   td:       { padding: "10px 12px", borderBottom: `1px solid ${c.surfaceAlt}`, color: c.text, verticalAlign: "middle" as const } as React.CSSProperties,
   tdR:      { padding: "10px 12px", borderBottom: `1px solid ${c.surfaceAlt}`, color: c.text, textAlign: "right" as const, fontVariantNumeric: "tabular-nums" as const, verticalAlign: "middle" as const } as React.CSSProperties,
   bar:      { marginTop: 16, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const } as React.CSSProperties,
+  pillLabel:{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.5px" } as React.CSSProperties,
 };
+
+function pillStyle(active: boolean, activeBg: string): React.CSSProperties {
+  return {
+    padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none",
+    background: active ? activeBg  : c.border,
+    color:      active ? c.white   : c.textSecondary,
+    transition: "all 0.15s",
+  };
+}
 
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelLuxmed() {
   const { categories, settings } = useAppContext();
-  const { activeBudgetMonth }    = useMonthStatus();
   const api                      = useApi();
   const { showSuccess, showError } = useToast();
   const { transactions, isLoading, loadRange, invalidate } = useTransactionsRange();
 
   // ── Quarter ───────────────────────────────────────────────
-  const now  = useMemo(() => currentQuarter(), []);
-  const [activeQ,    setActiveQ]    = useState(now.q);
-  const [activeYear, setActiveYear] = useState(now.year);
+  // Default = last COMPLETED quarter (what you claim now). Older quarters
+  // are archive-only (view). Returns always book in the current month.
+  const returnMonth = currentCalendarMonth();
+  const defQ  = useMemo(() => prevQuarter(currentQuarter()), []);
+  const [activeQ,    setActiveQ]    = useState(defQ.q);
+  const [activeYear, setActiveYear] = useState(defQ.year);
+  const isArchive = !(activeQ === defQ.q && activeYear === defQ.year);
   const bounds = useMemo(() => quarterBounds(activeQ, activeYear), [activeQ, activeYear]);
+
+  // Archive quarters: the 4 quarters preceding the default (view-only).
+  const archiveQuarters = useMemo(() => {
+    const arr: Quarter[] = [];
+    let cursor = defQ;
+    for (let i = 0; i < 4; i++) { cursor = prevQuarter(cursor); arr.push(cursor); }
+    return arr;
+  }, [defQ]);
 
   useEffect(() => { loadRange(bounds.from, bounds.to); }, [bounds.from, bounds.to, loadRange]);
   useEffect(() => { setSelected(new Set()); }, [activeQ, activeYear]);
@@ -141,35 +173,35 @@ export default function PanelLuxmed() {
   const maxPercent = settings?.luxmed?.maxPercent ?? 90;
   const maxTotal   = settings?.luxmed?.maxTotal   ?? 500;
 
-  // ── Already used this quarter ────────────────────────────
+  // ── Already returned from this quarter's visits ──────────
+  // The quarterly limit tracks reimbursements against the quarter's
+  // transactions, regardless of the month the return was booked in.
   const alreadyUsed = useMemo(() =>
     luxmedTxs.reduce((sum, tx) =>
-      sum + (tx.returns || [])
-        .filter(r => r.moneyReturnedInMonth >= bounds.from && r.moneyReturnedInMonth <= bounds.to)
-        .reduce((s, r) => s + (r.cashAmount || 0), 0),
+      sum + (tx.returns || []).reduce((s, r) => s + (r.cashAmount || 0), 0),
     0),
-    [luxmedTxs, bounds]
+    [luxmedTxs]
   );
   const effectiveLimit = Math.max(0, maxTotal - alreadyUsed);
 
   // ── Selection — tylko transakcje z pozostałą kwotą ───────
-  // Transakcja jest w pełni zwrócona gdy: remaining <= 0
-  // Nie można jej ponownie zaznaczyć (disabled checkbox + nie jest selectowalna)
+  // Transakcja jest w pełni zwrócona gdy: remaining <= 0 lub przekroczono % limitu.
+  // W trybie archiwum nic nie jest selectowalne (podgląd).
   const selectableTxs = useMemo(() =>
-    luxmedTxs.filter(tx => {
+    isArchive ? [] : luxmedTxs.filter(tx => {
       const returned = alreadyReturnedTotal(tx);
       const remaining = tx.amount - returned;
       const maxAllowed = tx.amount * maxPercent / 100;
-      // Można zwrócić jeśli: jest jeszcze coś do zwrotu I nie przekroczono % limitu
       return remaining > 0 && returned < maxAllowed;
     }),
-    [luxmedTxs, maxPercent]
+    [luxmedTxs, maxPercent, isArchive]
   );
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const allSelected = selectableTxs.length > 0 && selectableTxs.every(tx => selected.has(tx.id));
 
   function toggleAll() {
+    if (isArchive) return;
     setSelected(allSelected ? new Set() : new Set(selectableTxs.map(tx => tx.id)));
   }
   function toggleTx(id: string, selectable: boolean) {
@@ -206,8 +238,8 @@ export default function PanelLuxmed() {
       try {
         await api.post(`/api/transactions/${row.txId}/returns`, {
           amount: row.willReturn, cashAmount: row.willReturn, voucherAmount: 0,
-          moneyReturnedInMonth: activeBudgetMonth,
-          returnedAt: new Date().toISOString().split("T")[0],
+          moneyReturnedInMonth: returnMonth,
+          returnedAt: todayYMD(),
           reason: "Zwrot LuxMed",
         });
         ok++;
@@ -220,24 +252,6 @@ export default function PanelLuxmed() {
     if (fail === 0) showSuccess(`✅ Wykonano ${ok} zwrot${ok === 1 ? "" : "ów"} — ${fmt(totalWillReturn)}`);
     else            showError(`${ok} OK, ${fail} błędów`);
   }
-
-  // ── Quarter pills ────────────────────────────────────────
-  const quarterPills = useMemo(() => {
-    const pills = [];
-    if (now.q === 1) pills.push({
-      label: `Q4 ${now.year - 1}`,
-      active: activeQ === 4 && activeYear === now.year - 1,
-      onClick: () => { setActiveQ(4); setActiveYear(now.year - 1); },
-    });
-    for (let q = 1; q <= now.q; q++) {
-      pills.push({
-        label: `Q${q}${activeYear < now.year ? ` ${now.year}` : ""}`,
-        active: activeQ === q && activeYear === now.year,
-        onClick: () => { setActiveQ(q); setActiveYear(now.year); },
-      });
-    }
-    return pills;
-  }, [now, activeQ, activeYear]);
 
   // ── No sub banner ────────────────────────────────────────
   if (!isLoading && luxmedSubIds.size === 0) {
@@ -260,29 +274,46 @@ export default function PanelLuxmed() {
     <div style={s.panel}>
       <PanelHeader />
 
-      {/* Quarter pills */}
+      {/* Bieżący kwartał do rozliczenia */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ ...s.pillLabel, marginBottom: 8 }}>Kwartał do rozliczenia</div>
+        <button
+          onClick={() => { setActiveQ(defQ.q); setActiveYear(defQ.year); }}
+          style={pillStyle(!isArchive, c.cyan)}
+        >
+          Q{defQ.q} {defQ.year}
+        </button>
+      </div>
+
+      {/* Archiwum — tylko podgląd */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Kwartał</div>
+        <div style={{ ...s.pillLabel, marginBottom: 8 }}>📁 Archiwum (tylko podgląd)</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {quarterPills.map(p => (
-            <button key={p.label} onClick={p.onClick} style={{
-              padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none",
-              background: p.active ? c.cyan : c.border,
-              color:      p.active ? c.white    : c.textSecondary,
-              transition: "all 0.15s",
-            }}>{p.label}</button>
-          ))}
+          {archiveQuarters.map(aq => {
+            const active = activeQ === aq.q && activeYear === aq.year;
+            return (
+              <button
+                key={`${aq.year}-${aq.q}`}
+                onClick={() => { setActiveQ(aq.q); setActiveYear(aq.year); }}
+                style={pillStyle(active, c.warning)}
+              >
+                Q{aq.q} {aq.year}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Month info */}
-      <div style={{ marginBottom: 14, padding: "8px 14px", background: "#0f1f2e", border: "1px solid #1e3a5f", borderRadius: 8, fontSize: 12, color: c.textSecondary, display: "flex", alignItems: "center", gap: 8 }}>
-        <span>📅</span>
-        <span>Zwroty zaksięgowane w <strong style={{ color: c.infoLight }}>{activeBudgetMonth}</strong> — zmień miesiąc strzałkami w headerze.</span>
-      </div>
+      {/* Archive-mode banner */}
+      {isArchive && (
+        <div style={{ marginBottom: 14, padding: "10px 14px", background: alpha(c.warning, "11"), border: `1px solid ${alpha(c.warning, "44")}`, borderRadius: 8, fontSize: 13, color: c.warning, display: "flex", alignItems: "center", gap: 8 }}>
+          <span>📁</span>
+          <span>Tryb archiwum — podgląd kwartału <strong>Q{activeQ} {activeYear}</strong>. Zwroty wykonujesz tylko dla bieżącego kwartału.</span>
+        </div>
+      )}
 
       {/* Limit exhausted */}
-      {limitExhausted && (
+      {!isArchive && limitExhausted && (
         <div style={{ marginBottom: 14, padding: "10px 14px", background: "#1a0a0a", border: `1px solid ${alpha(c.danger, "44")}`, borderRadius: 8, fontSize: 13, color: c.dangerLight }}>
           🚫 Limit kwartalny wyczerpany — wykorzystano <strong>{fmt(alreadyUsed)}</strong> z <strong>{fmt(maxTotal)}</strong>.
         </div>
@@ -309,7 +340,7 @@ export default function PanelLuxmed() {
                 <thead>
                   <tr>
                     <th style={{ ...s.th, width: 36 }}>
-                      <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ cursor: "pointer" }} />
+                      <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={isArchive || selectableTxs.length === 0} style={{ cursor: isArchive ? "not-allowed" : "pointer" }} />
                     </th>
                     <th style={s.th}>Data</th>
                     <th style={s.th}>Subkategoria / Opis</th>
@@ -325,24 +356,25 @@ export default function PanelLuxmed() {
                     const remaining     = Math.max(0, tx.amount - returned);
                     const maxAllowed    = tx.amount * maxPercent / 100;
                     const fullyReturned = remaining <= 0 || returned >= maxAllowed;
+                    const selectable    = !fullyReturned && !isArchive;
                     const isSelected    = selected.has(tx.id);
                     const sim           = simMap.get(tx.id);
 
                     return (
                       <tr key={tx.id}
-                        onClick={() => toggleTx(tx.id, !fullyReturned)}
+                        onClick={() => toggleTx(tx.id, selectable)}
                         style={{
                           background:  isSelected ? alpha(c.cyan, "08") : idx % 2 === 0 ? "transparent" : alpha(c.white, "04"),
-                          cursor:      fullyReturned ? "default" : "pointer",
+                          cursor:      selectable ? "pointer" : "default",
                           opacity:     fullyReturned ? 0.45 : 1,
                           borderLeft:  isSelected ? `3px solid ${c.cyan}` : "3px solid transparent",
                           transition:  "background 0.1s",
                         }}>
                         <td style={{ ...s.td, paddingRight: 4 }}>
-                          <input type="checkbox" checked={isSelected} disabled={fullyReturned}
-                            onChange={() => toggleTx(tx.id, !fullyReturned)}
+                          <input type="checkbox" checked={isSelected} disabled={!selectable}
+                            onChange={() => toggleTx(tx.id, selectable)}
                             onClick={e => e.stopPropagation()}
-                            style={{ cursor: fullyReturned ? "not-allowed" : "pointer" }}
+                            style={{ cursor: selectable ? "pointer" : "not-allowed" }}
                           />
                         </td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: c.textTertiary, fontSize: 12 }}>
@@ -374,7 +406,7 @@ export default function PanelLuxmed() {
               </table>
             </div>
             <div style={{ padding: "8px 14px", borderTop: `1px solid ${c.surfaceAlt}`, fontSize: 11, color: c.borderStrong, display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <span>Łącznie: <strong style={{ color: c.textSecondary }}>{luxmedTxs.length}</strong> tx · <strong style={{ color: c.textSecondary }}>{selectableTxs.length}</strong> do zwrotu</span>
+              <span>Łącznie: <strong style={{ color: c.textSecondary }}>{luxmedTxs.length}</strong> tx{!isArchive && <> · <strong style={{ color: c.textSecondary }}>{selectableTxs.length}</strong> do zwrotu</>}</span>
               <span>Limit {maxPercent}% / tx · {fmt(maxTotal)} / kwartał</span>
             </div>
           </div>
@@ -382,7 +414,7 @@ export default function PanelLuxmed() {
           {/* ── MOBILE: karty (ukryte na desktop) ── */}
           <div className="luxmed-mobile">
             {/* Zaznacz wszystkie */}
-            {selectableTxs.length > 0 && (
+            {!isArchive && selectableTxs.length > 0 && (
               <button onClick={toggleAll} style={{
                 width: "100%", marginBottom: 10, padding: "10px 14px", borderRadius: 10,
                 border: `1px solid ${c.border}`, background: "transparent", color: c.textSecondary,
@@ -397,12 +429,13 @@ export default function PanelLuxmed() {
               const remaining     = Math.max(0, tx.amount - returned);
               const maxAllowed    = tx.amount * maxPercent / 100;
               const fullyReturned = remaining <= 0 || returned >= maxAllowed;
+              const selectable    = !fullyReturned && !isArchive;
               const isSelected    = selected.has(tx.id);
               const sim           = simMap.get(tx.id);
 
               return (
                 <div key={tx.id}
-                  onClick={() => toggleTx(tx.id, !fullyReturned)}
+                  onClick={() => toggleTx(tx.id, selectable)}
                   style={{
                     ...s.card,
                     marginBottom: 8,
@@ -410,7 +443,7 @@ export default function PanelLuxmed() {
                     opacity:    fullyReturned ? 0.5 : 1,
                     borderColor: isSelected ? c.cyan : c.border,
                     borderLeft:  isSelected ? `4px solid ${c.cyan}` : `1px solid ${c.border}`,
-                    cursor:      fullyReturned ? "default" : "pointer",
+                    cursor:      selectable ? "pointer" : "default",
                   }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
                     <div>
@@ -438,7 +471,7 @@ export default function PanelLuxmed() {
                       ) : isSelected ? (
                         <span style={{ fontSize: 11, color: c.warning }}>limit!</span>
                       ) : null}
-                      {!fullyReturned && (
+                      {selectable && (
                         <input type="checkbox" checked={isSelected}
                           onChange={() => toggleTx(tx.id, true)}
                           onClick={e => e.stopPropagation()}
@@ -461,13 +494,13 @@ export default function PanelLuxmed() {
       <ConfirmModal
         isOpen={confirmOpen}
         title="🏥 Potwierdź zwroty LuxMed"
-        message={`Wykonać ${simRows.filter(r => r.willReturn > 0).length} zwrot${simRows.filter(r => r.willReturn > 0).length === 1 ? "" : "ów"} na łączną kwotę ${fmt(totalWillReturn)}?\n\nMiesiąc: ${activeBudgetMonth}. Dla transakcji z innych miesięcy system automatycznie utworzy transfery.`}
+        message={`Wykonać ${simRows.filter(r => r.willReturn > 0).length} zwrot${simRows.filter(r => r.willReturn > 0).length === 1 ? "" : "ów"} na łączną kwotę ${fmt(totalWillReturn)}?\n\nZaksięgowane w bieżącym miesiącu (${returnMonth}). Dla transakcji z innych miesięcy system automatycznie utworzy transfery.`}
         onConfirm={handleBulkReturn}
         onCancel={() => setConfirmOpen(false)}
       />
 
-      {/* Sticky summary bar */}
-      {!isLoading && luxmedTxs.length > 0 && (
+      {/* Summary bar — tylko dla bieżącego kwartału */}
+      {!isLoading && !isArchive && luxmedTxs.length > 0 && (
         <SummaryBar
           maxTotal={maxTotal}
           alreadyUsed={alreadyUsed}
