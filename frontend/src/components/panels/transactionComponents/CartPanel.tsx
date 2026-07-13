@@ -15,6 +15,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { useAppContext }    from "../../../context/AppContext";
 import { useTransactions }  from "../../../hooks/useTransactions";
 import { useVouchers }      from "../../../hooks/useVouchers";
+import { useApi }           from "../../../hooks/useApi";
 import { useToast }         from "../../../hooks/useToast";
 import { fmt, round2 }      from "../../../utils/helpers";
 import { PRIORITY_COLORS }  from "../../ui/PriorityPicker";
@@ -38,6 +39,10 @@ export interface CartItem extends TransactionPayload {
   _ocrNeedsReview?: boolean; // AI was unsure — keep flagged in cart until edited
   _lineItems?:      Array<{ description: string; amount: number; originalAmount?: number; originalCurrency?: string }>;
   _ocrSummary?: string;
+  // ── Category-learning provenance (stripped before save) ──
+  _ocrOrigSubcatId?: string; // AI's originally suggested subcategory id
+  _ocrOrigDesc?:     string; // raw OCR description — the learning key
+  _ocrNoLearn?:      boolean; // user opted this one-off edit out of learning
 }
 
 interface CartPanelProps {
@@ -124,6 +129,7 @@ function toPayload(item: CartItem): TransactionPayload {
   const {
     _cartId, _ocrSummary ,_allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote,
     _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _ocrNeedsReview,
+    _ocrOrigSubcatId, _ocrOrigDesc, _ocrNoLearn,
     _lineItems, ...payload
   } = item;
   if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
@@ -134,12 +140,50 @@ function toPayload(item: CartItem): TransactionPayload {
   return payload as TransactionPayload;
 }
 
+// ── Category-learning feedback ────────────────────────────────
+// A "correction" is an OCR-originated line whose final subcategory differs
+// from what the AI suggested (covers both "AI wrong → fixed" and "AI blank
+// → filled"). Computed from the RAW cart (pre-aggregate, so per-line origin
+// survives), restricted to lines that actually saved. Deduped by key.
+interface FeedbackCorrection {
+  description:     string;
+  merchant:        string | null;
+  categoryName:    string;
+  subcategoryName: string;
+}
+function collectCorrections(items: CartItem[], savedIds: string[]): FeedbackCorrection[] {
+  const saved = new Set(savedIds);
+  const seen  = new Set<string>();
+  const out: FeedbackCorrection[] = [];
+  for (const i of items) {
+    if (!saved.has(i._cartId)) continue;
+    if (i._ocrNoLearn) continue;                            // user opted this edit out of learning
+    if (!i._ocrOrigDesc || !i.subcategoryId || !i.subcategoryName || !i.categoryName) continue;
+    if (i.subcategoryId === i._ocrOrigSubcatId) continue;   // unchanged → not a correction
+    const merchant = i._ocrMerchant || i.merchant || null;
+    const key = `${i._ocrOrigDesc}|${merchant || ""}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ description: i._ocrOrigDesc, merchant, categoryName: i.categoryName, subcategoryName: i.subcategoryName });
+  }
+  return out;
+}
+
 // ── Component ─────────────────────────────────────────────────
 
 export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
   const { cart, setCart } = useAppContext();
   const { addTransaction, addTransactionBatch } = useTransactions();
   const { showSuccess, showError, showInfo } = useToast();
+  const api = useApi();
+
+  // Fire-and-forget: teach the backend from the user's category fixes.
+  // Never blocks or surfaces errors — learning is a background nicety.
+  const sendCorrections = useCallback((savedIds: string[]) => {
+    const corrections = collectCorrections(cart, savedIds);
+    if (!corrections.length) return;
+    api.post("/api/ocr/feedback", { corrections }).catch(() => {});
+  }, [api, cart]);
 
   const [statuses,   setStatuses]   = useState<Record<string, ItemStatus>>({});
   const [saving,     setSaving]     = useState(false);
@@ -240,6 +284,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       if (result) {
         allIds.forEach(id => setStatus(id, STATUS.DONE));
         showSuccess(`Zapisano ${pending.length} ${noun(pending.length)}! ✅`);
+        sendCorrections(allIds);
         setCartAllocations([]);
         setVoucherOpen(false);
         setTimeout(() => {
@@ -267,6 +312,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       }
     }
     setSaving(false);
+    if (savedIds.length) sendCorrections(savedIds);
 
     const savedTxCount = pending.filter(item =>
       (item._allCartIds || [item._cartId]).some(id => savedIds.includes(id))
@@ -282,7 +328,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       setStatuses(prev => { const n = { ...prev }; savedIds.forEach(id => delete n[id]); return n; });
       if (savedTxCount > 0) onSaveComplete?.();
     }, 1200);
-  }, [cart, statuses, cartAllocations, addTransaction, addTransactionBatch, setCart, showSuccess, showError, showInfo, onSaveComplete]);
+  }, [cart, statuses, cartAllocations, addTransaction, addTransactionBatch, setCart, showSuccess, showError, showInfo, onSaveComplete, sendCorrections]);
 
   if (cart.length === 0) return null;
 

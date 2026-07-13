@@ -1,9 +1,19 @@
 // ============================================================
 // File: backend/utils/merchant.js
-// Shared merchant-name normalization. Used by the OCR pipeline,
-// the /api/merchants route, and transaction commit — so a junk
-// value never reaches the DB or the per-shop filter from any path.
+// Shared merchant-name normalization + the family's known-merchant
+// registry. Used by the OCR pipeline, the /api/merchants route, and
+// transaction commit — so a junk value never reaches the DB or the
+// per-shop filter from any path.
+//
+// The registry lives in ONE Settings doc, merchants_${familyId}:
+//   - merchants: string[]              — autocomplete + prompt canonicalization
+//   - nips:      { [nip]: name }       — deterministic NIP → shop-name override
+// Both are maintained here through the shared settingsDoc helper.
 // ============================================================
+
+const { upsertSettingsDoc } = require("./settingsDoc");
+
+const MERCHANTS_DOC = (familyId) => `merchants_${familyId}`;
 
 const MERCHANT_JUNK = new Set([
   "nieznany", "nieznany sklep", "brak", "n/a", "na", "-", "—",
@@ -19,6 +29,15 @@ function cleanMerchant(raw) {
   return t;
 }
 
+// Returns the digits-only tax id, or null when it doesn't look like one.
+// PL NIP is 10 digits; the 8–15 window tolerates foreign VAT ids while
+// still rejecting an OCR misread of some unrelated number.
+function cleanNip(raw) {
+  const digits = (raw == null ? "" : String(raw)).replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 15) return null;
+  return digits;
+}
+
 // Case-insensitive membership check against an existing list.
 function merchantExists(list, name) {
   const n = (name || "").trim().toLowerCase();
@@ -29,38 +48,48 @@ function merchantExists(list, name) {
 // idempotent — used by both the OCR scan and manual transaction commit,
 // so any path that produces a merchant name keeps the autocomplete list
 // (and OCR canonicalization source) up to date. Never throws.
-//
-// settingsContainer is passed in to avoid a circular require with cosmos.js
-// from a utils module.
 async function rememberMerchant(settingsContainer, familyId, name) {
   const clean = cleanMerchant(name);
   if (!clean) return;
-  try {
-    let doc = null;
-    try {
-      const { resource } = await settingsContainer.item(`merchants_${familyId}`, familyId).read();
-      doc = resource;
-    } catch { doc = null; }
-    if (!doc) {
-      doc = {
-        id:        `merchants_${familyId}`,
-        userId:    familyId,
-        type:      "MERCHANTS",
-        merchants: [],
-        createdAt: new Date().toISOString(),
-      };
-    }
-    const list = Array.isArray(doc.merchants) ? doc.merchants : [];
-    if (merchantExists(list, clean)) return;  // already known
-    await settingsContainer.items.upsert({
-      ...doc,
-      merchants: [...list, clean],
-      updatedAt: new Date().toISOString(),
-    });
-    console.log(`[MERCHANTS] Remembered "${clean}" for ${familyId}`);
-  } catch (err) {
-    console.error("[MERCHANTS] rememberMerchant failed (non-fatal):", err.message);
-  }
+  await upsertSettingsDoc(settingsContainer, {
+    id: MERCHANTS_DOC(familyId),
+    familyId,
+    type:   "MERCHANTS",
+    logTag: "MERCHANTS",
+    mutate: (doc) => {
+      const list = Array.isArray(doc.merchants) ? doc.merchants : [];
+      if (merchantExists(list, clean)) return null;   // already known → skip write
+      return { ...doc, merchants: [...list, clean] };
+    },
+  });
 }
 
-module.exports = { cleanMerchant, merchantExists, rememberMerchant };
+// Learn a NIP → shop-name mapping. Called at transaction commit with the
+// receipt's seller NIP and the user's FINAL merchant name (so a corrected
+// name is what gets remembered; last write wins). Also ensures the name is
+// in merchants[] for consistency. Best-effort, never throws.
+async function rememberMerchantNip(settingsContainer, familyId, nip, name) {
+  const cleanN    = cleanNip(nip);
+  const cleanName = cleanMerchant(name);
+  if (!cleanN || !cleanName) return;
+  await upsertSettingsDoc(settingsContainer, {
+    id: MERCHANTS_DOC(familyId),
+    familyId,
+    type:   "MERCHANTS",
+    logTag: "MERCHANTS",
+    mutate: (doc) => {
+      const nips = (doc.nips && typeof doc.nips === "object") ? doc.nips : {};
+      const list = Array.isArray(doc.merchants) ? doc.merchants : [];
+      const nameKnown = merchantExists(list, cleanName);
+      // No-op guard: identical mapping already stored → skip the write.
+      if (nips[cleanN] === cleanName && nameKnown) return null;
+      return {
+        ...doc,
+        nips:      { ...nips, [cleanN]: cleanName },
+        merchants: nameKnown ? list : [...list, cleanName],
+      };
+    },
+  });
+}
+
+module.exports = { cleanMerchant, cleanNip, merchantExists, rememberMerchant, rememberMerchantNip };

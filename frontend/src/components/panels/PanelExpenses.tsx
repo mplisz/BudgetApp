@@ -24,6 +24,7 @@ import { useCurrencyConverter } from "../../hooks/useCurrencyConverter";
 import { useCurrencyManager }   from "../../hooks/useCurrencyManager";
 import { TagMultiSelect } from "../ui/TagMultiSelect";
 import { CartItemEditorModal } from "./transactionComponents/CartItemEditorModal";
+import type { CartEditPayload } from "./transactionComponents/CartItemEditor";
 
 // ── Cart ID generator ─────────────────────────────────────────
 
@@ -144,7 +145,7 @@ export default function PanelExpenses() {
     setOcrMode(false);
   }, [setEditingCartItem]);
 
-const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
+const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
   if (!editingCartItem) return;
 
   // Merged items carry every original id in _allCartIds. Editing
@@ -298,7 +299,12 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
         // items stay visibly flagged after adding — on a 28-item receipt
         // it's impossible to remember which the AI was unsure about.
         _ocrNeedsReview:  line.categoryConfidence < 0.75 || undefined,
-        _ocrSummary:  ocrMeta?.summary || undefined
+        _ocrSummary:  ocrMeta?.summary || undefined,
+        // Learning provenance: the AI's original suggestion + the raw OCR
+        // description. Survives cart edits ({...editingCartItem, ...payload})
+        // so on save we can diff final vs. original and learn the correction.
+        _ocrOrigSubcatId: line.subcategoryId || "",
+        _ocrOrigDesc:     line.description   || undefined,
       })),
     ]);
 

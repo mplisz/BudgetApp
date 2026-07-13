@@ -20,8 +20,11 @@ const rateLimit = require('express-rate-limit');
 */
 const { ipKeyGenerator } = require('express-rate-limit');
 
+// Only the expensive scan endpoint has a dedicated (strict) limiter.
+// /ocr/feedback is a cheap learning write, so it falls through to the
+// cross-cutting write/api limiters instead of the tight scan budget.
 const hasDedicatedLimiter = (path) =>
-    path.startsWith('/auth/') || path.startsWith('/limits')|| path.startsWith('/ocr');
+    path.startsWith('/auth/') || path.startsWith('/limits') || path === '/ocr/receipt';
 
 // Factory — keeps limiters DRY
 const createLimiter = (windowMs, maxRequests, baseMessage, extraOptions = {}) => {
@@ -91,7 +94,11 @@ function applyRateLimiters(app) {
   app.use('/api/auth/refresh', refreshLimiter);
   app.use('/api/auth/login',   loginLimiter);
   app.use('/api/limits',       limitsLimiter);
-  app.use('/api/ocr',          ocrLimiter);
+  app.use('/api/ocr', (req, res, next) => {
+    // Strict scan budget applies to /receipt only; /feedback is cheap.
+    if (req.path === '/feedback') return next();
+    return ocrLimiter(req, res, next);
+  });
   // 2. Cross-cutting limiters — apply to /api/* but skip paths that
   //    already have a dedicated limiter (to avoid double-counting).
   app.use('/api/', (req, res, next) => {

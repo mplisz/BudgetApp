@@ -10,15 +10,15 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { CartItemEditor } from "./CartItemEditor";
+import type { CartEditPayload } from "./CartItemEditor";
 import { c } from "../../../styles/tokens";
-import type { TransactionPayload } from "../../../types/transaction";
 import type { CartItem } from "./CartPanel";
 
 interface CartItemEditorModalProps {
   item:        CartItem;
   budgetMonth: string;
   isSaving?:   boolean;
-  onSave:      (payload: TransactionPayload) => void;
+  onSave:      (payload: CartEditPayload) => void;
   onCancel:    () => void;
 }
 

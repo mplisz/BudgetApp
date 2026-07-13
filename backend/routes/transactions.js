@@ -43,7 +43,7 @@ const {
 } = require("../utils/voucherAllocations");
 const { getReceiptBlobContainer, setReceiptRetention } = require("../utils/receiptStorage");
 router.use(requireAuth);
-const { cleanMerchant, merchantExists, rememberMerchant } = require("../utils/merchant");
+const { cleanMerchant, merchantExists, rememberMerchant, rememberMerchantNip } = require("../utils/merchant");
 const { resolveTransferTarget } = require("../utils/transferCategory");
 
 
@@ -237,7 +237,7 @@ router.get("/range", async (req, res) => {
 // the tx id and set ttl=-1 . Subsequent transactions from the
 // same receipt just append their id. Idempotent, best-effort: a
 // failure here must never break the transaction save.
-async function promoteReceipt(receiptId, familyId, txId, isWarranty = false) {
+async function promoteReceipt(receiptId, familyId, txId, isWarranty = false, merchant = null) {
   try {
     const existing = await readItem(receiptsContainer, receiptId, familyId);
     if (!existing) {
@@ -255,6 +255,13 @@ async function promoteReceipt(receiptId, familyId, txId, isWarranty = false) {
       committedAt:    existing.committedAt || new Date().toISOString(),
     });
     console.log(`[TX POST] Receipt committed: ${receiptId}${isWarranty ? " 🛡️" : ""} (+tx ${txId})`);
+
+    // Learn NIP → shop-name from this committed receipt. The NIP is exact,
+    // so this powers a deterministic merchant override on future scans.
+    // Uses the receipt read we already did — no extra I/O. Fire-and-forget.
+    if (existing.sellerTaxId && merchant) {
+      rememberMerchantNip(settingsContainer, familyId, existing.sellerTaxId, merchant);
+    }
   } catch (err) {
     console.error(`[TX POST] Receipt promote failed for ${receiptId} (non-fatal):`, err.message);
   }
@@ -365,7 +372,7 @@ router.post("/", async (req, res) => {
       setReceiptRetention(createdTx.receiptBlobPath, !!createdTx.isWarranty);
     }
     if (createdTx.receiptId) {
-      promoteReceipt(createdTx.receiptId, familyId, createdTx.id);
+      promoteReceipt(createdTx.receiptId, familyId, createdTx.id, !!createdTx.isWarranty, createdTx.merchant);
     }
     // Remember the merchant for autocomplete + OCR canonicalization,
     // whether it came from OCR or was typed manually. Fire-and-forget.
@@ -457,7 +464,7 @@ router.post("/batch", async (req, res) => {
       if (tx.receiptBlobPath && tx.receiptBlobPath.startsWith(`${familyId}/`)) {
         setReceiptRetention(tx.receiptBlobPath, !!tx.isWarranty);
       }
-      if (tx.receiptId) promoteReceipt(tx.receiptId, familyId, tx.id);
+      if (tx.receiptId) promoteReceipt(tx.receiptId, familyId, tx.id, !!tx.isWarranty, tx.merchant);
       if (tx.merchant)  rememberMerchant(settingsContainer, familyId, tx.merchant);
     }
 

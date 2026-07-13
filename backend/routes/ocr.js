@@ -42,7 +42,11 @@ const sharp   = require("sharp");
 const { AzureOpenAI } = require("openai");
 
 const { categoriesContainer, receiptsContainer, settingsContainer } = require("../cosmos");
-const { cleanMerchant, merchantExists, rememberMerchant } = require("../utils/merchant");
+const { cleanMerchant, cleanNip, merchantExists, rememberMerchant } = require("../utils/merchant");
+const {
+  normDesc, normMerchant, fetchCorrections, rememberCorrections,
+  buildCorrectionLookup, buildLearnedSection,
+} = require("../utils/ocrLearning");
 const crypto                  = require("crypto");
 const { requireAuth }         = require("../middleware/auth");
 const { archiveReceipt }      = require("../utils/receiptStorage");
@@ -61,7 +65,8 @@ const MAX_SEGMENTS      = 6;                      // hard cap on vision images
 const JPEG_QUALITY      = 80;
 const ALLOWED_MIME      = ["image/jpeg", "image/png", "image/webp"];
 const OPENAI_TIMEOUT_MS = 60_000;
-const MAX_ITEMS         = 60;                     // sanity cap on response
+const MAX_ITEMS         = 100;                    // sanity cap on OCR response
+const MAX_FEEDBACK_ITEMS = 60;                    // cap on a single learning batch
 const MAX_PDF_PAGES     = 8;                      // OCR page cap (e-receipts are 1-2 pages)
 
 // ── Azure OpenAI client (lazy singleton) ─────────────────────
@@ -189,7 +194,7 @@ async function mistralOcrExtract(buffer, mime = "image/jpeg") {
 
 // ── Prompt builder ────────────────────────────────────────────
 
-function buildSystemPrompt(categoryTree, knownMerchants = []) {
+function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "") {
   // categoryTree: [{ name, subcategories: [name, ...] }, ...]
   const catLines = categoryTree
     .map(c => `- ${c.name}: ${c.subcategories.join(", ") || "(brak podkategorii)"}`)
@@ -276,7 +281,7 @@ KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z
 
 KATEGORIE UŻYTKOWNIKA:
 ${catLines}
-
+${learnedSection}
 FORMAT ODPOWIEDZI — wyłącznie poprawny JSON, bez markdown, bez komentarzy:
 {
   "items": [
@@ -312,10 +317,25 @@ Jeśli zdjęcie NIE jest paragonem lub jest nieczytelne, zwróć: {"items": [], 
 async function fetchKnownMerchants(familyId) {
   try {
     const { resource } = await settingsContainer.item(`merchants_${familyId}`, familyId).read();
-    return Array.isArray(resource?.merchants) ? resource.merchants : [];
+    return {
+      merchants: Array.isArray(resource?.merchants) ? resource.merchants : [],
+      nips:      (resource?.nips && typeof resource.nips === "object") ? resource.nips : {},
+    };
   } catch {
-    return [];  // no doc yet → empty list, scan proceeds normally
+    return { merchants: [], nips: {} };  // no doc yet → empty, scan proceeds normally
   }
+}
+
+// Deterministic NIP → shop-name override. The receipt's seller NIP is an
+// exact identifier, so a learned mapping beats the model's name guess
+// outright (e.g. "OWOCE I WARZYWA" → "Badylek"). Mutates metadata in place.
+function applyMerchantOverride(metadata, nips) {
+  const nip = cleanNip(metadata.sellerTaxId);
+  if (nip && nips && nips[nip]) {
+    metadata.merchant = nips[nip];
+    return true;
+  }
+  return false;
 }
 
 async function fetchCategoryTree(familyId) {
@@ -405,12 +425,15 @@ async function preprocessImage(dataUrl) {
 // Maps LLM category NAMES to category IDs so the frontend doesn't
 // have to do fuzzy matching. Unknown names → null (user picks manually).
 
-function mapItemsToCategories(items, categoryTree) {
+function mapItemsToCategories(items, categoryTree, corrections = [], merchant = null) {
   // Case-insensitive name → node lookup
   const catByName = new Map();
   for (const root of categoryTree) {
     catByName.set(root.name.toLowerCase(), root);
   }
+
+  const lookup    = buildCorrectionLookup(corrections);
+  const normMerch = normMerchant(merchant);
 
   return items.map(item => {
     let categoryId = null, categoryName = null;
@@ -433,6 +456,26 @@ function mapItemsToCategories(items, categoryTree) {
       }
     } else {
       confidence = Math.min(confidence, 0.3);
+    }
+
+    // Learned-correction override: an exact (desc, merchant) — or desc-only —
+    // match the user has confirmed before wins over the model's guess.
+    // Only applies when both names still resolve in the current tree (a
+    // since-deleted category falls back to the LLM suggestion).
+    const key = normDesc(item.description);
+    const hit = lookup.get(`${key}|${normMerch}`) || lookup.get(`${key}|`);
+    if (hit) {
+      const hitRoot = catByName.get((hit.categoryName || "").toLowerCase());
+      const hitSub  = hitRoot
+        ? hitRoot.subcategories.find(s => s.name.toLowerCase() === (hit.subcategoryName || "").toLowerCase())
+        : null;
+      if (hitRoot && hitSub) {
+        categoryId      = hitRoot.id;
+        categoryName    = hitRoot.name;
+        subcategoryId   = hitSub.id;
+        subcategoryName = hitSub.name;
+        confidence      = 0.98;
+      }
     }
 
     return {
@@ -571,12 +614,16 @@ router.post("/receipt", async (req, res) => {
       ({ fullJpeg, segments } = await preprocessImage(parsed.data.image));
     }
 
-    // 2. Fetch user's categories + known merchants for the prompt
+    // 2. Fetch user's categories, known merchants (+ NIP map), and learned
+    // category corrections — all feed the prompt / post-processing.
     const categoryTree = await fetchCategoryTree(familyId);
     if (categoryTree.length === 0) {
       return res.status(422).json({ error: "No expense categories defined." });
     }
-    const knownMerchants = await fetchKnownMerchants(familyId);
+    const [{ merchants: knownMerchants, nips: knownNips }, corrections] = await Promise.all([
+      fetchKnownMerchants(familyId),
+      fetchCorrections(settingsContainer, familyId),
+    ]);
 
     // 3a. PREFERRED: dedicated OCR engine reads the receipt as text.
     // Deterministic line reading — no vision-LLM row confusion.
@@ -616,7 +663,7 @@ router.post("/receipt", async (req, res) => {
         { role: "system", content: buildSystemPrompt(categoryTree.map(c => ({
             name: c.name,
             subcategories: c.subcategories.map(s => s.name),
-          })), knownMerchants) },
+          })), knownMerchants, buildLearnedSection(corrections)) },
         { role: "user", content: userContent },
       ],
       // gpt-5.x renamed max_tokens → max_completion_tokens and rejects
@@ -657,6 +704,11 @@ router.post("/receipt", async (req, res) => {
 
     const { items, metadata, warning } = validated.data;
 
+    // 4b. Deterministic shop override from learned NIP → name mappings.
+    // Runs before fingerprint/mapping so the corrected merchant flows into
+    // dedup, the pending receipt, and per-item correction matching.
+    applyMerchantOverride(metadata, knownNips);
+
     // 5. Sanity check: items sum vs receipt total (tolerance 0.05 zł)
     let sumWarning = warning || null;
     if (droppedNeg > 0 && !sumWarning) {
@@ -670,8 +722,9 @@ router.post("/receipt", async (req, res) => {
     }
     
 
-    // 6. Map category names → IDs
-    const mappedItems = mapItemsToCategories(items, categoryTree);
+    // 6. Map category names → IDs, applying learned per-item overrides
+    // (scoped to the — possibly NIP-corrected — merchant).
+    const mappedItems = mapItemsToCategories(items, categoryTree, corrections, metadata.merchant);
 
     // 7. Fingerprint + duplicate check (soft warning, never blocks).
     // duplicateWarning is a SEPARATE channel from sumWarning — a receipt
@@ -740,6 +793,30 @@ router.post("/receipt", async (req, res) => {
     console.error("[OCR] Unexpected error:", err);
     res.status(500).json({ error: "Failed to analyze receipt." });
   }
+});
+
+// ── POST /api/ocr/feedback ────────────────────────────────────
+// Records the user's manual category corrections from the cart so the
+// next scan of the same product categorizes automatically. Cheap write,
+// fire-and-forget from the client — a failure here is never surfaced.
+// (Merchant/NIP learning happens separately, at transaction commit.)
+
+const FeedbackSchema = z.object({
+  corrections: z.array(z.object({
+    description:     z.string().min(1).max(200),
+    merchant:        z.string().max(150).optional().nullable(),
+    categoryName:    z.string().min(1).max(100),
+    subcategoryName: z.string().min(1).max(100),
+  })).min(1).max(MAX_FEEDBACK_ITEMS),
+});
+
+router.post("/feedback", async (req, res) => {
+  const parsed = FeedbackSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  await rememberCorrections(settingsContainer, req.user.familyId, parsed.data.corrections);
+  res.status(204).end();
 });
 
 module.exports = router;
