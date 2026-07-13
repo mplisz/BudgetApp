@@ -196,7 +196,7 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
     if (!file) return;
 
     if (file.size > OCR_MAX_FILE_BYTES) {
-      showError(`Zdjęcie jest za duże (${(file.size / 1024 / 1024).toFixed(1)} MB, max 5 MB).`);
+      showError(`Plik jest za duży (${(file.size / 1024 / 1024).toFixed(1)} MB, max 5 MB).`);
       return;
     }
 
@@ -425,7 +425,7 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
                 <div style={{ textAlign: "center", padding: "32px 0" }}>
                   <div style={{ fontSize: 56, marginBottom: 16 }}>📷</div>
                   <div style={{ color: c.textSecondary, marginBottom: 20, fontSize: 14 }}>
-                    Zrób zdjęcie paragonu lub wybierz z galerii
+                    Zrób zdjęcie paragonu lub wybierz plik (zdjęcie / PDF)
                   </div>
                   {/* Camera input — capture forces the camera app on mobile,
                       ignored on desktop (regular file picker opens instead) */}
@@ -438,11 +438,13 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
                     onChange={handleFileSelected}
                   />
                   {/* Gallery input — NO capture, so mobile opens the system
-                      chooser (gallery + files), desktop the file picker */}
+                      chooser (gallery + files), desktop the file picker.
+                      Also accepts PDF e-receipts (".pdf" helps some Android
+                      pickers that ignore the mime type). */}
                   <input
                     ref={galleryRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,application/pdf,.pdf"
                     style={{ display: "none" }}
                     onChange={handleFileSelected}
                   />
@@ -452,7 +454,7 @@ const handleCartItemSave = useCallback(async (payload: TransactionPayload) => {
                   </button>
                   <button onClick={() => galleryRef.current?.click()} disabled={ocrLoading}
                     style={{ display: "block", width: "100%", padding: 12, borderRadius: 8, border: "none", background: ocrLoading ? "#1e3a8a" : c.info, color: c.white, fontWeight: 700, fontSize: 14, cursor: ocrLoading ? "not-allowed" : "pointer" }}>
-                    🖼️ Wybierz z galerii
+                    🖼️ Wybierz z galerii lub PDF
                   </button>
 
                 </div>

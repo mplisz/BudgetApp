@@ -34,9 +34,10 @@ async function getReceiptBlobContainer() {
   }
 }
 
-// Upload a processed receipt JPEG. Best-effort: returns the blob
-// path on success, null on any failure (never throws).
-async function archiveReceipt(jpegBuffer, familyId, userId, metadata) {
+// Upload a processed receipt (JPEG by default, or the original PDF
+// for e-receipts). Best-effort: returns the blob path on success,
+// null on any failure (never throws).
+async function archiveReceipt(buffer, familyId, userId, metadata, contentType = "image/jpeg") {
   try {
     const container = await getReceiptBlobContainer();
     if (!container) return null;
@@ -44,11 +45,12 @@ async function archiveReceipt(jpegBuffer, familyId, userId, metadata) {
     const now      = new Date();
     const year     = now.getFullYear();
     const month    = String(now.getMonth() + 1).padStart(2, "0");
-    const blobName = `${familyId}/${year}/${month}/${crypto.randomUUID()}.jpg`;
+    const ext      = contentType === "application/pdf" ? "pdf" : "jpg";
+    const blobName = `${familyId}/${year}/${month}/${crypto.randomUUID()}.${ext}`;
 
     const blockBlob = container.getBlockBlobClient(blobName);
-    await blockBlob.uploadData(jpegBuffer, {
-      blobHTTPHeaders: { blobContentType: "image/jpeg" },
+    await blockBlob.uploadData(buffer, {
+      blobHTTPHeaders: { blobContentType: contentType },
       metadata: {
         merchant:   encodeURIComponent(metadata?.merchant || ""),
         date:       metadata?.date || "",

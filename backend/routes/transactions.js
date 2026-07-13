@@ -1087,7 +1087,10 @@ router.get("/:id/receipt", async (req, res) => {
     if (!container) return res.status(503).json({ error: "Receipt storage is not configured." });
 
     const download = await container.getBlockBlobClient(existing.receiptBlobPath).download();
-    res.setHeader("Content-Type", "image/jpeg");
+    // PDF e-receipts are archived as .pdf — the frontend modal picks
+    // its viewer (img vs iframe) off this header via blob.type.
+    res.setHeader("Content-Type", download.contentType
+      || (existing.receiptBlobPath.endsWith(".pdf") ? "application/pdf" : "image/jpeg"));
     res.setHeader("Cache-Control", "private, max-age=86400");
     download.readableStreamBody.pipe(res);
   } catch (err) {

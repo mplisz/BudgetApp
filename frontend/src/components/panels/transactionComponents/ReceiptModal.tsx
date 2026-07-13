@@ -1,9 +1,10 @@
 // ============================================================
 // File: src/components/panels/transactionComponents/ReceiptModal.tsx
-// Receipt photo preview. The blob container is PRIVATE, so the
-// image is fetched through the authenticated backend proxy
-// (GET /api/transactions/:id/receipt) and shown via an object
+// Receipt preview (photo or PDF e-receipt). The blob container is
+// PRIVATE, so the file is fetched through the authenticated backend
+// proxy (GET /api/transactions/:id/receipt) and shown via an object
 // URL, which is revoked on unmount to avoid memory leaks.
+// PDFs render in an <iframe> — <img> can't display them.
 // ============================================================
 
 import { useState, useEffect } from "react";
@@ -21,6 +22,7 @@ export function ReceiptModal({ txId, onClose }: ReceiptModalProps) {
   const { fetchWithAuth } = useAuth();
 
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isPdf,    setIsPdf]    = useState(false);
   const [error,    setError]    = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,7 +40,10 @@ export function ReceiptModal({ txId, onClose }: ReceiptModalProps) {
         }
         const blob = await res.blob();
         objectUrl = URL.createObjectURL(blob);
-        if (!cancelled) setImageUrl(objectUrl);
+        if (!cancelled) {
+          setIsPdf(blob.type === "application/pdf");
+          setImageUrl(objectUrl);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Błąd pobierania.");
       }
@@ -80,6 +85,12 @@ export function ReceiptModal({ txId, onClose }: ReceiptModalProps) {
         <div style={{ overflow: "auto", display: "flex", justifyContent: "center", minHeight: 200, minWidth: 280 }}>
           {error ? (
             <div style={{ color: c.dangerLight, fontSize: 13, alignSelf: "center" }}>⚠️ {error}</div>
+          ) : imageUrl && isPdf ? (
+            <iframe
+              src={imageUrl}
+              title="Paragon (PDF)"
+              style={{ width: "80vw", maxWidth: 800, height: "75vh", border: "none", borderRadius: 8, background: "#fff" }}
+            />
           ) : imageUrl ? (
             <img
               src={imageUrl}

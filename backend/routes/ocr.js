@@ -1,12 +1,14 @@
 // ============================================================
 // File: backend/routes/ocr.js
-// POST /api/ocr/receipt — analyze a receipt photo with Azure
-// OpenAI Vision and return structured cart items.
+// POST /api/ocr/receipt — analyze a receipt photo (or PDF
+// e-receipt) with Azure OpenAI Vision and return structured
+// cart items.
 //
 // Flow:
-//   1. Validate base64 image (size, mime type)
-//   2. Resize/compress with sharp (cost optimization — smaller
-//      image = fewer vision tokens)
+//   1. Validate base64 image/PDF (size, mime type)
+//   2. Images: resize/compress with sharp (cost optimization —
+//      smaller image = fewer vision tokens). PDFs skip this and
+//      REQUIRE the Mistral OCR engine (no vision fallback).
 //   3. Fetch user's EXPENSE categories from Cosmos → prompt
 //   4. Call Azure OpenAI (gpt-4o-mini deployment) with the image
 //   5. Parse + validate the JSON response (Zod)
@@ -60,6 +62,7 @@ const JPEG_QUALITY      = 80;
 const ALLOWED_MIME      = ["image/jpeg", "image/png", "image/webp"];
 const OPENAI_TIMEOUT_MS = 60_000;
 const MAX_ITEMS         = 60;                     // sanity cap on response
+const MAX_PDF_PAGES     = 8;                      // OCR page cap (e-receipts are 1-2 pages)
 
 // ── Azure OpenAI client (lazy singleton) ─────────────────────
 // Lazy so the server still boots when OCR env vars are missing —
@@ -89,10 +92,10 @@ function getOpenAIClient() {
 // ── Zod Schemas ───────────────────────────────────────────────
 
 const ReceiptPostSchema = z.object({
-  // data URL: "data:image/jpeg;base64,...."
+  // data URL: "data:image/jpeg;base64,...." or "data:application/pdf;base64,...."
   image: z.string()
     .min(100, "Image payload too small")
-    .regex(/^data:image\/(jpeg|png|webp);base64,/, "Expected base64 data URL (jpeg/png/webp)"),
+    .regex(/^data:(image\/(jpeg|png|webp)|application\/pdf);base64,/, "Expected base64 data URL (jpeg/png/webp/pdf)"),
 });
 
 // What we expect back from the model — validated defensively,
@@ -132,7 +135,7 @@ function isMistralConfigured() {
   return !!(process.env.MISTRAL_OCR_ENDPOINT && process.env.MISTRAL_OCR_KEY && process.env.MISTRAL_OCR_MODEL);
 }
 
-async function mistralOcrExtract(jpegBuffer) {
+async function mistralOcrExtract(buffer, mime = "image/jpeg") {
   if (!isMistralConfigured()) return null;
 
   // MISTRAL_OCR_ENDPOINT accepts either:
@@ -156,10 +159,11 @@ async function mistralOcrExtract(jpegBuffer) {
     },
     body: JSON.stringify({
       model: process.env.MISTRAL_OCR_MODEL,
-      document: {
-        type:      "image_url",
-        image_url: `data:image/jpeg;base64,${jpegBuffer.toString("base64")}`,
-      },
+      // PDFs go through the document_url variant — Mistral Document AI
+      // reads them natively (multi-page), no rasterization needed.
+      document: mime === "application/pdf"
+        ? { type: "document_url", document_url: `data:application/pdf;base64,${buffer.toString("base64")}` }
+        : { type: "image_url",    image_url:    `data:image/jpeg;base64,${buffer.toString("base64")}` },
       include_image_base64: false,
     }),
     signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
@@ -174,7 +178,9 @@ async function mistralOcrExtract(jpegBuffer) {
   }
 
   const data = await res.json();
-  const text = (data.pages || []).map(p => p.markdown || "").join("\n\n").trim();
+  // Page cap guards the LLM prompt against a runaway multi-page PDF —
+  // a real (e-)receipt never exceeds a couple of pages.
+  const text = (data.pages || []).slice(0, MAX_PDF_PAGES).map(p => p.markdown || "").join("\n\n").trim();
   if (!text) {
     throw Object.assign(new Error("Mistral OCR returned no text"), { isOcrEngineError: true });
   }
@@ -540,9 +546,30 @@ router.post("/receipt", async (req, res) => {
   const familyId = req.user.familyId;
   const t0 = Date.now();
 
+  const isPdf = parsed.data.image.startsWith("data:application/pdf");
+
   try {
-    // 1. Preprocess image (validate + resize + EXIF rotate + segment)
-    const { fullJpeg, segments } = await preprocessImage(parsed.data.image);
+    // 1. Preprocess input. PDFs skip the sharp pipeline entirely (sharp
+    // can't decode them) — they go straight to Mistral Document AI,
+    // which reads PDFs natively. No vision fallback exists for PDFs,
+    // so the OCR engine is a hard requirement for them.
+    let fullJpeg = null, segments = [], pdfBuffer = null;
+    if (isPdf) {
+      if (!isMistralConfigured()) {
+        return res.status(415).json({ error: "Skanowanie PDF wymaga silnika OCR, który nie jest skonfigurowany. Użyj zdjęcia paragonu." });
+      }
+      const b64 = parsed.data.image.substring(parsed.data.image.indexOf(",") + 1);
+      pdfBuffer = Buffer.from(b64, "base64");
+      if (pdfBuffer.length > MAX_IMAGE_BYTES) {
+        return res.status(413).json({ error: "Image too large." });
+      }
+      // Magic-byte check — the data URL prefix is client-supplied.
+      if (!pdfBuffer.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
+        return res.status(415).json({ error: "Unsupported image format." });
+      }
+    } else {
+      ({ fullJpeg, segments } = await preprocessImage(parsed.data.image));
+    }
 
     // 2. Fetch user's categories + known merchants for the prompt
     const categoryTree = await fetchCategoryTree(familyId);
@@ -554,12 +581,18 @@ router.post("/receipt", async (req, res) => {
     // 3a. PREFERRED: dedicated OCR engine reads the receipt as text.
     // Deterministic line reading — no vision-LLM row confusion.
     let ocrText = null;
-    try {
-      ocrText = await mistralOcrExtract(fullJpeg);
-    } catch (ocrErr) {
-      // OCR engine configured but failing → log and fall back to vision
-      // rather than hard-failing the scan.
-      console.error("[OCR] Mistral engine error, falling back to vision:", ocrErr.message);
+    if (isPdf) {
+      // No vision fallback for PDFs — an engine error surfaces as 502
+      // (isOcrEngineError is handled in the catch below).
+      ocrText = await mistralOcrExtract(pdfBuffer, "application/pdf");
+    } else {
+      try {
+        ocrText = await mistralOcrExtract(fullJpeg);
+      } catch (ocrErr) {
+        // OCR engine configured but failing → log and fall back to vision
+        // rather than hard-failing the scan.
+        console.error("[OCR] Mistral engine error, falling back to vision:", ocrErr.message);
+      }
     }
     const engine = ocrText ? "mistral+text" : "vision";
 
@@ -650,8 +683,11 @@ router.post("/receipt", async (req, res) => {
       ? `Ten paragon wygląda na już zeskanowany (${duplicate.merchant || "sklep"}, ${duplicate.date || "wcześniej"}). Sprawdź zanim dodasz, by uniknąć duplikatu.`
       : null;
 
-    // 8. Archive original image (best-effort, non-blocking failure)
-    const receiptBlobPath = await archiveReceipt(fullJpeg, familyId, req.user.id, metadata);
+    // 8. Archive original (best-effort, non-blocking failure) —
+    // PDFs are stored as-is, images as the processed JPEG.
+    const receiptBlobPath = isPdf
+      ? await archiveReceipt(pdfBuffer, familyId, req.user.id, metadata, "application/pdf")
+      : await archiveReceipt(fullJpeg,  familyId, req.user.id, metadata);
 
     // 9. Create the pending Receipt entity (ttl=1day until committed)
     const receiptId = await createPendingReceipt(
@@ -688,6 +724,11 @@ router.post("/receipt", async (req, res) => {
     // Custom errors from preprocessing carry their own status.
     if (err.status) {
       return res.status(err.status).json({ error: err.message });
+    }
+    // PDF path has no vision fallback — engine failure is a clean 502.
+    if (err.isOcrEngineError) {
+      console.error("[OCR] Engine error (no fallback available):", err.message);
+      return res.status(502).json({ error: "Nie udało się odczytać pliku PDF. Spróbuj ponownie lub użyj zdjęcia." });
     }
     // Azure OpenAI SDK errors
     if (err.status === 429 || err.code === "rate_limit_exceeded") {
