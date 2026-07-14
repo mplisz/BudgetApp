@@ -439,6 +439,7 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
     let categoryId = null, categoryName = null;
     let subcategoryId = null, subcategoryName = null;
     let confidence = item.categoryConfidence ?? 0.5;
+    let learned = false;
 
     const root = item.category ? catByName.get(item.category.toLowerCase()) : null;
     if (root) {
@@ -475,6 +476,7 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
         subcategoryId   = hitSub.id;
         subcategoryName = hitSub.name;
         confidence      = 0.98;
+        learned         = true;   // categorized from the user's own past correction
       }
     }
 
@@ -489,6 +491,7 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
       subcategoryId,
       subcategoryName,
       categoryConfidence: confidence,
+      learned,
     };
   });
 }

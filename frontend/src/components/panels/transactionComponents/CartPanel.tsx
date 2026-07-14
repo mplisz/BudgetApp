@@ -43,6 +43,7 @@ export interface CartItem extends TransactionPayload {
   _ocrOrigSubcatId?: string; // AI's originally suggested subcategory id
   _ocrOrigDesc?:     string; // raw OCR description — the learning key
   _ocrNoLearn?:      boolean; // user opted this one-off edit out of learning
+  _ocrLearned?:      boolean; // auto-categorized from a past user correction
 }
 
 interface CartPanelProps {
@@ -129,7 +130,7 @@ function toPayload(item: CartItem): TransactionPayload {
   const {
     _cartId, _ocrSummary ,_allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote,
     _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _ocrNeedsReview,
-    _ocrOrigSubcatId, _ocrOrigDesc, _ocrNoLearn,
+    _ocrOrigSubcatId, _ocrOrigDesc, _ocrNoLearn, _ocrLearned,
     _lineItems, ...payload
   } = item;
   if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
@@ -408,6 +409,11 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
                   {item._ocrNeedsReview && status !== STATUS.DONE && (
                     <div style={{ color: c.warning, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
                       ⚠️ AI niepewne — sprawdź kategorię (✏️)
+                    </div>
+                  )}
+                  {item._ocrLearned && status !== STATUS.DONE && (
+                    <div style={{ color: c.success, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
+                      ✓ z Twoich poprawek
                     </div>
                   )}
                 </div>

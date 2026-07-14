@@ -54,6 +54,7 @@ interface OcrLine {
   subcategoryId:      string | null;
   subcategoryName:    string | null;
   categoryConfidence: number;
+  learned?:           boolean;         // categorized from a past user correction
   selected:           boolean;         // client-side only
 }
 
@@ -169,6 +170,7 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
       _mergedCount:    1,
       _allCartIds:     [keepId],
       _ocrNeedsReview: undefined, // editing IS the review → clear the flag
+      _ocrLearned:     undefined, // after a manual edit it's no longer the learned value
     };
 
     if (insertAt >= 0) {
@@ -305,6 +307,7 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
         // so on save we can diff final vs. original and learn the correction.
         _ocrOrigSubcatId: line.subcategoryId || "",
         _ocrOrigDesc:     line.description   || undefined,
+        _ocrLearned:      line.learned       || undefined,
       })),
     ]);
 
