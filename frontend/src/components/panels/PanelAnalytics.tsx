@@ -1,16 +1,13 @@
 // ============================================================
 // File: src/components/panels/PanelAnalytics.tsx
 // Multi-month analytics panel.
-// Sections:
-//   1) Range picker
-//   2) Monthly trend (line chart)
-//   3) Budget vs. actual (#1)
-//   4) Pie chart with drill-down + top categories bar
-//   5) Income structure (#2) + savings rate (#3)
-//   6) Fixed vs. variable expenses (#5)
-//   7) Savings contributions by goal (#6)
-//   8) Monthly table (clickable rows → navigate to PanelSummary)
-//   9) Category heatmap
+// Layout: range picker + collapsible sections (only the first one is
+// open by default; collapsed sections don't mount their charts):
+//   📈 Przegląd miesięcy   — trend, budget vs. actual, monthly table
+//   🧭 Struktura wydatków  — pie + top categories, top shops, fixed vs. variable
+//   🔎 Kategorie w czasie  — category heatmap, subcategory m/m, delta vs. average
+//   🏷️ Tagi               — per-tag heatmap + top tags
+//   💰 Wpływy i oszczędności — income structure, savings rate, goals
 //
 // APP-START FLOOR:
 //   The lower bound of the requested range is clamped to
@@ -31,6 +28,7 @@ import { usePlanned } from "../../hooks/usePlanned";
 import { calculateEffectiveAmount, calculateNetAmount } from "../../utils/returnUtils";
 import { RangePicker, resolveRange, type DateRange } from "../ui/RangePicker";
 import { Card } from "../ui/summaryUi";
+import { CollapsibleSection } from "../ui";
 import { theme as s } from "../../styles/theme";
 import { fmt } from "../../utils/helpers";
 
@@ -43,6 +41,8 @@ import { BudgetVsActualChart, type BudgetVsActualPoint } from "./analyticsCompon
 import { SavingsRateChart, type SavingsRatePoint }       from "./analyticsComponents/SavingsRateChart";
 import { StackedMonthlyChart, type StackedSeries }       from "./analyticsComponents/StackedMonthlyChart";
 import { MonthlyDeltaChart, type CategoryDelta }         from "./analyticsComponents/MonthlyDeltaChart";
+import { SubcategoryComparison, type SubcatTransaction } from "./analyticsComponents/SubcategoryComparison";
+import { TagSpendingSection, type TagTransaction }       from "./analyticsComponents/TagSpendingSection";
 import { CHART_COLORS, SERIES, isRetirementCategory }    from "./analyticsComponents/chartKit";
 import { useMonthFromUrl } from "../../hooks/useMonthFromUrl";
 
@@ -595,103 +595,120 @@ export default function PanelAnalytics() {
 
       {!isLoading && !noDataAvailable && (
         <>
-          {/* Trend */}
-          <Card title="📈 Trend miesięczny">
-            <MonthlyTrendChart data={monthlyData} />
-          </Card>
-
-          {/* #1 Budget vs. actual */}
-          <div style={{ marginTop: 16 }}>
-            <Card title="🎯 Budżet vs. rzeczywistość">
-              <BudgetVsActualChart data={budgetVsActual} />
+          {/* 📈 Overview: trend + budget vs. actual + monthly table */}
+          <CollapsibleSection title="📈 Przegląd miesięcy" defaultOpen={true}>
+            <Card title="📈 Trend miesięczny">
+              <MonthlyTrendChart data={monthlyData} />
             </Card>
-          </div>
 
-          {/* Two-column: expense pie + top categories bar */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 16,
-            marginTop: 16,
-          }} data-analytics-cols>
-            <Card title="🥧 Struktura wydatków">
-              <AnalyticsPieChart data={pieData} />
-            </Card>
-            <Card title="🏆 Top kategorie">
-              <TopCategoriesBar data={categoryTotals} topN={10} />
-            </Card>
-          </div>
-
-          {/* Top shops (only when merchant data exists) */}
-          {merchantTotals.length > 0 && (
             <div style={{ marginTop: 16 }}>
-              <Card title="🛒 Top sklepy">
-                <TopCategoriesBar data={merchantTotals} topN={10} />
+              <Card title="🎯 Budżet vs. rzeczywistość">
+                <BudgetVsActualChart data={budgetVsActual} />
               </Card>
             </div>
-          )}
 
-          {/* #2 income structure + #3 savings rate */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 16,
-            marginTop: 16,
-          }} data-analytics-cols>
-            <Card title="💰 Struktura wpływów">
-              <AnalyticsPieChart data={incomePieData} emptyMessage="Brak wpływów w zakresie." />
-            </Card>
-            <Card title="📈 Stopa oszczędności">
-              <SavingsRateChart
-                data={savingsRateData}
-                minSavingsPercent={settings?.targets?.minSavingsPercent}
-                minRetirementPercent={settings?.targets?.minRetirementPercent}
-              />
-            </Card>
-          </div>
-
-          {/* #5 fixed vs. variable */}
-          <div style={{ marginTop: 16 }}>
-            <Card title="🧱 Wydatki stałe vs. zmienne">
-              <StackedMonthlyChart data={fixedVariableData} series={fixedVariableSeries} />
-            </Card>
-          </div>
-
-          {/* #6 savings contributions by goal */}
-          <div style={{ marginTop: 16 }}>
-            <Card title="🏦 Wpłaty na cele oszczędnościowe">
-              <StackedMonthlyChart
-                data={savingsByGoal.data}
-                series={savingsByGoal.series}
-                emptyMessage="Brak wpłat na oszczędności w zakresie."
-              />
-            </Card>
-          </div>
-
-          {/* Monthly table */}
-          <div style={{ marginTop: 16 }}>
-            <Card title="📋 Miesiące">
-              <MonthlyTable data={monthlyData} onClick={navigateToMonth} />
-            </Card>
-          </div>
-
-          {/* Heatmap */}
-          {heatmapRows.length > 0 && (
             <div style={{ marginTop: 16 }}>
+              <Card title="📋 Miesiące">
+                <MonthlyTable data={monthlyData} onClick={navigateToMonth} />
+              </Card>
+            </div>
+          </CollapsibleSection>
+
+          {/* 🧭 Expense structure: pie + top categories, shops, fixed vs. variable */}
+          <CollapsibleSection title="🧭 Struktura wydatków" defaultOpen={false}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 16,
+            }} data-analytics-cols>
+              <Card title="🥧 Struktura wydatków">
+                <AnalyticsPieChart data={pieData} />
+              </Card>
+              <Card title="🏆 Top kategorie">
+                <TopCategoriesBar data={categoryTotals} topN={10} />
+              </Card>
+            </div>
+
+            {merchantTotals.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <Card title="🛒 Top sklepy">
+                  <TopCategoriesBar data={merchantTotals} topN={10} />
+                </Card>
+              </div>
+            )}
+
+            <div style={{ marginTop: 16 }}>
+              <Card title="🧱 Wydatki stałe vs. zmienne">
+                <StackedMonthlyChart data={fixedVariableData} series={fixedVariableSeries} />
+              </Card>
+            </div>
+          </CollapsibleSection>
+
+          {/* 🔎 Categories over time: heatmap, subcategory m/m, delta vs. average */}
+          <CollapsibleSection title="🔎 Kategorie w czasie" defaultOpen={false}>
+            {heatmapRows.length > 0 && (
               <Card title="🔥 Heatmapa kategorii × miesiące">
                 <CategoryHeatmap rows={heatmapRows} months={monthsInRange} />
               </Card>
-            </div>
-          )}
+            )}
 
-          {/* #7 Latest month vs. in-range average per category */}
-          {deltaMeta && (
-            <div style={{ marginTop: 16 }}>
-              <Card title={`📊 ${deltaMeta.cur} vs średnia (${deltaBaselineLabel})`}>
-                <MonthlyDeltaChart data={categoryDeltas} topN={10} />
+            <div style={{ marginTop: heatmapRows.length > 0 ? 16 : 0 }}>
+              <Card title="🧩 Subkategorie miesiąc do miesiąca">
+                <SubcategoryComparison
+                  transactions={transactions as unknown as SubcatTransaction[]}
+                  months={monthsInRange}
+                />
               </Card>
             </div>
-          )}
+
+            {deltaMeta && (
+              <div style={{ marginTop: 16 }}>
+                <Card title={`📊 ${deltaMeta.cur} vs średnia (${deltaBaselineLabel})`}>
+                  <MonthlyDeltaChart data={categoryDeltas} topN={10} />
+                </Card>
+              </div>
+            )}
+          </CollapsibleSection>
+
+          {/* 🏷️ Tags */}
+          <CollapsibleSection title="🏷️ Tagi" defaultOpen={false}>
+            <Card title="🏷️ Wydatki per tag">
+              <TagSpendingSection
+                transactions={transactions as unknown as TagTransaction[]}
+                months={monthsInRange}
+              />
+            </Card>
+          </CollapsibleSection>
+
+          {/* 💰 Income & savings */}
+          <CollapsibleSection title="💰 Wpływy i oszczędności" defaultOpen={false}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 16,
+            }} data-analytics-cols>
+              <Card title="💰 Struktura wpływów">
+                <AnalyticsPieChart data={incomePieData} emptyMessage="Brak wpływów w zakresie." />
+              </Card>
+              <Card title="📈 Stopa oszczędności">
+                <SavingsRateChart
+                  data={savingsRateData}
+                  minSavingsPercent={settings?.targets?.minSavingsPercent}
+                  minRetirementPercent={settings?.targets?.minRetirementPercent}
+                />
+              </Card>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <Card title="🏦 Wpłaty na cele oszczędnościowe">
+                <StackedMonthlyChart
+                  data={savingsByGoal.data}
+                  series={savingsByGoal.series}
+                  emptyMessage="Brak wpłat na oszczędności w zakresie."
+                />
+              </Card>
+            </div>
+          </CollapsibleSection>
         </>
       )}
 
