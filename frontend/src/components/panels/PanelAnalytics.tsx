@@ -4,7 +4,7 @@
 // Layout: range picker + collapsible sections (only the first one is
 // open by default; collapsed sections don't mount their charts):
 //   📈 Przegląd miesięcy   — trend, budget vs. actual, run-rate forecast, monthly table
-//   🧭 Struktura wydatków  — pie + top categories, top shops, fixed vs. variable
+//   🧭 Struktura wydatków  — pie + top categories, top shops, fixed vs. variable, cost creep
 //   🔎 Kategorie w czasie  — category heatmap, subcategory m/m, delta vs. average
 //   🏷️ Tagi               — per-tag heatmap + top tags
 //   🛒 Ceny produktów      — receipt line-item price history (per shop)
@@ -46,6 +46,7 @@ import { SubcategoryComparison, type SubcatTransaction } from "./analyticsCompon
 import { TagSpendingSection, type TagTransaction }       from "./analyticsComponents/TagSpendingSection";
 import { ProductPriceSection }                           from "./analyticsComponents/ProductPriceSection";
 import { MonthForecastSection }                          from "./analyticsComponents/MonthForecastSection";
+import { RecurringCostsSection }                         from "./analyticsComponents/RecurringCostsSection";
 import { type PricedTransaction }                        from "../../utils/productPricing";
 import { isFixedExpense, type ForecastTransaction }      from "../../utils/monthForecast";
 import { CHART_COLORS, SERIES, isRetirementCategory }    from "./analyticsComponents/chartKit";
@@ -653,6 +654,12 @@ export default function PanelAnalytics() {
             <div style={{ marginTop: 16 }}>
               <Card title="🧱 Wydatki stałe vs. zmienne">
                 <StackedMonthlyChart data={fixedVariableData} series={fixedVariableSeries} />
+              </Card>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <Card title="🔄 Pełzanie kosztów stałych">
+                <RecurringCostsSection months={monthsInRange} />
               </Card>
             </div>
           </CollapsibleSection>
