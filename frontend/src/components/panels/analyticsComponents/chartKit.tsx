@@ -35,8 +35,10 @@ export const SERIES = {
   balance:    c.text,
   limit:      c.textSecondary,
   retirement: c.voucher,
+  // Fixed vs variable: indigo + orange — deliberately NOT indigo + yellow,
+  // which reads as the Ukrainian flag when stacked.
   fixed:      c.indigo,
-  variable:   c.warning,
+  variable:   c.orange,
   over:       c.danger,
   movingAvg:  c.warningLight,   // dashed overlay — 3-month avg of expenses
   up:         c.danger,         // spent MORE m/m (worse)

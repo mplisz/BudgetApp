@@ -25,6 +25,8 @@ const PRESET_PILLS: RangePicker[] = [
   { label: "3 msc",     months: 3  },
   { label: "6 msc",     months: 6  },
   { label: "12 msc",    months: 12 },
+  { label: "18 msc",    months: 18 },
+  { label: "24 msc",    months: 24 },   // backend /range maximum
   { label: "Wszystkie", months: 0  },
 ];
 

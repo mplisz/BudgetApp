@@ -3,10 +3,12 @@
 // Multi-month analytics panel.
 // Layout: range picker + collapsible sections (only the first one is
 // open by default; collapsed sections don't mount their charts):
-//   📈 Przegląd miesięcy   — trend, budget vs. actual, run-rate forecast, monthly table
+//   📈 Przegląd miesięcy   — trend, budget vs. actual, monthly table
+//                            (run-rate forecast lives in PanelSummary now)
 //   🧭 Struktura wydatków  — pie + top categories, top shops + merchant profile,
 //                            fixed vs. variable, cost creep
-//   🔎 Kategorie w czasie  — category heatmap, subcategory m/m, delta vs. average
+//   🔎 Kategorie w czasie  — category heatmap + delta vs. average
+//   🧩 Subkategorie w czasie — pills + line chart + heatmap + subcat delta
 //   🏷️ Tagi               — per-tag heatmap + top tags
 //   🛒 Ceny produktów      — receipt line-item price history (per shop)
 //   📆 Sezonowość          — year overlay + same-month-last-year (own 24m window)
@@ -48,7 +50,6 @@ import { MonthlyDeltaChart, type CategoryDelta }         from "./analyticsCompon
 import { SubcategoryComparison, type SubcatTransaction } from "./analyticsComponents/SubcategoryComparison";
 import { TagSpendingSection, type TagTransaction }       from "./analyticsComponents/TagSpendingSection";
 import { ProductPriceSection }                           from "./analyticsComponents/ProductPriceSection";
-import { MonthForecastSection }                          from "./analyticsComponents/MonthForecastSection";
 import { RecurringCostsSection }                         from "./analyticsComponents/RecurringCostsSection";
 import { MerchantProfileSection }                        from "./analyticsComponents/MerchantProfileSection";
 import { type MerchantTx }                               from "../../utils/merchantProfile";
@@ -57,7 +58,7 @@ import { TimePatternsSection }                           from "./analyticsCompon
 import { type TimeTx }                                   from "../../utils/timePatterns";
 import { enumerateMonths }                               from "../../utils/seasonality";
 import { type PricedTransaction }                        from "../../utils/productPricing";
-import { isFixedExpense, type ForecastTransaction }      from "../../utils/monthForecast";
+import { isFixedExpense }                                from "../../utils/monthForecast";
 import { CHART_COLORS, SERIES, isRetirementCategory }    from "./analyticsComponents/chartKit";
 import { useMonthFromUrl } from "../../hooks/useMonthFromUrl";
 
@@ -394,8 +395,10 @@ export default function PanelAnalytics() {
       for (const id of goalIds) if (row[id] === undefined) row[id] = 0;  // fill gaps
       return row;
     });
+    // Stride through the palette (5 is coprime with its length) so goal
+    // colours don't mirror the income-structure pie sitting next to it.
     const series: StackedSeries[] = goalIds.map((id, i) => ({
-      key: id, name: goals.get(id) ?? id, color: CHART_COLORS[i % CHART_COLORS.length],
+      key: id, name: goals.get(id) ?? id, color: CHART_COLORS[(i * 5 + 2) % CHART_COLORS.length],
     }));
     return { data, series };
   }, [monthlyData, transactions]);
@@ -524,34 +527,8 @@ export default function PanelAnalytics() {
     <div style={{ padding: "0 16px 40px", maxWidth: 1200, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
 
       {/* Header — shows the CLAMPED range, not the user-requested one */}
-      <div style={{ marginBottom: 20, marginTop: 8 }}>
+      <div style={{ marginBottom: 12, marginTop: 8 }}>
         <div style={s.sectionTitle}>📊 Analiza wielomiesięczna</div>
-        <div style={{ fontSize: 13, color: c.textSecondary }}>
-          {noDataAvailable ? (
-            <>Brak danych dla wybranego zakresu</>
-          ) : (
-            <>
-              {clampedFrom} → {effectiveTo} · {monthsInRange.length}{" "}
-              {monthsInRange.length === 1 ? "miesiąc" : "miesięcy"}
-              {!isLoading && (
-                <>
-                  {" · Wydatki łącznie: "}
-                  <strong style={{ color: c.danger }}>{fmt(rangeTotals.expenses)}</strong>
-                  {rangeTotals.envelopes > 0 && (
-                    <>
-                      {" · W kopertach: "}
-                      <strong style={{ color: c.info }}>{fmt(rangeTotals.envelopes)}</strong>
-                    </>
-                  )}
-                  {" · Saldo: "}
-                  <strong style={{ color: rangeTotals.balance >= 0 ? c.success : c.danger }}>
-                    {rangeTotals.balance >= 0 ? "+" : ""}{fmt(rangeTotals.balance)}
-                  </strong>
-                </>
-              )}
-            </>
-          )}
-        </div>
 
         {/* Clamp banner — shown when the user picked a range that reached
             below the budget start. Tells them what's actually displayed. */}
@@ -568,8 +545,43 @@ export default function PanelAnalytics() {
       </div>
 
       {/* Range picker */}
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 8 }}>
         <RangePicker value={range} onChange={setRange} allowAll={false} />
+      </div>
+
+      {/* Sticky range summary — stays visible while scrolling the sections,
+          so "which months am I looking at" never scrolls away. */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 20,
+        background: c.bg, padding: "8px 0", marginBottom: 16,
+        borderBottom: `1px solid ${c.border}`,
+        fontSize: 13, color: c.textSecondary,
+      }}>
+        {noDataAvailable ? (
+          <>Brak danych dla wybranego zakresu</>
+        ) : (
+          <>
+            📆 <strong style={{ color: c.text }}>{clampedFrom} → {effectiveTo}</strong>
+            {" · "}{monthsInRange.length}{" "}
+            {monthsInRange.length === 1 ? "miesiąc" : "miesięcy"}
+            {!isLoading && (
+              <>
+                {" · Wydatki: "}
+                <strong style={{ color: c.danger }}>{fmt(rangeTotals.expenses)}</strong>
+                {rangeTotals.envelopes > 0 && (
+                  <>
+                    {" · W kopertach: "}
+                    <strong style={{ color: c.info }}>{fmt(rangeTotals.envelopes)}</strong>
+                  </>
+                )}
+                {" · Saldo: "}
+                <strong style={{ color: rangeTotals.balance >= 0 ? c.success : c.danger }}>
+                  {rangeTotals.balance >= 0 ? "+" : ""}{fmt(rangeTotals.balance)}
+                </strong>
+              </>
+            )}
+          </>
+        )}
       </div>
 
       {/* Empty state — entire range is before the floor */}
@@ -603,15 +615,6 @@ export default function PanelAnalytics() {
             <div style={{ marginTop: 16 }}>
               <Card title="🎯 Budżet vs. rzeczywistość">
                 <BudgetVsActualChart data={budgetVsActual} />
-              </Card>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <Card title="🔮 Prognoza końca miesiąca">
-                <MonthForecastSection
-                  transactions={transactions as unknown as ForecastTransaction[]}
-                  months={monthsInRange}
-                />
               </Card>
             </div>
 
@@ -667,7 +670,7 @@ export default function PanelAnalytics() {
             </div>
           </CollapsibleSection>
 
-          {/* 🔎 Categories over time: heatmap, subcategory m/m, delta vs. average */}
+          {/* 🔎 Categories over time: heatmap + delta vs. average */}
           <CollapsibleSection title="🔎 Kategorie w czasie" defaultOpen={false}>
             {heatmapRows.length > 0 && (
               <Card title="🔥 Heatmapa kategorii × miesiące">
@@ -675,22 +678,23 @@ export default function PanelAnalytics() {
               </Card>
             )}
 
-            <div style={{ marginTop: heatmapRows.length > 0 ? 16 : 0 }}>
-              <Card title="🧩 Subkategorie miesiąc do miesiąca">
-                <SubcategoryComparison
-                  transactions={transactions as unknown as SubcatTransaction[]}
-                  months={monthsInRange}
-                />
-              </Card>
-            </div>
-
             {deltaMeta && (
-              <div style={{ marginTop: 16 }}>
+              <div style={{ marginTop: heatmapRows.length > 0 ? 16 : 0 }}>
                 <Card title={`📊 ${deltaMeta.cur} vs średnia (${deltaBaselineLabel})`}>
                   <MonthlyDeltaChart data={categoryDeltas} topN={10} />
                 </Card>
               </div>
             )}
+          </CollapsibleSection>
+
+          {/* 🧩 Subcategories over time: pills + line chart + heatmap + delta */}
+          <CollapsibleSection title="🧩 Subkategorie w czasie" defaultOpen={false}>
+            <Card title="🧩 Subkategorie miesiąc do miesiąca">
+              <SubcategoryComparison
+                transactions={transactions as unknown as SubcatTransaction[]}
+                months={monthsInRange}
+              />
+            </Card>
           </CollapsibleSection>
 
           {/* 🏷️ Tags */}

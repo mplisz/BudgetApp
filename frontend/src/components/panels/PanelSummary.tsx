@@ -32,6 +32,8 @@ import type {
 } from "../../types/summary";
 import { EnvelopeBreakdown }  from "../ui/EnvelopeBreakdown";
 import type { EnvelopeBreakdownItem } from "../ui/EnvelopeBreakdown";
+import { MonthForecastSection } from "./analyticsComponents/MonthForecastSection";
+import type { ForecastTransaction } from "../../utils/monthForecast";
 
 // ── Local types ───────────────────────────────────────────────
 
@@ -416,6 +418,17 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
               style={{ marginBottom: 16 }}
               variant="card"
             />
+          )}
+
+          {/* Run-rate forecast — only for the RUNNING calendar month; past
+              months have nothing to forecast, future ones have no pace. */}
+          {activeBudgetMonth === new Date().toISOString().slice(0, 7) && (
+            <Card title="🔮 Prognoza końca miesiąca" style={{ marginBottom: 16 }}>
+              <MonthForecastSection
+                transactions={monthTx as unknown as ForecastTransaction[]}
+                months={[activeBudgetMonth]}
+              />
+            </Card>
           )}
 
           {/* Empty state */}

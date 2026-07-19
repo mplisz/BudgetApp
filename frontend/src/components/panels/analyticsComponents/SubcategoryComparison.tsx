@@ -1,20 +1,29 @@
 // ============================================================
 // File: src/components/panels/analyticsComponents/SubcategoryComparison.tsx
 // Month-to-month comparison of subcategories within ONE expense category.
-// Category dropdown → heatmap (subcategory × month) + diverging delta chart
-// (latest month vs. average of the preceding months in range — same baseline
-// convention as the panel-level #7 chart).
+// Category dropdown → subcategory pills (multi-select) → line chart of
+// the selected subcategories + heatmap (subcategory × month) + diverging
+// delta chart (latest month vs. average of the preceding months — same
+// baseline convention as the panel-level category chart).
 // Amounts are NET of all returns (calculateNetAmount), matching the
 // category heatmap and pie in PanelAnalytics.
 // ============================================================
 
-import { c } from "../../../styles/tokens";
+import { c, alpha } from "../../../styles/tokens";
 import { useMemo, useState } from "react";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
+} from "recharts";
 import { useAppContext } from "../../../context/AppContext";
 import { theme as s } from "../../../styles/theme";
+import { fmt } from "../../../utils/helpers";
 import { calculateNetAmount } from "../../../utils/returnUtils";
 import { CategoryHeatmap, type HeatmapRow } from "./CategoryHeatmap";
 import { MonthlyDeltaChart, type CategoryDelta } from "./MonthlyDeltaChart";
+import {
+  CHART_COLORS, chartTooltipStyle, chartTooltipLabelStyle, chartTooltipItemStyle,
+  AXIS_STROKE, AXIS_FONT_SIZE, plnTick, plnLabel,
+} from "./chartKit";
 
 export interface SubcatTransaction {
   type:            string;
@@ -35,6 +44,7 @@ interface Props {
 export function SubcategoryComparison({ transactions, months }: Props) {
   const { categories } = useAppContext();
   const [selectedId, setSelectedId] = useState<string>("");
+  const [selectedSubs, setSelectedSubs] = useState<string[]>([]);
 
   const monthsSet = useMemo(() => new Set(months), [months]);
 
@@ -86,6 +96,32 @@ export function SubcategoryComparison({ transactions, months }: Props) {
     });
   }, [transactions, effectiveId, months, monthsSet]);
 
+  // Pills selection — clicks toggle; empty/invalid selection falls back to
+  // the top subcategory so the line chart always shows something.
+  const activeSubs = useMemo(() => {
+    const valid = selectedSubs.filter(id => rows.some(r => r.categoryId === id));
+    return valid.length > 0 ? valid : rows.slice(0, 1).map(r => r.categoryId);
+  }, [selectedSubs, rows]);
+
+  function toggleSub(id: string) {
+    setSelectedSubs(prev => {
+      const base = prev.length > 0 ? prev : activeSubs;
+      return base.includes(id) ? base.filter(x => x !== id) : [...base, id];
+    });
+  }
+
+  // Line-chart rows: one point per month, one column per selected sub.
+  const lineData = useMemo(() => {
+    return months.map(month => {
+      const point: Record<string, string | number> = { month };
+      for (const id of activeSubs) {
+        const row = rows.find(r => r.categoryId === id);
+        point[id] = row?.byMonth[month] ?? 0;
+      }
+      return point;
+    });
+  }, [months, rows, activeSubs]);
+
   // Delta: latest month vs. average of the preceding months (per subcategory).
   const deltas = useMemo<CategoryDelta[]>(() => {
     if (months.length < 2) return [];
@@ -122,6 +158,8 @@ export function SubcategoryComparison({ transactions, months }: Props) {
   }
 
   const selected = options.find(o => o.id === effectiveId);
+  const subtitle: React.CSSProperties = { fontSize: 12, color: c.textMuted, fontWeight: 700, marginBottom: 8 };
+  const nameOf = (id: string) => rows.find(r => r.categoryId === id)?.categoryName ?? id;
 
   return (
     <div>
@@ -130,7 +168,7 @@ export function SubcategoryComparison({ transactions, months }: Props) {
         <span style={{ fontSize: 12, color: c.textMuted, fontWeight: 600 }}>Kategoria:</span>
         <select
           value={effectiveId}
-          onChange={e => setSelectedId(e.target.value)}
+          onChange={e => { setSelectedId(e.target.value); setSelectedSubs([]); }}
           style={{ ...s.select, width: "auto", minWidth: 220, padding: "8px 12px", fontSize: 13 }}
         >
           {options.map(o => (
@@ -141,14 +179,62 @@ export function SubcategoryComparison({ transactions, months }: Props) {
         </select>
       </div>
 
+      {/* Subcategory pills — multi-select drives the line chart */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        {rows.map(r => {
+          const active = activeSubs.includes(r.categoryId);
+          const total = months.reduce((sum, m) => sum + (r.byMonth[m] || 0), 0);
+          return (
+            <span
+              key={r.categoryId}
+              onClick={() => toggleSub(r.categoryId)}
+              style={{
+                padding: "3px 10px", borderRadius: 20, fontSize: 12, cursor: "pointer",
+                background: active ? alpha(c.success, "22") : c.bg,
+                border:     `1px solid ${active ? c.success : c.border}`,
+                color:      active ? c.successLight : c.textSecondary,
+              }}>
+              {r.categoryName} <span style={{ opacity: 0.6 }}>{fmt(total)}</span>
+            </span>
+          );
+        })}
+      </div>
+
+      {/* Line chart of the selected subcategories */}
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={lineData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+          <XAxis dataKey="month" stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} interval="preserveStartEnd" />
+          <YAxis stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} tickFormatter={plnTick} width={56} />
+          <Tooltip
+            contentStyle={chartTooltipStyle}
+            labelStyle={chartTooltipLabelStyle}
+            itemStyle={chartTooltipItemStyle}
+            formatter={(v: unknown) => plnLabel(v)}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {activeSubs.map((id, i) => (
+            <Line
+              key={id}
+              dataKey={id}
+              name={nameOf(id)}
+              type="monotone"
+              stroke={CHART_COLORS[i % CHART_COLORS.length]}
+              strokeWidth={2}
+              dot={{ r: 2 }}
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+
       {/* Subcategory × month heatmap */}
+      <div style={{ ...subtitle, marginTop: 16 }}>🔥 Heatmapa subkategorii × miesiące</div>
       <CategoryHeatmap rows={rows} months={months} />
 
       {/* Latest month vs. baseline per subcategory */}
       {deltas.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, color: c.textMuted, fontWeight: 700, marginBottom: 8 }}>
-            📊 {selected?.icon} {selected?.name} — {months[months.length - 1]} vs średnia ({deltaLabel})
+          <div style={subtitle}>
+            📊 {selected?.icon} {selected?.name} — subkategorie: {months[months.length - 1]} vs średnia ({deltaLabel})
           </div>
           <MonthlyDeltaChart data={deltas} topN={10} />
         </div>
