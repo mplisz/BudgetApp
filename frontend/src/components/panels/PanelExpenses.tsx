@@ -14,6 +14,7 @@ import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { theme as s }       from "../../styles/theme";
 import { TransactionForm, emptyFormValues} from "./transactionComponents/TransactionForm";
 import type { TransactionPayload } from "../../types/transaction";
+import type { LineItemProduct } from "../../utils/productPricing";
 import { CartPanel } from "./transactionComponents/CartPanel";
 import type { CartItem } from "./transactionComponents/CartPanel";
 import { computeSuggestedPriority } from "../ui/PriorityPicker";
@@ -55,6 +56,7 @@ interface OcrLine {
   subcategoryName:    string | null;
   categoryConfidence: number;
   learned?:           boolean;         // categorized from a past user correction
+  product?:           LineItemProduct | null;  // structured identity for price history
   selected:           boolean;         // client-side only
 }
 
@@ -308,6 +310,7 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
         _ocrOrigSubcatId: line.subcategoryId || "",
         _ocrOrigDesc:     line.description   || undefined,
         _ocrLearned:      line.learned       || undefined,
+        _product:         line.product       ?? undefined,
       })),
     ]);
 

@@ -114,8 +114,14 @@ const LlmItemSchema = z.object({
   category:           z.string().max(100).optional().nullable(),
   subcategory:        z.string().max(100).optional().nullable(),
   categoryConfidence: z.number().min(0).max(1).optional().default(0.5),
-
-
+  // Structured product identity for price-history analytics. Optional —
+  // the frontend falls back to regex parsing of `description` without it.
+  product: z.object({
+    name:      z.string().min(1).max(120),          // clean name, no size/pack tokens
+    size:      z.number().positive().nullable().optional(),  // single-package size in `unit`
+    unit:      z.enum(["g", "ml", "szt"]).nullable().optional(),
+    packCount: z.number().int().positive().max(99).optional(),
+  }).optional().nullable(),
 });
 
 const LlmResponseSchema = z.object({
@@ -277,6 +283,19 @@ POMIJAJ: linie VAT/PTU, numery NIP, formy płatności, wydaną resztę, punkty l
 — typ zakupów + sklep, NIE lista pozycji. Maks ~6 słów.
 Przykłady: "Spożywcze, Lidl"; "Chemia, Rossmann"; "Paliwo, Orlen".
 Jeśli nie da się sensownie podsumować — null.
+23. PRODUKT (pole "product" przy każdej pozycji): ustrukturyzowana tożsamość produktu do
+śledzenia historii cen.
+- "name": czysta nazwa produktu BEZ gramatury, pojemności, wielopaku i wagi — pełne słowa,
+  poprawna polska pisownia (rozwiń skróty z paragonu, np. "MLK UHT3.2" → "Mleko UHT 3,2%").
+- "size": rozmiar JEDNEGO opakowania przeliczony do jednostki bazowej ("kg"→g, "l"→ml).
+- "unit": "g", "ml" lub "szt". Dla towarów ważonych podaj wagę z paragonu w gramach.
+- "packCount": liczba sztuk w wielopaku (np. "0,5L x4" → 4). Pomiń gdy 1.
+Przykłady:
+  "ŻUBR PUSZKA 0,5L x4"        → {"name": "Żubr puszka", "size": 500, "unit": "ml", "packCount": 4}
+  "Filet kurczaka 0,442 kg"    → {"name": "Filet z piersi kurczaka", "size": 442, "unit": "g"}
+  "JAJA L 10SZT"               → {"name": "Jaja L", "size": 10, "unit": "szt"}
+  "PAPIER TOALETOWY"           → {"name": "Papier toaletowy", "size": null, "unit": null}
+Gdy nie da się ustalić rozmiaru — size/unit: null, ale "name" podaj ZAWSZE.
 KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
 
 KATEGORIE UŻYTKOWNIKA:
@@ -293,7 +312,8 @@ FORMAT ODPOWIEDZI — wyłącznie poprawny JSON, bez markdown, bez komentarzy:
       "mergeNote": "2x 6,99 + rabat -6,99",
       "category": "Zakupy codzienne",
       "subcategory": "Napoje",
-      "categoryConfidence": 0.95
+      "categoryConfidence": 0.95,
+      "product": { "name": "Coca-Cola", "size": 1500, "unit": "ml", "packCount": 2 }
     }
   ],
   "metadata": {
@@ -492,6 +512,7 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
       subcategoryName,
       categoryConfidence: confidence,
       learned,
+      product:            item.product ?? null,   // structured identity → lineItems
     };
   });
 }

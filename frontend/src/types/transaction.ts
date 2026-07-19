@@ -3,6 +3,8 @@
 // Shared domain types for transaction form and related components.
 // ============================================================
 
+import type { LineItemProduct } from "../utils/productPricing";
+
 export type Priority = 1 | 2 | 3 | 4;
 
 // A single voucher applied to a transaction. amount is always PLN
@@ -107,6 +109,9 @@ export interface TransactionPayload {
                       amount:            number;          // PLN — always
                       originalAmount?:   number;          // Original amount
                       originalCurrency?: string;          // for example "CZK"; if absent ⇒ PLN
+                      // Structured product identity from the OCR AI —
+                      // consumed by the price-history analytics.
+                      product?:          LineItemProduct | null;
                     }>;
 }
 

@@ -21,6 +21,7 @@ import { fmt, round2 }      from "../../../utils/helpers";
 import { PRIORITY_COLORS }  from "../../ui/PriorityPicker";
 import { VoucherSection }   from "./VoucherSection";
 import type { TransactionPayload, VoucherAllocation } from "../../../types/transaction";
+import type { LineItemProduct } from "../../../utils/productPricing";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -37,13 +38,14 @@ export interface CartItem extends TransactionPayload {
   _ocrMerchant?:    string;  // shop name (for per-merchant filtering)
   _ocrWarranty?:    boolean; // receipt flagged as warranty → longer retention
   _ocrNeedsReview?: boolean; // AI was unsure — keep flagged in cart until edited
-  _lineItems?:      Array<{ description: string; amount: number; originalAmount?: number; originalCurrency?: string }>;
+  _lineItems?:      Array<{ description: string; amount: number; originalAmount?: number; originalCurrency?: string; product?: LineItemProduct | null }>;
   _ocrSummary?: string;
   // ── Category-learning provenance (stripped before save) ──
   _ocrOrigSubcatId?: string; // AI's originally suggested subcategory id
   _ocrOrigDesc?:     string; // raw OCR description — the learning key
   _ocrNoLearn?:      boolean; // user opted this one-off edit out of learning
   _ocrLearned?:      boolean; // auto-categorized from a past user correction
+  _product?:         LineItemProduct;  // structured identity → saved into lineItems
 }
 
 interface CartPanelProps {
@@ -86,6 +88,7 @@ export function aggregateCart(items: CartItem[]): CartItem[] {
       amount:          item.amount,                       // PLN
       originalAmount:  item.originalAmount ?? item.amount,
       originalCurrency: item.originalCurrency || "PLN",
+      product:          item._product ?? null,
     };
     if (groups.has(key)) {
       const existing = groups.get(key)!;
@@ -112,15 +115,15 @@ export function aggregateCart(items: CartItem[]): CartItem[] {
       groups.set(key, { ...item, _mergedCount: 1, _allCartIds: [item._cartId], _lineItems: [line] });
     }
   }
-  // Singletons don't need lineItems (description+amount of the tx itself
-  // already say everything). Keep the array only for true merges.
+  // Singletons keep their single-entry _lineItems too — toPayload ships it
+  // only when the line carries structured product data (price history);
+  // otherwise the field is stripped there, exactly like before.
   return Array.from(groups.values()).map(g => {
     if ((g._mergedCount || 1) > 1) {
       // Merged → details in _lineItems; description as the label of the reciept
       return { ...g, description: g._ocrSummary || g.description };
     }
-    const { _lineItems, ...rest } = g;   // singleton → bez rozbicia, zostaje nazwa pozycji
-    return rest as CartItem;
+    return g;   // singleton → bez rozbicia, zostaje nazwa pozycji
   });
 }
 
@@ -137,7 +140,12 @@ function toPayload(item: CartItem): TransactionPayload {
   if (_ocrReceiptId)   payload.receiptId       = _ocrReceiptId;
   if (_ocrMerchant)    payload.merchant         = _ocrMerchant;
   if (_ocrWarranty)    payload.isWarranty       = true;
-  if (_lineItems && _lineItems.length > 1) payload.lineItems = _lineItems;
+  // Merged carts always keep the breakdown; a SINGLE line is kept too when
+  // it carries structured product data — otherwise single-product receipts
+  // would be invisible to the price-history analytics.
+  if (_lineItems && (_lineItems.length > 1 || _lineItems[0]?.product)) {
+    payload.lineItems = _lineItems;
+  }
   return payload as TransactionPayload;
 }
 
@@ -421,11 +429,11 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
                   {item.useVoucher && item.voucherAmount > 0 ? (
                     <>
                       <div style={{ fontSize: 11, color: c.textSecondary, textDecoration: "line-through" }}>{fmt(item.amount)}</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(itemNet)} zł</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(itemNet)}</div>
                       <div style={{ fontSize: 10, color: c.voucher }}>🎫 {fmt(item.voucherAmount)}</div>
                     </>
                   ) : (
-                    <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(item.amount)} zł</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(item.amount)}</div>
                   )}
                   <span style={{ fontSize: 12 }}>
                     {status === STATUS.SAVING ? "⏳" : status === STATUS.DONE ? "✅" : status === STATUS.ERROR ? "❌" : ""}

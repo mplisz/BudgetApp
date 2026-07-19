@@ -75,6 +75,14 @@ const TransactionBaseSchema = z.object({
                       amount:          z.number(),
                       originalAmount:  z.number().optional(),
                       originalCurrency: z.string().max(5).optional(),
+                      // Structured product identity from the OCR AI —
+                      // consumed by the price-history analytics.
+                      product:          z.object({
+                        name:      z.string().max(120),
+                        size:      z.number().nullable().optional(),
+                        unit:      z.enum(["g", "ml", "szt"]).nullable().optional(),
+                        packCount: z.number().int().positive().max(99).optional(),
+                      }).nullable().optional(),
                     })).max(60).optional(),
   voucherAllocations: z.array(z.object({
                       voucherId: z.string().min(1),
