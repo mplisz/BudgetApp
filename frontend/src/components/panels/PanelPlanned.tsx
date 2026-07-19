@@ -286,16 +286,16 @@ const filtered = useMemo<PlannedDoc[]>(() => {
           <div style={{ fontSize: 12, color: c.textSecondary, marginTop: 8, display: "flex", flexDirection: "column", gap: 3 }}>
             <span>
               💳 Jednorazowe — Suma:{" "}
-              <strong style={{ color: c.text }}>{fmt(summary.oneoffTotal)} zł</strong>
+              <strong style={{ color: c.text }}>{fmt(summary.oneoffTotal)}</strong>
               {" / "}Faktycznie wydano:{" "}
-              <strong style={{ color: c.success }}>{fmt(summary.oneoffSpent)} zł</strong>
+              <strong style={{ color: c.success }}>{fmt(summary.oneoffSpent)}</strong>
             </span>
             {currentMonthOnly && (
               <span>
                 🪙 Koperty ({cur}) — Suma rat:{" "}
-                <strong style={{ color: c.text }}>{fmt(summary.envRateTotal)} zł</strong>
+                <strong style={{ color: c.text }}>{fmt(summary.envRateTotal)}</strong>
                 {" / "}Faktycznie zebrano:{" "}
-                <strong style={{ color: c.success }}>{fmt(summary.envRateCollected)} zł</strong>
+                <strong style={{ color: c.success }}>{fmt(summary.envRateCollected)}</strong>
               </span>
             )}
           </div>

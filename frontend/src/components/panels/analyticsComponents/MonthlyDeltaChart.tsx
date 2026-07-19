@@ -66,7 +66,7 @@ export function MonthlyDeltaChart({ data, topN = 10 }: Props) {
             const num  = toNum(v);
             const p    = (item as { payload?: CategoryDelta })?.payload;
             const sign = num > 0 ? "+" : num < 0 ? "−" : "";
-            const ctx  = p ? ` (śr. ${fmt(p.previous)} zł → bież. ${fmt(p.current)} zł)` : "";
+            const ctx  = p ? ` (śr. ${fmt(p.previous)} → bież. ${fmt(p.current)})` : "";
             return [`${sign}${fmt(Math.abs(num))} zł${ctx}`, "Odchylenie od średniej"];
           }}
         />

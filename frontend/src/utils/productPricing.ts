@@ -18,14 +18,25 @@
 export type SizeUnit = "g" | "ml" | "szt";
 
 export interface ParsedName {
-  nameKey: string;           // folded description without the size token
-  size:    number | null;    // in base unit (g / ml / szt), multipack included
-  unit:    SizeUnit | null;
+  nameKey:  string;          // folded description without the size token
+  size:     number | null;   // in base unit (g / ml / szt), multipack included
+  unit:     SizeUnit | null;
+  packSize: number | null;   // single-package size (pre-multipack) — shrink detection
+}
+
+/** Structured product fields the OCR AI attaches to new line items.
+ *  Older data has only the raw description — the regex path covers it. */
+export interface LineItemProduct {
+  name:       string;
+  size?:      number | null;
+  unit?:      SizeUnit | null;
+  packCount?: number | null;
 }
 
 export interface PriceLineItem {
   description: string;
   amount:      number;       // PLN
+  product?:    LineItemProduct | null;
 }
 
 /** Minimal transaction shape the aggregation needs (subset of range docs). */
@@ -41,7 +52,8 @@ export interface PriceOccurrence {
   date:      string;
   month:     string;
   merchant:  string;
-  raw:       string;          // original receipt description
+  raw:       string;          // original receipt description (tooltip)
+  label:     string;          // clean display name (size/pack stripped)
   price:     number;          // line price in PLN
   size:      number | null;
   unit:      SizeUnit | null;
@@ -93,6 +105,8 @@ export function foldText(s: string): string {
 
 // "2x200g" / "2 x 200 g" — multipack prefix multiplies the extracted size.
 const PACK_RE = /(\d+)\s*[x*]\s*(?=\d)/;
+// "0,5 l x4" — multipack SUFFIX (standalone "xN" token after the size).
+const POST_PACK_RE = /(^|\s)[x*]\s*(\d{1,3})(?=\s|$)/;
 // Longer units first so "kg" isn't consumed as "g" and "ml" as "l".
 const SIZE_RE = /(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|szt)\b/;
 
@@ -123,8 +137,19 @@ export function normalizeProductName(raw: string): ParsedName {
     found.unit = base.unit;
     return " ";
   });
-  const size = found.size === null ? null : found.size * pack;
-  const unit = found.unit;
+
+  // Suffix multipack ("0,5 l x4") — only meaningful once the prefix form
+  // didn't match. Without any size, a bare "xN" means N pieces.
+  if (pack === 1) {
+    s = s.replace(POST_PACK_RE, (_m, lead: string, n: string) => {
+      pack = parseInt(n, 10) || 1;
+      return lead;
+    });
+  }
+  let size = found.size === null ? null : found.size * pack;
+  let unit = found.unit;
+  let packSize = found.size;
+  if (size === null && pack > 1) { size = pack; unit = "szt"; packSize = 1; }
 
   // Drop punctuation orphaned by token removal ("ekst." → "ekst"),
   // but keep it inside tokens ("3,2%" stays intact).
@@ -134,7 +159,21 @@ export function normalizeProductName(raw: string): ParsedName {
     .filter(Boolean)
     .join(" ");
 
-  return { nameKey: nameKey || foldText(raw).trim(), size, unit };
+  return { nameKey: nameKey || foldText(raw).trim(), size, unit, packSize };
+}
+
+/** Display name: the raw description with size/pack tokens stripped,
+ *  case preserved — "Filet z piersi kurczaka z grzędy 0,442 kg" →
+ *  "Filet z piersi kurczaka z grzędy". */
+export function cleanProductLabel(raw: string): string {
+  const cleaned = raw
+    .replace(/(\d+)\s*[x*]\s*(?=\d)/gi, " ")                    // "2x" prefix packs
+    .replace(/(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|szt)\b\.?/gi, " ") // size tokens
+    .replace(/(^|\s)[x*]\s*\d{1,3}(?=\s|$)/gi, " ")             // "x4" suffix packs
+    .replace(/\s+/g, " ")
+    .replace(/[\s.,-]+$/g, "")
+    .trim();
+  return cleaned || raw.trim();
 }
 
 // ── Unit price ────────────────────────────────────────────────
@@ -187,18 +226,74 @@ export function productMetric(p: ProductHistory): ProductMetric {
 
 // ── Aggregation ───────────────────────────────────────────────
 
-/** Latest size decrease between consecutive sized purchases of one product. */
-function detectShrink(occurrences: PriceOccurrence[]): ShrinkEvent | null {
-  let prev: PriceOccurrence | null = null;
+/** One receipt line's package size — the shrink-detection input. */
+interface ShrinkLine {
+  date:     string;
+  packSize: number | null;
+  unit:     SizeUnit | null;
+}
+
+/**
+ * Latest PACKAGE-size decrease. Works on per-line package sizes (never on
+ * day-merged totals — buying two packs one day is not shrinkflation) and
+ * requires a STABLE baseline: the previous size must repeat at least
+ * twice in a row before a smaller one counts. Weighted goods (each line
+ * a different random weight) never build a stable run, so they can't
+ * false-alarm.
+ */
+function detectShrink(lines: ShrinkLine[]): ShrinkEvent | null {
+  let stable: { size: number; unit: SizeUnit } | null = null;
+  let prev:   { size: number; unit: SizeUnit } | null = null;
   let event: ShrinkEvent | null = null;
-  for (const o of occurrences) {
-    if (o.size === null || o.unit === null) continue;
-    if (prev && prev.unit === o.unit && o.size < (prev.size as number)) {
-      event = { date: o.date, fromSize: prev.size as number, toSize: o.size, unit: o.unit };
+  for (const line of lines) {
+    if (line.packSize === null || line.unit === null) continue;
+    const cur = { size: line.packSize, unit: line.unit };
+    if (prev && prev.unit === cur.unit && prev.size === cur.size) stable = cur;
+    if (stable && stable.unit === cur.unit && cur.size < stable.size) {
+      event  = { date: line.date, fromSize: stable.size, toSize: cur.size, unit: cur.unit };
+      stable = null;   // a new stable run is required before the next flag
     }
-    prev = o;
+    prev = cur;
   }
   return event;
+}
+
+/** AI-structured fields win over regex parsing when present. */
+function parseItem(item: PriceLineItem): (ParsedName & { label: string }) | null {
+  const structured = item.product;
+  if (structured?.name?.trim()) {
+    const pack = structured.packCount && structured.packCount > 0 ? structured.packCount : 1;
+    const unit = structured.unit ?? null;
+    const packSize = unit && structured.size && structured.size > 0 ? structured.size : null;
+    const size = packSize !== null
+      ? packSize * pack
+      : (unit === "szt" && pack > 1 ? pack : null);
+    const label = structured.name.trim();
+    return { nameKey: foldText(label).replace(/\s+/g, " ").trim(), size, unit, packSize, label };
+  }
+  const parsed = normalizeProductName(item.description);
+  if (!parsed.nameKey) return null;
+  return { ...parsed, label: cleanProductLabel(item.description) };
+}
+
+/** Same product bought several times on one shopping trip (weighted goods
+ *  print one line per piece) → ONE occurrence: summed price and size. */
+function mergeSameDay(occurrences: PriceOccurrence[]): PriceOccurrence[] {
+  const byVisit = new Map<string, PriceOccurrence[]>();
+  for (const o of occurrences) {
+    const key = `${o.merchant}|${o.date}`;
+    const list = byVisit.get(key);
+    if (list) list.push(o); else byVisit.set(key, [o]);
+  }
+  return [...byVisit.values()].map(parts => {
+    if (parts.length === 1) return parts[0];
+    const price = parts.reduce((s, o) => s + o.price, 0);
+    const uniform = parts.every(o =>
+      o.size !== null && o.unit !== null && o.unit === parts[0].unit);
+    const size = uniform ? parts.reduce((s, o) => s + (o.size as number), 0) : null;
+    const unit = uniform ? parts[0].unit : null;
+    return { ...parts[0], price, size, unit, unitPrice: computeUnitPrice(price, size, unit) };
+  });
 }
 
 export function buildPriceHistory(
@@ -206,6 +301,7 @@ export function buildPriceHistory(
   months?: Set<string>,
 ): PriceHistoryResult {
   const byName = new Map<string, ProductHistory>();
+  const linesByName = new Map<string, ShrinkLine[]>();   // per-line, pre-merge
   let txWithItems = 0;
 
   for (const tx of transactions) {
@@ -218,13 +314,15 @@ export function buildPriceHistory(
 
     for (const item of items) {
       if (!item.description?.trim() || !(item.amount > 0)) continue;
-      const { nameKey, size, unit } = normalizeProductName(item.description);
-      if (!nameKey) continue;
+      const parsed = parseItem(item);
+      if (!parsed) continue;
+      const { nameKey, size, unit, packSize, label } = parsed;
 
       let product = byName.get(nameKey);
       if (!product) {
-        product = { nameKey, label: item.description, merchants: [], occurrences: [], shrink: null };
+        product = { nameKey, label, merchants: [], occurrences: [], shrink: null };
         byName.set(nameKey, product);
+        linesByName.set(nameKey, []);
       }
       if (!product.merchants.includes(merchant)) product.merchants.push(merchant);
       product.occurrences.push({
@@ -232,25 +330,30 @@ export function buildPriceHistory(
         month:     tx.budgetMonth,
         merchant,
         raw:       item.description,
+        label,
         price:     item.amount,
         size,
         unit,
         unitPrice: computeUnitPrice(item.amount, size, unit),
       });
+      linesByName.get(nameKey)!.push({ date: tx.date, packSize, unit });
     }
   }
 
   const products = [...byName.values()]
-    .filter(p => p.occurrences.length >= MIN_OCCURRENCES)
     .map(p => {
-      const occurrences = [...p.occurrences].sort((a, b) => a.date.localeCompare(b.date));
+      const occurrences = mergeSameDay(p.occurrences)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const lines = (linesByName.get(p.nameKey) ?? [])
+        .sort((a, b) => a.date.localeCompare(b.date));
       return {
         ...p,
         occurrences,
-        label:  occurrences[occurrences.length - 1].raw,  // freshest receipt wording
-        shrink: detectShrink(occurrences),
+        label:  occurrences[occurrences.length - 1].label,  // freshest wording, cleaned
+        shrink: detectShrink(lines),
       };
     })
+    .filter(p => p.occurrences.length >= MIN_OCCURRENCES)
     .sort((a, b) =>
       b.occurrences.length - a.occurrences.length || a.label.localeCompare(b.label));
 

@@ -20,6 +20,7 @@
 // ============================================================
 
 import { getActiveCost } from "../hooks/useRecurring";
+import { shiftMonth } from "./seasonality";
 import type { RecurringDoc } from "../types/appContext";
 
 type RecurringCost = NonNullable<RecurringDoc["costs"]>[number];
@@ -47,7 +48,11 @@ export interface SubscriptionRow {
   description:   string;
   categoryName:  string;
   monthlyCost:   number;
+  /** Cost over the NEXT 12 months, honouring validTo/archivedFrom — an
+   *  installment with 3 payments left costs 3× the installment, not 12×. */
   annualCost:    number;
+  /** Last in-force month when the obligation ends within the next year. */
+  endsAt:        string | null;
   sinceFirstPct: number | null;   // price drift vs the first cost entry; null = never changed
 }
 
@@ -134,12 +139,28 @@ export function subscriptionRows(docs: RecurringDoc[], month: string): Subscript
       const monthlyCost = monthlyEquivalent(doc, month);
       const first   = costPLN(doc.costs?.[0] ?? null);
       const current = costPLN(getActiveCost(doc, month));
+
+      // Walk the next 12 months instead of ×12 — obligations that end
+      // mid-horizon (validTo, future archive) stop contributing, and
+      // already-recorded future raises are picked up per month.
+      let annualCost = 0;
+      let endsAt: string | null = null;
+      for (let offset = 0; offset < 12; offset++) {
+        const m = shiftMonth(month, offset);
+        if (isInForce(doc, m)) {
+          annualCost += monthlyEquivalent(doc, m);
+          endsAt = m;
+        }
+      }
+      if (endsAt === null || isInForce(doc, shiftMonth(month, 12))) endsAt = null;
+
       return {
         id:            doc.id,
         description:   doc.description,
         categoryName:  doc.categoryName,
         monthlyCost,
-        annualCost:    monthlyCost * 12,
+        annualCost,
+        endsAt,
         sinceFirstPct: first > 0 && first !== current ? ((current - first) / first) * 100 : null,
       };
     })

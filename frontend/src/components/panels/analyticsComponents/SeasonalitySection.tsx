@@ -145,9 +145,9 @@ export function SeasonalitySection() {
             </div>
 
             <div style={{ ...label, marginBottom: 8 }}>
-              {effectiveMonth}: <strong style={{ color: c.text }}>{fmt(yoy.totals.current)} zł</strong>
+              {effectiveMonth}: <strong style={{ color: c.text }}>{fmt(yoy.totals.current)}</strong>
               {" vs "}
-              {shiftMonth(effectiveMonth, -12)}: <strong style={{ color: c.textSecondary }}>{fmt(yoy.totals.previous)} zł</strong>
+              {shiftMonth(effectiveMonth, -12)}: <strong style={{ color: c.textSecondary }}>{fmt(yoy.totals.previous)}</strong>
               {yoyChangePct !== null && (
                 <strong style={{ marginLeft: 6, color: yoyChangePct > 0 ? c.danger : c.success }}>
                   ({yoyChangePct >= 0 ? "+" : ""}{yoyChangePct.toFixed(1)}%)

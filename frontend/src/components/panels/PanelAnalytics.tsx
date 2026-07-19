@@ -536,16 +536,16 @@ export default function PanelAnalytics() {
               {!isLoading && (
                 <>
                   {" · Wydatki łącznie: "}
-                  <strong style={{ color: c.danger }}>{fmt(rangeTotals.expenses)} zł</strong>
+                  <strong style={{ color: c.danger }}>{fmt(rangeTotals.expenses)}</strong>
                   {rangeTotals.envelopes > 0 && (
                     <>
                       {" · W kopertach: "}
-                      <strong style={{ color: c.info }}>{fmt(rangeTotals.envelopes)} zł</strong>
+                      <strong style={{ color: c.info }}>{fmt(rangeTotals.envelopes)}</strong>
                     </>
                   )}
                   {" · Saldo: "}
                   <strong style={{ color: rangeTotals.balance >= 0 ? c.success : c.danger }}>
-                    {rangeTotals.balance >= 0 ? "+" : ""}{fmt(rangeTotals.balance)} zł
+                    {rangeTotals.balance >= 0 ? "+" : ""}{fmt(rangeTotals.balance)}
                   </strong>
                 </>
               )}

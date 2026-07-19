@@ -59,10 +59,14 @@ export const AXIS_FONT_SIZE = 11;
 export function toNum(v: unknown): number {
   return typeof v === "number" ? v : Number(v) || 0;
 }
-/** "1 234 zł" — matches the convention already used across analyticsComponents. */
-export const plnLabel = (v: unknown): string => `${fmt(toNum(v))} zł`;
-/** Bare formatted number, for axis ticks. */
-export const plnTick = (v: unknown): string => fmt(toNum(v));
+/** "1 234,56 zł" — fmt() already carries the currency suffix (Intl style),
+ *  so nothing extra is appended here. Appending " zł" after fmt() anywhere
+ *  produces the infamous "zł zł". */
+export const plnLabel = (v: unknown): string => fmt(toNum(v));
+/** Bare number without the currency suffix — axis ticks, unit prices. */
+export const plnNum = (v: unknown): string =>
+  toNum(v).toLocaleString("pl-PL", { maximumFractionDigits: 2 });
+export const plnTick = plnNum;
 /** "12.3%" */
 export const pctLabel = (v: unknown): string => `${toNum(v).toFixed(1)}%`;
 

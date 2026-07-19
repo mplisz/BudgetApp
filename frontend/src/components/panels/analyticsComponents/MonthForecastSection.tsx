@@ -109,7 +109,7 @@ export function MonthForecastSection({ transactions, months }: Props) {
         <ProgressBar percent={progress.elapsedFraction * 100} color={c.info} />
         {forecast.limitTotal > 0 && (
           <>
-            <span style={label}>💸 Budżet: {fmt(forecast.spent)} / {fmt(forecast.limitTotal)} zł</span>
+            <span style={label}>💸 Budżet: {fmt(forecast.spent)} / {fmt(forecast.limitTotal)}</span>
             <ProgressBar percent={(forecast.spent / forecast.limitTotal) * 100} color={usageColor} />
           </>
         )}
@@ -117,26 +117,26 @@ export function MonthForecastSection({ transactions, months }: Props) {
 
       {/* Stat row */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 28px", marginBottom: 12 }}>
-        {stat("Wydano dotąd", `${fmt(forecast.spent)} zł`, c.text)}
+        {stat("Wydano dotąd", fmt(forecast.spent), c.text)}
         {stat(
           "Prognoza końca miesiąca",
-          `~${fmt(forecast.projected)} zł`,
+          `~${fmt(forecast.projected)}`,
           usageColor,
         )}
-        {forecast.limitTotal > 0 && stat("Suma limitów", `${fmt(forecast.limitTotal)} zł`, c.textSecondary)}
+        {forecast.limitTotal > 0 && stat("Suma limitów", fmt(forecast.limitTotal), c.textSecondary)}
       </div>
 
       {/* Known / soft additions */}
       <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
         {forecast.upcomingFixedTotal > 0 && (
           <span style={label}>
-            🔄 W prognozie: nadchodzące cykliczne <strong style={{ color: c.textTertiary }}>{fmt(forecast.upcomingFixedTotal)} zł</strong>
+            🔄 W prognozie: nadchodzące cykliczne <strong style={{ color: c.textTertiary }}>{fmt(forecast.upcomingFixedTotal)}</strong>
           </span>
         )}
         {plannedInfo.count > 0 && (
           <span style={label}>
             🛍️ Poza prognozą: planowane zakupy{" "}
-            <strong style={{ color: c.textTertiary }}>+{fmt(plannedInfo.total)} zł</strong>{" "}
+            <strong style={{ color: c.textTertiary }}>+{fmt(plannedInfo.total)}</strong>{" "}
             ({plannedInfo.count} {plannedInfo.count === 1 ? "pozycja" : "pozycje"}) — mogą, ale nie muszą się wydarzyć
           </span>
         )}
@@ -176,8 +176,8 @@ export function MonthForecastSection({ transactions, months }: Props) {
                   color={crossed ? c.danger : c.warning}
                 />
                 <div style={{ ...label, marginTop: 3 }}>
-                  wydano {fmt(r.spent)} zł · prognoza <strong style={{ color: c.dangerLight }}>~{fmt(r.projected)} zł</strong>{" "}
-                  / limit {fmt(r.limit as number)} zł
+                  wydano {fmt(r.spent)} · prognoza <strong style={{ color: c.dangerLight }}>~{fmt(r.projected)}</strong>{" "}
+                  / limit {fmt(r.limit as number)}
                 </div>
               </div>
             );

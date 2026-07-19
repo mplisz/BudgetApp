@@ -22,7 +22,7 @@ import {
 } from "../../../utils/productPricing";
 import {
   CHART_COLORS, chartTooltipStyle, chartTooltipLabelStyle, chartTooltipItemStyle,
-  AXIS_STROKE, AXIS_FONT_SIZE, plnTick, toNum, ChartEmpty,
+  AXIS_STROKE, AXIS_FONT_SIZE, plnTick, plnNum, ChartEmpty,
 } from "./chartKit";
 
 interface Props {
@@ -147,13 +147,13 @@ export function ProductPriceSection({ transactions, months }: Props) {
               {selected.label}
             </span>
             <span style={statChip}>
-              {fmt(chart.summary.first)} → {fmt(chart.summary.last)} {chart.metric.label}{" "}
+              {plnNum(chart.summary.first)} → {plnNum(chart.summary.last)} {chart.metric.label}{" "}
               <strong style={{ color: chart.summary.changePct > 0 ? c.danger : c.success }}>
                 ({chart.summary.changePct >= 0 ? "+" : ""}{chart.summary.changePct.toFixed(1)}%)
               </strong>
             </span>
             <span style={statChip}>
-              min {fmt(chart.summary.min)} · max {fmt(chart.summary.max)} {chart.metric.label}
+              min {plnNum(chart.summary.min)} · max {plnNum(chart.summary.max)} {chart.metric.label}
             </span>
           </div>
 
@@ -180,7 +180,7 @@ export function ProductPriceSection({ transactions, months }: Props) {
                 contentStyle={chartTooltipStyle}
                 labelStyle={chartTooltipLabelStyle}
                 itemStyle={chartTooltipItemStyle}
-                formatter={(v: unknown) => `${fmt(toNum(v))} ${chart.metric.label}`}
+                formatter={(v: unknown) => `${plnNum(v)} ${chart.metric.label}`}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {selected.merchants.map((m, i) => (
@@ -218,15 +218,15 @@ export function ProductPriceSection({ transactions, months }: Props) {
                   <tr key={i} style={{ borderTop: `1px solid ${c.border}` }}>
                     <td style={{ padding: "5px 10px", color: c.textTertiary, whiteSpace: "nowrap" }}>{o.date}</td>
                     <td style={{ padding: "5px 10px", color: c.textBody }}>{o.merchant}</td>
-                    <td style={{ padding: "5px 10px", color: c.textSecondary }}>{o.raw}</td>
+                    <td style={{ padding: "5px 10px", color: c.textSecondary }} title={o.raw}>{o.label}</td>
                     <td style={{ padding: "5px 10px", textAlign: "right", color: c.textTertiary, whiteSpace: "nowrap" }}>
                       {o.size !== null && o.unit !== null ? formatSize(o.size, o.unit) : "—"}
                     </td>
                     <td style={{ padding: "5px 10px", textAlign: "right", color: c.textBody, fontWeight: 600, whiteSpace: "nowrap" }}>
-                      {fmt(o.price)} zł
+                      {fmt(o.price)}
                     </td>
                     <td style={{ padding: "5px 10px", textAlign: "right", color: c.textTertiary, whiteSpace: "nowrap" }}>
-                      {chart.metric.useUnitPrice && o.unitPrice !== null ? fmt(o.unitPrice) : ""}
+                      {chart.metric.useUnitPrice && o.unitPrice !== null ? plnNum(o.unitPrice) : ""}
                     </td>
                   </tr>
                 ))}

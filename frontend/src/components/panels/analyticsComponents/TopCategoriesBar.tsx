@@ -54,7 +54,7 @@ export function TopCategoriesBar({ data, topN = 10, onClick }: TopCategoriesBarP
             const num = toNum(v);
             const payload = (item as { payload?: CategoryTotal })?.payload;
             const share = payload?.share ?? 0;
-            return [`${fmt(num)} zł (${share.toFixed(1)}%)`, "Suma"];
+            return [`${fmt(num)} (${share.toFixed(1)}%)`, "Suma"];
           }}
         />
         <Bar

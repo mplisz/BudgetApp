@@ -104,8 +104,8 @@ export function MerchantProfileSection({ transactions, months }: Props) {
                 ☕ Mikrowydatki
               </div>
               <div style={{ fontSize: 12, color: c.text }}>
-                <strong>{m.merchant}</strong>: {m.visits} wizyt × {fmt(m.avgBasket)} zł ={" "}
-                <strong style={{ color: c.warningLight }}>{fmt(m.total)} zł</strong>
+                <strong>{m.merchant}</strong>: {m.visits} wizyt × {fmt(m.avgBasket)} ={" "}
+                <strong style={{ color: c.warningLight }}>{fmt(m.total)}</strong>
               </div>
             </div>
           ))}
@@ -153,10 +153,10 @@ export function MerchantProfileSection({ transactions, months }: Props) {
                   {r.visitsPerMonth.toFixed(1)}
                 </td>
                 <td style={{ padding: "5px 10px", textAlign: "right", color: c.textBody, whiteSpace: "nowrap" }}>
-                  {fmt(r.avgBasket)} zł
+                  {fmt(r.avgBasket)}
                 </td>
                 <td style={{ padding: "5px 10px", textAlign: "right", color: c.text, fontWeight: 600, whiteSpace: "nowrap" }}>
-                  {fmt(r.total)} zł
+                  {fmt(r.total)}
                 </td>
                 <td style={{ padding: "5px 10px", textAlign: "right", color: c.textTertiary, whiteSpace: "nowrap" }}>
                   {r.lastVisit}

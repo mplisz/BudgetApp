@@ -7,6 +7,10 @@
 // flags "micro-spending" shops: visited often, small average basket —
 // the classic place where money leaks unnoticed.
 //
+// A visit is a RECEIPT (receiptId), not a transaction — the OCR cart
+// splits one receipt into several per-category transactions; counting
+// those as visits would multiply visit counts and shrink baskets.
+//
 // The micro threshold is relative (below the average basket across all
 // tagged spend), not a fixed amount, so it scales with the user's
 // spending. A per-shop median would sit exactly on the typical small
@@ -28,6 +32,7 @@ export interface MerchantTx {
   budgetMonth: string;
   merchant?:   string | null;
   amount:      number;
+  receiptId?:  string | null;
   returns?:    Array<{ moneyReturnedInMonth: string; cashAmount?: number }>;
 }
 
@@ -60,6 +65,11 @@ export function buildMerchantProfile(
 ): MerchantProfileResult {
   const monthsSet = new Set(months);
   const byShop = new Map<string, MerchantRow>();
+  // One VISIT = one receipt, not one transaction: the OCR cart splits a
+  // single receipt into several transactions (one per category), all
+  // sharing the same receiptId. Manual entries have no receiptId — for
+  // them merchant+date approximates a visit.
+  const visitKeys = new Map<string, Set<string>>();
   let taggedTotal = 0;
 
   for (const tx of transactions) {
@@ -71,13 +81,17 @@ export function buildMerchantProfile(
     if (!row) {
       row = { merchant, visits: 0, total: 0, avgBasket: 0, share: 0, visitsPerMonth: 0, lastVisit: "", byMonth: {} };
       byShop.set(merchant, row);
+      visitKeys.set(merchant, new Set());
     }
     const net = calculateNetAmount(tx);
-    row.visits += 1;
-    row.total  += net;
+    visitKeys.get(merchant)!.add(tx.receiptId || `${merchant}|${tx.date}`);
+    row.total += net;
     row.byMonth[tx.budgetMonth] = (row.byMonth[tx.budgetMonth] ?? 0) + net;
     if (tx.date > row.lastVisit) row.lastVisit = tx.date;
     taggedTotal += net;
+  }
+  for (const [merchant, keys] of visitKeys) {
+    byShop.get(merchant)!.visits = keys.size;
   }
 
   const monthCount = Math.max(months.length, 1);

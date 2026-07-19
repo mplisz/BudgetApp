@@ -17,6 +17,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeProductName,
+  cleanProductLabel,
   computeUnitPrice,
   formatSize,
   productMetric,
@@ -31,7 +32,7 @@ import {
 function tx(o: {
   date: string;
   merchant?: string | null;
-  items?: Array<{ description: string; amount: number }>;
+  items?: PricedTransaction["lineItems"];
   type?: string;
 }): PricedTransaction {
   return {
@@ -58,12 +59,12 @@ function purchases(description: string, amounts: number[], merchant = "Biedronka
 describe("normalizeProductName", () => {
   it("extracts grams and strips diacritics", () => {
     expect(normalizeProductName("MASŁO EKSTRA 200G"))
-      .toEqual({ nameKey: "maslo ekstra", size: 200, unit: "g" });
+      .toEqual({ nameKey: "maslo ekstra", size: 200, unit: "g", packSize: 200 });
   });
 
   it("handles size glued to the name with a dot", () => {
     expect(normalizeProductName("MASLO EKST.200G"))
-      .toEqual({ nameKey: "maslo ekst", size: 200, unit: "g" });
+      .toEqual({ nameKey: "maslo ekst", size: 200, unit: "g", packSize: 200 });
   });
 
   it("gives the same key for 200g and 195g variants (shrinkflation)", () => {
@@ -82,27 +83,52 @@ describe("normalizeProductName", () => {
 
   it("keeps percent as part of the name, not a size", () => {
     expect(normalizeProductName("Mleko UHT 3,2% 1L"))
-      .toEqual({ nameKey: "mleko uht 3,2%", size: 1000, unit: "ml" });
+      .toEqual({ nameKey: "mleko uht 3,2%", size: 1000, unit: "ml", packSize: 1000 });
   });
 
   it("multiplies multipacks into the size", () => {
-    expect(normalizeProductName("WODA 6x1,5L")).toMatchObject({ size: 9000, unit: "ml" });
+    expect(normalizeProductName("WODA 6x1,5L")).toMatchObject({ size: 9000, unit: "ml", packSize: 1500 });
     expect(normalizeProductName("Piwo 4 x 500 ml")).toMatchObject({ size: 2000, unit: "ml" });
+  });
+
+  it("handles the multipack SUFFIX form (size before xN)", () => {
+    expect(normalizeProductName("Żubr puszka 0,5 l x4"))
+      .toEqual({ nameKey: "zubr puszka", size: 2000, unit: "ml", packSize: 500 });
+    expect(computeUnitPrice(35.12, 2000, "ml")).toBeCloseTo(17.56, 2);   // zł/l, not ×4
+  });
+
+  it("treats a bare xN with no size as N pieces", () => {
+    expect(normalizeProductName("BUŁKA KAJZERKA x6"))
+      .toMatchObject({ nameKey: "bulka kajzerka", size: 6, unit: "szt" });
   });
 
   it("supports pieces (szt)", () => {
     expect(normalizeProductName("JAJA L 10SZT"))
-      .toEqual({ nameKey: "jaja l", size: 10, unit: "szt" });
+      .toEqual({ nameKey: "jaja l", size: 10, unit: "szt", packSize: 10 });
   });
 
   it("returns null size when none present", () => {
     expect(normalizeProductName("Chleb wiejski"))
-      .toEqual({ nameKey: "chleb wiejski", size: null, unit: null });
+      .toEqual({ nameKey: "chleb wiejski", size: null, unit: null, packSize: null });
   });
 
   it("falls back to the folded raw name when only a size remains", () => {
     const parsed = normalizeProductName("200g");
     expect(parsed.nameKey.length).toBeGreaterThan(0);
+  });
+});
+
+describe("cleanProductLabel", () => {
+  it("strips size tokens but keeps the original casing", () => {
+    expect(cleanProductLabel("Filet z piersi kurczaka z grzędy 0,442 kg"))
+      .toBe("Filet z piersi kurczaka z grzędy");
+    expect(cleanProductLabel("MASLO EKST.200G")).toBe("MASLO EKST");
+    expect(cleanProductLabel("Żubr puszka 0,5 l x4")).toBe("Żubr puszka");
+    expect(cleanProductLabel("Mleko UHT 3,2% 1L")).toBe("Mleko UHT 3,2%");
+  });
+
+  it("falls back to the raw name when nothing but a size remains", () => {
+    expect(cleanProductLabel("200g")).toBe("200g");
   });
 });
 
@@ -180,7 +206,7 @@ describe("buildPriceHistory", () => {
     expect(products[0].occurrences).toHaveLength(3);
   });
 
-  it("sorts occurrences chronologically and labels with the freshest wording", () => {
+  it("sorts occurrences chronologically and labels with the freshest CLEAN wording", () => {
     const txs = [
       tx({ date: "2026-02-10", merchant: "Lidl", items: [{ description: "MASLO EKSTRA 200G", amount: 6 }] }),
       tx({ date: "2026-01-10", merchant: "Lidl", items: [{ description: "Maslo ekstra 200 g", amount: 5 }] }),
@@ -188,7 +214,55 @@ describe("buildPriceHistory", () => {
     ];
     const { products } = buildPriceHistory(txs);
     expect(products[0].occurrences.map(o => o.price)).toEqual([5, 6, 7]);
-    expect(products[0].label).toBe("Masło Ekstra 200g");
+    expect(products[0].label).toBe("Masło Ekstra");   // size token stripped
+  });
+
+  it("merges same-day purchases of one product into a single occurrence", () => {
+    // Weighted goods: three fillet pieces on one receipt, one line each.
+    const txs = [
+      tx({ date: "2026-01-13", merchant: "Auchan", items: [
+        { description: "Filet z piersi kurczaka 0,442 kg", amount: 16.34 },
+        { description: "Filet z piersi kurczaka 0,443 kg", amount: 16.36 },
+        { description: "Filet z piersi kurczaka 0,491 kg", amount: 18.14 },
+      ] }),
+      tx({ date: "2026-02-10", merchant: "Auchan", items: [{ description: "Filet z piersi kurczaka 0,500 kg", amount: 18.50 }] }),
+      tx({ date: "2026-03-10", merchant: "Auchan", items: [{ description: "Filet z piersi kurczaka 0,450 kg", amount: 16.65 }] }),
+    ];
+    const { products } = buildPriceHistory(txs);
+    expect(products).toHaveLength(1);
+    const [first] = products[0].occurrences;
+    expect(first.size).toBeCloseTo(1376, 5);              // 442+443+491 g
+    expect(first.price).toBeCloseTo(50.84, 2);
+    expect(first.unitPrice).toBeCloseTo(36.95, 1);        // zł/kg from the sums
+    expect(products[0].occurrences).toHaveLength(3);      // 3 shopping days
+    expect(products[0].shrink).toBeNull();                // weighted → no shrink alarm
+  });
+
+  it("prefers AI-structured product fields over regex parsing", () => {
+    const txs = [1, 2, 3].map(i =>
+      tx({ date: `2026-0${i}-10`, merchant: "Lidl", items: [{
+        description: "MLK UHT3.2 KART",
+        amount: 4,
+        product: { name: "Mleko UHT 3,2%", size: 1000, unit: "ml", packCount: 2 },
+      }] }));
+    const { products } = buildPriceHistory(txs);
+    expect(products[0].label).toBe("Mleko UHT 3,2%");
+    expect(products[0].occurrences[0].size).toBe(2000);   // size × packCount
+    expect(products[0].occurrences[0].unitPrice).toBe(2); // 4 zł / 2 l
+  });
+
+  it("does not flag shrink when a double-pack day precedes a single-pack day", () => {
+    const txs = [
+      tx({ date: "2026-01-10", merchant: "Lidl", items: [
+        { description: "Maslo ekstra 200g", amount: 7 },
+        { description: "Maslo ekstra 200g", amount: 7 },   // two packs, one receipt
+      ] }),
+      tx({ date: "2026-02-10", merchant: "Lidl", items: [{ description: "Maslo ekstra 200g", amount: 7 }] }),
+      tx({ date: "2026-03-10", merchant: "Lidl", items: [{ description: "Maslo ekstra 200g", amount: 7 }] }),
+    ];
+    const { products } = buildPriceHistory(txs);
+    expect(products[0].occurrences[0].size).toBe(400);   // merged day
+    expect(products[0].shrink).toBeNull();               // package size never shrank
   });
 
   it("detects shrinkflation between consecutive sized purchases", () => {

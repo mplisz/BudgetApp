@@ -113,7 +113,7 @@ export function AnalyticsPieChart({ data, emptyMessage }: AnalyticsPieChartProps
             formatter={(v: unknown) => {
               const num = toNum(v);
               return [
-                `${fmt(num)} zł (${total > 0 ? ((num / total) * 100).toFixed(1) : 0}%)`,
+                `${fmt(num)} (${total > 0 ? ((num / total) * 100).toFixed(1) : 0}%)`,
                 "Suma",
               ];
             }}

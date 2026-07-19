@@ -205,4 +205,32 @@ describe("subscriptionRows", () => {
     const rows = subscriptionRows([doc({ validTo: "2026-01" })], "2026-06");
     expect(rows).toHaveLength(0);
   });
+
+  it("caps the annual cost of an installment at its remaining payments", () => {
+    // 533/month, ends 2026-08 → June forward: 3 payments left, not 12.
+    const installment = doc({
+      validTo: "2026-08",
+      costs: [{ validFrom: "2026-05", amount: 533, amountPLN: 533 }],
+    });
+    const [row] = subscriptionRows([installment], "2026-06");
+    expect(row.annualCost).toBe(1599);
+    expect(row.endsAt).toBe("2026-08");
+  });
+
+  it("keeps endsAt null for open-ended obligations", () => {
+    const [row] = subscriptionRows([doc({})], "2026-06");
+    expect(row.endsAt).toBeNull();
+    expect(row.annualCost).toBe(43 * 12);
+  });
+
+  it("picks up already-recorded future raises inside the horizon", () => {
+    const raisedAhead = doc({
+      costs: [
+        { validFrom: "2026-01", amount: 40, amountPLN: 40 },
+        { validFrom: "2026-10", amount: 50, amountPLN: 50 },
+      ],
+    });
+    const [row] = subscriptionRows([raisedAhead], "2026-06");
+    expect(row.annualCost).toBe(4 * 40 + 8 * 50);   // 06–09 old price, 10→ new
+  });
 });

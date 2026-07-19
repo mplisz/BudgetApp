@@ -80,7 +80,7 @@ export function CategoryHeatmap({ rows, months, onClick }: CategoryHeatmapProps)
                     <td
                       key={m}
                       onClick={() => onClick && onClick(row.categoryId, m)}
-                      title={`${row.categoryName} · ${m} · ${fmt(value)} zł`}
+                      title={`${row.categoryName} · ${m} · ${fmt(value)}`}
                       style={{
                         textAlign: "center",
                         padding: "8px 4px",

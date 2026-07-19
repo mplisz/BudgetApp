@@ -49,6 +49,8 @@ export function RecurringCostsSection({ months }: Props) {
 
   const raisesMonthly = changes.reduce((sum, ch) => sum + ch.monthlyDelta, 0);
   const totalMonthly  = rows.reduce((sum, r) => sum + r.monthlyCost, 0);
+  // Horizon-aware (validTo / future archive), NOT monthly × 12.
+  const totalAnnual   = rows.reduce((sum, r) => sum + r.annualCost, 0);
   const label: React.CSSProperties = { fontSize: 11, color: c.textMuted };
   const th = (right = false): React.CSSProperties => ({
     position: "sticky", top: 0, background: c.surface, textAlign: right ? "right" : "left",
@@ -61,17 +63,17 @@ export function RecurringCostsSection({ months }: Props) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 28px", marginBottom: 12 }}>
         <div>
           <div style={label}>Koszty stałe miesięcznie</div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: c.text }}>{fmt(totalMonthly)} zł</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: c.text }}>{fmt(totalMonthly)}</div>
         </div>
         <div>
-          <div style={label}>Rocznie</div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: c.textSecondary }}>{fmt(totalMonthly * 12)} zł</div>
+          <div style={label}>Najbliższe 12 mies.</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: c.textSecondary }}>{fmt(totalAnnual)}</div>
         </div>
         {changes.length > 0 && (
           <div>
             <div style={label}>Zmiany cen w zakresie</div>
             <div style={{ fontSize: 17, fontWeight: 800, color: raisesMonthly > 0 ? c.danger : c.success }}>
-              {raisesMonthly >= 0 ? "+" : ""}{fmt(raisesMonthly)} zł/mies.
+              {raisesMonthly >= 0 ? "+" : ""}{fmt(raisesMonthly)}/mies.
             </div>
           </div>
         )}
@@ -111,7 +113,7 @@ export function RecurringCostsSection({ months }: Props) {
                     {raise ? "⬆️" : "⬇️"} {ch.description}
                   </span>
                   <span style={{ fontSize: 12, color: c.textSecondary }}>
-                    {fmt(ch.fromAmount)} → {fmt(ch.toAmount)} zł{" "}
+                    {fmt(ch.fromAmount)} → {fmt(ch.toAmount)}{" "}
                     <strong style={{ color }}>
                       ({ch.deltaPct >= 0 ? "+" : ""}{ch.deltaPct.toFixed(1)}%)
                     </strong>{" "}
@@ -132,7 +134,7 @@ export function RecurringCostsSection({ months }: Props) {
               <th style={th()}>Nazwa</th>
               <th style={th()}>Harmonogram</th>
               <th style={th(true)}>Mies.</th>
-              <th style={th(true)}>Rocznie</th>
+              <th style={th(true)}>12 mies.</th>
               <th style={th(true)}>Od startu</th>
             </tr>
           </thead>
@@ -147,12 +149,15 @@ export function RecurringCostsSection({ months }: Props) {
                   </td>
                   <td style={{ padding: "5px 10px", color: c.textTertiary, whiteSpace: "nowrap" }}>
                     {docRef ? scheduleLabel(docRef) : ""}
+                    {r.endsAt && (
+                      <span style={{ marginLeft: 6, color: c.warningLight, fontSize: 10 }}>· do {r.endsAt}</span>
+                    )}
                   </td>
                   <td style={{ padding: "5px 10px", textAlign: "right", color: c.textBody, fontWeight: 600, whiteSpace: "nowrap" }}>
-                    {fmt(r.monthlyCost)} zł
+                    {fmt(r.monthlyCost)}
                   </td>
                   <td style={{ padding: "5px 10px", textAlign: "right", color: c.textTertiary, whiteSpace: "nowrap" }}>
-                    {fmt(r.annualCost)} zł
+                    {fmt(r.annualCost)}
                   </td>
                   <td style={{
                     padding: "5px 10px", textAlign: "right", whiteSpace: "nowrap", fontWeight: 600,

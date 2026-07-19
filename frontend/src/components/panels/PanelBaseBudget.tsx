@@ -878,7 +878,7 @@ export default function PanelBaseBudget() {
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: envelopeTotal > 0 ? 2 : 10 }}>
                     <span style={{ fontSize: 12, color: c.textTertiary }}>📤 Estymata wydatków</span>
-                    <span style={{ fontWeight: 700, color: c.text, fontSize: 14 }}>{fmt(totalOutflow)} zł</span>
+                    <span style={{ fontWeight: 700, color: c.text, fontSize: 14 }}>{fmt(totalOutflow)}</span>
                   </div>
                   {envelopeTotal > 0 && (
                     <div style={{ fontSize: 10, color: c.voucher, textAlign: "right", marginBottom: 10 }}>
@@ -887,7 +887,7 @@ export default function PanelBaseBudget() {
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
                     <span style={{ fontSize: 12, color: c.textTertiary }}>📥 Kwota dostępna</span>
-                    <span style={{ fontWeight: 700, color: c.success, fontSize: 14 }}>{fmt(monthlyIncome)} zł</span>
+                    <span style={{ fontWeight: 700, color: c.success, fontSize: 14 }}>{fmt(monthlyIncome)}</span>
                   </div>
                   {monthlyIncome > 0 && (
                     <div style={{
@@ -975,7 +975,7 @@ export default function PanelBaseBudget() {
                       <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: c.textTertiary }}>
                         <span>📤 Estymata wydatków:</span>
                         <span style={{ fontWeight: 700, color: c.text }}>
-                          {fmt(totalOutflow)} zł
+                          {fmt(totalOutflow)}
                         </span>
                         {envelopeTotal > 0 && (
                           <span style={{ fontSize: 10, color: c.voucher }}>
@@ -986,7 +986,7 @@ export default function PanelBaseBudget() {
                       <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: c.textTertiary }}>
                         <span>📥 Kwota dostępna w miesiącu:</span>
                         <span style={{ fontWeight: 700, color: c.success }}>
-                          {fmt(monthlyIncome)} zł
+                          {fmt(monthlyIncome)}
                         </span>
                         {monthlyIncome === 0 && (
                           <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>

@@ -86,9 +86,9 @@ export function TimePatternsSection({ transactions, months }: Props) {
       {insights.top && (
         <div style={{ ...label, marginBottom: 8 }}>
           💥 Najdroższy dzień: <strong style={{ color: c.text }}>{WEEKDAY_FULL[topWeekday]}</strong>{" "}
-          — śr. {fmt(insights.top.avgPerDay)} zł/dzień,{" "}
+          — śr. {fmt(insights.top.avgPerDay)}/dzień,{" "}
           <strong style={{ color: c.danger }}>+{insights.topAbovePct.toFixed(0)}%</strong> vs średnia
-          {" · weekend "}{fmt(insights.weekendAvg)} zł/dzień vs dni robocze {fmt(insights.workdayAvg)} zł/dzień
+          {" · weekend "}{fmt(insights.weekendAvg)}/dzień vs dni robocze {fmt(insights.workdayAvg)}/dzień
         </div>
       )}
       <ResponsiveContainer width="100%" height={180}>

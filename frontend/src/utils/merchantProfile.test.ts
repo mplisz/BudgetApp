@@ -31,6 +31,7 @@ function tx(o: Partial<MerchantTx> & Pick<MerchantTx, "amount">): MerchantTx {
     budgetMonth: o.budgetMonth ?? "2026-06",
     merchant:    o.merchant ?? "Żabka",
     amount:      o.amount,
+    receiptId:   o.receiptId,
     returns:     o.returns,
   };
 }
@@ -57,6 +58,27 @@ describe("buildMerchantProfile", () => {
   it("computes visit frequency over the range length", () => {
     const { rows } = buildMerchantProfile(visits("Żabka", [10, 10, 10, 10]), MONTHS);
     expect(rows[0].visitsPerMonth).toBe(2);   // 4 visits / 2 months
+  });
+
+  it("counts one visit per receipt, not per split transaction", () => {
+    // OCR cart: one Auchan receipt split into 3 category transactions.
+    const { rows } = buildMerchantProfile([
+      tx({ merchant: "Auchan", amount: 120, receiptId: "rcp_1" }),
+      tx({ merchant: "Auchan", amount: 60,  receiptId: "rcp_1" }),
+      tx({ merchant: "Auchan", amount: 20,  receiptId: "rcp_1" }),
+      tx({ merchant: "Auchan", amount: 90,  receiptId: "rcp_2", date: "2026-06-20" }),
+    ], MONTHS);
+    expect(rows[0].visits).toBe(2);
+    expect(rows[0].avgBasket).toBe(145);   // (200 + 90) / 2 receipts
+  });
+
+  it("falls back to merchant+date for manual entries without receiptId", () => {
+    const { rows } = buildMerchantProfile([
+      tx({ amount: 10, date: "2026-06-10" }),
+      tx({ amount: 5,  date: "2026-06-10" }),   // same day → same visit
+      tx({ amount: 8,  date: "2026-06-11" }),
+    ], MONTHS);
+    expect(rows[0].visits).toBe(2);
   });
 
   it("tracks the last visit date and per-month series", () => {
