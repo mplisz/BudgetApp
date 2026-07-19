@@ -9,6 +9,7 @@
 //   🔎 Kategorie w czasie  — category heatmap, subcategory m/m, delta vs. average
 //   🏷️ Tagi               — per-tag heatmap + top tags
 //   🛒 Ceny produktów      — receipt line-item price history (per shop)
+//   📆 Sezonowość          — year overlay + same-month-last-year (own 24m window)
 //   💰 Wpływy i oszczędności — income structure, savings rate, goals
 //
 // APP-START FLOOR:
@@ -50,6 +51,8 @@ import { MonthForecastSection }                          from "./analyticsCompon
 import { RecurringCostsSection }                         from "./analyticsComponents/RecurringCostsSection";
 import { MerchantProfileSection }                        from "./analyticsComponents/MerchantProfileSection";
 import { type MerchantTx }                               from "../../utils/merchantProfile";
+import { SeasonalitySection }                            from "./analyticsComponents/SeasonalitySection";
+import { enumerateMonths }                               from "../../utils/seasonality";
 import { type PricedTransaction }                        from "../../utils/productPricing";
 import { isFixedExpense, type ForecastTransaction }      from "../../utils/monthForecast";
 import { CHART_COLORS, SERIES, isRetirementCategory }    from "./analyticsComponents/chartKit";
@@ -72,21 +75,6 @@ interface Transaction {
   recurringId?:    string | null;
   merchant?:       string | null;
   returns?:        Array<{ moneyReturnedInMonth: string; cashAmount?: number }>;
-}
-
-// ── Helpers ───────────────────────────────────────────────────
-
-function enumerateMonths(fromYM: string, toYM: string): string[] {
-  const result: string[] = [];
-  const [fy, fm] = fromYM.split("-").map(Number);
-  const [ty, tm] = toYM.split("-").map(Number);
-  let y = fy, m = fm;
-  while (y < ty || (y === ty && m <= tm)) {
-    result.push(`${y}-${String(m).padStart(2, "0")}`);
-    m++;
-    if (m > 12) { m = 1; y++; }
-  }
-  return result;
 }
 
 // ── Component ─────────────────────────────────────────────────
@@ -719,6 +707,13 @@ export default function PanelAnalytics() {
                 transactions={transactions as unknown as PricedTransaction[]}
                 months={monthsInRange}
               />
+            </Card>
+          </CollapsibleSection>
+
+          {/* 📆 Seasonality — own 24-month window, fetched lazily on expand */}
+          <CollapsibleSection title="📆 Sezonowość" defaultOpen={false}>
+            <Card title="📆 Sezonowość wydatków">
+              <SeasonalitySection />
             </Card>
           </CollapsibleSection>
 
