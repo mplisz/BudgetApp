@@ -7,6 +7,7 @@
 //   🧭 Struktura wydatków  — pie + top categories, top shops, fixed vs. variable
 //   🔎 Kategorie w czasie  — category heatmap, subcategory m/m, delta vs. average
 //   🏷️ Tagi               — per-tag heatmap + top tags
+//   🛒 Ceny produktów      — receipt line-item price history (per shop)
 //   💰 Wpływy i oszczędności — income structure, savings rate, goals
 //
 // APP-START FLOOR:
@@ -43,6 +44,8 @@ import { StackedMonthlyChart, type StackedSeries }       from "./analyticsCompon
 import { MonthlyDeltaChart, type CategoryDelta }         from "./analyticsComponents/MonthlyDeltaChart";
 import { SubcategoryComparison, type SubcatTransaction } from "./analyticsComponents/SubcategoryComparison";
 import { TagSpendingSection, type TagTransaction }       from "./analyticsComponents/TagSpendingSection";
+import { ProductPriceSection }                           from "./analyticsComponents/ProductPriceSection";
+import { type PricedTransaction }                        from "../../utils/productPricing";
 import { CHART_COLORS, SERIES, isRetirementCategory }    from "./analyticsComponents/chartKit";
 import { useMonthFromUrl } from "../../hooks/useMonthFromUrl";
 
@@ -675,6 +678,16 @@ export default function PanelAnalytics() {
             <Card title="🏷️ Wydatki per tag">
               <TagSpendingSection
                 transactions={transactions as unknown as TagTransaction[]}
+                months={monthsInRange}
+              />
+            </Card>
+          </CollapsibleSection>
+
+          {/* 🛒 Product prices from receipt line items */}
+          <CollapsibleSection title="🛒 Ceny produktów" defaultOpen={false}>
+            <Card title="🛒 Historia cen z paragonów">
+              <ProductPriceSection
+                transactions={transactions as unknown as PricedTransaction[]}
                 months={monthsInRange}
               />
             </Card>
