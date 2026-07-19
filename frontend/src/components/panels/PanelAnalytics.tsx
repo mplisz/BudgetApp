@@ -3,7 +3,7 @@
 // Multi-month analytics panel.
 // Layout: range picker + collapsible sections (only the first one is
 // open by default; collapsed sections don't mount their charts):
-//   📈 Przegląd miesięcy   — trend, budget vs. actual, monthly table
+//   📈 Przegląd miesięcy   — trend, budget vs. actual, run-rate forecast, monthly table
 //   🧭 Struktura wydatków  — pie + top categories, top shops, fixed vs. variable
 //   🔎 Kategorie w czasie  — category heatmap, subcategory m/m, delta vs. average
 //   🏷️ Tagi               — per-tag heatmap + top tags
@@ -45,7 +45,9 @@ import { MonthlyDeltaChart, type CategoryDelta }         from "./analyticsCompon
 import { SubcategoryComparison, type SubcatTransaction } from "./analyticsComponents/SubcategoryComparison";
 import { TagSpendingSection, type TagTransaction }       from "./analyticsComponents/TagSpendingSection";
 import { ProductPriceSection }                           from "./analyticsComponents/ProductPriceSection";
+import { MonthForecastSection }                          from "./analyticsComponents/MonthForecastSection";
 import { type PricedTransaction }                        from "../../utils/productPricing";
+import { isFixedExpense, type ForecastTransaction }      from "../../utils/monthForecast";
 import { CHART_COLORS, SERIES, isRetirementCategory }    from "./analyticsComponents/chartKit";
 import { useMonthFromUrl } from "../../hooks/useMonthFromUrl";
 
@@ -362,9 +364,8 @@ export default function PanelAnalytics() {
       if (tx.type !== "EXPENSE") continue;
       const row = byMonth[tx.budgetMonth];
       if (!row) continue;
-      const eff     = calculateEffectiveAmount(tx, tx.budgetMonth);
-      const isFixed = tx.isRecurring === true || (tx.recurringId ?? null) !== null;
-      if (isFixed) row.fixed += eff; else row.variable += eff;
+      const eff = calculateEffectiveAmount(tx, tx.budgetMonth);
+      if (isFixedExpense(tx)) row.fixed += eff; else row.variable += eff;
     }
     return monthlyData.map(d => byMonth[d.month]);
   }, [monthlyData, transactions]);
@@ -607,6 +608,15 @@ export default function PanelAnalytics() {
             <div style={{ marginTop: 16 }}>
               <Card title="🎯 Budżet vs. rzeczywistość">
                 <BudgetVsActualChart data={budgetVsActual} />
+              </Card>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <Card title="🔮 Prognoza końca miesiąca">
+                <MonthForecastSection
+                  transactions={transactions as unknown as ForecastTransaction[]}
+                  months={monthsInRange}
+                />
               </Card>
             </div>
 
