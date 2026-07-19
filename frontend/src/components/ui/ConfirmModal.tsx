@@ -3,6 +3,7 @@
 // ============================================================
 
 import { c } from "../../styles/tokens";
+import type { ReactNode } from "react";
 
 interface ConfirmModalProps {
   isOpen:    boolean;
@@ -10,9 +11,11 @@ interface ConfirmModalProps {
   message:   string;
   onConfirm: () => void;
   onCancel:  () => void;
+  /** Optional extra content (inputs etc.) rendered between message and buttons. */
+  children?: ReactNode;
 }
 
-export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }: ConfirmModalProps) {
+export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, children }: ConfirmModalProps) {
   if (!isOpen) return null;
   return (
     <div
@@ -45,6 +48,8 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }: Co
         <p style={{ margin: "0 0 24px 0", color: c.textTertiary, fontSize: "14px", lineHeight: "1.5", whiteSpace: "pre-line" }}>
           {message}
         </p>
+
+        {children && <div style={{ marginBottom: 20 }}>{children}</div>}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
           <button

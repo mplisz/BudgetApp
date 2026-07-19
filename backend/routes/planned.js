@@ -131,10 +131,17 @@ router.get("/", async (req, res) => {
     const familyId = req.user.familyId;
     const { month } = req.query;
 
+    // includeArchived=true → return archived docs too (PanelPlanned's
+    // "pokaż zarchiwizowane" view). Default stays active-only so every
+    // other consumer keeps its clean list.
+    const archivedFilter = req.query.includeArchived === "true"
+      ? ""
+      : "AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))";
+
     const { resources } = await plannedContainer.items
       .query({
         query: `SELECT * FROM c WHERE c.userId = @userId
-                AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))
+                ${archivedFilter}
                 ORDER BY c.plannedMonth ASC`,
         parameters: [{ name: "@userId", value: familyId }],
       })
@@ -353,8 +360,21 @@ router.delete("/:id", async (req, res) => {
     const { resource: existing, etag } = await readItemWithEtag(plannedContainer, id, familyId);
     if (!existing) return res.status(404).json({ error: "Planned expense not found." });
 
+    // Optional free-text note explaining WHY the plan was dropped —
+    // shown later in the archived view ("świadomie zrezygnowaliśmy, bo…").
+    const reason = typeof req.body?.reason === "string"
+      ? req.body.reason.trim().slice(0, 300)
+      : "";
+
     const { resource } = await plannedContainer.items.upsert(
-      { ...existing, isArchived: true, archivedAt: new Date().toISOString(), archivedBy: req.user.name || req.user.email, archivedById: req.user.id },
+      {
+        ...existing,
+        isArchived:     true,
+        archivedAt:     new Date().toISOString(),
+        archivedBy:     req.user.name || req.user.email,
+        archivedById:   req.user.id,
+        archivedReason: reason || null,
+      },
       { accessCondition: { type: "IfMatch", condition: etag } }
     );
 

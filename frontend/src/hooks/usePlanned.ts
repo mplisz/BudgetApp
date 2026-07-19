@@ -41,6 +41,9 @@ export interface PlannedDoc {
   isPurchased:          boolean;
   purchasedMonth:       string | null;
   isArchived:           boolean;
+  archivedAt?:          string | null;
+  archivedBy?:          string | null;
+  archivedReason?:      string | null;   // optional "why we dropped this" note
   notifiedAt?:          string | null;   // bell reminder dismissed at (ISO)
   createdAt?:           string;
   updatedAt?:           string;
@@ -200,9 +203,11 @@ interface UsePlannedResult {
   isSaving:        boolean;
   pendingNotifications: PlannedDoc[];
   loadAll:         () => Promise<void>;
+  /** Archived docs only — fetched on demand, NOT stored in AppContext. */
+  loadArchived:    () => Promise<PlannedDoc[]>;
   createPlanned:   (payload: PlannedPostPayload) => Promise<PlannedDoc | null>;
   updatePlanned:   (id: string, patch: PlannedPatchPayload) => Promise<PlannedDoc | null>;
-  archivePlanned:  (id: string) => Promise<boolean>;
+  archivePlanned:  (id: string, reason?: string) => Promise<boolean>;
   purchasePlanned: (id: string, date: string, budgetMonth: string, override?: PurchaseOverride) => Promise<PlannedDoc | null>;
   payMonth:        (id: string, month: string, amountPLN: number, amount: number, fxRate: number) => Promise<PlannedDoc | null>;
   dismissMonth:    (id: string, month: string) => Promise<PlannedDoc | null>;
@@ -234,6 +239,23 @@ export function usePlanned(): UsePlannedResult {
       setIsLoading(false);
     }
   }, [api, setPlanned, showError]);
+
+  // ── Load archived (on demand) ─────────────────────────────
+  // Kept OUT of AppContext on purpose: every other consumer (forecast,
+  // envelopes, notifications) expects the active-only list.
+
+  const loadArchived = useCallback(async (): Promise<PlannedDoc[]> => {
+    try {
+      const data = await api.get<PlannedDoc[]>(
+        "/api/planned?includeArchived=true",
+        { fallback: "Nie udało się pobrać zarchiwizowanych planów." },
+      );
+      return data.filter(d => d.isArchived);
+    } catch (err) {
+      showError((err as Error).message);
+      return [];
+    }
+  }, [api, showError]);
 
   // ── Create ─────────────────────────────────────────────────
 
@@ -272,10 +294,15 @@ export function usePlanned(): UsePlannedResult {
 
   // ── Archive ────────────────────────────────────────────────
 
-  const archivePlanned = useCallback(async (id: string): Promise<boolean> => {
+  const archivePlanned = useCallback(async (id: string, reason?: string): Promise<boolean> => {
     setIsSaving(true);
     try {
-      await api.del(`/api/planned/${id}`, undefined, { fallback: "Nie udało się zarchiwizować planu." });
+      const trimmed = reason?.trim();
+      await api.del(
+        `/api/planned/${id}`,
+        trimmed ? { reason: trimmed } : undefined,
+        { fallback: "Nie udało się zarchiwizować planu." },
+      );
       setPlanned(prev => prev.filter(p => p.id !== id));
       showSuccess("Plan zarchiwizowany.");
       return true;
@@ -377,7 +404,7 @@ export function usePlanned(): UsePlannedResult {
   return {
     planned, isLoading, isSaving,
     pendingNotifications,
-    loadAll, createPlanned, updatePlanned,
+    loadAll, loadArchived, createPlanned, updatePlanned,
     archivePlanned, purchasePlanned,
     payMonth, dismissMonth, markNotified,
   };

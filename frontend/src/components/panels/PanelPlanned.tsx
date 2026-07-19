@@ -66,7 +66,7 @@ interface PurchaseModalState {
 export default function PanelPlanned() {
   const {
     planned, isLoading, isSaving,
-    loadAll, updatePlanned, archivePlanned, purchasePlanned,
+    loadAll, loadArchived, updatePlanned, archivePlanned, purchasePlanned,
   } = usePlanned();
 
   const { activeBudgetMonth } = useMonthStatus();
@@ -82,11 +82,23 @@ export default function PanelPlanned() {
   const [archiveModal,  setArchiveModal]  = useState<ArchiveModalState>({
     isOpen: false, id: null, name: "", doc: null, paidSoFar: 0,
   });
+  const [archiveReason, setArchiveReason] = useState("");
   const [purchaseModal, setPurchaseModal] = useState<PurchaseModalState>({
     isOpen: false, doc: null,
   });
 
+  // Archived docs live in LOCAL state (not AppContext) and load lazily on
+  // the first toggle — the rest of the app only ever needs active plans.
+  const [showArchived, setShowArchived] = useState(false);
+  const [archived, setArchived] = useState<PlannedDoc[] | null>(null);
+
   useEffect(() => { loadAll(); }, []);
+
+  useEffect(() => {
+    if (showArchived && archived === null) {
+      loadArchived().then(setArchived);
+    }
+  }, [showArchived, archived, loadArchived]);
 
   const cur = currentCalendarMonth();
 
@@ -221,8 +233,10 @@ const filtered = useMemo<PlannedDoc[]>(() => {
 
   async function handleArchive() {
     if (!archiveModal.id) return;
-    await archivePlanned(archiveModal.id);
+    await archivePlanned(archiveModal.id, archiveReason);
     setArchiveModal({ isOpen: false, id: null, name: "", doc: null, paidSoFar: 0 });
+    setArchiveReason("");
+    setArchived(null);   // invalidate — refetches on next toggle/render
   }
 
   async function handleRealize(payload: TransactionPayload) {
@@ -355,6 +369,21 @@ const filtered = useMemo<PlannedDoc[]>(() => {
             ✕
           </button>
         )}
+
+        <div style={{ width: 1, height: 20, background: c.border }} />
+
+        {/* Archived toggle — hidden by default, loads lazily */}
+        <button
+          onClick={() => setShowArchived(v => !v)}
+          style={{
+            padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer",
+            fontWeight: 700, fontSize: 12,
+            background: showArchived ? c.info : c.border,
+            color:      showArchived ? c.white : c.textSecondary,
+          }}
+        >
+          🗄️ Zarchiwizowane{archived !== null ? ` (${archived.length})` : ""}
+        </button>
       </div>
 
       {/* Overdue warning — unrealized plans from past months */}
@@ -391,10 +420,50 @@ const filtered = useMemo<PlannedDoc[]>(() => {
         />
       ))}
 
+      {/* Archived list — dimmed, read-only, with the "why we dropped it" note */}
+      {showArchived && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: c.textMuted, marginBottom: 10 }}>
+            🗄️ Zarchiwizowane plany {archived !== null && `(${archived.length})`}
+          </div>
+          {archived === null && (
+            <div style={{ color: c.textMuted, fontSize: 13, padding: "12px 0" }}>Ładowanie…</div>
+          )}
+          {archived !== null && archived.length === 0 && (
+            <div style={{ color: c.borderStrong, fontSize: 13, padding: "12px 0" }}>
+              Brak zarchiwizowanych planów.
+            </div>
+          )}
+          {(archived ?? []).map(doc => (
+            <div key={doc.id} style={{
+              background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12,
+              padding: "12px 16px", marginBottom: 8, opacity: 0.75,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: c.textSecondary }}>
+                  {doc.mode === "envelope" ? "🪙" : "💳"} {doc.description}
+                </span>
+                <span style={{ fontSize: 13, color: c.textTertiary, whiteSpace: "nowrap" }}>
+                  {fmt(doc.totalAmountPLN)} · plan na {doc.plannedMonth}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>
+                Zarchiwizowano {doc.archivedAt?.slice(0, 10)}{doc.archivedBy ? ` przez ${doc.archivedBy}` : ""}
+              </div>
+              {doc.archivedReason && (
+                <div style={{ fontSize: 12, color: c.textTertiary, marginTop: 6, fontStyle: "italic" }}>
+                  💬 {doc.archivedReason}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Edit modal */}
       {modalEl}
 
-      {/* Archive confirm */}
+      {/* Archive confirm — with an optional "why" note stored on the doc */}
       <ConfirmModal
         isOpen={archiveModal.isOpen}
         title="Archiwizuj planowany wydatek"
@@ -404,8 +473,25 @@ const filtered = useMemo<PlannedDoc[]>(() => {
             : `"${archiveModal.name}" zostanie zarchiwizowany.`
         }
         onConfirm={handleArchive}
-        onCancel={() => setArchiveModal({ isOpen: false, id: null, name: "", doc: null, paidSoFar: 0 })}
-      />
+        onCancel={() => {
+          setArchiveModal({ isOpen: false, id: null, name: "", doc: null, paidSoFar: 0 });
+          setArchiveReason("");
+        }}
+      >
+        <textarea
+          value={archiveReason}
+          onChange={e => setArchiveReason(e.target.value)}
+          placeholder="Dlaczego rezygnujesz? (opcjonalnie — zapisze się przy planie)"
+          maxLength={300}
+          rows={3}
+          style={{
+            width: "100%", boxSizing: "border-box", resize: "vertical",
+            background: c.bg, border: `1px solid ${c.borderStrong}`, borderRadius: 8,
+            color: c.text, padding: "8px 12px", fontSize: 13, outline: "none",
+            fontFamily: "inherit",
+          }}
+        />
+      </ConfirmModal>
 
       {/* Purchase / realize — editable expense form pre-filled from the plan */}
       {purchaseModal.doc && createPortal(
