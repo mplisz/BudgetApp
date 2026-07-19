@@ -10,6 +10,7 @@
 //   🏷️ Tagi               — per-tag heatmap + top tags
 //   🛒 Ceny produktów      — receipt line-item price history (per shop)
 //   📆 Sezonowość          — year overlay + same-month-last-year (own 24m window)
+//   🕐 Wzorce czasowe      — weekday/day-of-month profiles + payday markers
 //   💰 Wpływy i oszczędności — income structure, savings rate, goals
 //
 // APP-START FLOOR:
@@ -52,6 +53,8 @@ import { RecurringCostsSection }                         from "./analyticsCompon
 import { MerchantProfileSection }                        from "./analyticsComponents/MerchantProfileSection";
 import { type MerchantTx }                               from "../../utils/merchantProfile";
 import { SeasonalitySection }                            from "./analyticsComponents/SeasonalitySection";
+import { TimePatternsSection }                           from "./analyticsComponents/TimePatternsSection";
+import { type TimeTx }                                   from "../../utils/timePatterns";
 import { enumerateMonths }                               from "../../utils/seasonality";
 import { type PricedTransaction }                        from "../../utils/productPricing";
 import { isFixedExpense, type ForecastTransaction }      from "../../utils/monthForecast";
@@ -714,6 +717,16 @@ export default function PanelAnalytics() {
           <CollapsibleSection title="📆 Sezonowość" defaultOpen={false}>
             <Card title="📆 Sezonowość wydatków">
               <SeasonalitySection />
+            </Card>
+          </CollapsibleSection>
+
+          {/* 🕐 Time patterns — when the money leaves */}
+          <CollapsibleSection title="🕐 Wzorce czasowe" defaultOpen={false}>
+            <Card title="🕐 Kiedy wydajesz">
+              <TimePatternsSection
+                transactions={transactions as unknown as TimeTx[]}
+                months={monthsInRange}
+              />
             </Card>
           </CollapsibleSection>
 
