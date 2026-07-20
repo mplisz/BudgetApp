@@ -3,7 +3,7 @@
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useAppContext }      from "../../../context/AppContext";
 import { theme as s }        from "../../../styles/theme";
 import { EmojiSelector }     from "../../ui/EmojiSelector";
@@ -35,6 +35,35 @@ export function CategoriesSection() {
   const [newSubCanBeLuxmed,    setNewSubCanBeLuxmed]    = useState(false);
   const [newSubTrackPrices,    setNewSubTrackPrices]    = useState(false);
   const [modalConfig,          setModalConfig]          = useState(MODAL_CLOSED);
+
+  // ── Keep the subcategory panel level with the categories column ──
+  // Short list → it fills that height; long list → it scrolls instead of
+  // growing past and leaving a gap beside the categories. CSS can't say
+  // "match my sibling": with alignItems:stretch the grid row just grows to
+  // the tallest content, so nothing is ever constrained enough to scroll.
+  // Hence measuring. Only in the two-column layout — under 700px the grid
+  // stacks and each card should keep its natural height.
+  const leftColRef = useRef<HTMLDivElement>(null);
+  const [leftHeight, setLeftHeight] = useState<number | null>(null);
+  const [isTwoCol, setIsTwoCol] = useState(true);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 701px)");
+    const sync = () => setIsTwoCol(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    const el = leftColRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setLeftHeight(entry.contentRect.height));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isLoadingCats]);
+
+  const panelHeight = isTwoCol && leftHeight ? leftHeight : undefined;
 
   const expandedCat = useMemo(() =>
     categories.find(c => c.id === expandedCatId) || null,
@@ -99,10 +128,13 @@ export function CategoriesSection() {
         {isLoadingCats ? (
           <div style={{ padding: 40, textAlign: "center", color: c.textTertiary }}>⏳ Ładowanie bazy...</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 12, alignItems: "stretch" }} data-cats-grid>
+          // alignItems:start keeps the left column at its NATURAL height —
+          // with stretch it would grow to whatever the right column needs,
+          // making the measurement above circular.
+          <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 12, alignItems: "start" }} data-cats-grid>
 
             {/* ── LEFT COLUMN ───────────────────────────────── */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div ref={leftColRef} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
               {/* Add new root category */}
               <div style={s.card}>
@@ -190,7 +222,7 @@ export function CategoriesSection() {
                 the card instead of letting the table scroll inside it.
                 minHeight:0 does the same job vertically — it lets the list
                 below shrink and scroll instead of stretching the row. */}
-            <div style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
+            <div style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, height: panelHeight }}>
               {expandedCat ? (
                 // flex:1 makes the card match the left column's height, so a
                 // short list leaves no gap beside the main categories and a
