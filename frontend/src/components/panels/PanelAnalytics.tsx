@@ -607,7 +607,7 @@ export default function PanelAnalytics() {
       {!isLoading && !noDataAvailable && (
         <>
           {/* 📈 Overview: trend + budget vs. actual + monthly table */}
-          <CollapsibleSection title="📈 Przegląd miesięcy" defaultOpen={true}>
+          <CollapsibleSection title="📈 Przegląd miesięcy" defaultOpen={false}>
             <Card title="📈 Trend miesięczny">
               <MonthlyTrendChart data={monthlyData} />
             </Card>
