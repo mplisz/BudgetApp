@@ -16,7 +16,7 @@ const { productsContainer, transactionsContainer, categoriesContainer } = requir
 const { requireAuth }       = require("../middleware/auth");
 const { readItemWithEtag, readItem, IdParamSchema } = require("../utils/helpers");
 const { mergeProducts, rememberProducts } = require("../utils/productCatalog");
-const { inferProducts } = require("../utils/productAi");
+const { inferProducts, ProductSchema } = require("../utils/productAi");
 const { collectCandidates, applyProducts } = require("../utils/productBackfill");
 
 router.use(requireAuth);
@@ -32,6 +32,18 @@ const RenameSchema = z.object({
 const MergeSchema = z.object({
   sourceId: z.string().min(1).max(200),
   targetId: z.string().min(1).max(200),
+});
+
+// Commit payload for /backfill: the exact mapping the user approved in
+// the dry run. Sending it back means the model is called ONCE and what
+// was previewed is byte-for-byte what gets written (an LLM re-run could
+// word things differently). Omit it and the server infers again.
+const BackfillSchema = z.object({
+  dryRun:   z.boolean().optional(),
+  products: z.array(z.object({
+    text:    z.string().min(1).max(300),
+    product: ProductSchema,
+  })).max(MAX_UNIQUE_PER_RUN).optional(),
 });
 
 // ── GET / — the whole catalog, most-purchased first ──────────
@@ -64,7 +76,11 @@ router.get("/", async (req, res) => {
 // body: { dryRun?: boolean }  → dryRun returns the proposal, writes nothing.
 
 router.post("/backfill", async (req, res) => {
-  const dryRun = req.body?.dryRun !== false;   // default to a preview, never a surprise write
+  const parsedBody = BackfillSchema.safeParse(req.body ?? {});
+  if (!parsedBody.success) return res.status(400).json({ error: parsedBody.error.issues[0].message });
+
+  const dryRun   = parsedBody.data.dryRun !== false;   // preview unless told otherwise
+  const approved = parsedBody.data.products;
   const familyId = req.user.familyId;
 
   try {
@@ -106,12 +122,12 @@ router.post("/backfill", async (req, res) => {
     }
     const batch = uniqueDescriptions.slice(0, MAX_UNIQUE_PER_RUN);
 
-    // 4. Ask the model (same contract as the live scan).
-    const productByDesc = await inferProducts(batch);
-
-    const preview = [...productByDesc.entries()]
-      .slice(0, 100)
-      .map(([text, product]) => ({ text, product }));
+    // 4. Resolve the texts. On commit we reuse the mapping the user
+    //    approved in the dry run — one model call per run, and what was
+    //    previewed is exactly what lands.
+    const productByDesc = approved?.length
+      ? new Map(approved.map(({ text, product }) => [text, product]))
+      : await inferProducts(batch);
 
     if (dryRun) {
       return res.json({
@@ -123,7 +139,9 @@ router.post("/backfill", async (req, res) => {
         queued:       batch.length,
         resolved:     productByDesc.size,
         remaining:    Math.max(0, uniqueDescriptions.length - batch.length),
-        preview,
+        // The FULL mapping — the client shows a slice and sends it back
+        // on commit, so the approved result is the written result.
+        products: [...productByDesc.entries()].map(([text, product]) => ({ text, product })),
       });
     }
 
@@ -149,7 +167,7 @@ router.post("/backfill", async (req, res) => {
       }
     }
 
-    console.log(`[PRODUCTS BACKFILL] ${updated} tx updated, ${productByDesc.size}/${batch.length} texts resolved, ${failed} failed`);
+    console.log(`[PRODUCTS BACKFILL] ${updated} tx updated, ${productByDesc.size} texts applied${approved?.length ? " (approved)" : ""}, ${failed} failed`);
     res.json({
       dryRun: false,
       trackedSubcategories: trackedIds.length,

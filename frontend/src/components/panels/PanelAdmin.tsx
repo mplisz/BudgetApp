@@ -28,8 +28,13 @@ interface BackfillResult {
   updatedTransactions?: number;
   failed?:             number;
   message?:            string;
-  preview?:            Array<{ text: string; product: BackfillProduct }>;
+  /** Full text→product mapping from the dry run; sent back on commit so
+   *  the approved result is exactly what gets written (one model call). */
+  products?:           Array<{ text: string; product: BackfillProduct }>;
 }
+
+/** How many proposed rows to render — the mapping itself can be larger. */
+const PREVIEW_ROWS = 100;
 
 export default function PanelAdmin() {
   const { user } = useAuth();
@@ -52,7 +57,11 @@ export default function PanelAdmin() {
     if (dryRun) setBackfill(null);
     try {
       const data = await api.post<BackfillResult>(
-        "/api/products/backfill", { dryRun },
+        "/api/products/backfill",
+        // On commit, hand back the mapping the preview produced — the
+        // server then writes exactly what was shown, without re-asking
+        // the model (which could word things differently).
+        dryRun ? { dryRun: true } : { dryRun: false, products: backfill?.products },
         { fallback: "Nie udało się uruchomić uzupełniania." },
       );
       setBackfill(data);
@@ -273,7 +282,7 @@ export default function PanelAdmin() {
             )}
 
             {/* Preview — what the AI proposes, before anything is written */}
-            {backfill.dryRun && !!backfill.preview?.length && (
+            {backfill.dryRun && !!backfill.products?.length && (
               <div style={{ marginTop: 10, maxHeight: 260, overflowY: "auto", border: `1px solid ${c.border}`, borderRadius: 8 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                   <thead>
@@ -287,7 +296,7 @@ export default function PanelAdmin() {
                     </tr>
                   </thead>
                   <tbody>
-                    {backfill.preview.map(({ text, product }, i) => (
+                    {backfill.products.slice(0, PREVIEW_ROWS).map(({ text, product }, i) => (
                       <tr key={i} style={{ borderTop: `1px solid ${c.border}` }}>
                         <td style={{ padding: "4px 10px", color: c.textMuted }}>{text}</td>
                         <td style={{ padding: "4px 10px", color: c.text, fontWeight: 600 }}>{product.name}</td>
@@ -299,6 +308,11 @@ export default function PanelAdmin() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {backfill.dryRun && (backfill.products?.length ?? 0) > PREVIEW_ROWS && (
+              <div style={{ marginTop: 6, fontSize: 11, color: c.textMuted }}>
+                Pokazano {PREVIEW_ROWS} z {backfill.products?.length} — zapis obejmie wszystkie.
               </div>
             )}
           </div>
