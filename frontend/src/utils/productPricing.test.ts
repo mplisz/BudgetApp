@@ -234,22 +234,43 @@ describe("buildPriceHistory", () => {
     expect(products[0].occurrences[0].size).toBe(800);   // parsed from the description
   });
 
-  it("falls back to the subcategory name when a single-item tx has no description", () => {
-    const txs = [1, 2, 3].map(i => tx({
-      date: `2026-0${i}-10`, merchant: "Apteka",
-      amount: 45, subcategoryName: "Mleko modyfikowane",
+  it("skips size-less single-item transactions (a shop name is not a product)", () => {
+    // Clothing bought 4× at Reserved, the SHOP typed into the description:
+    // the amounts are unrelated trip totals, not a product's price.
+    const txs = [1, 2, 3, 4].map(i => tx({
+      date: `2026-0${i}-10`, amount: 100 + i, description: "Reserved",
     }));
-    const { products } = buildPriceHistory(txs);
-    expect(products).toHaveLength(1);
-    expect(products[0].label).toBe("Mleko modyfikowane");
+    expect(buildPriceHistory(txs).products).toHaveLength(0);
+  });
+
+  it("uses the subcategory as the name only when it carries a size", () => {
+    const sized = [1, 2, 3].map(i => tx({
+      date: `2026-0${i}-10`, merchant: "Apteka", amount: 45,
+      subcategoryName: "Mleko modyfikowane 800g",
+    }));
+    expect(buildPriceHistory(sized).products[0].label).toBe("Mleko modyfikowane");
+
+    const unsized = [1, 2, 3].map(i => tx({
+      date: `2026-0${i}-10`, merchant: "Apteka", amount: 45,
+      subcategoryName: "Mleko modyfikowane",
+    }));
+    expect(buildPriceHistory(unsized).products).toHaveLength(0);
+  });
+
+  it("keeps size-less RECEIPT line items (real products, exempt from the rule)", () => {
+    const txs = [1, 2, 3].map(i => tx({
+      date: `2026-0${i}-10`, merchant: "Lidl",
+      items: [{ description: "Chleb wiejski", amount: 5 }],
+    }));
+    expect(buildPriceHistory(txs).products).toHaveLength(1);
   });
 
   it("groups differently-named products into one via the catalog resolver", () => {
     const txs = [
-      tx({ date: "2026-01-10", merchant: "Auchan",    amount: 10.9, description: "Napój energetyczny" }),
-      tx({ date: "2026-02-10", merchant: "Auchan",    amount: 10.9, description: "Napój energetyczny" }),
-      tx({ date: "2026-03-10", merchant: "Biedronka", amount: 5.5,  description: "Napój energetyczny Dzik" }),
-      tx({ date: "2026-04-10", merchant: "Biedronka", amount: 5.5,  description: "Napój energetyczny Dzik" }),
+      tx({ date: "2026-01-10", merchant: "Auchan",    items: [{ description: "Napój energetyczny", amount: 10.9 }] }),
+      tx({ date: "2026-02-10", merchant: "Auchan",    items: [{ description: "Napój energetyczny", amount: 10.9 }] }),
+      tx({ date: "2026-03-10", merchant: "Biedronka", items: [{ description: "Napój energetyczny Dzik", amount: 5.5 }] }),
+      tx({ date: "2026-04-10", merchant: "Biedronka", items: [{ description: "Napój energetyczny Dzik", amount: 5.5 }] }),
     ];
     // A merge in the catalog: both keys point to one canonical product.
     const resolve = (key: string) =>
@@ -266,8 +287,8 @@ describe("buildPriceHistory", () => {
 
   it("without a resolver keeps the name-fold grouping (two separate products)", () => {
     const txs = [
-      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-10`, merchant: "Auchan",    amount: 11,  description: "Napój energetyczny" })),
-      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-11`, merchant: "Biedronka", amount: 5.5, description: "Napój energetyczny Dzik" })),
+      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-10`, merchant: "Auchan",    items: [{ description: "Napój energetyczny", amount: 11 }] })),
+      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-11`, merchant: "Biedronka", items: [{ description: "Napój energetyczny Dzik", amount: 5.5 }] })),
     ];
     expect(buildPriceHistory(txs).products).toHaveLength(2);
   });

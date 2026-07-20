@@ -355,10 +355,12 @@ export function buildPriceHistory(
     // Multi-item receipts carry lineItems. A single-item purchase — a
     // manual entry, or an OCR scan of a one-line receipt — has none; treat
     // the whole transaction as one product line, named by its description
-    // (fallback: the subcategory, e.g. "Mleko modyfikowane" as its own
-    // category). Without this, single-item buys are invisible here.
-    const items: PriceLineItem[] = (tx.lineItems && tx.lineItems.length > 0)
-      ? tx.lineItems
+    // (fallback: the subcategory). Without this, single-item buys are
+    // invisible here. Such a line only counts when it carries a SIZE — see
+    // the guard below.
+    const hasLineItems = !!(tx.lineItems && tx.lineItems.length > 0);
+    const items: PriceLineItem[] = hasLineItems
+      ? tx.lineItems!
       : [{ description: (tx.description || tx.subcategoryName || "").trim(), amount: tx.amount }];
 
     let contributed = false;
@@ -367,6 +369,13 @@ export function buildPriceHistory(
       const parsed = parseItem(item);
       if (!parsed) continue;
       const { nameKey, size, unit, packSize, label } = parsed;
+
+      // A synthesized line (single-item transaction) only counts as a
+      // product when its text carries a size. Free-text descriptions are
+      // often a shop or a label ("Reserved"), which would otherwise become
+      // a fake product whose "prices" are just unrelated trip totals.
+      // Receipt line items are exempt — those are real products already.
+      if (!hasLineItems && size === null) continue;
 
       // Catalog identity: resolve this line's catalog key to a canonical
       // group (honours cross-shop + manual merges). Falls back to the local
