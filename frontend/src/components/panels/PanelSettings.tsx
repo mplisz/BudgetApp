@@ -9,6 +9,7 @@ import { CurrenciesSection }     from "./settings/CurrenciesSection";
 import { theme as s }            from "./../../styles/theme";
 import { LuxmedSection }         from  "./settings/LuxmedSection";
 import { CategoryMappingSection } from  "./settings/CategoryMappingSection";
+import { TrackedProductsSection } from "./settings/TrackedProductsSection";
 
 function PanelSettings() {
   return (
@@ -21,6 +22,7 @@ function PanelSettings() {
       <TagsSection />
       <LuxmedSection />
       <CategoryMappingSection />
+      <TrackedProductsSection />
       <SettingsSection />
     </div>
   );
