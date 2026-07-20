@@ -74,12 +74,21 @@ export interface ShrinkEvent {
 }
 
 export interface ProductHistory {
-  nameKey:     string;
-  label:       string;             // latest raw description — display name
+  nameKey:     string;             // grouping key (catalog id when catalog-backed)
+  catalogId?:  string;             // set when this group maps to a catalog product
+  label:       string;             // display name (catalog canonical, else freshest wording)
   merchants:   string[];           // distinct shops, by first purchase
   occurrences: PriceOccurrence[];  // sorted by date, oldest first
   shrink:      ShrinkEvent | null; // latest size decrease, if any
 }
+
+/** Catalog identity for a normalized key — supplied by the caller so the
+ *  price history can group cross-shop and honour manual merges. */
+export interface CatalogIdentity {
+  groupId:       string;   // stable catalog product id
+  canonicalName: string;
+}
+export type IdentityResolver = (catalogKey: string) => CatalogIdentity | null;
 
 export interface PriceHistoryStats {
   txWithItems:     number;  // expense transactions with merchant + line items
@@ -107,6 +116,18 @@ const POLISH_FOLD: Record<string, string> = {
  *  input the same way the keys were folded. */
 export function foldText(s: string): string {
   return s.toLowerCase().replace(/[ąćęłńóśźż]/g, ch => POLISH_FOLD[ch]);
+}
+
+/**
+ * Catalog identity key — a FAITHFUL port of the backend's productKey
+ * (utils/productCatalog.js): fold diacritics, drop all punctuation, append
+ * the unit. Frontend and backend MUST agree so the catalog resolver hits.
+ * Returns null for an empty name.
+ */
+export function catalogKey(name: string, unit: SizeUnit | null): string | null {
+  const folded = foldText(name).replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+  if (!folded) return null;
+  return `${folded}|${unit ?? ""}`;
 }
 
 // "2x200g" / "2 x 200 g" — multipack prefix multiplies the extracted size.
@@ -319,9 +340,11 @@ function mergeSameDay(occurrences: PriceOccurrence[]): PriceOccurrence[] {
 export function buildPriceHistory(
   transactions: PricedTransaction[],
   months?: Set<string>,
+  resolve?: IdentityResolver,
 ): PriceHistoryResult {
   const byName = new Map<string, ProductHistory>();
-  const linesByName = new Map<string, ShrinkLine[]>();   // per-line, pre-merge
+  const linesByName = new Map<string, ShrinkLine[]>();       // per-line, pre-merge
+  const catalogByGroup = new Map<string, CatalogIdentity>(); // groupKey → catalog identity
   let txWithItems = 0;
 
   for (const tx of transactions) {
@@ -345,11 +368,27 @@ export function buildPriceHistory(
       if (!parsed) continue;
       const { nameKey, size, unit, packSize, label } = parsed;
 
-      let product = byName.get(nameKey);
+      // Catalog identity: resolve this line's catalog key to a canonical
+      // group (honours cross-shop + manual merges). Falls back to the local
+      // name key when the catalog doesn't know it — identical to the old
+      // behaviour when no resolver is supplied.
+      const ck       = catalogKey(label, unit);
+      const identity = ck && resolve ? resolve(ck) : null;
+      const groupKey = identity?.groupId ?? nameKey;
+
+      let product = byName.get(groupKey);
       if (!product) {
-        product = { nameKey, label, merchants: [], occurrences: [], shrink: null };
-        byName.set(nameKey, product);
-        linesByName.set(nameKey, []);
+        product = {
+          nameKey:   groupKey,
+          catalogId: identity?.groupId,
+          label,
+          merchants: [],
+          occurrences: [],
+          shrink: null,
+        };
+        byName.set(groupKey, product);
+        linesByName.set(groupKey, []);
+        if (identity) catalogByGroup.set(groupKey, identity);
       }
       if (!product.merchants.includes(merchant)) product.merchants.push(merchant);
       product.occurrences.push({
@@ -363,7 +402,7 @@ export function buildPriceHistory(
         unit,
         unitPrice: computeUnitPrice(item.amount, size, unit),
       });
-      linesByName.get(nameKey)!.push({ date: tx.date, packSize, unit });
+      linesByName.get(groupKey)!.push({ date: tx.date, packSize, unit });
       contributed = true;
     }
     if (contributed) txWithItems++;
@@ -378,7 +417,8 @@ export function buildPriceHistory(
       return {
         ...p,
         occurrences,
-        label:  occurrences[occurrences.length - 1].label,  // freshest wording, cleaned
+        // Catalog canonical name wins; otherwise the freshest cleaned wording.
+        label:  catalogByGroup.get(p.nameKey)?.canonicalName ?? occurrences[occurrences.length - 1].label,
         shrink: detectShrink(lines),
       };
     })

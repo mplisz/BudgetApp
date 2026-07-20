@@ -14,12 +14,18 @@ const router  = express.Router();
 const { z }   = require("zod");
 const { productsContainer } = require("../cosmos");
 const { requireAuth }       = require("../middleware/auth");
-const { readItemWithEtag, IdParamSchema } = require("../utils/helpers");
+const { readItemWithEtag, readItem, IdParamSchema } = require("../utils/helpers");
+const { mergeProducts } = require("../utils/productCatalog");
 
 router.use(requireAuth);
 
 const RenameSchema = z.object({
   canonicalName: z.string().min(1).max(120),
+});
+
+const MergeSchema = z.object({
+  sourceId: z.string().min(1).max(200),
+  targetId: z.string().min(1).max(200),
 });
 
 // ── GET / — the whole catalog, most-purchased first ──────────
@@ -38,6 +44,43 @@ router.get("/", async (req, res) => {
   } catch (err) {
     console.error("[PRODUCTS GET]", err);
     res.status(500).json({ error: "Failed to fetch products." });
+  }
+});
+
+// ── POST /merge — fold source product INTO target ───────────
+// The target survives (keeps id + canonical name) and records source.key
+// in mergedKeys[] so future scans of the source name fold back in; the
+// source doc is deleted. No transactions are touched — the frontend
+// re-groups price history by catalog identity on the next fetch.
+
+router.post("/merge", async (req, res) => {
+  const parsed = MergeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const { sourceId, targetId } = parsed.data;
+  if (sourceId === targetId) return res.status(400).json({ error: "Cannot merge a product into itself." });
+
+  try {
+    const familyId = req.user.familyId;
+    const [source, targetRead] = await Promise.all([
+      readItem(productsContainer, sourceId, familyId),
+      readItemWithEtag(productsContainer, targetId, familyId),
+    ]);
+    if (!source)            return res.status(404).json({ error: "Source product not found." });
+    if (!targetRead.resource) return res.status(404).json({ error: "Target product not found." });
+
+    const merged = mergeProducts(targetRead.resource, source);
+    const { resource: saved } = await productsContainer.item(targetId, familyId).replace(merged, {
+      accessCondition: { type: "IfMatch", condition: targetRead.etag },
+    });
+    // Delete the source only after the target absorbed it.
+    await productsContainer.item(sourceId, familyId).delete();
+
+    res.json(saved);
+  } catch (err) {
+    if (err.code === 412) return res.status(409).json({ error: "Data was modified by another user. Please refresh." });
+    console.error("[PRODUCTS MERGE]", err);
+    res.status(500).json({ error: "Failed to merge products." });
   }
 });
 

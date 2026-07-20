@@ -18,6 +18,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizeProductName,
   cleanProductLabel,
+  catalogKey,
   computeUnitPrice,
   formatSize,
   productMetric,
@@ -168,6 +169,22 @@ describe("formatSize", () => {
   });
 });
 
+// ── catalogKey (must match backend productKey) ───────────────
+
+describe("catalogKey", () => {
+  it("folds diacritics, drops punctuation, appends the unit", () => {
+    expect(catalogKey("Mleko UHT 3,2%", "ml")).toBe("mleko uht 3 2|ml");
+    expect(catalogKey("ŻUBR PUSZKA", "ml")).toBe("zubr puszka|ml");
+  });
+  it("makes comma and dot agree", () => {
+    expect(catalogKey("Mleko UHT 3.2%", "ml")).toBe(catalogKey("Mleko UHT 3,2%", "ml"));
+  });
+  it("keeps units distinct and returns null for empty", () => {
+    expect(catalogKey("Mleko", "szt")).not.toBe(catalogKey("Mleko", "ml"));
+    expect(catalogKey("   ", null)).toBeNull();
+  });
+});
+
 // ── buildPriceHistory ────────────────────────────────────────
 
 describe("buildPriceHistory", () => {
@@ -225,6 +242,34 @@ describe("buildPriceHistory", () => {
     const { products } = buildPriceHistory(txs);
     expect(products).toHaveLength(1);
     expect(products[0].label).toBe("Mleko modyfikowane");
+  });
+
+  it("groups differently-named products into one via the catalog resolver", () => {
+    const txs = [
+      tx({ date: "2026-01-10", merchant: "Auchan",    amount: 10.9, description: "Napój energetyczny" }),
+      tx({ date: "2026-02-10", merchant: "Auchan",    amount: 10.9, description: "Napój energetyczny" }),
+      tx({ date: "2026-03-10", merchant: "Biedronka", amount: 5.5,  description: "Napój energetyczny Dzik" }),
+      tx({ date: "2026-04-10", merchant: "Biedronka", amount: 5.5,  description: "Napój energetyczny Dzik" }),
+    ];
+    // A merge in the catalog: both keys point to one canonical product.
+    const resolve = (key: string) =>
+      key === "napoj energetyczny|" || key === "napoj energetyczny dzik|"
+        ? { groupId: "prod_dzik", canonicalName: "Napój energetyczny Dzik" }
+        : null;
+    const { products } = buildPriceHistory(txs, undefined, resolve);
+    expect(products).toHaveLength(1);                        // 2+2 merged (>= MIN_OCCURRENCES)
+    expect(products[0].catalogId).toBe("prod_dzik");
+    expect(products[0].label).toBe("Napój energetyczny Dzik");
+    expect(products[0].merchants).toEqual(["Auchan", "Biedronka"]);
+    expect(products[0].occurrences).toHaveLength(4);
+  });
+
+  it("without a resolver keeps the name-fold grouping (two separate products)", () => {
+    const txs = [
+      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-10`, merchant: "Auchan",    amount: 11,  description: "Napój energetyczny" })),
+      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-11`, merchant: "Biedronka", amount: 5.5, description: "Napój energetyczny Dzik" })),
+    ];
+    expect(buildPriceHistory(txs).products).toHaveLength(2);
   });
 
   it("restricts to the given months when provided", () => {

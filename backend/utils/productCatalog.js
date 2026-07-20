@@ -66,6 +66,7 @@ function mergeProductDoc(existing, line, familyId) {
       userId:        familyId,
       type:          "PRODUCT",
       key:           line.key,
+      mergedKeys:    [],      // keys of products merged INTO this one (see /merge)
       canonicalName: line.name,
       unit:          line.unit || null,
       packSizes:     line.size ? [line.size] : [],
@@ -112,30 +113,78 @@ function mergeProductDoc(existing, line, familyId) {
   };
 }
 
+/**
+ * Pure merge of two catalog docs — `target` absorbs `source`. The
+ * survivor keeps its own id, key and canonical name, and records the
+ * source's key (+ its already-merged keys) in mergedKeys[] so future
+ * receipt lines for the source fold back into the survivor. Returns the
+ * updated target doc; the caller deletes the source. Unit-tested.
+ */
+function mergeProducts(target, source) {
+  const dedup = (arr) => [...new Set(arr.filter(Boolean))];
+  const aliasKey = (a) => `${a.merchant || ""}|${a.raw || ""}`;
+  const aliasMap = new Map();
+  for (const a of [...(target.aliases || []), ...(source.aliases || [])]) {
+    if (!aliasMap.has(aliasKey(a))) aliasMap.set(aliasKey(a), a);
+  }
+  return {
+    ...target,
+    mergedKeys:    dedup([...(target.mergedKeys || []), source.key, ...(source.mergedKeys || [])])
+                     .filter(k => k !== target.key),
+    merchants:     dedup([...(target.merchants || []), ...(source.merchants || [])]),
+    packSizes:     dedup([...(target.packSizes || []), ...(source.packSizes || [])]).slice(-MAX_SIZES),
+    aliases:       [...aliasMap.values()].slice(-MAX_ALIASES),
+    purchaseCount: (target.purchaseCount || 0) + (source.purchaseCount || 0),
+    firstSeen:     source.firstSeen && source.firstSeen < target.firstSeen ? source.firstSeen : target.firstSeen,
+    lastSeen:      source.lastSeen  && source.lastSeen  > target.lastSeen  ? source.lastSeen  : target.lastSeen,
+    updatedAt:     new Date().toISOString(),
+  };
+}
+
 // ── Container I/O (thin, best-effort) ─────────────────────────
+
+// A product whose `key` was merged INTO another product no longer owns its
+// own doc — its key lives in some target's mergedKeys[]. Find that target so
+// a new receipt line for a merged product folds into the survivor instead of
+// resurrecting the old split. Within-partition query, only hit on a point-
+// read miss (i.e. rarely).
+async function findByMergedKey(container, familyId, key) {
+  const { resources } = await container.items
+    .query({
+      query: `SELECT * FROM c WHERE c.userId = @u AND ARRAY_CONTAINS(c.mergedKeys, @k)`,
+      parameters: [{ name: "@u", value: familyId }, { name: "@k", value: key }],
+    })
+    .fetchAll();
+  return resources[0] || null;
+}
 
 // Read-modify-write for one product line. Optimistic concurrency: a
 // concurrent write (412) or a create race (409) is retried once.
 async function upsertProductLine(container, familyId, rawLine) {
   const key = productKey(rawLine.name, rawLine.unit);
   if (!key) return;
-  const id  = productId(familyId, key);
-  const line = { ...rawLine, id, key };
+  const ownId = productId(familyId, key);
+  const line  = { ...rawLine, id: ownId, key };
 
   for (let attempt = 0; attempt < 2; attempt++) {
     let existing = null, etag = null;
     try {
-      const r = await container.item(id, familyId).read();
+      const r = await container.item(ownId, familyId).read();
       existing = r.resource;
       etag     = r.etag;
     } catch (err) {
-      if (err.code !== 404) throw err;   // 404 = new product; anything else is real
+      if (err.code !== 404) throw err;   // 404 = maybe new, maybe merged away
+    }
+    // Point-read missed — the key may have been merged into a survivor.
+    if (!existing) {
+      const target = await findByMergedKey(container, familyId, key);
+      if (target) { existing = target; etag = target._etag; }
     }
 
     const doc = mergeProductDoc(existing, line, familyId);
     try {
       if (existing) {
-        await container.item(id, familyId).replace(doc, {
+        await container.item(existing.id, familyId).replace(doc, {
           accessCondition: { type: "IfMatch", condition: etag },
         });
       } else {
@@ -206,6 +255,7 @@ module.exports = {
   productKey,
   productId,
   mergeProductDoc,
+  mergeProducts,
   rememberProducts,
   fetchTopProductNames,
 };
