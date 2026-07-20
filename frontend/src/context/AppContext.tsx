@@ -46,6 +46,7 @@ interface DbCategory {
   canBeRecurring?:   boolean;
   isCritical?:       boolean;
   canBeLuxmed?:      boolean;
+  trackPrices?:      boolean;
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -103,6 +104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           canBeRecurring: child.canBeRecurring  ?? false,
           isCritical:     child.isCritical      ?? false,
           canBeLuxmed:    child.canBeLuxmed      ?? false,
+          trackPrices:    child.trackPrices      ?? false,
         });
       }
     });

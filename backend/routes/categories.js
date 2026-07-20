@@ -37,6 +37,7 @@ const CategoryBaseSchema = z.object({
   canBeRecurring: z.boolean().optional(),
   isCritical:     z.boolean().optional(),
   canBeLuxmed:    z.boolean().optional(),   // 🏥 LuxMed refund eligibility
+  trackPrices:    z.boolean().optional(),   // 🏷️ include in product price history
 });
  
 // POST: create-only fields + defaults 
@@ -46,6 +47,7 @@ const CategoryPostSchema = CategoryBaseSchema.extend({
   canBeRecurring:   z.boolean().optional().default(false),  // override base 
   isCritical:       z.boolean().optional().default(false),
   canBeLuxmed:      z.boolean().optional().default(false),
+  trackPrices:      z.boolean().optional().default(false),
 });
  
 // PATCH: each field optional, no field in the body = no update
@@ -151,6 +153,7 @@ router.post('/', async (req, res) => {
       canBeRecurring: parsed.data.canBeRecurring ?? false,
       isCritical:     parsed.data.isCritical     ?? false,  
       canBeLuxmed:    parsed.data.canBeLuxmed     ?? false,
+      trackPrices:    parsed.data.trackPrices     ?? false,
     };
 
     const { resource } = await categoriesContainer.items.create(newCategory);
@@ -199,7 +202,7 @@ router.patch('/update/:id', async (req, res) => {
     }
 
     // ── Build safe updates (only fields that were sent) ─────
-    const { name, icon, isArchived, priority, canBeRecurring, isCritical, canBeLuxmed  } = parsed.data;
+    const { name, icon, isArchived, priority, canBeRecurring, isCritical, canBeLuxmed, trackPrices } = parsed.data;
     const safeUpdates = {};
     if (name           !== undefined) safeUpdates.name           = name.trim();
     if (icon           !== undefined) safeUpdates.icon           = icon.substring(0, 10);
@@ -208,6 +211,7 @@ router.patch('/update/:id', async (req, res) => {
     if (canBeRecurring !== undefined) safeUpdates.canBeRecurring = canBeRecurring;
     if (isCritical     !== undefined) safeUpdates.isCritical     = isCritical;
     if (canBeLuxmed    !== undefined) safeUpdates.canBeLuxmed    = canBeLuxmed;
+    if (trackPrices    !== undefined) safeUpdates.trackPrices    = trackPrices;
     
 
     safeUpdates.updatedAt     = new Date().toISOString();

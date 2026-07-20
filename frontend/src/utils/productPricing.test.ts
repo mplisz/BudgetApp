@@ -37,6 +37,7 @@ function tx(o: {
   type?: string;
   amount?: number;
   description?: string | null;
+  subcategoryId?: string | null;
   subcategoryName?: string | null;
 }): PricedTransaction {
   return {
@@ -46,6 +47,7 @@ function tx(o: {
     merchant:        o.merchant,
     amount:          o.amount ?? 0,
     description:     o.description,
+    subcategoryId:   o.subcategoryId,
     subcategoryName: o.subcategoryName,
     lineItems:       o.items,
   };
@@ -234,27 +236,33 @@ describe("buildPriceHistory", () => {
     expect(products[0].occurrences[0].size).toBe(800);   // parsed from the description
   });
 
-  it("skips size-less single-item transactions (a shop name is not a product)", () => {
-    // Clothing bought 4× at Reserved, the SHOP typed into the description:
-    // the amounts are unrelated trip totals, not a product's price.
-    const txs = [1, 2, 3, 4].map(i => tx({
-      date: `2026-0${i}-10`, amount: 100 + i, description: "Reserved",
-    }));
-    expect(buildPriceHistory(txs).products).toHaveLength(0);
-  });
-
-  it("uses the subcategory as the name only when it carries a size", () => {
-    const sized = [1, 2, 3].map(i => tx({
-      date: `2026-0${i}-10`, merchant: "Apteka", amount: 45,
-      subcategoryName: "Mleko modyfikowane 800g",
-    }));
-    expect(buildPriceHistory(sized).products[0].label).toBe("Mleko modyfikowane");
-
-    const unsized = [1, 2, 3].map(i => tx({
+  it("keeps size-less single-item buys (subcategory flags handle the noise now)", () => {
+    const txs = [1, 2, 3].map(i => tx({
       date: `2026-0${i}-10`, merchant: "Apteka", amount: 45,
       subcategoryName: "Mleko modyfikowane",
     }));
-    expect(buildPriceHistory(unsized).products).toHaveLength(0);
+    const { products } = buildPriceHistory(txs);
+    expect(products).toHaveLength(1);
+    expect(products[0].label).toBe("Mleko modyfikowane");
+  });
+
+  it("filters to the tracked subcategories when the set is supplied", () => {
+    const txs = [
+      ...[1, 2, 3].map(i => tx({
+        date: `2026-0${i}-10`, merchant: "Lidl", subcategoryId: "sub_meat",
+        items: [{ description: "Mieso mielone 500g", amount: 19 }],
+      })),
+      // Clothing: the SHOP typed into the description — pure noise.
+      ...[1, 2, 3, 4].map(i => tx({
+        date: `2026-0${i}-11`, subcategoryId: "sub_clothes",
+        amount: 100 + i, description: "Reserved",
+      })),
+    ];
+    expect(buildPriceHistory(txs).products).toHaveLength(2);   // no filter → both
+
+    const tracked = buildPriceHistory(txs, undefined, undefined, new Set(["sub_meat"]));
+    expect(tracked.products).toHaveLength(1);
+    expect(tracked.products[0].label).toBe("Mieso mielone");
   });
 
   it("keeps size-less RECEIPT line items (real products, exempt from the rule)", () => {

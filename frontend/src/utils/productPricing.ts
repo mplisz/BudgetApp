@@ -47,6 +47,7 @@ export interface PricedTransaction {
   merchant?:        string | null;
   amount:           number;
   description?:     string | null;
+  subcategoryId?:   string | null;
   subcategoryName?: string | null;
   lineItems?:       PriceLineItem[];
 }
@@ -337,10 +338,17 @@ function mergeSameDay(occurrences: PriceOccurrence[]): PriceOccurrence[] {
   });
 }
 
+/**
+ * @param trackedSubcategoryIds  Subcategories flagged `trackPrices` in
+ *   Settings. Only their purchases are treated as trackable products —
+ *   this is what keeps clothing shops and restaurant bills out of a view
+ *   meant for comparable goods. Pass undefined to disable the filter.
+ */
 export function buildPriceHistory(
   transactions: PricedTransaction[],
   months?: Set<string>,
   resolve?: IdentityResolver,
+  trackedSubcategoryIds?: Set<string>,
 ): PriceHistoryResult {
   const byName = new Map<string, ProductHistory>();
   const linesByName = new Map<string, ShrinkLine[]>();       // per-line, pre-merge
@@ -350,6 +358,8 @@ export function buildPriceHistory(
   for (const tx of transactions) {
     if (tx.type !== "EXPENSE") continue;
     if (months && !months.has(tx.budgetMonth)) continue;
+    // Only subcategories the user flagged for price tracking.
+    if (trackedSubcategoryIds && !trackedSubcategoryIds.has(tx.subcategoryId ?? "")) continue;
     const merchant = (tx.merchant ?? "").trim() || NO_MERCHANT;
 
     // Multi-item receipts carry lineItems. A single-item purchase — a
@@ -369,13 +379,6 @@ export function buildPriceHistory(
       const parsed = parseItem(item);
       if (!parsed) continue;
       const { nameKey, size, unit, packSize, label } = parsed;
-
-      // A synthesized line (single-item transaction) only counts as a
-      // product when its text carries a size. Free-text descriptions are
-      // often a shop or a label ("Reserved"), which would otherwise become
-      // a fake product whose "prices" are just unrelated trip totals.
-      // Receipt line items are exempt — those are real products already.
-      if (!hasLineItems && size === null) continue;
 
       // Catalog identity: resolve this line's catalog key to a canonical
       // group (honours cross-shop + manual merges). Falls back to the local

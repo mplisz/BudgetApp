@@ -19,6 +19,7 @@ import {
 } from "recharts";
 import { theme as s } from "../../../styles/theme";
 import { fmt } from "../../../utils/helpers";
+import { useAppContext } from "../../../context/AppContext";
 import { useProductCatalog } from "../../../hooks/useProductCatalog";
 import {
   buildPriceHistory, productMetric, formatSize, foldText, MIN_OCCURRENCES,
@@ -43,14 +44,27 @@ export function ProductPriceSection({ transactions, months }: Props) {
   const [renaming,    setRenaming]    = useState<string | null>(null);
   const [renameText,  setRenameText]  = useState("");
 
+  const { categories } = useAppContext();
   const { resolve, load: loadCatalog, merge, rename } = useProductCatalog();
   useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
   const monthsSet = useMemo(() => new Set(months), [months]);
 
+  // Subcategories flagged "🏷️ Ceny" in Settings → Kategorie. Only these
+  // count as trackable products, so shops/labels never pollute the view.
+  const trackedSubIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const cat of categories) {
+      for (const sub of (cat.sub ?? [])) {
+        if (sub.trackPrices && !sub.isArchived) ids.add(sub.id);
+      }
+    }
+    return ids;
+  }, [categories]);
+
   const { products, stats } = useMemo(
-    () => buildPriceHistory(transactions, monthsSet, resolve),
-    [transactions, monthsSet, resolve],
+    () => buildPriceHistory(transactions, monthsSet, resolve, trackedSubIds),
+    [transactions, monthsSet, resolve, trackedSubIds],
   );
 
   const filtered = useMemo(() => {
@@ -111,12 +125,23 @@ export function ProductPriceSection({ transactions, months }: Props) {
     if (ok) setRenaming(null);
   }
 
-  // ── Empty state ────────────────────────────────────────────
+  // ── Empty states ───────────────────────────────────────────
+  // Nothing flagged yet — the feature is opt-in per subcategory, so say
+  // exactly where to turn it on instead of showing a blank chart.
+  if (trackedSubIds.size === 0) {
+    return (
+      <ChartEmpty message={
+        "Nie wybrano subkategorii do śledzenia cen. " +
+        "Wejdź w Ustawienia → Kategorie i włącz 🏷️ Ceny przy subkategoriach, " +
+        "które chcesz porównywać (np. mięso mielone, woda)."
+      } />
+    );
+  }
   if (products.length === 0) {
     return (
       <ChartEmpty message={
         `Brak produktów kupionych min. ${MIN_OCCURRENCES}× w zakresie ` +
-        "(z paragonów lub pojedynczych transakcji)."
+        `(śledzone subkategorie: ${trackedSubIds.size}).`
       } />
     );
   }

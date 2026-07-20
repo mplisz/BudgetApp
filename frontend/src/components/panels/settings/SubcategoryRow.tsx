@@ -136,6 +136,34 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
     </button>
   ) : null;
 
+  // Price tracking: which subcategories feed the product price history.
+  // Available for every EXPENSE subcategory — you decide what is worth
+  // comparing (meat, water) and what is noise (clothing, restaurants).
+  const trackPricesBtn = isExpense ? (
+    <button
+      onClick={() => !isDisabled && onUpdate(subData.id, subName, parentId, { trackPrices: !subData.trackPrices })}
+      disabled={isDisabled}
+      title={subData.trackPrices
+        ? "Wyłącz ze śledzenia cen produktów"
+        : "Włącz do śledzenia cen — produkty z tej subkategorii pojawią się w Analiza → Ceny produktów"
+      }
+      style={{
+        background:    subData.trackPrices ? alpha(c.success, "22") : "transparent",
+        border:        `1px solid ${subData.trackPrices ? alpha(c.success, "66") : c.border}`,
+        color:         subData.trackPrices ? c.success : c.borderStrong,
+        borderRadius:  6,
+        padding:       "4px 8px",
+        cursor:        isDisabled ? "not-allowed" : "pointer",
+        fontSize:      11,
+        fontWeight:    700,
+        whiteSpace:    "nowrap",
+        opacity:       isDisabled ? 0.4 : 1,
+      }}
+    >
+      🏷️ {subData.trackPrices ? "Ceny" : "—"}
+    </button>
+  ) : null;
+
   const archiveBtn = (
     <button
       onClick={() => {
@@ -185,6 +213,7 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
             {recurringBtn}
             {criticalBtn}
             {luxmedBtn}
+            {trackPricesBtn}
           </div>
         )}
       </div>
@@ -215,6 +244,7 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
       {recurringBtn}
       {criticalBtn}
       {luxmedBtn}
+      {trackPricesBtn}
       {archiveBtn}
     </div>
   );

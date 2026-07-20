@@ -20,6 +20,7 @@ interface DbCategory {
   canBeRecurring?:   boolean;
   isCritical?:       boolean;
   canBeLuxmed?:      boolean;
+  trackPrices?:      boolean;
 }
 
 export type CategoryUpdates = { isArchived?: boolean; [key: string]: unknown };
@@ -58,7 +59,8 @@ export function useCategoryManager() {
               isArchived:     child.isArchived || false,
               canBeRecurring: child.canBeRecurring ?? false,
               isCritical:     child.isCritical     ?? false,
-              canBeLuxmed:    child.canBeLuxmed     ?? false, 
+              canBeLuxmed:    child.canBeLuxmed     ?? false,
+              trackPrices:    child.trackPrices     ?? false,
             });
           }
         });
@@ -136,7 +138,8 @@ export function useCategoryManager() {
                 isArchived: false,
                 canBeRecurring: saved.canBeRecurring ?? false,
                 isCritical:     saved.isCritical     ?? false,
-                canBeLuxmed:    saved.canBeLuxmed     ?? false, 
+                canBeLuxmed:    saved.canBeLuxmed     ?? false,
+                trackPrices:    saved.trackPrices     ?? false,
               }],
             };
           }
