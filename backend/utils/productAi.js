@@ -1,17 +1,10 @@
 // ============================================================
 // File: backend/utils/productAi.js
-// THE single definition of "what a product is" for the AI, shared by:
-//   - the live receipt scan (routes/ocr.js, rule 23 of its prompt)
-//   - the retroactive backfill (routes/products.js → productBackfill.js)
+// THE single definition of "what a product is" for the AI — the shared
+// schema (ProductSchema) and prompt fragment (PRODUCT_RULES) that
+// routes/ocr.js injects into the live receipt scan (rule 23).
 //
-// Both paths MUST name products identically — otherwise the same item
-// scanned today and backfilled from history would land as two separate
-// products, which is exactly what the catalog is supposed to prevent.
-// Hence one prompt fragment (PRODUCT_RULES) and one schema
-// (ProductSchema) live here, not copies in each caller.
-//
-// Also owns the lazy Azure OpenAI client, so both callers share one
-// connection and one timeout policy.
+// Also owns the lazy Azure OpenAI client used by the scan.
 // ============================================================
 
 const { z } = require("zod");
@@ -51,8 +44,10 @@ const ProductSchema = z.object({
   packCount: z.number().int().positive().max(99).nullable().optional(),
 });
 
-/** Prompt fragment describing the product fields. Injected verbatim into
- *  the scan prompt AND the backfill prompt so the naming never diverges. */
+/** Prompt fragment describing HOW to fill the product fields once a line
+ *  is recognized as a tracked product. WHETHER to attach one at all is a
+ *  separate, restrictive instruction built in ocr.js from the user's
+ *  whitelist — this fragment only covers name/size/unit/packCount. */
 const PRODUCT_RULES = `- "name": czysta nazwa produktu BEZ gramatury, pojemności, wielopaku i wagi — pełne słowa,
   poprawna polska pisownia (rozwiń skróty z paragonu, np. "MLK UHT3.2" → "Mleko UHT 3,2%").
 - "size": rozmiar JEDNEGO opakowania przeliczony do jednostki bazowej ("kg"→g, "l"→ml).
@@ -71,91 +66,9 @@ Przykłady:
   "PAPIER TOALETOWY"           → {"name": "Papier toaletowy", "size": null, "unit": null}
 Gdy nie da się ustalić rozmiaru — size/unit: null, ale "name" podaj ZAWSZE.`;
 
-// ── Retroactive inference (backfill) ─────────────────────────
-
-/** How many descriptions go into one model call. */
-const BATCH_SIZE = 50;
-
-const InferResponseSchema = z.object({
-  products: z.array(ProductSchema.extend({ i: z.number().int().min(0) })).max(BATCH_SIZE),
-});
-
-function buildInferPrompt() {
-  return `Jesteś asystentem normalizującym nazwy produktów z paragonów.
-
-ZADANIE: Dla każdej podanej pozycji paragonu zwróć ustrukturyzowaną tożsamość produktu.
-
-${PRODUCT_RULES}
-
-POMIŃ pozycję (nie zwracaj jej wcale), gdy nie jest produktem — np. usługa, opłata,
-nazwa sklepu, "zakupy", rabat, kaucja. Lepiej pominąć niż zmyślić.
-
-WEJŚCIE: tablica JSON obiektów {"i": <indeks>, "t": "<tekst pozycji>"}.
-ODPOWIEDŹ — wyłącznie poprawny JSON, bez markdown:
-{"products": [{"i": 0, "name": "Mleko UHT 3,2%", "size": 1000, "unit": "ml"}]}
-Pole "i" MUSI odpowiadać indeksowi z wejścia.`;
-}
-
-/**
- * Infer structured products for raw receipt-line texts.
- * Deduplication is the CALLER's job — this receives unique strings only,
- * which is what keeps the backfill cheap and guarantees that identical
- * text always yields the identical product (no split-by-batch).
- *
- * @returns Map<description, product> — only entries the model was
- *   confident about; unparseable lines are simply absent.
- */
-async function inferProducts(descriptions, { onProgress } = {}) {
-  const client = getOpenAIClient();
-  if (!client) throw new Error("Azure OpenAI is not configured.");
-
-  const result = new Map();
-  for (let start = 0; start < descriptions.length; start += BATCH_SIZE) {
-    const batch = descriptions.slice(start, start + BATCH_SIZE);
-    const payload = batch.map((t, i) => ({ i, t }));
-
-    const completion = await client.chat.completions.create({
-      model: process.env.AZURE_OPENAI_DEPLOYMENT,
-      messages: [
-        { role: "system", content: buildInferPrompt() },
-        { role: "user",   content: JSON.stringify(payload) },
-      ],
-      max_completion_tokens: 4000,
-      response_format: { type: "json_object" },
-    });
-
-    const raw = completion.choices?.[0]?.message?.content;
-    if (!raw) continue;                       // empty batch → skip, keep going
-
-    let parsed;
-    try {
-      parsed = InferResponseSchema.safeParse(JSON.parse(raw));
-    } catch {
-      continue;                               // malformed JSON → skip batch
-    }
-    if (!parsed.success) continue;
-
-    for (const entry of parsed.data.products) {
-      const description = batch[entry.i];
-      const name = entry.name?.trim();
-      if (!description || !name) continue;    // model skipped or gave no name
-      result.set(description, {
-        name,
-        size:      entry.size      ?? null,
-        unit:      entry.unit      ?? null,
-        packCount: entry.packCount ?? null,
-      });
-    }
-    if (onProgress) onProgress(Math.min(start + BATCH_SIZE, descriptions.length), descriptions.length);
-  }
-  return result;
-}
-
 module.exports = {
   getOpenAIClient,
   ProductSchema,
   PRODUCT_RULES,
-  inferProducts,
-  BATCH_SIZE,
   OPENAI_TIMEOUT_MS,
 };

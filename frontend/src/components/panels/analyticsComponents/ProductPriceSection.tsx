@@ -19,7 +19,6 @@ import {
 } from "recharts";
 import { theme as s } from "../../../styles/theme";
 import { fmt } from "../../../utils/helpers";
-import { useAppContext } from "../../../context/AppContext";
 import { useProductCatalog } from "../../../hooks/useProductCatalog";
 import {
   buildPriceHistory, productMetric, formatSize, foldText, MIN_OCCURRENCES,
@@ -44,27 +43,19 @@ export function ProductPriceSection({ transactions, months }: Props) {
   const [renaming,    setRenaming]    = useState<string | null>(null);
   const [renameText,  setRenameText]  = useState("");
 
-  const { categories } = useAppContext();
-  const { resolve, load: loadCatalog, merge, rename } = useProductCatalog();
+  const { catalog, resolve, load: loadCatalog, merge, rename } = useProductCatalog();
   useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
   const monthsSet = useMemo(() => new Set(months), [months]);
 
-  // Subcategories flagged "🏷️ Ceny" in Settings → Kategorie. Only these
-  // count as trackable products, so shops/labels never pollute the view.
-  const trackedSubIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const cat of categories) {
-      for (const sub of (cat.sub ?? [])) {
-        if (sub.trackPrices && !sub.isArchived) ids.add(sub.id);
-      }
-    }
-    return ids;
-  }, [categories]);
-
+  // The scope gate lives entirely in the backend: a receipt line only
+  // ever carries `product` when it matched one of the user's tracked
+  // ("whitelisted") products at scan time (see resolveTrackedProduct).
+  // `catalog` (loaded above) IS that whitelist — an empty one means
+  // nothing has been registered yet in Admin → Produkty śledzone.
   const { products, stats } = useMemo(
-    () => buildPriceHistory(transactions, monthsSet, resolve, trackedSubIds),
-    [transactions, monthsSet, resolve, trackedSubIds],
+    () => buildPriceHistory(transactions, monthsSet, resolve),
+    [transactions, monthsSet, resolve],
   );
 
   const filtered = useMemo(() => {
@@ -126,14 +117,14 @@ export function ProductPriceSection({ transactions, months }: Props) {
   }
 
   // ── Empty states ───────────────────────────────────────────
-  // Nothing flagged yet — the feature is opt-in per subcategory, so say
-  // exactly where to turn it on instead of showing a blank chart.
-  if (trackedSubIds.size === 0) {
+  // Nothing registered yet — say exactly where to add it instead of
+  // showing a blank chart.
+  if (catalog.length === 0) {
     return (
       <ChartEmpty message={
-        "Nie wybrano subkategorii do śledzenia cen. " +
-        "Wejdź w Ustawienia → Kategorie i włącz 🏷️ Ceny przy subkategoriach, " +
-        "które chcesz porównywać (np. mięso mielone, woda)."
+        "Nie masz jeszcze żadnych śledzonych produktów. " +
+        "Wejdź w Admin → Produkty śledzone i dodaj to, co chcesz porównywać " +
+        "(np. mięso mielone, woda, Coca-Cola Zero) — nowe paragony zaczną je wyłapywać."
       } />
     );
   }
@@ -141,7 +132,7 @@ export function ProductPriceSection({ transactions, months }: Props) {
     return (
       <ChartEmpty message={
         `Brak produktów kupionych min. ${MIN_OCCURRENCES}× w zakresie ` +
-        `(śledzone subkategorie: ${trackedSubIds.size}).`
+        `(śledzonych produktów: ${catalog.length}).`
       } />
     );
   }

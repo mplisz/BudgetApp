@@ -28,7 +28,6 @@ export interface AppSubcategory {
   canBeRecurring?: boolean;
   isCritical?:     boolean;
   canBeLuxmed?:    boolean;
-  trackPrices?:    boolean;   // 🏷️ include in the product price history
 }
 
 export interface AppCategory {

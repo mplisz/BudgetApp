@@ -2,13 +2,13 @@
 // File: src/utils/productPricing.ts
 // Pure logic for the "Ceny produktów" analytics section.
 //
-// SCOPE — two deliberate gates decide what counts as a trackable product:
-//   1. the transaction's subcategory must be flagged `trackPrices`
-//      (Settings → Kategorie), so only goods worth comparing show up;
-//   2. the receipt line must carry the AI-structured `product`
-//      (name + size + unit). Hand-typed transactions have none and are
-//      out of scope — that uniformity is what makes unit prices
-//      computable and the catalog key match the backend exactly.
+// SCOPE — the receipt line must carry the AI-structured `product`, and the
+// backend only ever attaches one when the item matched a product the user
+// explicitly registered in their "inflation basket" (Admin → Produkty
+// śledzone; see backend/utils/productCatalog.resolveTrackedProduct).
+// Hand-typed transactions carry no `product` and are out of scope — that
+// uniformity is what makes unit prices computable and the catalog key
+// match the backend exactly.
 //
 // buildPriceHistory then groups occurrences by CATALOG identity when a
 // resolver is supplied (cross-shop + manual merges), else by name fold.
@@ -46,7 +46,6 @@ export interface PricedTransaction {
   date:           string;
   budgetMonth:    string;
   merchant?:      string | null;
-  subcategoryId?: string | null;   // gates on the trackPrices flag
   lineItems?:     PriceLineItem[];
 }
 
@@ -280,17 +279,10 @@ function mergeSameDay(occurrences: PriceOccurrence[]): PriceOccurrence[] {
   });
 }
 
-/**
- * @param trackedSubcategoryIds  Subcategories flagged `trackPrices` in
- *   Settings. Only their purchases are treated as trackable products —
- *   this is what keeps clothing shops and restaurant bills out of a view
- *   meant for comparable goods. Pass undefined to disable the filter.
- */
 export function buildPriceHistory(
   transactions: PricedTransaction[],
   months?: Set<string>,
   resolve?: IdentityResolver,
-  trackedSubcategoryIds?: Set<string>,
 ): PriceHistoryResult {
   const byName = new Map<string, ProductHistory>();
   const linesByName = new Map<string, ShrinkLine[]>();       // per-line, pre-merge
@@ -300,8 +292,6 @@ export function buildPriceHistory(
   for (const tx of transactions) {
     if (tx.type !== "EXPENSE") continue;
     if (months && !months.has(tx.budgetMonth)) continue;
-    // Only subcategories the user flagged for price tracking.
-    if (trackedSubcategoryIds && !trackedSubcategoryIds.has(tx.subcategoryId ?? "")) continue;
     const merchant = (tx.merchant ?? "").trim() || NO_MERCHANT;
 
     // Scanned receipts carry lineItems (a one-line receipt included —

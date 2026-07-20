@@ -31,17 +31,16 @@ interface SubcategoryRowProps {
  * header (CategoriesSection) and every row — when those drifted apart the
  * table skewed and buttons wrapped onto a second line.
  *
- * EXPENSE always has the SAME seven columns
- *   name | priority | recurring | critical | luxmed | prices | archive
- * even outside the health category, where the LuxMed cell renders empty.
+ * EXPENSE always has the SAME six columns
+ *   name | priority | recurring | critical | luxmed | archive
  * A constant column count is what keeps header and rows aligned; a
  * conditional one is how they drift.
  */
-export const SUBCAT_MIN_WIDTH = 670;   // below this the table scrolls instead of crushing
+export const SUBCAT_MIN_WIDTH = 580;   // below this the table scrolls instead of crushing
 
 export function subcategoryGridColumns(type: string | undefined): string {
   if (type !== "EXPENSE") return "1fr 34px";
-  return "minmax(140px, 1fr) 120px 92px 92px 92px 92px 34px";
+  return "minmax(140px, 1fr) 120px 92px 92px 92px 34px";
 }
 
 export function SubcategoryRow({ subName, subData, parentId, parentType, parentIsArchived, onUpdate, onError }: SubcategoryRowProps) {
@@ -149,34 +148,6 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
     </button>
   ) : null;
 
-  // Price tracking: which subcategories feed the product price history.
-  // Available for every EXPENSE subcategory — you decide what is worth
-  // comparing (meat, water) and what is noise (clothing, restaurants).
-  const trackPricesBtn = isExpense ? (
-    <button
-      onClick={() => !isDisabled && onUpdate(subData.id, subName, parentId, { trackPrices: !subData.trackPrices })}
-      disabled={isDisabled}
-      title={subData.trackPrices
-        ? "Wyłącz ze śledzenia cen produktów"
-        : "Włącz do śledzenia cen — produkty z tej subkategorii pojawią się w Analiza → Ceny produktów"
-      }
-      style={{
-        background:    subData.trackPrices ? alpha(c.success, "22") : "transparent",
-        border:        `1px solid ${subData.trackPrices ? alpha(c.success, "66") : c.border}`,
-        color:         subData.trackPrices ? c.success : c.borderStrong,
-        borderRadius:  6,
-        padding:       "4px 8px",
-        cursor:        isDisabled ? "not-allowed" : "pointer",
-        fontSize:      11,
-        fontWeight:    700,
-        whiteSpace:    "nowrap",
-        opacity:       isDisabled ? 0.4 : 1,
-      }}
-    >
-      🏷️ {subData.trackPrices ? "Ceny" : "—"}
-    </button>
-  ) : null;
-
   const archiveBtn = (
     <button
       onClick={() => {
@@ -226,7 +197,6 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
             {recurringBtn}
             {criticalBtn}
             {luxmedBtn}
-            {trackPricesBtn}
           </div>
         )}
       </div>
@@ -250,7 +220,6 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
       {recurringBtn}
       {criticalBtn}
       {luxmedBtn}
-      {trackPricesBtn}
       {archiveBtn}
     </div>
   );

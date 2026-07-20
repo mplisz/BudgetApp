@@ -1,6 +1,6 @@
 // ============================================================
 // File: src/components/panels/PanelAdmin.jsx
-// Admin panel – session management
+// Admin panel – session management + tracked-products whitelist
 // ============================================================
 
 import { c, alpha } from "../../styles/tokens";
@@ -8,41 +8,14 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useApi } from "../../hooks/useApi";
 import { theme as s } from "../../styles/theme";
+import { useProductCatalog, type CatalogProduct } from "../../hooks/useProductCatalog";
+import { formatSize, type SizeUnit } from "../../utils/productPricing";
+import { ConfirmModal } from "../ui/ConfirmModal";
 
 const ACCESS_TOKEN_EXPIRY = import.meta.env.VITE_ACCESS_TOKEN_EXPIRY || "15 min";
 
 interface FamilyMember { email: string; name: string }
 interface AdminResult  { success: boolean; message: string }
-
-// Retroactive product backfill — see backend/routes/products.js
-interface BackfillProduct { name: string; size: number | null; unit: string | null; packCount: number | null }
-interface BackfillResult {
-  dryRun:              boolean;
-  trackedSubcategories: number;
-  scanned:             number;
-  missingLines:        number;
-  uniqueTexts:         number;
-  queued?:             number;
-  resolved:            number;
-  remaining?:          number;
-  updatedTransactions?: number;
-  failed?:             number;
-  message?:            string;
-  /** Full text→product mapping from the dry run; sent back on commit so
-   *  the approved result is exactly what gets written (one model call). */
-  products?:           Array<{ text: string; product: BackfillProduct }>;
-}
-
-/** One reviewable proposal: the AI's answer, editable, with an accept
- *  toggle. Every row is rendered — what you see is what gets written. */
-interface ReviewRow {
-  text:      string;              // the receipt wording (read-only key)
-  name:      string;
-  size:      string;              // kept as text so the input can be empty
-  unit:      "" | "g" | "ml" | "szt";
-  packCount: number | null;
-  accepted:  boolean;
-}
 
 export default function PanelAdmin() {
   const { user } = useAuth();
@@ -53,66 +26,6 @@ export default function PanelAdmin() {
   const [isLoading, setIsLoading]     = useState(false);
   const [isRevoking, setIsRevoking]   = useState(false);
   const [result, setResult]           = useState<AdminResult | null>(null);
-
-  // ── Product backfill ──────────────────────────────────────
-  const [backfill,        setBackfill]        = useState<BackfillResult | null>(null);
-  const [rows,            setRows]            = useState<ReviewRow[]>([]);
-  const [backfillError,   setBackfillError]   = useState<string | null>(null);
-  const [isBackfilling,   setIsBackfilling]   = useState(false);
-
-  // A row without a name can't identify a product, so it can never be
-  // committed — treated as rejected regardless of the checkbox.
-  const isRowValid = (r: ReviewRow) => r.name.trim().length > 0;
-  const acceptedRows = rows.filter(r => r.accepted && isRowValid(r));
-
-  function patchRow(index: number, patch: Partial<ReviewRow>) {
-    setRows(prev => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  }
-
-  async function runBackfill(dryRun: boolean) {
-    setIsBackfilling(true);
-    setBackfillError(null);
-    if (dryRun) { setBackfill(null); setRows([]); }
-    try {
-      const data = await api.post<BackfillResult>(
-        "/api/products/backfill",
-        dryRun
-          ? { dryRun: true }
-          : {
-              // Commit exactly what was reviewed — edits included,
-              // rejected rows omitted. No second model call.
-              dryRun: false,
-              products: acceptedRows.map(r => ({
-                text: r.text,
-                product: {
-                  name:      r.name.trim(),
-                  size:      r.size.trim() ? Number(r.size.replace(",", ".")) : null,
-                  unit:      r.unit || null,
-                  packCount: r.packCount,
-                },
-              })),
-            },
-        { fallback: "Nie udało się uruchomić uzupełniania." },
-      );
-      setBackfill(data);
-      if (dryRun) {
-        setRows((data.products ?? []).map(({ text, product }) => ({
-          text,
-          name:      product.name ?? "",
-          size:      product.size != null ? String(product.size) : "",
-          unit:      (product.unit as ReviewRow["unit"]) ?? "",
-          packCount: product.packCount ?? null,
-          accepted:  true,
-        })));
-      } else {
-        setRows([]);   // committed — nothing left to review
-      }
-    } catch (err) {
-      setBackfillError((err as Error).message);
-    } finally {
-      setIsBackfilling(false);
-    }
-  }
 
   // Load family members
   useEffect(() => {
@@ -242,188 +155,196 @@ export default function PanelAdmin() {
         )}
       </div>
 
-      {/* ── Retroactive product backfill ─────────────────────── */}
-      <div style={{ ...s.card, marginTop: 16 }}>
-        <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase", marginBottom: 8 }}>
-          🏷️ Uzupełnij brakujące produkty
-        </div>
-        <div style={{ color: c.textMuted, fontSize: 12, lineHeight: 1.6, marginBottom: 14 }}>
-          Historia cen pokazuje tylko pozycje z rozpoznanym produktem. Ta akcja znajduje starsze
-          transakcje w subkategoriach oznaczonych <strong>🏷️ Ceny</strong>, które go nie mają, i uzupełnia
-          je przez AI. Możesz ją uruchomić ponownie po oznaczeniu kolejnej subkategorii — wtedy
-          dobierze tylko to, czego brakuje.
-        </div>
+      <TrackedProductsSection />
+    </div>
+  );
+}
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            onClick={() => runBackfill(true)}
-            disabled={isBackfilling}
-            style={{
-              ...s.btn(), width: "auto", marginTop: 0,
-              background: alpha(c.info, "22"), color: c.info,
-              border: `1px solid ${alpha(c.info, "44")}`,
-              opacity: isBackfilling ? 0.5 : 1,
-            }}
-          >
-            {isBackfilling ? "⏳ Analizuję…" : "🔍 Sprawdź (podgląd)"}
-          </button>
+// ── Tracked products — the personal "inflation basket" ──────────
+// Registering a product here is what makes the OCR scan allowed to
+// attach it to a receipt line at all (see backend resolveTrackedProduct);
+// nothing the user hasn't explicitly added ever reaches the price
+// history, regardless of what the model could technically recognize.
 
-          {/* Commit only makes sense once a preview produced accepted rows. */}
-          {backfill?.dryRun && rows.length > 0 && (
-            <button
-              onClick={() => runBackfill(false)}
-              disabled={isBackfilling || acceptedRows.length === 0}
-              style={{
-                ...s.btn(), width: "auto", marginTop: 0,
-                background: alpha(c.success, "22"), color: c.success,
-                border: `1px solid ${alpha(c.success, "44")}`,
-                opacity: (isBackfilling || acceptedRows.length === 0) ? 0.5 : 1,
-                cursor: acceptedRows.length === 0 ? "not-allowed" : "pointer",
-              }}
-            >
-              ✅ Zapisz {acceptedRows.length} z {rows.length}
-            </button>
-          )}
-        </div>
+/** User-facing unit choices, each mapped to the BASE unit (g/ml/szt) the
+ *  rest of the app works in — so "1,5 l" is stored as 1500/ml, matching
+ *  every other size already parsed off a receipt. */
+const UNIT_SCALE: Record<string, { base: SizeUnit; factor: number; label: string }> = {
+  g:   { base: "g",   factor: 1,    label: "g"   },
+  kg:  { base: "g",   factor: 1000, label: "kg"  },
+  ml:  { base: "ml",  factor: 1,    label: "ml"  },
+  l:   { base: "ml",  factor: 1000, label: "l"   },
+  szt: { base: "szt", factor: 1,    label: "szt" },
+};
 
-        {backfillError && (
-          <div style={{
-            marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 13,
-            background: alpha(c.danger, "11"), color: c.dangerLight,
-            border: `1px solid ${alpha(c.danger, "33")}`,
-          }}>
-            ❌ {backfillError}
-          </div>
-        )}
+function parseSizeInput(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const n = Number(trimmed.replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
-        {backfill && (
-          <div style={{ marginTop: 12, fontSize: 12, color: c.textSecondary, lineHeight: 1.8 }}>
-            {backfill.message ? (
-              <div style={{ color: c.success }}>✅ {backfill.message}</div>
-            ) : (
-              <>
-                <div>
-                  Przejrzano <strong style={{ color: c.text }}>{backfill.scanned}</strong> transakcji
-                  w <strong style={{ color: c.text }}>{backfill.trackedSubcategories}</strong> śledzonych subkategoriach ·
-                  brakujących pozycji: <strong style={{ color: c.text }}>{backfill.missingLines}</strong> ·
-                  unikalnych nazw: <strong style={{ color: c.text }}>{backfill.uniqueTexts}</strong>
-                </div>
-                <div>
-                  Rozpoznano: <strong style={{ color: c.success }}>{backfill.resolved}</strong>
-                  {backfill.queued !== undefined && ` z ${backfill.queued} przetworzonych`}
-                  {!!backfill.remaining && (
-                    <span style={{ color: c.warning }}> · zostało {backfill.remaining} na kolejny przebieg</span>
-                  )}
-                </div>
-                {!backfill.dryRun && (
-                  <div style={{ color: c.success }}>
-                    ✅ Zaktualizowano {backfill.updatedTransactions} transakcji
-                    {!!backfill.failed && <span style={{ color: c.danger }}> · błędów: {backfill.failed}</span>}
-                  </div>
-                )}
-              </>
-            )}
+const PRODUCT_MODAL_CLOSED = { isOpen: false, product: null as CatalogProduct | null };
 
-            {/* Review table — editable, per-row accept. EVERY row is
-                rendered: what you see is exactly what gets written. */}
-            {backfill.dryRun && rows.length > 0 && (
-              <>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, color: c.textMuted }}>
-                    Popraw nazwy lub odznacz pozycje, których nie chcesz zapisywać:
-                  </span>
-                  <button
-                    onClick={() => setRows(prev => prev.map(r => ({ ...r, accepted: true })))}
-                    style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "2px 8px", fontSize: 11, cursor: "pointer" }}
-                  >
-                    Zaznacz wszystkie
-                  </button>
-                  <button
-                    onClick={() => setRows(prev => prev.map(r => ({ ...r, accepted: false })))}
-                    style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "2px 8px", fontSize: 11, cursor: "pointer" }}
-                  >
-                    Odznacz wszystkie
-                  </button>
-                </div>
+function TrackedProductsSection() {
+  const { catalog, load, create, updateDefaultSize, remove } = useProductCatalog();
+  useEffect(() => { load(); }, [load]);
 
-                <div style={{ maxHeight: 360, overflowY: "auto", border: `1px solid ${c.border}`, borderRadius: 8 }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                    <thead>
-                      <tr>
-                        {["", "Tekst z paragonu", "Produkt", "Rozmiar", "Jedn."].map((h, i) => (
-                          <th key={i} style={{
-                            position: "sticky", top: 0, background: c.surface, textAlign: "left",
-                            padding: "5px 8px", fontSize: 10, color: c.textMuted, textTransform: "uppercase",
-                          }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((r, i) => {
-                        const valid = isRowValid(r);
-                        const on    = r.accepted && valid;
-                        const input: React.CSSProperties = {
-                          background: c.bg, border: `1px solid ${c.border}`, borderRadius: 6,
-                          color: on ? c.text : c.textMuted, padding: "3px 6px", fontSize: 11,
-                          width: "100%", outline: "none", boxSizing: "border-box",
-                        };
-                        return (
-                          <tr key={r.text} style={{ borderTop: `1px solid ${c.border}`, opacity: on ? 1 : 0.45 }}>
-                            <td style={{ padding: "3px 8px" }}>
-                              <input
-                                type="checkbox"
-                                checked={on}
-                                disabled={!valid}
-                                onChange={e => patchRow(i, { accepted: e.target.checked })}
-                                style={{ cursor: valid ? "pointer" : "not-allowed" }}
-                              />
-                            </td>
-                            <td style={{ padding: "3px 8px", color: c.textMuted, maxWidth: 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.text}>
-                              {r.text}
-                            </td>
-                            <td style={{ padding: "3px 8px", minWidth: 160 }}>
-                              <input
-                                value={r.name}
-                                onChange={e => patchRow(i, { name: e.target.value })}
-                                placeholder="nazwa produktu"
-                                style={{ ...input, fontWeight: 600, borderColor: valid ? c.border : alpha(c.danger, "66") }}
-                              />
-                            </td>
-                            <td style={{ padding: "3px 8px", width: 80 }}>
-                              <input
-                                value={r.size}
-                                onChange={e => patchRow(i, { size: e.target.value.replace(/[^\d.,]/g, "") })}
-                                placeholder="—"
-                                style={{ ...input, textAlign: "right" }}
-                              />
-                            </td>
-                            <td style={{ padding: "3px 8px", width: 70 }}>
-                              <select
-                                value={r.unit}
-                                onChange={e => patchRow(i, { unit: e.target.value as ReviewRow["unit"] })}
-                                style={{ ...input, cursor: "pointer" }}
-                              >
-                                <option value="">—</option>
-                                <option value="g">g</option>
-                                <option value="ml">ml</option>
-                                <option value="szt">szt</option>
-                              </select>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ marginTop: 6, fontSize: 11, color: c.textMuted }}>
-                  Zapisane zostaną tylko zaznaczone pozycje ({acceptedRows.length} z {rows.length}).
-                  Pozycja bez nazwy nie może zostać zapisana.
-                </div>
-              </>
-            )}
-          </div>
-        )}
+  const [newName,     setNewName]     = useState("");
+  const [newSize,     setNewSize]     = useState("");
+  const [newUnitKey,  setNewUnitKey]  = useState<keyof typeof UNIT_SCALE>("szt");
+  const [isSaving,    setIsSaving]    = useState(false);
+
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [editSize,    setEditSize]    = useState("");
+  const [deleteModal, setDeleteModal] = useState(PRODUCT_MODAL_CLOSED);
+
+  async function handleAdd() {
+    const name = newName.trim();
+    if (!name) return;
+    const scale = UNIT_SCALE[newUnitKey];
+    const raw   = parseSizeInput(newSize);
+    setIsSaving(true);
+    const ok = await create(name, scale.base, raw !== null ? raw * scale.factor : null);
+    setIsSaving(false);
+    if (ok) { setNewName(""); setNewSize(""); }
+  }
+
+  function startEdit(p: CatalogProduct) {
+    setEditingId(p.id);
+    setEditSize(p.defaultSize != null ? String(p.defaultSize) : "");
+  }
+  async function saveEdit(id: string) {
+    const ok = await updateDefaultSize(id, parseSizeInput(editSize));
+    if (ok) setEditingId(null);
+  }
+
+  const input: React.CSSProperties = {
+    background: c.bg, border: `1px solid ${c.borderStrong}`, borderRadius: 8,
+    color: c.text, padding: "8px 10px", fontSize: 13, outline: "none",
+  };
+
+  return (
+    <div style={{ ...s.card, marginTop: 16 }}>
+      <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase", marginBottom: 8 }}>
+        🏷️ Produkty śledzone (koszyk inflacyjny)
       </div>
+      <div style={{ color: c.textMuted, fontSize: 12, lineHeight: 1.6, marginBottom: 14 }}>
+        Tylko produkty z tej listy trafiają do Analiza → Ceny produktów — nowy skan paragonu
+        dopasowuje pozycje do tych nazw i pomija resztę. Gdy paragon nie poda gramatury,
+        użyty zostanie podany tu domyślny rozmiar.
+      </div>
+
+      {/* Add form */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        <input
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          placeholder="Nazwa produktu, np. Coca-Cola Zero"
+          style={{ ...input, flex: "2 1 220px" }}
+        />
+        <input
+          value={newSize}
+          onChange={e => setNewSize(e.target.value.replace(/[^\d.,]/g, ""))}
+          placeholder="Domyślny rozmiar (opcjonalnie)"
+          style={{ ...input, flex: "1 1 140px" }}
+        />
+        <select
+          value={newUnitKey}
+          onChange={e => setNewUnitKey(e.target.value as keyof typeof UNIT_SCALE)}
+          style={{ ...input, cursor: "pointer", flex: "0 0 80px" }}
+        >
+          {Object.entries(UNIT_SCALE).map(([key, u]) => (
+            <option key={key} value={key}>{u.label}</option>
+          ))}
+        </select>
+        <button
+          onClick={handleAdd}
+          disabled={isSaving || !newName.trim()}
+          style={{
+            ...s.btn(), width: "auto", marginTop: 0,
+            opacity: (isSaving || !newName.trim()) ? 0.5 : 1,
+            cursor: !newName.trim() ? "not-allowed" : "pointer",
+          }}
+        >
+          {isSaving ? "⏳" : "Dodaj"}
+        </button>
+      </div>
+
+      {/* List */}
+      {catalog.length === 0 ? (
+        <div style={{ color: c.borderStrong, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
+          Brak śledzonych produktów.
+        </div>
+      ) : (
+        <div style={{ maxHeight: 420, overflowY: "auto", border: `1px solid ${c.border}`, borderRadius: 8 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr>
+                {["Nazwa", "Domyślnie", "Kupione", "Sklepy", ""].map((h, i) => (
+                  <th key={i} style={{
+                    position: "sticky", top: 0, background: c.surface,
+                    textAlign: i === 0 ? "left" : i === 4 ? "right" : "center",
+                    padding: "6px 10px", fontSize: 10, color: c.textMuted, textTransform: "uppercase",
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {catalog.map(p => (
+                <tr key={p.id} style={{ borderTop: `1px solid ${c.border}` }}>
+                  <td style={{ padding: "6px 10px", color: c.text, fontWeight: 600 }}>{p.canonicalName}</td>
+                  <td style={{ padding: "6px 10px", textAlign: "center", color: c.textTertiary, whiteSpace: "nowrap" }}>
+                    {editingId === p.id ? (
+                      <div style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                        <input
+                          value={editSize}
+                          onChange={e => setEditSize(e.target.value.replace(/[^\d.,]/g, ""))}
+                          autoFocus
+                          style={{ ...input, width: 70, padding: "3px 6px", fontSize: 11, textAlign: "right" }}
+                        />
+                        <span style={{ fontSize: 11, color: c.textMuted }}>{p.unit}</span>
+                        <button onClick={() => saveEdit(p.id)} style={{ background: "none", border: "none", color: c.success, cursor: "pointer", fontSize: 13 }}>✓</button>
+                        <button onClick={() => setEditingId(null)} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 13 }}>✕</button>
+                      </div>
+                    ) : (
+                      <span onClick={() => startEdit(p)} style={{ cursor: "pointer" }} title="Kliknij, aby zmienić">
+                        {p.defaultSize != null && p.unit ? formatSize(p.defaultSize, p.unit) : "— ✏️"}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: "6px 10px", textAlign: "center", color: c.textTertiary }}>{p.purchaseCount}</td>
+                  <td style={{ padding: "6px 10px", textAlign: "center", color: c.textTertiary }}>{p.merchants.length || "—"}</td>
+                  <td style={{ padding: "6px 10px", textAlign: "right" }}>
+                    <button
+                      onClick={() => setDeleteModal({ isOpen: true, product: p })}
+                      style={{ background: "none", border: "none", color: c.danger, cursor: "pointer", fontSize: 13 }}
+                      title="Przestań śledzić"
+                    >
+                      🗑
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        title="Przestań śledzić produkt"
+        message={
+          deleteModal.product
+            ? `„${deleteModal.product.canonicalName}” zniknie z koszyka inflacyjnego i historii cen. Zebrana historia zakupów tego produktu zostanie utracona.`
+            : ""
+        }
+        onConfirm={async () => {
+          if (deleteModal.product) await remove(deleteModal.product.id);
+          setDeleteModal(PRODUCT_MODAL_CLOSED);
+        }}
+        onCancel={() => setDeleteModal(PRODUCT_MODAL_CLOSED)}
+      />
     </div>
   );
 }

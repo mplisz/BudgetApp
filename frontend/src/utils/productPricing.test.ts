@@ -7,7 +7,8 @@
 // Watch:      npm run test:watch
 //
 // Coverage targets:
-//   - scope gates: AI-structured product required, tracked subcategories
+//   - scope gate: AI-structured product required (backend only attaches
+//     one for a whitelist match — see backend productCatalog.js)
 //   - catalogKey: must match the backend productKey byte for byte
 //   - computeUnitPrice / formatSize: unit math and display
 //   - productMetric: dominant-unit selection, non-comparable rows nulled
@@ -51,15 +52,13 @@ function tx(o: {
   merchant?: string | null;
   items?: PriceLineItem[];
   type?: string;
-  subcategoryId?: string | null;
 }): PricedTransaction {
   return {
-    type:          o.type ?? "EXPENSE",
-    date:          o.date,
-    budgetMonth:   o.date.slice(0, 7),
-    merchant:      o.merchant,
-    subcategoryId: o.subcategoryId,
-    lineItems:     o.items,
+    type:        o.type ?? "EXPENSE",
+    date:        o.date,
+    budgetMonth: o.date.slice(0, 7),
+    merchant:    o.merchant,
+    lineItems:   o.items,
   };
 }
 
@@ -138,24 +137,6 @@ describe("buildPriceHistory — scope", () => {
   it("skips transactions with no line items at all (hand-typed entries)", () => {
     const txs = [1, 2, 3].map(i => tx({ date: `2026-0${i}-10`, merchant: "Apteka" }));
     expect(buildPriceHistory(txs).products).toHaveLength(0);
-  });
-
-  it("filters to the tracked subcategories when the set is supplied", () => {
-    const txs = [
-      ...[1, 2, 3].map(i => tx({
-        date: `2026-0${i}-10`, merchant: "Lidl", subcategoryId: "sub_meat",
-        items: [line("Mięso mielone wołowe", 19, 500, "g")],
-      })),
-      ...[1, 2, 3, 4].map(i => tx({
-        date: `2026-0${i}-11`, merchant: "Reserved", subcategoryId: "sub_clothes",
-        items: [line("Bluza", 100 + i)],
-      })),
-    ];
-    expect(buildPriceHistory(txs).products).toHaveLength(2);   // no filter → both
-
-    const tracked = buildPriceHistory(txs, undefined, undefined, new Set(["sub_meat"]));
-    expect(tracked.products).toHaveLength(1);
-    expect(tracked.products[0].label).toBe("Mięso mielone wołowe");
   });
 
   it("skips non-expenses and non-positive amounts", () => {

@@ -20,7 +20,6 @@ interface DbCategory {
   canBeRecurring?:   boolean;
   isCritical?:       boolean;
   canBeLuxmed?:      boolean;
-  trackPrices?:      boolean;
 }
 
 export type CategoryUpdates = { isArchived?: boolean; [key: string]: unknown };
@@ -60,7 +59,6 @@ export function useCategoryManager() {
               canBeRecurring: child.canBeRecurring ?? false,
               isCritical:     child.isCritical     ?? false,
               canBeLuxmed:    child.canBeLuxmed     ?? false,
-              trackPrices:    child.trackPrices     ?? false,
             });
           }
         });
@@ -108,7 +106,6 @@ export function useCategoryManager() {
     canBeRecurring = false,
     isCritical = false,
     canBeLuxmed = false,
-    trackPrices = false,
   ) {
     setIsSavingCat(true);
     try {
@@ -118,7 +115,6 @@ export function useCategoryManager() {
         canBeRecurring: canBeRecurring ?? false,
         isCritical:     isCritical     ?? false,
         canBeLuxmed:    canBeLuxmed     ?? false,
-        trackPrices:    trackPrices    ?? false,
       }, { fallback: "Nie można dodać kategorii." });
 
       setCategories(prev => {
@@ -141,7 +137,6 @@ export function useCategoryManager() {
                 canBeRecurring: saved.canBeRecurring ?? false,
                 isCritical:     saved.isCritical     ?? false,
                 canBeLuxmed:    saved.canBeLuxmed     ?? false,
-                trackPrices:    saved.trackPrices     ?? false,
               }],
             };
           }

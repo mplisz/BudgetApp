@@ -1,25 +1,32 @@
 // ============================================================
 // File: backend/utils/productCatalog.js
-// The family's PRODUCT CATALOG — phase 3 of the receipt price-history
-// feature. The OCR AI emits a structured product identity per line item
-// ({name, size, unit, packCount}); this module turns that stream into a
-// persistent, deduplicated catalog in the Products container.
+// The family's PRODUCT CATALOG — the user's personal "inflation basket".
+//
+// Unlike a general product cache, this catalog is a WHITELIST: entries
+// are seeded explicitly by the user (routes/products.js POST /, the
+// Admin "Produkty śledzone" section) with a canonical name, a unit and a
+// default size (e.g. "Coca-Cola Zero", 1.5 l). The OCR scan (routes/ocr.js)
+// is only ALLOWED to attach a structured product to a receipt line when
+// it recognizes one of these tracked names (see resolveTrackedProduct) —
+// so nothing the user didn't explicitly register ever enters the price
+// history, regardless of how many products the model could technically
+// name.
 //
 // Why it exists:
-//   - stable cross-shop identity: "Mleko UHT 3,2%" from Biedronka and
+//   - stable cross-shop identity: "Coca-Cola Zero" from Biedronka and
 //     from Lidl collapse to ONE catalog doc (keyed by a normalized name
 //     + unit), regardless of how each receipt spelled it,
-//   - a learning loop: the catalog's canonical names feed back into the
-//     OCR prompt, so the model keeps naming products consistently,
-//   - a queryable product list for the price-history analytics and any
-//     future "my products" view.
+//   - a deterministic size fallback: when a receipt doesn't print the
+//     gramatura, the tracked entry's own default is used instead,
+//   - a queryable product list for the price-history analytics.
 //
 // Writes are BEST-EFFORT and fire-and-forget, exactly like the merchant
 // registry (rememberMerchant): a catalog failure must never break the
 // transaction save that triggered it.
 //
-// The merge logic (productKey, mergeProductDoc) is pure and unit-tested
-// via a standalone check — the container I/O wrapper is a thin shell.
+// The pure functions (productKey, mergeProductDoc, resolveTrackedProduct)
+// are unit-tested via a standalone check — the container I/O wrapper is a
+// thin shell.
 // ============================================================
 
 const { generateId } = require("./helpers");
@@ -29,6 +36,17 @@ const POLISH_FOLD = { ą: "a", ć: "c", ę: "e", ł: "l", ń: "n", ó: "o", ś: 
 const MAX_ALIASES = 24;   // cap the cross-shop wording record per product
 const MAX_SIZES   = 16;   // cap distinct package sizes tracked per product
 
+/** Lowercase, diacritics-folded, punctuation-stripped name — the basis
+ *  for both the identity key (+ unit) and whitelist name matching. */
+function foldProductName(name) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[ąćęłńóśźż]/g, ch => POLISH_FOLD[ch])
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 /**
  * Normalized identity key. Folds diacritics, drops ALL punctuation
  * (so "3,2%" and "3.2%" agree) and collapses whitespace, then appends
@@ -36,12 +54,7 @@ const MAX_SIZES   = 16;   // cap distinct package sizes tracked per product
  * null for an empty name so the caller can skip it.
  */
 function productKey(name, unit) {
-  const folded = String(name || "")
-    .toLowerCase()
-    .replace(/[ąćęłńóśźż]/g, ch => POLISH_FOLD[ch])
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
+  const folded = foldProductName(name);
   if (!folded) return null;
   return `${folded}|${unit || ""}`;
 }
@@ -113,6 +126,72 @@ function mergeProductDoc(existing, line, familyId) {
     firstSeen:     day < existing.firstSeen ? day : existing.firstSeen,
     lastSeen:      day > existing.lastSeen  ? day : existing.lastSeen,
     updatedAt:     now,
+  };
+}
+
+/**
+ * Seed a brand-new WHITELIST entry — the user explicitly registering a
+ * product to track, before any purchase of it has been scanned. Shape
+ * matches a normal catalog doc (mergeProductDoc's "new" branch) so the
+ * very next matching purchase folds into it exactly like any other:
+ * purchaseCount/packSizes/merchants/aliases start empty and accumulate
+ * from there. `nameLocked` is set immediately — the user typed this
+ * spelling on purpose, so no future purchase's own wording should ever
+ * silently rename it.
+ */
+function newTrackedProduct(familyId, id, key, canonicalName, unit, defaultSize) {
+  const now = new Date().toISOString();
+  return {
+    id,
+    userId:        familyId,
+    type:          "PRODUCT",
+    key,
+    mergedKeys:    [],
+    canonicalName,
+    unit,
+    defaultSize:   defaultSize ?? null,
+    packSizes:     [],
+    merchants:     [],
+    aliases:       [],
+    purchaseCount: 0,
+    firstSeen:     null,
+    lastSeen:      null,
+    nameLocked:    true,
+    createdAt:     now,
+    updatedAt:     now,
+  };
+}
+
+/**
+ * Enforcement point for the whitelist: the model's own per-line product
+ * guess is only kept when its NAME (folded) matches one of the user's
+ * tracked products — otherwise it's dropped entirely (return null), no
+ * matter how confidently the model named it. This is what keeps the
+ * catalog to exactly "my inflation basket" rather than every product the
+ * AI can recognize.
+ *
+ * The tracked entry's own `unit` is authoritative (a product's dimension
+ * is part of its registered identity, not up for the model to reinterpret
+ * per receipt) — the model's `size` is only trusted when its own `unit`
+ * agrees, otherwise the tracked `defaultSize` fills in. `packCount` (a
+ * multiplier read off "xN" text) is independent of unit and always kept.
+ */
+function resolveTrackedProduct(product, trackedProducts) {
+  const rawName = product && typeof product.name === "string" ? product.name.trim() : "";
+  if (!rawName) return null;
+  const folded = foldProductName(rawName);
+  const tracked = (trackedProducts || []).find(t => foldProductName(t.canonicalName) === folded);
+  if (!tracked) return null;   // not on the whitelist → not tracked
+
+  const unit = tracked.unit;
+  const sizeFromReceipt = product.unit === unit && typeof product.size === "number" && product.size > 0
+    ? product.size
+    : null;
+  return {
+    name:      tracked.canonicalName,
+    size:      sizeFromReceipt ?? (typeof tracked.defaultSize === "number" ? tracked.defaultSize : null),
+    unit,
+    packCount: (typeof product.packCount === "number" && product.packCount > 0) ? product.packCount : null,
   };
 }
 
@@ -229,36 +308,36 @@ async function rememberProducts(container, familyId, tx) {
 }
 
 /**
- * Top canonical product names by purchase frequency — injected into the
- * OCR prompt so the model reuses the exact spelling it already learned.
- * Best-effort: returns [] on any error.
+ * The full whitelist — every tracked product's identity fields, needed
+ * both to inject names into the OCR prompt and to resolve/fallback each
+ * matched line (resolveTrackedProduct). Best-effort: returns [] on error,
+ * which degrades a scan to "nothing tracked" rather than failing it.
  */
-async function fetchTopProductNames(container, familyId, limit = 40) {
+async function fetchTrackedProducts(container, familyId) {
   try {
     const { resources } = await container.items
       .query({
-        query: `SELECT c.canonicalName FROM c
+        query: `SELECT c.id, c.canonicalName, c.unit, c.defaultSize FROM c
                 WHERE c.userId = @u
-                ORDER BY c.purchaseCount DESC
-                OFFSET 0 LIMIT @n`,
-        parameters: [
-          { name: "@u", value: familyId },
-          { name: "@n", value: limit },
-        ],
+                ORDER BY c.canonicalName ASC`,
+        parameters: [{ name: "@u", value: familyId }],
       })
       .fetchAll();
-    return resources.map(r => r.canonicalName).filter(Boolean);
+    return resources.filter(r => r.canonicalName);
   } catch (err) {
-    console.error("[PRODUCTS] fetchTopProductNames failed (non-fatal):", err.message);
+    console.error("[PRODUCTS] fetchTrackedProducts failed (non-fatal):", err.message);
     return [];
   }
 }
 
 module.exports = {
+  foldProductName,
   productKey,
   productId,
+  newTrackedProduct,
+  resolveTrackedProduct,
   mergeProductDoc,
   mergeProducts,
   rememberProducts,
-  fetchTopProductNames,
+  fetchTrackedProducts,
 };

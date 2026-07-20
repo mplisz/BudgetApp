@@ -33,7 +33,6 @@ export function CategoriesSection() {
   const [newSubCanBeRecurring, setNewSubCanBeRecurring] = useState(false);
   const [newSubIsCritical,     setNewSubIsCritical]     = useState(false);
   const [newSubCanBeLuxmed,    setNewSubCanBeLuxmed]    = useState(false);
-  const [newSubTrackPrices,    setNewSubTrackPrices]    = useState(false);
   const [modalConfig,          setModalConfig]          = useState(MODAL_CLOSED);
 
   // ── Keep the subcategory panel level with the categories column ──
@@ -102,7 +101,6 @@ export function CategoriesSection() {
       newSubCanBeRecurring,
       newSubIsCritical,
       newSubCanBeLuxmed,
-      newSubTrackPrices,
     );
     if (success) {
       setNewSubName("");
@@ -110,7 +108,6 @@ export function CategoriesSection() {
       setNewSubCanBeRecurring(false);
       setNewSubIsCritical(false);
       setNewSubCanBeLuxmed(false);
-      setNewSubTrackPrices(false);
     }
   }
 
@@ -309,20 +306,6 @@ export function CategoriesSection() {
                       </label>
                     )}
 
-                    {expandedCat.type === "EXPENSE" && (
-                      <label
-                        title="Ceny — produkty z tej subkategorii trafią do historii cen (Analiza → Ceny produktów)"
-                        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "0 4px", whiteSpace: "nowrap" }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={newSubTrackPrices}
-                          onChange={e => setNewSubTrackPrices(e.target.checked)}
-                        />
-                        <span style={{ fontSize: 11, color: c.textSecondary }}>🏷️</span>
-                      </label>
-                    )}
-
                     <button
                       onClick={handleAddSubCategory}
                       disabled={isSavingCat}
@@ -354,7 +337,6 @@ export function CategoriesSection() {
                         <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>CYKL.</span>
                         <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>KRYT.</span>
                         <span style={{ color: c.cyan,    fontSize: 10, fontWeight: 700 }}>LUXMED</span>
-                        <span style={{ color: c.success, fontSize: 10, fontWeight: 700 }}>CENY</span>
                       </>
                     )}
                   </div>

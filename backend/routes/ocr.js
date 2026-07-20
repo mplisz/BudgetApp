@@ -42,7 +42,7 @@ const sharp   = require("sharp");
 const { getOpenAIClient, ProductSchema, PRODUCT_RULES } = require("../utils/productAi");
 
 const { categoriesContainer, receiptsContainer, settingsContainer, productsContainer } = require("../cosmos");
-const { fetchTopProductNames } = require("../utils/productCatalog");
+const { fetchTrackedProducts, resolveTrackedProduct } = require("../utils/productCatalog");
 const { cleanMerchant, cleanNip, merchantExists, rememberMerchant } = require("../utils/merchant");
 const {
   normDesc, normMerchant, fetchCorrections, rememberCorrections,
@@ -181,7 +181,7 @@ async function mistralOcrExtract(buffer, mime = "image/jpeg") {
 
 // ── Prompt builder ────────────────────────────────────────────
 
-function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "", knownProducts = []) {
+function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "", trackedProductNames = []) {
   // categoryTree: [{ name, subcategories: [name, ...] }, ...]
   const catLines = categoryTree
     .map(c => `- ${c.name}: ${c.subcategories.join(", ") || "(brak podkategorii)"}`)
@@ -189,10 +189,10 @@ function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "
   const merchantLine = knownMerchants.length
     ? knownMerchants.join(", ")
     : "(brak zapisanych sklepów)";
-  // Catalog feedback: reuse the exact product.name spelling already
-  // learned, so the same product stays one entry across receipts/shops.
-  const productSection = knownProducts.length
-    ? `\nZNANE PRODUKTY (użyj DOKŁADNIE tej pisowni w "product.name" gdy pozycja to ten sam produkt):\n${knownProducts.join(", ")}\n`
+  // The user's personal "inflation basket" — see rule 23. Without any
+  // tracked products, the whole product feature is simply off.
+  const trackedSection = trackedProductNames.length
+    ? `\nŚLEDZONE PRODUKTY:\n${trackedProductNames.join(", ")}\n`
     : "";
 
   return `Jesteś asystentem OCR analizującym zdjęcia paragonów fiskalnych (zwykle polskich, ale możliwe też zagraniczne).
@@ -269,10 +269,17 @@ POMIJAJ: linie VAT/PTU, numery NIP, formy płatności, wydaną resztę, punkty l
 — typ zakupów + sklep, NIE lista pozycji. Maks ~6 słów.
 Przykłady: "Spożywcze, Lidl"; "Chemia, Rossmann"; "Paliwo, Orlen".
 Jeśli nie da się sensownie podsumować — null.
-23. PRODUKT (pole "product" przy każdej pozycji): ustrukturyzowana tożsamość produktu do
-śledzenia historii cen.
+23. PRODUKT (pole "product" przy każdej pozycji): pole to WYPEŁNIASZ WYŁĄCZNIE gdy pozycja
+odpowiada jednemu z produktów na liście ŚLEDZONE PRODUKTY poniżej (dopuszczalne drobne różnice
+pisowni, skrótów czy marki — rozpoznajesz PO ZNACZENIU, nie po dokładnym brzmieniu z paragonu).
+Gdy pozycja nie pasuje do ŻADNEGO z nich — pomiń pole "product" całkowicie (ustaw null). NIE
+twórz nowych śledzonych produktów samodzielnie, nawet jeśli pozycja wygląda jak dobry kandydat.
+Gdy pozycja pasuje: w polu "name" użyj DOKŁADNIE pisowni z listy ŚLEDZONE PRODUKTY (nie
+przepisuj tekstu z paragonu). Rozmiar/jednostkę/wielopak ustal z poniższych zasad — gdy nie da
+się ich odczytać z paragonu, zostaw null (system dobierze wartość domyślną automatycznie, Ty
+nie musisz jej znać):
 ${PRODUCT_RULES}
-${productSection}KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
+${trackedSection}KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
 
 KATEGORIE UŻYTKOWNIKA:
 ${catLines}
@@ -421,7 +428,7 @@ async function preprocessImage(dataUrl) {
 // Maps LLM category NAMES to category IDs so the frontend doesn't
 // have to do fuzzy matching. Unknown names → null (user picks manually).
 
-function mapItemsToCategories(items, categoryTree, corrections = [], merchant = null) {
+function mapItemsToCategories(items, categoryTree, corrections = [], merchant = null, trackedProducts = []) {
   // Case-insensitive name → node lookup
   const catByName = new Map();
   for (const root of categoryTree) {
@@ -488,7 +495,11 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
       subcategoryName,
       categoryConfidence: confidence,
       learned,
-      product:            item.product ?? null,   // structured identity → lineItems
+      // Enforcement point for the whitelist: only a match against the
+      // user's tracked products survives (name forced to canonical
+      // spelling, size/unit defaulted when unreadable) — see
+      // productCatalog.resolveTrackedProduct.
+      product:            resolveTrackedProduct(item.product, trackedProducts),
     };
   });
 }
@@ -620,10 +631,10 @@ router.post("/receipt", async (req, res) => {
     if (categoryTree.length === 0) {
       return res.status(422).json({ error: "No expense categories defined." });
     }
-    const [{ merchants: knownMerchants, nips: knownNips }, corrections, knownProducts] = await Promise.all([
+    const [{ merchants: knownMerchants, nips: knownNips }, corrections, trackedProducts] = await Promise.all([
       fetchKnownMerchants(familyId),
       fetchCorrections(settingsContainer, familyId),
-      fetchTopProductNames(productsContainer, familyId),
+      fetchTrackedProducts(productsContainer, familyId),
     ]);
 
     // 3a. PREFERRED: dedicated OCR engine reads the receipt as text.
@@ -664,7 +675,8 @@ router.post("/receipt", async (req, res) => {
         { role: "system", content: buildSystemPrompt(categoryTree.map(c => ({
             name: c.name,
             subcategories: c.subcategories.map(s => s.name),
-          })), knownMerchants, buildLearnedSection(corrections), knownProducts) },
+          })), knownMerchants, buildLearnedSection(corrections),
+          trackedProducts.map(p => p.canonicalName)) },
         { role: "user", content: userContent },
       ],
       // gpt-5.x renamed max_tokens → max_completion_tokens and rejects
@@ -725,7 +737,7 @@ router.post("/receipt", async (req, res) => {
 
     // 6. Map category names → IDs, applying learned per-item overrides
     // (scoped to the — possibly NIP-corrected — merchant).
-    const mappedItems = mapItemsToCategories(items, categoryTree, corrections, metadata.merchant);
+    const mappedItems = mapItemsToCategories(items, categoryTree, corrections, metadata.merchant, trackedProducts);
 
     // 7. Fingerprint + duplicate check (soft warning, never blocks).
     // duplicateWarning is a SEPARATE channel from sumWarning — a receipt

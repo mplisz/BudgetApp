@@ -1,32 +1,43 @@
 // ============================================================
 // File: backend/routes/products.js
-// Read + light-maintenance access to the family PRODUCT CATALOG.
+// The family PRODUCT CATALOG = the user's personal "inflation basket" —
+// a whitelist of products they explicitly chose to track, managed here:
+//   GET    /api/products          — list the whitelist
+//   POST   /api/products          — register a new tracked product
+//   PATCH  /api/products/:id      — edit canonical name / default size
+//   DELETE /api/products/:id      — stop tracking a product
+//   POST   /api/products/merge    — fold a duplicate into another
 //
-// The catalog is WRITTEN by the transaction-save side-effect
-// (utils/productCatalog.rememberProducts) — this route only exposes it:
-//   GET    /api/products          — list, most-purchased first
-//   PATCH  /api/products/:id      — rename the canonical name (correction)
-//   DELETE /api/products/:id      — drop a junk/miscaught product
+// Purchases are folded in automatically by the transaction-save
+// side-effect (utils/productCatalog.rememberProducts) whenever the OCR
+// scan recognized a line as one of these tracked names — see
+// utils/productCatalog.resolveTrackedProduct for the matching/fallback
+// logic, applied in routes/ocr.js.
 // ============================================================
 
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const { productsContainer, transactionsContainer, categoriesContainer } = require("../cosmos");
+const { productsContainer } = require("../cosmos");
 const { requireAuth }       = require("../middleware/auth");
 const { readItemWithEtag, readItem, IdParamSchema } = require("../utils/helpers");
-const { mergeProducts, rememberProducts } = require("../utils/productCatalog");
-const { inferProducts, ProductSchema } = require("../utils/productAi");
-const { collectCandidates, applyProducts } = require("../utils/productBackfill");
+const { productKey, productId, newTrackedProduct, mergeProducts } = require("../utils/productCatalog");
 
 router.use(requireAuth);
 
-/** Hard cap on how many distinct texts one run sends to the model —
- *  bounds both cost and runtime. Press the button again for the rest. */
-const MAX_UNIQUE_PER_RUN = 300;
+const UNIT_ENUM = z.enum(["g", "ml", "szt"]);
 
-const RenameSchema = z.object({
+const CreateSchema = z.object({
   canonicalName: z.string().min(1).max(120),
+  unit:          UNIT_ENUM,
+  defaultSize:   z.number().positive().max(1_000_000).nullable().optional(),
+});
+
+const PatchSchema = z.object({
+  canonicalName: z.string().min(1).max(120).optional(),
+  defaultSize:   z.number().positive().max(1_000_000).nullable().optional(),
+}).refine(d => d.canonicalName !== undefined || d.defaultSize !== undefined, {
+  message: "Nothing to update.",
 });
 
 const MergeSchema = z.object({
@@ -34,19 +45,7 @@ const MergeSchema = z.object({
   targetId: z.string().min(1).max(200),
 });
 
-// Commit payload for /backfill: the exact mapping the user approved in
-// the dry run. Sending it back means the model is called ONCE and what
-// was previewed is byte-for-byte what gets written (an LLM re-run could
-// word things differently). Omit it and the server infers again.
-const BackfillSchema = z.object({
-  dryRun:   z.boolean().optional(),
-  products: z.array(z.object({
-    text:    z.string().min(1).max(300),
-    product: ProductSchema,
-  })).max(MAX_UNIQUE_PER_RUN).optional(),
-});
-
-// ── GET / — the whole catalog, most-purchased first ──────────
+// ── GET / — the whole whitelist, alphabetical ─────────────────
 
 router.get("/", async (req, res) => {
   try {
@@ -54,7 +53,7 @@ router.get("/", async (req, res) => {
       .query({
         query: `SELECT * FROM c
                 WHERE c.userId = @userId
-                ORDER BY c.purchaseCount DESC`,
+                ORDER BY c.canonicalName ASC`,
         parameters: [{ name: "@userId", value: req.user.familyId }],
       })
       .fetchAll();
@@ -65,127 +64,32 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ── POST /backfill — fill in missing products retroactively ──
-//
-// Finds transactions in the currently price-tracked subcategories whose
-// lines carry no structured product, asks the model to normalize the
-// DEDUPLICATED line texts, then writes the answers back and seeds the
-// catalog. Self-scoping: flag a new subcategory later and press again —
-// only its history is missing, so only that gets processed.
-//
-// body: { dryRun?: boolean }  → dryRun returns the proposal, writes nothing.
+// ── POST / — register a new tracked product ───────────────────
+// Size is expected already in BASE units (g/ml) — the frontend converts
+// a user-friendly "1,5 l" to 1500/ml before sending, so the whole stack
+// (unit price math, shrink detection, catalog keys) keeps one convention.
 
-router.post("/backfill", async (req, res) => {
-  const parsedBody = BackfillSchema.safeParse(req.body ?? {});
-  if (!parsedBody.success) return res.status(400).json({ error: parsedBody.error.issues[0].message });
+router.post("/", async (req, res) => {
+  const parsed = CreateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
-  const dryRun   = parsedBody.data.dryRun !== false;   // preview unless told otherwise
-  const approved = parsedBody.data.products;
+  const { canonicalName, unit, defaultSize } = parsed.data;
   const familyId = req.user.familyId;
+  const key = productKey(canonicalName, unit);
+  if (!key) return res.status(400).json({ error: "Invalid product name." });
+  const id = productId(familyId, key);
 
   try {
-    // 1. Which subcategories are price-tracked right now?
-    const { resources: cats } = await categoriesContainer.items
-      .query({
-        query: "SELECT c.id FROM c WHERE c.userId = @u AND c.trackPrices = true AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))",
-        parameters: [{ name: "@u", value: familyId }],
-      })
-      .fetchAll();
-    const trackedIds = cats.map(c => c.id);
-    if (trackedIds.length === 0) {
-      return res.status(400).json({ error: "Brak subkategorii oznaczonych do śledzenia cen." });
+    const existing = await readItem(productsContainer, id, familyId);
+    if (existing) {
+      return res.status(409).json({ error: `„${canonicalName}” (${unit}) jest już śledzone.` });
     }
-
-    // 2. Their expense transactions.
-    const idParams = trackedIds.map((_, i) => `@s${i}`);
-    const { resources: transactions } = await transactionsContainer.items
-      .query({
-        query: `SELECT * FROM c
-                WHERE c.userId = @u AND c.type = 'EXPENSE'
-                  AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))
-                  AND c.subcategoryId IN (${idParams.join(", ")})`,
-        parameters: [
-          { name: "@u", value: familyId },
-          ...trackedIds.map((id, i) => ({ name: `@s${i}`, value: id })),
-        ],
-      })
-      .fetchAll();
-
-    // 3. What is missing — deduplicated.
-    const { candidates, uniqueDescriptions } = collectCandidates(transactions);
-    if (candidates.length === 0) {
-      return res.json({
-        dryRun, trackedSubcategories: trackedIds.length, scanned: transactions.length,
-        missingLines: 0, uniqueTexts: 0, resolved: 0, updatedTransactions: 0,
-        message: "Wszystkie pozycje w śledzonych subkategoriach mają już produkty.",
-      });
-    }
-    const batch = uniqueDescriptions.slice(0, MAX_UNIQUE_PER_RUN);
-
-    // 4. Resolve the texts. On commit we reuse the mapping the user
-    //    approved in the dry run — one model call per run, and what was
-    //    previewed is exactly what lands.
-    const productByDesc = approved?.length
-      ? new Map(approved.map(({ text, product }) => [text, product]))
-      : await inferProducts(batch);
-
-    if (dryRun) {
-      return res.json({
-        dryRun: true,
-        trackedSubcategories: trackedIds.length,
-        scanned:      transactions.length,
-        missingLines: candidates.length,
-        uniqueTexts:  uniqueDescriptions.length,
-        queued:       batch.length,
-        resolved:     productByDesc.size,
-        remaining:    Math.max(0, uniqueDescriptions.length - batch.length),
-        // The FULL mapping — the client shows a slice and sends it back
-        // on commit, so the approved result is the written result.
-        products: [...productByDesc.entries()].map(([text, product]) => ({ text, product })),
-      });
-    }
-
-    // 5. Write back — only transactions that actually changed.
-    let updated = 0, failed = 0;
-    for (const tx of transactions) {
-      const next = applyProducts(tx, productByDesc);
-      if (!next) continue;
-      try {
-        const { resource: saved } = await transactionsContainer.items.upsert({
-          ...next,
-          updatedAt:   new Date().toISOString(),
-          updatedBy:   req.user.name || req.user.email,
-          updatedById: req.user.id,
-        });
-        updated++;
-        // 6. Seed the catalog from the freshly structured lines. Existing
-        //    canonical names and merges are preserved by rememberProducts.
-        await rememberProducts(productsContainer, familyId, saved);
-      } catch (err) {
-        failed++;
-        console.error(`[PRODUCTS BACKFILL] tx ${tx.id} failed:`, err.message);
-      }
-    }
-
-    console.log(`[PRODUCTS BACKFILL] ${updated} tx updated, ${productByDesc.size} texts applied${approved?.length ? " (approved)" : ""}, ${failed} failed`);
-    res.json({
-      dryRun: false,
-      trackedSubcategories: trackedIds.length,
-      scanned:      transactions.length,
-      missingLines: candidates.length,
-      uniqueTexts:  uniqueDescriptions.length,
-      queued:       batch.length,
-      resolved:     productByDesc.size,
-      remaining:    Math.max(0, uniqueDescriptions.length - batch.length),
-      updatedTransactions: updated,
-      failed,
-    });
+    const doc = newTrackedProduct(familyId, id, key, canonicalName.trim(), unit, defaultSize ?? null);
+    const { resource } = await productsContainer.items.create(doc);
+    res.status(201).json(resource);
   } catch (err) {
-    console.error("[PRODUCTS BACKFILL]", err);
-    const msg = /not configured/i.test(err.message)
-      ? "Azure OpenAI nie jest skonfigurowane."
-      : "Nie udało się uzupełnić produktów.";
-    res.status(500).json({ error: msg });
+    console.error("[PRODUCTS POST]", err);
+    res.status(500).json({ error: "Failed to add tracked product." });
   }
 });
 
@@ -226,13 +130,15 @@ router.post("/merge", async (req, res) => {
   }
 });
 
-// ── PATCH /:id — user correction of the display name ─────────
+// ── PATCH /:id — edit the canonical name and/or default size ──
+// Unit is immutable here — it's part of the identity key, so changing it
+// would orphan the doc's own id/key. Delete + re-add for that.
 
 router.patch("/:id", async (req, res) => {
   const idParsed = IdParamSchema.safeParse(req.params.id);
   if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
 
-  const parsed = RenameSchema.safeParse(req.body);
+  const parsed = PatchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
   try {
@@ -243,9 +149,10 @@ router.patch("/:id", async (req, res) => {
     const { resource } = await productsContainer.item(idParsed.data, familyId).replace(
       {
         ...existing,
-        canonicalName: parsed.data.canonicalName.trim(),
-        nameLocked:    true,   // a hand-picked name outranks any future AI wording
-        updatedAt:     new Date().toISOString(),
+        ...(parsed.data.canonicalName !== undefined ? { canonicalName: parsed.data.canonicalName.trim() } : {}),
+        ...(parsed.data.defaultSize    !== undefined ? { defaultSize: parsed.data.defaultSize } : {}),
+        nameLocked: true,   // an explicit edit outranks any future AI wording
+        updatedAt:  new Date().toISOString(),
       },
       { accessCondition: { type: "IfMatch", condition: etag } },
     );
