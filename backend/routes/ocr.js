@@ -116,12 +116,16 @@ const LlmItemSchema = z.object({
   categoryConfidence: z.number().min(0).max(1).optional().default(0.5),
   // Structured product identity for price-history analytics. Optional —
   // the frontend falls back to regex parsing of `description` without it.
+  // Every field is nullable because the model emits `null` (not omission)
+  // for "not applicable", and `.catch(undefined)` makes a malformed
+  // product degrade to "no structured data" instead of failing the WHOLE
+  // receipt scan — one bad item must not nuke the other 27.
   product: z.object({
-    name:      z.string().min(1).max(120),          // clean name, no size/pack tokens
-    size:      z.number().positive().nullable().optional(),  // single-package size in `unit`
+    name:      z.string().min(1).max(120).nullable().optional(),  // clean name, no size/pack tokens
+    size:      z.number().positive().nullable().optional(),       // single-package size in `unit`
     unit:      z.enum(["g", "ml", "szt"]).nullable().optional(),
-    packCount: z.number().int().positive().max(99).optional(),
-  }).optional().nullable(),
+    packCount: z.number().int().positive().max(99).nullable().optional(),
+  }).optional().nullable().catch(undefined),
 });
 
 const LlmResponseSchema = z.object({

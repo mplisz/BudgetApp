@@ -76,13 +76,15 @@ const TransactionBaseSchema = z.object({
                       originalAmount:  z.number().optional(),
                       originalCurrency: z.string().max(5).optional(),
                       // Structured product identity from the OCR AI —
-                      // consumed by the price-history analytics.
+                      // consumed by the price-history analytics. Fields are
+                      // nullable (the model emits null, not omission) and a
+                      // malformed product degrades to none via .catch().
                       product:          z.object({
-                        name:      z.string().max(120),
+                        name:      z.string().max(120).nullable().optional(),
                         size:      z.number().nullable().optional(),
                         unit:      z.enum(["g", "ml", "szt"]).nullable().optional(),
-                        packCount: z.number().int().positive().max(99).optional(),
-                      }).nullable().optional(),
+                        packCount: z.number().int().positive().max(99).nullable().optional(),
+                      }).nullable().optional().catch(undefined),
                     })).max(60).optional(),
   voucherAllocations: z.array(z.object({
                       voucherId: z.string().min(1),
