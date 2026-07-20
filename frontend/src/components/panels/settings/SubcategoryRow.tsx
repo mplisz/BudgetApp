@@ -30,19 +30,21 @@ interface SubcategoryRowProps {
 export const LUXMED_CATEGORY_ID = "cat_zdrowie";
 
 /**
- * THE single definition of the subcategory grid columns. The header
- * (CategoriesSection) and every row must agree — when they drifted apart
- * the table visibly skewed and extra buttons wrapped onto a second line.
- * Column count per type:
- *   EXPENSE + Zdrowie: name | priority | recurring | critical | luxmed | prices | archive
- *   EXPENSE:           name | priority | recurring | critical | prices | archive
- *   other:             name | archive
+ * THE single definition of the subcategory grid columns, shared by the
+ * header (CategoriesSection) and every row — when those drifted apart the
+ * table skewed and buttons wrapped onto a second line.
+ *
+ * EXPENSE always has the SAME seven columns
+ *   name | priority | recurring | critical | luxmed | prices | archive
+ * even outside the health category, where the LuxMed cell renders empty.
+ * A constant column count is what keeps header and rows aligned; a
+ * conditional one is how they drift.
  */
-export function subcategoryGridColumns(type: string | undefined, categoryId: string | null): string {
-  if (type !== "EXPENSE") return "1fr 40px";
-  return categoryId === LUXMED_CATEGORY_ID
-    ? "minmax(90px, 1fr) 128px 90px 90px 90px 90px 36px"
-    : "minmax(120px, 1fr) 128px 90px 90px 90px 36px";
+export const SUBCAT_MIN_WIDTH = 560;   // below this the table scrolls instead of crushing
+
+export function subcategoryGridColumns(type: string | undefined): string {
+  if (type !== "EXPENSE") return "1fr 34px";
+  return "minmax(110px, 1fr) 120px 82px 82px 82px 82px 34px";
 }
 
 export function SubcategoryRow({ subName, subData, parentId, parentType, parentIsArchived, onUpdate, onError }: SubcategoryRowProps) {
@@ -128,7 +130,10 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
     </button>
   ) : null;
 
-  const luxmedBtn = (isExpense && isZdrowieCategory) ? (
+  // The LuxMed column exists for every EXPENSE subcategory so the grid
+  // keeps a constant shape; outside the health category the cell is
+  // simply empty (the toggle only makes sense there).
+  const luxmedBtn = !isExpense ? null : !isZdrowieCategory ? <span /> : (
     <button
       onClick={() => !isDisabled && onUpdate(subData.id, subName, parentId, { canBeLuxmed: !subData.canBeLuxmed })}
       disabled={isDisabled}
@@ -151,7 +156,7 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
     >
       🏥 {subData.canBeLuxmed ? "LuxMed" : "—"}
     </button>
-  ) : null;
+  );
 
   // Price tracking: which subcategories feed the product price history.
   // Available for every EXPENSE subcategory — you decide what is worth
@@ -242,7 +247,7 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
   return (
     <div style={{
       display:             "grid",
-      gridTemplateColumns: subcategoryGridColumns(parentType, parentId),
+      gridTemplateColumns: subcategoryGridColumns(parentType),
       gap:                 6,
       alignItems:          "center",
       padding:             "8px 0",

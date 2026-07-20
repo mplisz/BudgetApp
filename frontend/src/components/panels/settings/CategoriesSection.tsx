@@ -10,7 +10,7 @@ import { EmojiSelector }     from "../../ui/EmojiSelector";
 import { ConfirmModal }      from "../../ui/ConfirmModal";
 import { CollapsibleSection } from "../../ui/index";
 import { CategoryRow }       from "./CategoryRow";
-import { SubcategoryRow, subcategoryGridColumns, LUXMED_CATEGORY_ID } from "./SubcategoryRow";
+import { SubcategoryRow, subcategoryGridColumns, SUBCAT_MIN_WIDTH } from "./SubcategoryRow";
 import { ArchiveToggleButton } from "./ArchiveToggleButton";
 import { useCategoryManager } from "../../../hooks/useCategoryManager";
 import type { CategoryUpdates } from "../../../hooks/useCategoryManager";
@@ -182,7 +182,10 @@ export function CategoriesSection() {
             </div>
 
             {/* ── RIGHT COLUMN ──────────────────────────────── */}
-            <div style={{ display: "flex", flexDirection: "column" }}>
+            {/* minWidth:0 is load-bearing: a grid item defaults to
+                min-width:auto, so a wide table would push this track past
+                the card instead of letting the table scroll inside it. */}
+            <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
               {expandedCat ? (
                 <div style={s.card}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -276,11 +279,17 @@ export function CategoriesSection() {
                   </div>
 
                   {/* Subcategory list header */}
+                  {/* One horizontal scroller wraps header AND rows so they
+                      scroll together; the inner min-width stops the columns
+                      from crushing on a narrow screen. */}
+                  <div style={{ overflowX: "auto" }}>
+                    <div style={{ minWidth: expandedCat.type === "EXPENSE" ? SUBCAT_MIN_WIDTH : "auto" }}>
+
                   {/* Columns come from ONE shared definition (SubcategoryRow)
                       so the header can never drift from the rows again. */}
                   <div data-subcat-header style={{
                     display: "grid",
-                    gridTemplateColumns: subcategoryGridColumns(expandedCat.type, expandedCat.id),
+                    gridTemplateColumns: subcategoryGridColumns(expandedCat.type),
                     gap: 6, marginBottom: 8,
                   }}>
                     <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>NAZWA</span>
@@ -289,10 +298,7 @@ export function CategoriesSection() {
                         <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>PRIORYTET</span>
                         <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>CYKL.</span>
                         <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>KRYT.</span>
-                        {/* LuxMed column exists only where the row renders it */}
-                        {expandedCat.id === LUXMED_CATEGORY_ID && (
-                          <span style={{ color: c.cyan, fontSize: 10, fontWeight: 700 }}>LUXMED</span>
-                        )}
+                        <span style={{ color: c.cyan,    fontSize: 10, fontWeight: 700 }}>LUXMED</span>
                         <span style={{ color: c.success, fontSize: 10, fontWeight: 700 }}>CENY</span>
                       </>
                     )}
@@ -321,6 +327,9 @@ export function CategoriesSection() {
                         </div>
                       ))}
                   </div>
+
+                    </div>{/* min-width wrapper */}
+                  </div>{/* horizontal scroller */}
                 </div>
               ) : (
                 <div style={{
