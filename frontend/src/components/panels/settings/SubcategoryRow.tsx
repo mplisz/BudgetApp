@@ -26,15 +26,32 @@ interface SubcategoryRowProps {
   onError:          (msg: string) => void;
 }
 
+/** LuxMed flags only make sense inside the health category. */
+export const LUXMED_CATEGORY_ID = "cat_zdrowie";
+
+/**
+ * THE single definition of the subcategory grid columns. The header
+ * (CategoriesSection) and every row must agree — when they drifted apart
+ * the table visibly skewed and extra buttons wrapped onto a second line.
+ * Column count per type:
+ *   EXPENSE + Zdrowie: name | priority | recurring | critical | luxmed | prices | archive
+ *   EXPENSE:           name | priority | recurring | critical | prices | archive
+ *   other:             name | archive
+ */
+export function subcategoryGridColumns(type: string | undefined, categoryId: string | null): string {
+  if (type !== "EXPENSE") return "1fr 40px";
+  return categoryId === LUXMED_CATEGORY_ID
+    ? "minmax(90px, 1fr) 128px 90px 90px 90px 90px 36px"
+    : "minmax(120px, 1fr) 128px 90px 90px 90px 36px";
+}
+
 export function SubcategoryRow({ subName, subData, parentId, parentType, parentIsArchived, onUpdate, onError }: SubcategoryRowProps) {
   const isMobile   = useIsMobile();
   const isExpense  = parentType === "EXPENSE";
   const isDisabled = subData.isArchived || parentIsArchived;
 
   // canBeLuxmed toggle pokazujemy tylko dla kategorii Zdrowie (EXPENSE).
-  // Sprawdzamy po parentId żeby nie musieć przekazywać dodatkowego flaga —
-  // wszystkie znane ID kategorii Zdrowie zaczynają się od "cat_zdrowie".
-  const isZdrowieCategory = parentId === "cat_zdrowie";
+  const isZdrowieCategory = parentId === LUXMED_CATEGORY_ID;
 
   // ── Cells (zdefiniowane raz, użyte w obu układach) ────────────
 
@@ -82,7 +99,7 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
         opacity:       isDisabled ? 0.4 : 1,
       }}
     >
-      🔄 {subData.canBeRecurring ? "Cykliczne" : "—"}
+      🔄 {subData.canBeRecurring ? "Cykl." : "—"}
     </button>
   ) : null;
 
@@ -107,7 +124,7 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
         opacity:       isDisabled ? 0.4 : 1,
       }}
     >
-      🔒 {subData.isCritical ? "Krytyczne" : "—"}
+      🔒 {subData.isCritical ? "Kryt." : "—"}
     </button>
   ) : null;
 
@@ -225,15 +242,8 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
   return (
     <div style={{
       display:             "grid",
-      // EXPENSE (Zdrowie): name | priority | recurring | critical | luxmed | archive
-      // EXPENSE (inne):    name | priority | recurring | critical | archive
-      // INCOME/SAVING/TRANSFER: name | archive
-      gridTemplateColumns: isExpense
-        ? isZdrowieCategory
-          ? "1fr 140px 100px 100px 100px 40px"
-          : "1fr 140px 100px 100px 40px"
-        : "1fr 40px",
-      gap:                 8,
+      gridTemplateColumns: subcategoryGridColumns(parentType, parentId),
+      gap:                 6,
       alignItems:          "center",
       padding:             "8px 0",
       borderBottom:        `1px solid ${c.border}`,

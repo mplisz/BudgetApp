@@ -10,7 +10,7 @@ import { EmojiSelector }     from "../../ui/EmojiSelector";
 import { ConfirmModal }      from "../../ui/ConfirmModal";
 import { CollapsibleSection } from "../../ui/index";
 import { CategoryRow }       from "./CategoryRow";
-import { SubcategoryRow }    from "./SubcategoryRow";
+import { SubcategoryRow, subcategoryGridColumns, LUXMED_CATEGORY_ID } from "./SubcategoryRow";
 import { ArchiveToggleButton } from "./ArchiveToggleButton";
 import { useCategoryManager } from "../../../hooks/useCategoryManager";
 import type { CategoryUpdates } from "../../../hooks/useCategoryManager";
@@ -276,20 +276,24 @@ export function CategoriesSection() {
                   </div>
 
                   {/* Subcategory list header */}
+                  {/* Columns come from ONE shared definition (SubcategoryRow)
+                      so the header can never drift from the rows again. */}
                   <div data-subcat-header style={{
-                    display: "grid", 
-                    gridTemplateColumns: expandedCat.type === "EXPENSE"
-                      ? "1fr 140px 100px 100px 100px 40px"
-                      : "1fr 40px",
-                    gap: 8, marginBottom: 8,
+                    display: "grid",
+                    gridTemplateColumns: subcategoryGridColumns(expandedCat.type, expandedCat.id),
+                    gap: 6, marginBottom: 8,
                   }}>
                     <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>NAZWA</span>
                     {expandedCat.type === "EXPENSE" && (
                       <>
                         <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>PRIORYTET</span>
-                        <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>CYKLICZNE</span>
-                        <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>KRYTYCZNE</span>
-                        <span style={{ color: c.cyan,  fontSize: 10, fontWeight: 700 }}>LUXMED</span>
+                        <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>CYKL.</span>
+                        <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>KRYT.</span>
+                        {/* LuxMed column exists only where the row renders it */}
+                        {expandedCat.id === LUXMED_CATEGORY_ID && (
+                          <span style={{ color: c.cyan, fontSize: 10, fontWeight: 700 }}>LUXMED</span>
+                        )}
+                        <span style={{ color: c.success, fontSize: 10, fontWeight: 700 }}>CENY</span>
                       </>
                     )}
                   </div>
