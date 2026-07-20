@@ -187,10 +187,15 @@ export function CategoriesSection() {
             {/* ── RIGHT COLUMN ──────────────────────────────── */}
             {/* minWidth:0 is load-bearing: a grid item defaults to
                 min-width:auto, so a wide table would push this track past
-                the card instead of letting the table scroll inside it. */}
-            <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                the card instead of letting the table scroll inside it.
+                minHeight:0 does the same job vertically — it lets the list
+                below shrink and scroll instead of stretching the row. */}
+            <div style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
               {expandedCat ? (
-                <div style={s.card}>
+                // flex:1 makes the card match the left column's height, so a
+                // short list leaves no gap beside the main categories and a
+                // long one scrolls instead of overshooting it.
+                <div style={{ ...s.card, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                     <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase" }}>
                       {expandedCat.icon} {expandedCat.name} — subkategorie
@@ -296,12 +301,11 @@ export function CategoriesSection() {
                   </div>
 
                   {/* Subcategory list header */}
-                  {/* The list grows to fit — no inner vertical scroll, so the
-                      card fills the panel instead of boxing a scrollbar into
-                      a corner. Horizontal scrolling is the ONLY scroll here,
-                      and it wraps header + rows together so they can never
+                  {/* Grows to fill the card, scrolls only once it would grow
+                      past the left column. ONE scroller owns both axes, and
+                      it wraps header + rows together so they can never
                       desynchronise (a second scroller was what skewed them). */}
-                  <div style={{ overflowX: "auto" }}>
+                  <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
                     <div style={{ minWidth: expandedCat.type === "EXPENSE" ? SUBCAT_MIN_WIDTH : "auto" }}>
 
                   {/* Columns come from ONE shared definition (SubcategoryRow)
