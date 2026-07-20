@@ -210,6 +210,28 @@ describe("buildPriceHistory — grouping", () => {
     expect(products[0].merchants).toContain("(bez sklepu)");
   });
 
+  it("does not square a piece count echoed into both size and packCount", () => {
+    // "Napój Coca-Cola Zero x2" — the model reports the count twice.
+    // 11,98 zł buys TWO cans (5,99 each), not four.
+    const txs = [1, 2, 3].map(i => tx({
+      date: `2026-0${i}-10`, merchant: "Delikatesy Centrum",
+      items: [line("Coca-Cola Zero", 11.98, 2, "szt", 2)],
+    }));
+    const [product] = buildPriceHistory(txs).products;
+    expect(product.occurrences[0].size).toBe(2);
+    expect(product.occurrences[0].unitPrice).toBeCloseTo(5.99, 2);
+  });
+
+  it("still multiplies a genuine nesting (10 pieces per pack, 2 packs)", () => {
+    const txs = [1, 2, 3].map(i => tx({
+      date: `2026-0${i}-10`, merchant: "Lidl",
+      items: [line("Jaja L", 24, 10, "szt", 2)],
+    }));
+    const [product] = buildPriceHistory(txs).products;
+    expect(product.occurrences[0].size).toBe(20);
+    expect(product.occurrences[0].unitPrice).toBeCloseTo(1.2, 2);
+  });
+
   it("multiplies multipacks into the occurrence size", () => {
     const txs = [1, 2, 3].map(i => tx({
       date: `2026-0${i}-10`, merchant: "Lidl",

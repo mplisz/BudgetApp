@@ -247,8 +247,14 @@ function parseItem(item: PriceLineItem): (ParsedName & { label: string }) | null
   const pack = structured.packCount && structured.packCount > 0 ? structured.packCount : 1;
   const unit = structured.unit ?? null;
   const packSize = unit && structured.size && structured.size > 0 ? structured.size : null;
+
+  // For "szt" both fields carry the SAME dimension — a count — so a model
+  // that echoes "x2" into size AND packCount would square it (2 cans → 4).
+  // Collapse only when they match: different values are a real nesting
+  // ("Jaja 10szt x2" = 10 per pack × 2 packs = 20), which must still multiply.
+  const countEchoed = unit === "szt" && packSize !== null && packSize === pack;
   const size = packSize !== null
-    ? packSize * pack
+    ? (countEchoed ? packSize : packSize * pack)
     : (unit === "szt" && pack > 1 ? pack : null);
   const label = structured.name.trim();
   return { nameKey: foldText(label).replace(/\s+/g, " ").trim(), size, unit, packSize, label };

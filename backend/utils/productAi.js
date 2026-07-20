@@ -58,10 +58,16 @@ const PRODUCT_RULES = `- "name": czysta nazwa produktu BEZ gramatury, pojemnośc
 - "size": rozmiar JEDNEGO opakowania przeliczony do jednostki bazowej ("kg"→g, "l"→ml).
 - "unit": "g", "ml" lub "szt". Dla towarów ważonych podaj wagę z paragonu w gramach.
 - "packCount": liczba sztuk w wielopaku (np. "0,5L x4" → 4). Pomiń gdy 1.
+- KRYTYCZNE: "size" to rozmiar JEDNEJ sztuki — NIGDY liczba sztuk z "xN".
+  Gdy pozycja ma "xN", ale nie znasz pojemności/wagi jednej sztuki, ustaw
+  size: null, unit: "szt", packCount: N. Nie powtarzaj N w "size" —
+  inaczej wyjdzie N×N (np. "x2" zostanie policzone jako 4 sztuki).
 Przykłady:
   "ŻUBR PUSZKA 0,5L x4"        → {"name": "Żubr puszka", "size": 500, "unit": "ml", "packCount": 4}
+  "Napój Coca-Cola Zero x2"    → {"name": "Coca-Cola Zero", "size": null, "unit": "szt", "packCount": 2}
   "Filet kurczaka 0,442 kg"    → {"name": "Filet z piersi kurczaka", "size": 442, "unit": "g"}
   "JAJA L 10SZT"               → {"name": "Jaja L", "size": 10, "unit": "szt"}
+  "JAJA L 10SZT x2"            → {"name": "Jaja L", "size": 10, "unit": "szt", "packCount": 2}
   "PAPIER TOALETOWY"           → {"name": "Papier toaletowy", "size": null, "unit": null}
 Gdy nie da się ustalić rozmiaru — size/unit: null, ale "name" podaj ZAWSZE.`;
 
