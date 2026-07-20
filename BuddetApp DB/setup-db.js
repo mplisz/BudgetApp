@@ -14,16 +14,17 @@ const databaseDefinition = { id: "BudgetDB" };
 
 const containers = [
   { id: "Categories",            partitionKey: "/userId"  },
- // { id: "Tags",                  partitionKey: "/userId"  },
-  { id: "Limits",                partitionKey: "/userId"  }, 
-  { id: "Vouchers",                partitionKey: "/userId"  },
+  //{ id: "Limits",                partitionKey: "/userId"  }, 
+  //{ id: "Vouchers",                partitionKey: "/userId"  },
   { id: "Transactions",          partitionKey: "/userId"  },
   { id: "PlannedExpenses",       partitionKey: "/userId"  },
   { id: "RefreshTokens",         partitionKey: "/email"   },
   { id: "Settings",              partitionKey: "/userId"  },
   { id: "Months",                partitionKey: "/userId"  },
   { id: "Tags",              partitionKey: "/userId"  },
-  {id:  "Receipts",               partitionKey: "/userId" }
+  {id:  "Receipts",               partitionKey: "/userId" },
+  { id: "RecurringTransactions",              partitionKey: "/userId"  },
+  { id: "Products",              partitionKey: "/userId"  },
 ];
 
 async function setup() {

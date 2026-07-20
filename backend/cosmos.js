@@ -54,6 +54,7 @@ const limitsContainer        = database.container("Limits");
 const recurringContainer     = database.container("RecurringTransactions");
 const plannedContainer       = database.container("PlannedExpenses");
 const receiptsContainer       = database.container("Receipts");
+const productsContainer      = database.container("Products");
 
 module.exports = {
   categoriesContainer,
@@ -66,5 +67,6 @@ module.exports = {
   limitsContainer,
   recurringContainer,
   plannedContainer,
-  receiptsContainer
+  receiptsContainer,
+  productsContainer
 };

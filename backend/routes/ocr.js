@@ -41,7 +41,8 @@ const { z }   = require("zod");
 const sharp   = require("sharp");
 const { AzureOpenAI } = require("openai");
 
-const { categoriesContainer, receiptsContainer, settingsContainer } = require("../cosmos");
+const { categoriesContainer, receiptsContainer, settingsContainer, productsContainer } = require("../cosmos");
+const { fetchTopProductNames } = require("../utils/productCatalog");
 const { cleanMerchant, cleanNip, merchantExists, rememberMerchant } = require("../utils/merchant");
 const {
   normDesc, normMerchant, fetchCorrections, rememberCorrections,
@@ -204,7 +205,7 @@ async function mistralOcrExtract(buffer, mime = "image/jpeg") {
 
 // ── Prompt builder ────────────────────────────────────────────
 
-function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "") {
+function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "", knownProducts = []) {
   // categoryTree: [{ name, subcategories: [name, ...] }, ...]
   const catLines = categoryTree
     .map(c => `- ${c.name}: ${c.subcategories.join(", ") || "(brak podkategorii)"}`)
@@ -212,6 +213,11 @@ function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "
   const merchantLine = knownMerchants.length
     ? knownMerchants.join(", ")
     : "(brak zapisanych sklepów)";
+  // Catalog feedback: reuse the exact product.name spelling already
+  // learned, so the same product stays one entry across receipts/shops.
+  const productSection = knownProducts.length
+    ? `\nZNANE PRODUKTY (użyj DOKŁADNIE tej pisowni w "product.name" gdy pozycja to ten sam produkt):\n${knownProducts.join(", ")}\n`
+    : "";
 
   return `Jesteś asystentem OCR analizującym zdjęcia paragonów fiskalnych (zwykle polskich, ale możliwe też zagraniczne).
 
@@ -300,7 +306,7 @@ Przykłady:
   "JAJA L 10SZT"               → {"name": "Jaja L", "size": 10, "unit": "szt"}
   "PAPIER TOALETOWY"           → {"name": "Papier toaletowy", "size": null, "unit": null}
 Gdy nie da się ustalić rozmiaru — size/unit: null, ale "name" podaj ZAWSZE.
-KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
+${productSection}KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
 
 KATEGORIE UŻYTKOWNIKA:
 ${catLines}
@@ -648,9 +654,10 @@ router.post("/receipt", async (req, res) => {
     if (categoryTree.length === 0) {
       return res.status(422).json({ error: "No expense categories defined." });
     }
-    const [{ merchants: knownMerchants, nips: knownNips }, corrections] = await Promise.all([
+    const [{ merchants: knownMerchants, nips: knownNips }, corrections, knownProducts] = await Promise.all([
       fetchKnownMerchants(familyId),
       fetchCorrections(settingsContainer, familyId),
+      fetchTopProductNames(productsContainer, familyId),
     ]);
 
     // 3a. PREFERRED: dedicated OCR engine reads the receipt as text.
@@ -691,7 +698,7 @@ router.post("/receipt", async (req, res) => {
         { role: "system", content: buildSystemPrompt(categoryTree.map(c => ({
             name: c.name,
             subcategories: c.subcategories.map(s => s.name),
-          })), knownMerchants, buildLearnedSection(corrections)) },
+          })), knownMerchants, buildLearnedSection(corrections), knownProducts) },
         { role: "user", content: userContent },
       ],
       // gpt-5.x renamed max_tokens → max_completion_tokens and rejects

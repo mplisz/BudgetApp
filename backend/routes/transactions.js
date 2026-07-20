@@ -27,7 +27,7 @@
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const { transactionsContainer, vouchersContainer, monthsContainer, receiptsContainer, settingsContainer } = require("../cosmos");
+const { transactionsContainer, vouchersContainer, monthsContainer, receiptsContainer, settingsContainer, productsContainer } = require("../cosmos");
 const { requireAuth }                                                 = require("../middleware/auth");
 const {
   generateId, readItem, readItemWithEtag,
@@ -44,6 +44,7 @@ const {
 const { getReceiptBlobContainer, setReceiptRetention } = require("../utils/receiptStorage");
 router.use(requireAuth);
 const { cleanMerchant, merchantExists, rememberMerchant, rememberMerchantNip } = require("../utils/merchant");
+const { rememberProducts } = require("../utils/productCatalog");
 const { resolveTransferTarget } = require("../utils/transferCategory");
 
 
@@ -389,7 +390,12 @@ router.post("/", async (req, res) => {
     if (createdTx.merchant) {
       rememberMerchant(settingsContainer, familyId, createdTx.merchant);
     }
-    
+    // Fold any structured line-item products into the family catalog.
+    // Fire-and-forget — a catalog failure must never fail the tx save.
+    if (Array.isArray(createdTx.lineItems) && createdTx.lineItems.length > 0) {
+      rememberProducts(productsContainer, familyId, createdTx);
+    }
+
     console.log(`[TX POST] Created: ${createdTx.id}${createdTx.useVoucher ? ` (${createdTx.voucherAllocations.length} voucher[s])` : ""}`);
     res.status(201).json(createdTx);
   } catch (err) {
@@ -476,6 +482,9 @@ router.post("/batch", async (req, res) => {
       }
       if (tx.receiptId) promoteReceipt(tx.receiptId, familyId, tx.id, !!tx.isWarranty, tx.merchant);
       if (tx.merchant)  rememberMerchant(settingsContainer, familyId, tx.merchant);
+      if (Array.isArray(tx.lineItems) && tx.lineItems.length > 0) {
+        rememberProducts(productsContainer, familyId, tx);
+      }
     }
 
     console.log(`[TX BATCH] Created ${created.length} tx, split ${voucherIds.length} voucher(s).`);
