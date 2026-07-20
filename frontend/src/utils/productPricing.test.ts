@@ -7,137 +7,90 @@
 // Watch:      npm run test:watch
 //
 // Coverage targets:
-//   - normalizeProductName: diacritics, size units, decimals, multipacks,
-//     punctuation-glued sizes, percent-not-a-size, no-size fallback
+//   - scope gates: AI-structured product required, tracked subcategories
+//   - catalogKey: must match the backend productKey byte for byte
 //   - computeUnitPrice / formatSize: unit math and display
-//   - productMetric: unit-price vs line-price fallback rules
-//   - buildPriceHistory: grouping, filters, stats, shrink detection
+//   - productMetric: dominant-unit selection, non-comparable rows nulled
+//   - buildPriceHistory: grouping, catalog identity, same-day merge,
+//     shrink detection, stats
 // ============================================================
 
 import { describe, it, expect } from "vitest";
 import {
-  normalizeProductName,
-  cleanProductLabel,
   catalogKey,
   computeUnitPrice,
   formatSize,
   productMetric,
   buildPriceHistory,
   MIN_OCCURRENCES,
+  type SizeUnit,
+  type PriceLineItem,
   type PricedTransaction,
   type ProductHistory,
 } from "./productPricing";
 
 // ── Fixtures ─────────────────────────────────────────────────
 
-function tx(o: {
-  date: string;
-  merchant?: string | null;
-  items?: PricedTransaction["lineItems"];
-  type?: string;
-  amount?: number;
-  description?: string | null;
-  subcategoryId?: string | null;
-  subcategoryName?: string | null;
-}): PricedTransaction {
+/** A receipt line as the OCR AI delivers it: raw text + structured product. */
+function line(
+  name: string,
+  amount: number,
+  size: number | null = null,
+  unit: SizeUnit | null = null,
+  packCount?: number,
+): PriceLineItem {
   return {
-    type:            o.type ?? "EXPENSE",
-    date:            o.date,
-    budgetMonth:     o.date.slice(0, 7),
-    merchant:        o.merchant,
-    amount:          o.amount ?? 0,
-    description:     o.description,
-    subcategoryId:   o.subcategoryId,
-    subcategoryName: o.subcategoryName,
-    lineItems:       o.items,
+    description: `${name}${size ? ` ${size}${unit ?? ""}` : ""}`,
+    amount,
+    product: { name, size, unit, packCount },
   };
 }
 
-/** N purchases of the same item, one per month starting 2026-01. */
-function purchases(description: string, amounts: number[], merchant = "Biedronka") {
+function tx(o: {
+  date: string;
+  merchant?: string | null;
+  items?: PriceLineItem[];
+  type?: string;
+  subcategoryId?: string | null;
+}): PricedTransaction {
+  return {
+    type:          o.type ?? "EXPENSE",
+    date:          o.date,
+    budgetMonth:   o.date.slice(0, 7),
+    merchant:      o.merchant,
+    subcategoryId: o.subcategoryId,
+    lineItems:     o.items,
+  };
+}
+
+/** N monthly purchases of one product, starting 2026-01. */
+function buys(
+  name: string,
+  amounts: number[],
+  opts: { merchant?: string; size?: number | null; unit?: SizeUnit | null } = {},
+) {
+  const { merchant = "Biedronka", size = null, unit = null } = opts;
   return amounts.map((amount, i) =>
     tx({
       date: `2026-${String(i + 1).padStart(2, "0")}-10`,
       merchant,
-      items: [{ description, amount }],
+      items: [line(name, amount, size, unit)],
     }));
 }
 
-// ── normalizeProductName ─────────────────────────────────────
+// ── catalogKey (must match backend productKey) ───────────────
 
-describe("normalizeProductName", () => {
-  it("extracts grams and strips diacritics", () => {
-    expect(normalizeProductName("MASŁO EKSTRA 200G"))
-      .toEqual({ nameKey: "maslo ekstra", size: 200, unit: "g", packSize: 200 });
+describe("catalogKey", () => {
+  it("folds diacritics, drops punctuation, appends the unit", () => {
+    expect(catalogKey("Mleko UHT 3,2%", "ml")).toBe("mleko uht 3 2|ml");
+    expect(catalogKey("ŻUBR PUSZKA", "ml")).toBe("zubr puszka|ml");
   });
-
-  it("handles size glued to the name with a dot", () => {
-    expect(normalizeProductName("MASLO EKST.200G"))
-      .toEqual({ nameKey: "maslo ekst", size: 200, unit: "g", packSize: 200 });
+  it("makes comma and dot agree", () => {
+    expect(catalogKey("Mleko UHT 3.2%", "ml")).toBe(catalogKey("Mleko UHT 3,2%", "ml"));
   });
-
-  it("gives the same key for 200g and 195g variants (shrinkflation)", () => {
-    const a = normalizeProductName("MASLO EKST.200G");
-    const b = normalizeProductName("MASLO EKST. 195 G");
-    expect(a.nameKey).toBe(b.nameKey);
-    expect(b.size).toBe(195);
-  });
-
-  it("converts kg and l to base units", () => {
-    expect(normalizeProductName("Cukier 1kg").size).toBe(1000);
-    expect(normalizeProductName("Cukier 1kg").unit).toBe("g");
-    expect(normalizeProductName("Woda 1,5L")).toMatchObject({ size: 1500, unit: "ml" });
-    expect(normalizeProductName("Sok 0.33l")).toMatchObject({ size: 330, unit: "ml" });
-  });
-
-  it("keeps percent as part of the name, not a size", () => {
-    expect(normalizeProductName("Mleko UHT 3,2% 1L"))
-      .toEqual({ nameKey: "mleko uht 3,2%", size: 1000, unit: "ml", packSize: 1000 });
-  });
-
-  it("multiplies multipacks into the size", () => {
-    expect(normalizeProductName("WODA 6x1,5L")).toMatchObject({ size: 9000, unit: "ml", packSize: 1500 });
-    expect(normalizeProductName("Piwo 4 x 500 ml")).toMatchObject({ size: 2000, unit: "ml" });
-  });
-
-  it("handles the multipack SUFFIX form (size before xN)", () => {
-    expect(normalizeProductName("Żubr puszka 0,5 l x4"))
-      .toEqual({ nameKey: "zubr puszka", size: 2000, unit: "ml", packSize: 500 });
-    expect(computeUnitPrice(35.12, 2000, "ml")).toBeCloseTo(17.56, 2);   // zł/l, not ×4
-  });
-
-  it("treats a bare xN with no size as N pieces", () => {
-    expect(normalizeProductName("BUŁKA KAJZERKA x6"))
-      .toMatchObject({ nameKey: "bulka kajzerka", size: 6, unit: "szt" });
-  });
-
-  it("supports pieces (szt)", () => {
-    expect(normalizeProductName("JAJA L 10SZT"))
-      .toEqual({ nameKey: "jaja l", size: 10, unit: "szt", packSize: 10 });
-  });
-
-  it("returns null size when none present", () => {
-    expect(normalizeProductName("Chleb wiejski"))
-      .toEqual({ nameKey: "chleb wiejski", size: null, unit: null, packSize: null });
-  });
-
-  it("falls back to the folded raw name when only a size remains", () => {
-    const parsed = normalizeProductName("200g");
-    expect(parsed.nameKey.length).toBeGreaterThan(0);
-  });
-});
-
-describe("cleanProductLabel", () => {
-  it("strips size tokens but keeps the original casing", () => {
-    expect(cleanProductLabel("Filet z piersi kurczaka z grzędy 0,442 kg"))
-      .toBe("Filet z piersi kurczaka z grzędy");
-    expect(cleanProductLabel("MASLO EKST.200G")).toBe("MASLO EKST");
-    expect(cleanProductLabel("Żubr puszka 0,5 l x4")).toBe("Żubr puszka");
-    expect(cleanProductLabel("Mleko UHT 3,2% 1L")).toBe("Mleko UHT 3,2%");
-  });
-
-  it("falls back to the raw name when nothing but a size remains", () => {
-    expect(cleanProductLabel("200g")).toBe("200g");
+  it("keeps units distinct and returns null for empty", () => {
+    expect(catalogKey("Mleko", "szt")).not.toBe(catalogKey("Mleko", "ml"));
+    expect(catalogKey("   ", null)).toBeNull();
   });
 });
 
@@ -171,29 +124,63 @@ describe("formatSize", () => {
   });
 });
 
-// ── catalogKey (must match backend productKey) ───────────────
+// ── Scope gates ──────────────────────────────────────────────
 
-describe("catalogKey", () => {
-  it("folds diacritics, drops punctuation, appends the unit", () => {
-    expect(catalogKey("Mleko UHT 3,2%", "ml")).toBe("mleko uht 3 2|ml");
-    expect(catalogKey("ŻUBR PUSZKA", "ml")).toBe("zubr puszka|ml");
+describe("buildPriceHistory — scope", () => {
+  it("skips receipt lines with no AI-structured product", () => {
+    const txs = [1, 2, 3].map(i => tx({
+      date: `2026-0${i}-10`, merchant: "Lidl",
+      items: [{ description: "Napoj energetyczny", amount: 10 }],   // no product
+    }));
+    expect(buildPriceHistory(txs).products).toHaveLength(0);
   });
-  it("makes comma and dot agree", () => {
-    expect(catalogKey("Mleko UHT 3.2%", "ml")).toBe(catalogKey("Mleko UHT 3,2%", "ml"));
+
+  it("skips transactions with no line items at all (hand-typed entries)", () => {
+    const txs = [1, 2, 3].map(i => tx({ date: `2026-0${i}-10`, merchant: "Apteka" }));
+    expect(buildPriceHistory(txs).products).toHaveLength(0);
   });
-  it("keeps units distinct and returns null for empty", () => {
-    expect(catalogKey("Mleko", "szt")).not.toBe(catalogKey("Mleko", "ml"));
-    expect(catalogKey("   ", null)).toBeNull();
+
+  it("filters to the tracked subcategories when the set is supplied", () => {
+    const txs = [
+      ...[1, 2, 3].map(i => tx({
+        date: `2026-0${i}-10`, merchant: "Lidl", subcategoryId: "sub_meat",
+        items: [line("Mięso mielone wołowe", 19, 500, "g")],
+      })),
+      ...[1, 2, 3, 4].map(i => tx({
+        date: `2026-0${i}-11`, merchant: "Reserved", subcategoryId: "sub_clothes",
+        items: [line("Bluza", 100 + i)],
+      })),
+    ];
+    expect(buildPriceHistory(txs).products).toHaveLength(2);   // no filter → both
+
+    const tracked = buildPriceHistory(txs, undefined, undefined, new Set(["sub_meat"]));
+    expect(tracked.products).toHaveLength(1);
+    expect(tracked.products[0].label).toBe("Mięso mielone wołowe");
+  });
+
+  it("skips non-expenses and non-positive amounts", () => {
+    const txs = [
+      ...buys("Mleko", [3, 3, 3], { size: 1000, unit: "ml" }),
+      tx({ date: "2026-04-10", type: "INCOME", merchant: "Biedronka", items: [line("Mleko", 3, 1000, "ml")] }),
+      tx({ date: "2026-04-12", merchant: "Biedronka", items: [line("Mleko", 0, 1000, "ml")] }),
+    ];
+    expect(buildPriceHistory(txs).products[0].occurrences).toHaveLength(3);
+  });
+
+  it("restricts to the given months when provided", () => {
+    const txs = buys("Mleko", [3, 3, 3, 4], { size: 1000, unit: "ml" });   // 2026-01..04
+    const { products } = buildPriceHistory(txs, new Set(["2026-01", "2026-02", "2026-03"]));
+    expect(products[0].occurrences).toHaveLength(3);
   });
 });
 
-// ── buildPriceHistory ────────────────────────────────────────
+// ── Grouping ─────────────────────────────────────────────────
 
-describe("buildPriceHistory", () => {
-  it("groups the same product across shops by name key", () => {
+describe("buildPriceHistory — grouping", () => {
+  it("groups the same product across shops", () => {
     const txs = [
-      ...purchases("MASLO EKST.200G", [5, 6], "Biedronka"),
-      tx({ date: "2026-03-15", merchant: "Lidl", items: [{ description: "Maslo ekst 200g", amount: 7 }] }),
+      ...buys("Masło Ekstra", [5, 6], { merchant: "Biedronka", size: 200, unit: "g" }),
+      tx({ date: "2026-03-15", merchant: "Lidl", items: [line("Masło Ekstra", 7, 200, "g")] }),
     ];
     const { products } = buildPriceHistory(txs);
     expect(products).toHaveLength(1);
@@ -203,225 +190,173 @@ describe("buildPriceHistory", () => {
 
   it("drops products below MIN_OCCURRENCES but counts them in stats", () => {
     const txs = [
-      ...purchases("Mleko 1l", [3, 3, 3.5]),
-      ...purchases("Chleb", [4, 4]),           // only 2 purchases
+      ...buys("Mleko", [3, 3, 3.5], { size: 1000, unit: "ml" }),
+      ...buys("Chleb", [4, 4], { size: 500, unit: "g" }),   // only 2 purchases
     ];
     const { products, stats } = buildPriceHistory(txs);
-    expect(products.map(p => p.nameKey)).toEqual(["mleko"]);
+    expect(products.map(p => p.label)).toEqual(["Mleko"]);
     expect(stats.productsTotal).toBe(2);
     expect(stats.productsTracked).toBe(1);
     expect(MIN_OCCURRENCES).toBe(3);
   });
 
-  it("includes merchant-less buys under a placeholder, skips non-expenses and non-positive amounts", () => {
+  it("puts merchant-less buys under a placeholder", () => {
     const txs = [
-      ...purchases("Mleko 1l", [3, 3, 3]),
-      tx({ date: "2026-04-10", type: "INCOME", merchant: "Biedronka", items: [{ description: "Mleko 1l", amount: 3 }] }),
-      tx({ date: "2026-04-11", merchant: "",   items: [{ description: "Mleko 1l", amount: 3 }] }),   // no shop → placeholder
-      tx({ date: "2026-04-12", merchant: "Biedronka", items: [{ description: "Mleko 1l", amount: 0 }] }), // zero → skip
+      ...buys("Mleko", [3, 3, 3], { size: 1000, unit: "ml" }),
+      tx({ date: "2026-04-11", merchant: "", items: [line("Mleko", 3, 1000, "ml")] }),
     ];
     const { products } = buildPriceHistory(txs);
-    expect(products[0].occurrences).toHaveLength(4);          // 3 + the merchant-less one
-    expect(products[0].merchants).toContain("(bez sklepu)");  // NO_MERCHANT
+    expect(products[0].occurrences).toHaveLength(4);
+    expect(products[0].merchants).toContain("(bez sklepu)");
   });
 
-  it("includes single-item transactions with no lineItems, named by description", () => {
-    const txs = [1, 2, 3].map(i => tx({
-      date: `2026-0${i}-10`, merchant: "Rossmann",
-      amount: 40 + i, description: "Mleko modyfikowane Bebilon 800g",
-    }));
-    const { products } = buildPriceHistory(txs);
-    expect(products).toHaveLength(1);
-    expect(products[0].occurrences).toHaveLength(3);
-    expect(products[0].occurrences[0].size).toBe(800);   // parsed from the description
-  });
-
-  it("keeps size-less single-item buys (subcategory flags handle the noise now)", () => {
-    const txs = [1, 2, 3].map(i => tx({
-      date: `2026-0${i}-10`, merchant: "Apteka", amount: 45,
-      subcategoryName: "Mleko modyfikowane",
-    }));
-    const { products } = buildPriceHistory(txs);
-    expect(products).toHaveLength(1);
-    expect(products[0].label).toBe("Mleko modyfikowane");
-  });
-
-  it("filters to the tracked subcategories when the set is supplied", () => {
-    const txs = [
-      ...[1, 2, 3].map(i => tx({
-        date: `2026-0${i}-10`, merchant: "Lidl", subcategoryId: "sub_meat",
-        items: [{ description: "Mieso mielone 500g", amount: 19 }],
-      })),
-      // Clothing: the SHOP typed into the description — pure noise.
-      ...[1, 2, 3, 4].map(i => tx({
-        date: `2026-0${i}-11`, subcategoryId: "sub_clothes",
-        amount: 100 + i, description: "Reserved",
-      })),
-    ];
-    expect(buildPriceHistory(txs).products).toHaveLength(2);   // no filter → both
-
-    const tracked = buildPriceHistory(txs, undefined, undefined, new Set(["sub_meat"]));
-    expect(tracked.products).toHaveLength(1);
-    expect(tracked.products[0].label).toBe("Mieso mielone");
-  });
-
-  it("keeps size-less RECEIPT line items (real products, exempt from the rule)", () => {
+  it("multiplies multipacks into the occurrence size", () => {
     const txs = [1, 2, 3].map(i => tx({
       date: `2026-0${i}-10`, merchant: "Lidl",
-      items: [{ description: "Chleb wiejski", amount: 5 }],
+      items: [line("Żubr puszka", 35.12, 500, "ml", 4)],
     }));
-    expect(buildPriceHistory(txs).products).toHaveLength(1);
+    const { products } = buildPriceHistory(txs);
+    expect(products[0].occurrences[0].size).toBe(2000);            // 500 × 4
+    expect(products[0].occurrences[0].unitPrice).toBeCloseTo(17.56, 2);  // zł/l
   });
 
-  it("groups differently-named products into one via the catalog resolver", () => {
+  it("sorts occurrences chronologically and labels with the canonical name", () => {
     const txs = [
-      tx({ date: "2026-01-10", merchant: "Auchan",    items: [{ description: "Napój energetyczny", amount: 10.9 }] }),
-      tx({ date: "2026-02-10", merchant: "Auchan",    items: [{ description: "Napój energetyczny", amount: 10.9 }] }),
-      tx({ date: "2026-03-10", merchant: "Biedronka", items: [{ description: "Napój energetyczny Dzik", amount: 5.5 }] }),
-      tx({ date: "2026-04-10", merchant: "Biedronka", items: [{ description: "Napój energetyczny Dzik", amount: 5.5 }] }),
-    ];
-    // A merge in the catalog: both keys point to one canonical product.
-    const resolve = (key: string) =>
-      key === "napoj energetyczny|" || key === "napoj energetyczny dzik|"
-        ? { groupId: "prod_dzik", canonicalName: "Napój energetyczny Dzik" }
-        : null;
-    const { products } = buildPriceHistory(txs, undefined, resolve);
-    expect(products).toHaveLength(1);                        // 2+2 merged (>= MIN_OCCURRENCES)
-    expect(products[0].catalogId).toBe("prod_dzik");
-    expect(products[0].label).toBe("Napój energetyczny Dzik");
-    expect(products[0].merchants).toEqual(["Auchan", "Biedronka"]);
-    expect(products[0].occurrences).toHaveLength(4);
-  });
-
-  it("without a resolver keeps the name-fold grouping (two separate products)", () => {
-    const txs = [
-      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-10`, merchant: "Auchan",    items: [{ description: "Napój energetyczny", amount: 11 }] })),
-      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-11`, merchant: "Biedronka", items: [{ description: "Napój energetyczny Dzik", amount: 5.5 }] })),
-    ];
-    expect(buildPriceHistory(txs).products).toHaveLength(2);
-  });
-
-  it("restricts to the given months when provided", () => {
-    const txs = purchases("Mleko 1l", [3, 3, 3, 4]);  // 2026-01..04
-    const { products } = buildPriceHistory(txs, new Set(["2026-01", "2026-02", "2026-03"]));
-    expect(products[0].occurrences).toHaveLength(3);
-  });
-
-  it("sorts occurrences chronologically and labels with the freshest CLEAN wording", () => {
-    const txs = [
-      tx({ date: "2026-02-10", merchant: "Lidl", items: [{ description: "MASLO EKSTRA 200G", amount: 6 }] }),
-      tx({ date: "2026-01-10", merchant: "Lidl", items: [{ description: "Maslo ekstra 200 g", amount: 5 }] }),
-      tx({ date: "2026-03-10", merchant: "Lidl", items: [{ description: "Masło Ekstra 200g", amount: 7 }] }),
+      tx({ date: "2026-02-10", merchant: "Lidl", items: [line("Masło Ekstra", 6, 200, "g")] }),
+      tx({ date: "2026-01-10", merchant: "Lidl", items: [line("Masło Ekstra", 5, 200, "g")] }),
+      tx({ date: "2026-03-10", merchant: "Lidl", items: [line("Masło Ekstra", 7, 200, "g")] }),
     ];
     const { products } = buildPriceHistory(txs);
     expect(products[0].occurrences.map(o => o.price)).toEqual([5, 6, 7]);
-    expect(products[0].label).toBe("Masło Ekstra");   // size token stripped
+    expect(products[0].label).toBe("Masło Ekstra");
+  });
+
+  it("sorts products by purchase count", () => {
+    const txs = [
+      ...buys("Mleko", [3, 3, 3, 3], { size: 1000, unit: "ml" }),
+      ...buys("Chleb", [4, 4, 4], { size: 500, unit: "g" }),
+    ];
+    expect(buildPriceHistory(txs).products.map(p => p.label)).toEqual(["Mleko", "Chleb"]);
   });
 
   it("merges same-day purchases of one product into a single occurrence", () => {
     // Weighted goods: three fillet pieces on one receipt, one line each.
     const txs = [
       tx({ date: "2026-01-13", merchant: "Auchan", items: [
-        { description: "Filet z piersi kurczaka 0,442 kg", amount: 16.34 },
-        { description: "Filet z piersi kurczaka 0,443 kg", amount: 16.36 },
-        { description: "Filet z piersi kurczaka 0,491 kg", amount: 18.14 },
+        line("Filet z piersi kurczaka", 16.34, 442, "g"),
+        line("Filet z piersi kurczaka", 16.36, 443, "g"),
+        line("Filet z piersi kurczaka", 18.14, 491, "g"),
       ] }),
-      tx({ date: "2026-02-10", merchant: "Auchan", items: [{ description: "Filet z piersi kurczaka 0,500 kg", amount: 18.50 }] }),
-      tx({ date: "2026-03-10", merchant: "Auchan", items: [{ description: "Filet z piersi kurczaka 0,450 kg", amount: 16.65 }] }),
+      tx({ date: "2026-02-10", merchant: "Auchan", items: [line("Filet z piersi kurczaka", 18.50, 500, "g")] }),
+      tx({ date: "2026-03-10", merchant: "Auchan", items: [line("Filet z piersi kurczaka", 16.65, 450, "g")] }),
     ];
     const { products } = buildPriceHistory(txs);
     expect(products).toHaveLength(1);
     const [first] = products[0].occurrences;
-    expect(first.size).toBeCloseTo(1376, 5);              // 442+443+491 g
+    expect(first.size).toBe(1376);                    // 442 + 443 + 491
     expect(first.price).toBeCloseTo(50.84, 2);
-    expect(first.unitPrice).toBeCloseTo(36.95, 1);        // zł/kg from the sums
-    expect(products[0].occurrences).toHaveLength(3);      // 3 shopping days
-    expect(products[0].shrink).toBeNull();                // weighted → no shrink alarm
+    expect(first.unitPrice).toBeCloseTo(36.95, 1);    // zł/kg from the sums
+    expect(products[0].occurrences).toHaveLength(3);  // 3 shopping days
+    expect(products[0].shrink).toBeNull();            // weighted → no false alarm
+  });
+});
+
+// ── Catalog identity ─────────────────────────────────────────
+
+describe("buildPriceHistory — catalog identity", () => {
+  const auchanAndBiedronka = [
+    tx({ date: "2026-01-10", merchant: "Auchan",    items: [line("Napój energetyczny", 10.9)] }),
+    tx({ date: "2026-02-10", merchant: "Auchan",    items: [line("Napój energetyczny", 10.9)] }),
+    tx({ date: "2026-03-10", merchant: "Biedronka", items: [line("Napój energetyczny Dzik", 5.5)] }),
+    tx({ date: "2026-04-10", merchant: "Biedronka", items: [line("Napój energetyczny Dzik", 5.5)] }),
+  ];
+
+  it("groups differently-named products into one via the resolver", () => {
+    // A merge in the catalog: both keys point to one canonical product.
+    const resolve = (key: string) =>
+      key === "napoj energetyczny|" || key === "napoj energetyczny dzik|"
+        ? { groupId: "prod_dzik", canonicalName: "Napój energetyczny Dzik" }
+        : null;
+    const { products } = buildPriceHistory(auchanAndBiedronka, undefined, resolve);
+    expect(products).toHaveLength(1);                  // 2+2 merged, passes MIN_OCCURRENCES
+    expect(products[0].catalogId).toBe("prod_dzik");
+    expect(products[0].label).toBe("Napój energetyczny Dzik");
+    expect(products[0].merchants).toEqual(["Auchan", "Biedronka"]);
+    expect(products[0].occurrences).toHaveLength(4);
   });
 
-  it("prefers AI-structured product fields over regex parsing", () => {
-    const txs = [1, 2, 3].map(i =>
-      tx({ date: `2026-0${i}-10`, merchant: "Lidl", items: [{
-        description: "MLK UHT3.2 KART",
-        amount: 4,
-        product: { name: "Mleko UHT 3,2%", size: 1000, unit: "ml", packCount: 2 },
-      }] }));
-    const { products } = buildPriceHistory(txs);
-    expect(products[0].label).toBe("Mleko UHT 3,2%");
-    expect(products[0].occurrences[0].size).toBe(2000);   // size × packCount
-    expect(products[0].occurrences[0].unitPrice).toBe(2); // 4 zł / 2 l
-  });
-
-  it("does not flag shrink when a double-pack day precedes a single-pack day", () => {
+  it("without a resolver keeps the name-fold grouping (two products)", () => {
     const txs = [
-      tx({ date: "2026-01-10", merchant: "Lidl", items: [
-        { description: "Maslo ekstra 200g", amount: 7 },
-        { description: "Maslo ekstra 200g", amount: 7 },   // two packs, one receipt
-      ] }),
-      tx({ date: "2026-02-10", merchant: "Lidl", items: [{ description: "Maslo ekstra 200g", amount: 7 }] }),
-      tx({ date: "2026-03-10", merchant: "Lidl", items: [{ description: "Maslo ekstra 200g", amount: 7 }] }),
+      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-10`, merchant: "Auchan",    items: [line("Napój energetyczny", 11)] })),
+      ...[1, 2, 3].map(i => tx({ date: `2026-0${i}-11`, merchant: "Biedronka", items: [line("Napój energetyczny Dzik", 5.5)] })),
     ];
-    const { products } = buildPriceHistory(txs);
-    expect(products[0].occurrences[0].size).toBe(400);   // merged day
-    expect(products[0].shrink).toBeNull();               // package size never shrank
+    expect(buildPriceHistory(txs).products).toHaveLength(2);
   });
+});
 
-  it("detects shrinkflation between consecutive sized purchases", () => {
+// ── Shrinkflation ────────────────────────────────────────────
+
+describe("buildPriceHistory — shrink detection", () => {
+  it("detects a package-size drop after a stable run", () => {
     const shrunk = buildPriceHistory([
-      ...purchases("MASLO EKST.200G", [7, 7]),
-      tx({ date: "2026-03-10", merchant: "Biedronka", items: [{ description: "MASLO EKST.195G", amount: 7 }] }),
+      ...buys("Masło Ekstra", [7, 7], { size: 200, unit: "g" }),
+      tx({ date: "2026-03-10", merchant: "Biedronka", items: [line("Masło Ekstra", 7, 195, "g")] }),
     ]).products[0];
     expect(shrunk.shrink).toEqual({ date: "2026-03-10", fromSize: 200, toSize: 195, unit: "g" });
   });
 
-  it("does not flag shrink when the size grows back or stays equal", () => {
+  it("does not flag shrink when the size grows or stays equal", () => {
     const grown = buildPriceHistory([
-      ...purchases("MASLO EKST.200G", [7, 7]),
-      tx({ date: "2026-03-10", merchant: "Biedronka", items: [{ description: "MASLO EKST.250G", amount: 8 }] }),
+      ...buys("Masło Ekstra", [7, 7], { size: 200, unit: "g" }),
+      tx({ date: "2026-03-10", merchant: "Biedronka", items: [line("Masło Ekstra", 8, 250, "g")] }),
     ]).products[0];
     expect(grown.shrink).toBeNull();
   });
 
-  it("sorts products by purchase count", () => {
+  it("does not flag shrink for a two-pack day (merge must not look like a drop)", () => {
     const txs = [
-      ...purchases("Mleko 1l", [3, 3, 3, 3]),
-      ...purchases("Chleb", [4, 4, 4]),
+      tx({ date: "2026-01-10", merchant: "Lidl", items: [
+        line("Masło Ekstra", 7, 200, "g"),
+        line("Masło Ekstra", 7, 200, "g"),   // two packs, one receipt
+      ] }),
+      tx({ date: "2026-02-10", merchant: "Lidl", items: [line("Masło Ekstra", 7, 200, "g")] }),
+      tx({ date: "2026-03-10", merchant: "Lidl", items: [line("Masło Ekstra", 7, 200, "g")] }),
     ];
     const { products } = buildPriceHistory(txs);
-    expect(products.map(p => p.nameKey)).toEqual(["mleko", "chleb"]);
+    expect(products[0].occurrences[0].size).toBe(400);   // merged day
+    expect(products[0].shrink).toBeNull();               // package size never shrank
   });
 });
 
 // ── productMetric ────────────────────────────────────────────
 
 describe("productMetric", () => {
-  function historyOf(items: Array<{ description: string; amount: number }>): ProductHistory {
+  function historyOf(items: PriceLineItem[]): ProductHistory {
     const txs = items.map((it, i) =>
       tx({ date: `2026-0${i + 1}-10`, merchant: "Lidl", items: [it] }));
     return buildPriceHistory(txs).products[0];
   }
 
-  it("uses unit price when every occurrence has the same unit", () => {
+  it("uses unit price when every occurrence shares a unit", () => {
     const m = productMetric(historyOf([
-      { description: "Mleko 1l", amount: 3 },
-      { description: "Mleko 1l", amount: 3.3 },
-      { description: "Mleko 1l", amount: 3.6 },
+      line("Mleko", 3,   1000, "ml"),
+      line("Mleko", 3.3, 1000, "ml"),
+      line("Mleko", 3.6, 1000, "ml"),
     ]));
     expect(m.useUnitPrice).toBe(true);
     expect(m.label).toBe("zł/l");
     expect(m.unit).toBe("ml");
   });
 
-  it("keeps unit price for the sized occurrences, dropping the size-less one", () => {
+  it("keeps unit price for sized occurrences, dropping the size-less one", () => {
     const p = historyOf([
-      { description: "Chleb wiejski 500g", amount: 5 },
-      { description: "Chleb wiejski", amount: 5.5 },   // no size → off the chart
-      { description: "Chleb wiejski 500g", amount: 6 },
+      line("Chleb", 5,   500, "g"),
+      line("Chleb", 5.5),                // no size → off the chart
+      line("Chleb", 6,   500, "g"),
     ]);
     const m = productMetric(p);
     expect(m.useUnitPrice).toBe(true);
     expect(m.label).toBe("zł/kg");
-    // The size-less occurrence yields null (excluded), sized ones a number.
     const vals = p.occurrences.map(m.value);
     expect(vals.filter(v => v === null)).toHaveLength(1);
     expect(vals.filter(v => typeof v === "number")).toHaveLength(2);
@@ -430,10 +365,10 @@ describe("productMetric", () => {
   it("picks the DOMINANT unit and nulls the minority (kg wins over szt)", () => {
     // Minced meat: 3 weight buys + one bogus "2 szt" pack.
     const p = historyOf([
-      { description: "Mieso mielone 500g", amount: 19 },
-      { description: "Mieso mielone 1kg",  amount: 28 },
-      { description: "Mieso mielone x2",   amount: 34 },   // becomes 2 szt
-      { description: "Mieso mielone 500g", amount: 20 },
+      line("Mięso mielone", 19, 500,  "g"),
+      line("Mięso mielone", 28, 1000, "g"),
+      line("Mięso mielone", 34, 2,    "szt"),
+      line("Mięso mielone", 20, 500,  "g"),
     ]);
     const m = productMetric(p);
     expect(m.unit).toBe("g");
@@ -444,9 +379,9 @@ describe("productMetric", () => {
 
   it("falls back to line price only when NO occurrence has a size", () => {
     const m = productMetric(historyOf([
-      { description: "Chleb wiejski", amount: 5 },
-      { description: "Chleb wiejski", amount: 5.5 },
-      { description: "Chleb wiejski", amount: 6 },
+      line("Chleb", 5),
+      line("Chleb", 5.5),
+      line("Chleb", 6),
     ]));
     expect(m.useUnitPrice).toBe(false);
     expect(m.label).toBe("zł");

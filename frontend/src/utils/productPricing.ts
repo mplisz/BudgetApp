@@ -2,15 +2,16 @@
 // File: src/utils/productPricing.ts
 // Pure logic for the "Ceny produktów" analytics section.
 //
-// Pipeline (phase 1+2 of the product-price feature — deterministic,
-// no backend, no Products container yet):
-//   1. normalizeProductName: receipt line description → folded name key
-//      with the size token ("200G", "1,5L", "2x330ML") extracted into a
-//      separate field. The size is deliberately NOT part of the key, so
-//      a shrinkflated "MASLO EKST.195G" still matches "MASLO EKST.200G".
-//   2. buildPriceHistory: transactions (merchant + lineItems) → products
-//      grouped by name key, each with chronological price occurrences and
-//      unit prices (zł/kg, zł/l, zł/szt) where the size is known.
+// SCOPE — two deliberate gates decide what counts as a trackable product:
+//   1. the transaction's subcategory must be flagged `trackPrices`
+//      (Settings → Kategorie), so only goods worth comparing show up;
+//   2. the receipt line must carry the AI-structured `product`
+//      (name + size + unit). Hand-typed transactions have none and are
+//      out of scope — that uniformity is what makes unit prices
+//      computable and the catalog key match the backend exactly.
+//
+// buildPriceHistory then groups occurrences by CATALOG identity when a
+// resolver is supplied (cross-shop + manual merges), else by name fold.
 //
 // Everything here is a pure function — see productPricing.test.ts.
 // ============================================================
@@ -18,7 +19,7 @@
 export type SizeUnit = "g" | "ml" | "szt";
 
 export interface ParsedName {
-  nameKey:  string;          // folded description without the size token
+  nameKey:  string;          // folded product name (no size token)
   size:     number | null;   // in base unit (g / ml / szt), multipack included
   unit:     SizeUnit | null;
   packSize: number | null;   // single-package size (pre-multipack) — shrink detection
@@ -41,15 +42,12 @@ export interface PriceLineItem {
 
 /** Minimal transaction shape the aggregation needs (subset of range docs). */
 export interface PricedTransaction {
-  type:             string;
-  date:             string;
-  budgetMonth:      string;
-  merchant?:        string | null;
-  amount:           number;
-  description?:     string | null;
-  subcategoryId?:   string | null;
-  subcategoryName?: string | null;
-  lineItems?:       PriceLineItem[];
+  type:           string;
+  date:           string;
+  budgetMonth:    string;
+  merchant?:      string | null;
+  subcategoryId?: string | null;   // gates on the trackPrices flag
+  lineItems?:     PriceLineItem[];
 }
 
 /** Shown as the merchant for a purchase with no recorded shop. */
@@ -92,7 +90,7 @@ export interface CatalogIdentity {
 export type IdentityResolver = (catalogKey: string) => CatalogIdentity | null;
 
 export interface PriceHistoryStats {
-  txWithItems:     number;  // expense transactions with merchant + line items
+  txWithItems:     number;  // scanned transactions that contributed a product
   productsTotal:   number;  // distinct name keys before the min-occurrences filter
   productsTracked: number;  // products that passed the filter
   withUnitPrice:   number;  // tracked products charted in zł/kg | zł/l | zł/szt
@@ -131,78 +129,11 @@ export function catalogKey(name: string, unit: SizeUnit | null): string | null {
   return `${folded}|${unit ?? ""}`;
 }
 
-// "2x200g" / "2 x 200 g" — multipack prefix multiplies the extracted size.
-const PACK_RE = /(\d+)\s*[x*]\s*(?=\d)/;
-// "0,5 l x4" — multipack SUFFIX (standalone "xN" token after the size).
-const POST_PACK_RE = /(^|\s)[x*]\s*(\d{1,3})(?=\s|$)/;
-// Longer units first so "kg" isn't consumed as "g" and "ml" as "l".
-const SIZE_RE = /(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|szt)\b/;
-
-const UNIT_BASE: Record<string, { unit: SizeUnit; factor: number }> = {
-  kg:  { unit: "g",   factor: 1000 },
-  g:   { unit: "g",   factor: 1 },
-  l:   { unit: "ml",  factor: 1000 },
-  ml:  { unit: "ml",  factor: 1 },
-  szt: { unit: "szt", factor: 1 },
-};
-
-export function normalizeProductName(raw: string): ParsedName {
-  // Keep ",.%" so decimals ("1,5") and fat content ("3,2%") survive folding.
-  let s = ` ${foldText(raw)} `.replace(/[^a-z0-9%,.]+/g, " ");
-
-  let pack = 1;
-  s = s.replace(PACK_RE, (_m, n: string) => {
-    pack = parseInt(n, 10) || 1;
-    return " ";
-  });
-
-  // Collected via an object — assignments inside the replace() callback
-  // don't survive TS control-flow narrowing on plain `let` unions.
-  const found: { size: number | null; unit: SizeUnit | null } = { size: null, unit: null };
-  s = s.replace(SIZE_RE, (_m, num: string, u: string) => {
-    const base = UNIT_BASE[u];
-    found.size = parseFloat(num.replace(",", ".")) * base.factor;
-    found.unit = base.unit;
-    return " ";
-  });
-
-  // Suffix multipack ("0,5 l x4") — only meaningful once the prefix form
-  // didn't match. Without any size, a bare "xN" means N pieces.
-  if (pack === 1) {
-    s = s.replace(POST_PACK_RE, (_m, lead: string, n: string) => {
-      pack = parseInt(n, 10) || 1;
-      return lead;
-    });
-  }
-  let size = found.size === null ? null : found.size * pack;
-  let unit = found.unit;
-  let packSize = found.size;
-  if (size === null && pack > 1) { size = pack; unit = "szt"; packSize = 1; }
-
-  // Drop punctuation orphaned by token removal ("ekst." → "ekst"),
-  // but keep it inside tokens ("3,2%" stays intact).
-  const nameKey = s
-    .split(/\s+/)
-    .map(tok => tok.replace(/^[.,]+|[.,]+$/g, ""))
-    .filter(Boolean)
-    .join(" ");
-
-  return { nameKey: nameKey || foldText(raw).trim(), size, unit, packSize };
-}
-
-/** Display name: the raw description with size/pack tokens stripped,
- *  case preserved — "Filet z piersi kurczaka z grzędy 0,442 kg" →
- *  "Filet z piersi kurczaka z grzędy". */
-export function cleanProductLabel(raw: string): string {
-  const cleaned = raw
-    .replace(/(\d+)\s*[x*]\s*(?=\d)/gi, " ")                    // "2x" prefix packs
-    .replace(/(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|szt)\b\.?/gi, " ") // size tokens
-    .replace(/(^|\s)[x*]\s*\d{1,3}(?=\s|$)/gi, " ")             // "x4" suffix packs
-    .replace(/\s+/g, " ")
-    .replace(/[\s.,-]+$/g, "")
-    .trim();
-  return cleaned || raw.trim();
-}
+// NOTE: the receipt-text regex parser (normalizeProductName /
+// cleanProductLabel) lived here until products became structured-only.
+// Sizes, multipacks and clean names now come from the OCR AI, so the
+// parser had no callers left. Recover it from git if a text fallback is
+// ever needed again.
 
 // ── Unit price ────────────────────────────────────────────────
 
@@ -300,22 +231,27 @@ function detectShrink(lines: ShrinkLine[]): ShrinkEvent | null {
   return event;
 }
 
-/** AI-structured fields win over regex parsing when present. */
+/**
+ * ONLY AI-structured line items count as products. A line without
+ * `product` has no reliable identity — that is exactly how shop names
+ * ("Reserved") and free-text labels leaked in as fake products, and how
+ * size-less rows made prices incomparable. Requiring the structured
+ * field keeps every entry uniform: clean name + size + unit, so unit
+ * prices always compute and the catalog key always matches the backend.
+ * Consequence: manually typed transactions never appear here.
+ */
 function parseItem(item: PriceLineItem): (ParsedName & { label: string }) | null {
   const structured = item.product;
-  if (structured?.name?.trim()) {
-    const pack = structured.packCount && structured.packCount > 0 ? structured.packCount : 1;
-    const unit = structured.unit ?? null;
-    const packSize = unit && structured.size && structured.size > 0 ? structured.size : null;
-    const size = packSize !== null
-      ? packSize * pack
-      : (unit === "szt" && pack > 1 ? pack : null);
-    const label = structured.name.trim();
-    return { nameKey: foldText(label).replace(/\s+/g, " ").trim(), size, unit, packSize, label };
-  }
-  const parsed = normalizeProductName(item.description);
-  if (!parsed.nameKey) return null;
-  return { ...parsed, label: cleanProductLabel(item.description) };
+  if (!structured?.name?.trim()) return null;
+
+  const pack = structured.packCount && structured.packCount > 0 ? structured.packCount : 1;
+  const unit = structured.unit ?? null;
+  const packSize = unit && structured.size && structured.size > 0 ? structured.size : null;
+  const size = packSize !== null
+    ? packSize * pack
+    : (unit === "szt" && pack > 1 ? pack : null);
+  const label = structured.name.trim();
+  return { nameKey: foldText(label).replace(/\s+/g, " ").trim(), size, unit, packSize, label };
 }
 
 /** Same product bought several times on one shopping trip (weighted goods
@@ -362,16 +298,11 @@ export function buildPriceHistory(
     if (trackedSubcategoryIds && !trackedSubcategoryIds.has(tx.subcategoryId ?? "")) continue;
     const merchant = (tx.merchant ?? "").trim() || NO_MERCHANT;
 
-    // Multi-item receipts carry lineItems. A single-item purchase — a
-    // manual entry, or an OCR scan of a one-line receipt — has none; treat
-    // the whole transaction as one product line, named by its description
-    // (fallback: the subcategory). Without this, single-item buys are
-    // invisible here. Such a line only counts when it carries a SIZE — see
-    // the guard below.
-    const hasLineItems = !!(tx.lineItems && tx.lineItems.length > 0);
-    const items: PriceLineItem[] = hasLineItems
-      ? tx.lineItems!
-      : [{ description: (tx.description || tx.subcategoryName || "").trim(), amount: tx.amount }];
+    // Scanned receipts carry lineItems (a one-line receipt included —
+    // singletons keep them when they hold product data). Anything else,
+    // e.g. a hand-typed transaction, has no structured product and is
+    // deliberately out of scope here.
+    const items: PriceLineItem[] = tx.lineItems ?? [];
 
     let contributed = false;
     for (const item of items) {
