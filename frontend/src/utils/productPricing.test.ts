@@ -308,13 +308,44 @@ describe("productMetric", () => {
     ]));
     expect(m.useUnitPrice).toBe(true);
     expect(m.label).toBe("zł/l");
+    expect(m.unit).toBe("ml");
   });
 
-  it("falls back to line price when any occurrence lacks a size", () => {
-    const m = productMetric(historyOf([
+  it("keeps unit price for the sized occurrences, dropping the size-less one", () => {
+    const p = historyOf([
       { description: "Chleb wiejski 500g", amount: 5 },
-      { description: "Chleb wiejski", amount: 5.5 },
+      { description: "Chleb wiejski", amount: 5.5 },   // no size → off the chart
       { description: "Chleb wiejski 500g", amount: 6 },
+    ]);
+    const m = productMetric(p);
+    expect(m.useUnitPrice).toBe(true);
+    expect(m.label).toBe("zł/kg");
+    // The size-less occurrence yields null (excluded), sized ones a number.
+    const vals = p.occurrences.map(m.value);
+    expect(vals.filter(v => v === null)).toHaveLength(1);
+    expect(vals.filter(v => typeof v === "number")).toHaveLength(2);
+  });
+
+  it("picks the DOMINANT unit and nulls the minority (kg wins over szt)", () => {
+    // Minced meat: 3 weight buys + one bogus "2 szt" pack.
+    const p = historyOf([
+      { description: "Mieso mielone 500g", amount: 19 },
+      { description: "Mieso mielone 1kg",  amount: 28 },
+      { description: "Mieso mielone x2",   amount: 34 },   // becomes 2 szt
+      { description: "Mieso mielone 500g", amount: 20 },
+    ]);
+    const m = productMetric(p);
+    expect(m.unit).toBe("g");
+    expect(m.label).toBe("zł/kg");
+    const sztOcc = p.occurrences.find(o => o.unit === "szt");
+    expect(m.value(sztOcc as NonNullable<typeof sztOcc>)).toBeNull();
+  });
+
+  it("falls back to line price only when NO occurrence has a size", () => {
+    const m = productMetric(historyOf([
+      { description: "Chleb wiejski", amount: 5 },
+      { description: "Chleb wiejski", amount: 5.5 },
+      { description: "Chleb wiejski", amount: 6 },
     ]));
     expect(m.useUnitPrice).toBe(false);
     expect(m.label).toBe("zł");

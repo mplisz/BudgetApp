@@ -205,23 +205,37 @@ export function formatSize(size: number, unit: SizeUnit): string {
 
 export interface ProductMetric {
   useUnitPrice: boolean;
-  label:        string;                          // axis/tooltip unit
-  value:        (o: PriceOccurrence) => number;
+  unit:         SizeUnit | null;   // dominant unit when useUnitPrice
+  label:        string;            // axis/tooltip unit
+  /** Comparable value per occurrence, or null when it can't share the axis
+   *  (different unit, or no size) — the caller drops those from the chart. */
+  value:        (o: PriceOccurrence) => number | null;
 }
 
-/** Unit price is only comparable when EVERY occurrence has it in the same
- *  unit; otherwise fall back to the plain line price. */
+/**
+ * The only comparable metric is the UNIT price (zł/kg·l·szt), never the
+ * line total (a "2 szt" line total isn't comparable to a "1 szt" one).
+ * We pick the DOMINANT unit — the one most occurrences share — and expose
+ * unit price for those; occurrences in another unit or with no size return
+ * null so they drop off the chart (still listed in the table). Only when
+ * NOT ONE occurrence has a size do we fall back to the line price, and the
+ * UI then warns that the values aren't comparable.
+ */
 export function productMetric(p: ProductHistory): ProductMetric {
-  const units = new Set(p.occurrences.map(o => o.unit));
-  const complete = p.occurrences.every(o => o.unitPrice !== null);
-  if (complete && units.size === 1 && p.occurrences[0].unit) {
+  const counts = new Map<SizeUnit, number>();
+  for (const o of p.occurrences) {
+    if (o.unit && o.unitPrice !== null) counts.set(o.unit, (counts.get(o.unit) ?? 0) + 1);
+  }
+  if (counts.size > 0) {
+    const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
     return {
       useUnitPrice: true,
-      label: unitPriceLabel(p.occurrences[0].unit),
-      value: o => o.unitPrice as number,
+      unit:         dominant,
+      label:        unitPriceLabel(dominant),
+      value:        o => (o.unit === dominant && o.unitPrice !== null ? o.unitPrice : null),
     };
   }
-  return { useUnitPrice: false, label: "zł", value: o => o.price };
+  return { useUnitPrice: false, unit: null, label: "zł", value: o => o.price };
 }
 
 // ── Aggregation ───────────────────────────────────────────────

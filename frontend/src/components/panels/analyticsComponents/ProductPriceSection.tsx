@@ -59,21 +59,30 @@ export function ProductPriceSection({ transactions, months }: Props) {
     if (!selected) return null;
     const metric = productMetric(selected);
     const byDate = new Map<string, Record<string, string | number>>();
+    let plotted = 0, skipped = 0;
     for (const o of selected.occurrences) {
+      const v = metric.value(o);
+      if (v === null) { skipped++; continue; }   // not comparable → off the chart
+      plotted++;
       let row = byDate.get(o.date);
       if (!row) { row = { date: o.date }; byDate.set(o.date, row); }
-      row[o.merchant] = metric.value(o);
+      row[o.merchant] = v;
     }
-    const values = selected.occurrences.map(metric.value);
-    const first = values[0], last = values[values.length - 1];
+    // Summary uses only the comparable (chart) values, in date order.
+    const values = selected.occurrences
+      .map(metric.value)
+      .filter((v): v is number => v !== null);
+    const first = values[0] ?? 0, last = values[values.length - 1] ?? 0;
     return {
       metric,
       rows: [...byDate.values()],
+      plotted,
+      skipped,
       summary: {
         first, last,
         changePct: first > 0 ? ((last - first) / first) * 100 : 0,
-        min: Math.min(...values),
-        max: Math.max(...values),
+        min: values.length ? Math.min(...values) : 0,
+        max: values.length ? Math.max(...values) : 0,
       },
     };
   }, [selected]);
@@ -157,6 +166,19 @@ export function ProductPriceSection({ transactions, months }: Props) {
             </span>
           </div>
 
+          {/* Comparability notes */}
+          {!chart.metric.useUnitPrice && (
+            <div style={{ ...statChip, color: c.warningLight, marginBottom: 8 }}>
+              ⚠️ Brak gramatur — pokazane kwoty pozycji nie są porównywalne między zakupami.
+            </div>
+          )}
+          {chart.metric.useUnitPrice && chart.skipped > 0 && (
+            <div style={{ ...statChip, marginBottom: 8 }}>
+              ℹ️ {chart.skipped} {chart.skipped === 1 ? "wpis" : "wpisów"} poza wykresem
+              (inna jednostka niż {chart.metric.label} lub brak gramatury) — widoczne w tabeli.
+            </div>
+          )}
+
           {/* Shrinkflation badge */}
           {selected.shrink && (
             <div style={{
@@ -203,7 +225,8 @@ export function ProductPriceSection({ transactions, months }: Props) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr>
-                  {["Data", "Sklep", "Pozycja", "Ilość", "Cena", chart.metric.useUnitPrice ? chart.metric.label : ""].map((h, i) => (
+                  {["Data", "Sklep", "Pozycja", "Ilość", "Cena poz.",
+                    ...(chart.metric.useUnitPrice ? [chart.metric.label] : [])].map((h, i) => (
                     <th key={i} style={{
                       position: "sticky", top: 0, background: c.surface, textAlign: i >= 3 ? "right" : "left",
                       padding: "6px 10px", fontSize: 10, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.5px",
@@ -222,12 +245,18 @@ export function ProductPriceSection({ transactions, months }: Props) {
                     <td style={{ padding: "5px 10px", textAlign: "right", color: c.textTertiary, whiteSpace: "nowrap" }}>
                       {o.size !== null && o.unit !== null ? formatSize(o.size, o.unit) : "—"}
                     </td>
-                    <td style={{ padding: "5px 10px", textAlign: "right", color: c.textBody, fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <td style={{ padding: "5px 10px", textAlign: "right", color: c.textTertiary, whiteSpace: "nowrap" }}>
                       {fmt(o.price)}
                     </td>
-                    <td style={{ padding: "5px 10px", textAlign: "right", color: c.textTertiary, whiteSpace: "nowrap" }}>
-                      {chart.metric.useUnitPrice && o.unitPrice !== null ? plnNum(o.unitPrice) : ""}
-                    </td>
+                    {chart.metric.useUnitPrice && (
+                      <td style={{
+                        padding: "5px 10px", textAlign: "right", whiteSpace: "nowrap", fontWeight: 700,
+                        // Highlight the comparable rows; grey out the ones off the chart.
+                        color: o.unit === chart.metric.unit && o.unitPrice !== null ? c.text : c.borderStrong,
+                      }}>
+                        {o.unit === chart.metric.unit && o.unitPrice !== null ? plnNum(o.unitPrice) : "—"}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
