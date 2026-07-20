@@ -14,6 +14,23 @@ const ACCESS_TOKEN_EXPIRY = import.meta.env.VITE_ACCESS_TOKEN_EXPIRY || "15 min"
 interface FamilyMember { email: string; name: string }
 interface AdminResult  { success: boolean; message: string }
 
+// Retroactive product backfill — see backend/routes/products.js
+interface BackfillProduct { name: string; size: number | null; unit: string | null; packCount: number | null }
+interface BackfillResult {
+  dryRun:              boolean;
+  trackedSubcategories: number;
+  scanned:             number;
+  missingLines:        number;
+  uniqueTexts:         number;
+  queued?:             number;
+  resolved:            number;
+  remaining?:          number;
+  updatedTransactions?: number;
+  failed?:             number;
+  message?:            string;
+  preview?:            Array<{ text: string; product: BackfillProduct }>;
+}
+
 export default function PanelAdmin() {
   const { user } = useAuth();
   const api = useApi();
@@ -23,6 +40,28 @@ export default function PanelAdmin() {
   const [isLoading, setIsLoading]     = useState(false);
   const [isRevoking, setIsRevoking]   = useState(false);
   const [result, setResult]           = useState<AdminResult | null>(null);
+
+  // ── Product backfill ──────────────────────────────────────
+  const [backfill,        setBackfill]        = useState<BackfillResult | null>(null);
+  const [backfillError,   setBackfillError]   = useState<string | null>(null);
+  const [isBackfilling,   setIsBackfilling]   = useState(false);
+
+  async function runBackfill(dryRun: boolean) {
+    setIsBackfilling(true);
+    setBackfillError(null);
+    if (dryRun) setBackfill(null);
+    try {
+      const data = await api.post<BackfillResult>(
+        "/api/products/backfill", { dryRun },
+        { fallback: "Nie udało się uruchomić uzupełniania." },
+      );
+      setBackfill(data);
+    } catch (err) {
+      setBackfillError((err as Error).message);
+    } finally {
+      setIsBackfilling(false);
+    }
+  }
 
   // Load family members
   useEffect(() => {
@@ -149,6 +188,120 @@ export default function PanelAdmin() {
               </div>
             )}
           </>
+        )}
+      </div>
+
+      {/* ── Retroactive product backfill ─────────────────────── */}
+      <div style={{ ...s.card, marginTop: 16 }}>
+        <div style={{ fontWeight: 700, color: c.textTertiary, fontSize: 11, textTransform: "uppercase", marginBottom: 8 }}>
+          🏷️ Uzupełnij brakujące produkty
+        </div>
+        <div style={{ color: c.textMuted, fontSize: 12, lineHeight: 1.6, marginBottom: 14 }}>
+          Historia cen pokazuje tylko pozycje z rozpoznanym produktem. Ta akcja znajduje starsze
+          transakcje w subkategoriach oznaczonych <strong>🏷️ Ceny</strong>, które go nie mają, i uzupełnia
+          je przez AI. Możesz ją uruchomić ponownie po oznaczeniu kolejnej subkategorii — wtedy
+          dobierze tylko to, czego brakuje.
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            onClick={() => runBackfill(true)}
+            disabled={isBackfilling}
+            style={{
+              ...s.btn(), width: "auto", marginTop: 0,
+              background: alpha(c.info, "22"), color: c.info,
+              border: `1px solid ${alpha(c.info, "44")}`,
+              opacity: isBackfilling ? 0.5 : 1,
+            }}
+          >
+            {isBackfilling ? "⏳ Analizuję…" : "🔍 Sprawdź (podgląd)"}
+          </button>
+
+          {/* Commit only makes sense once a preview found something. */}
+          {backfill?.dryRun && backfill.resolved > 0 && (
+            <button
+              onClick={() => runBackfill(false)}
+              disabled={isBackfilling}
+              style={{
+                ...s.btn(), width: "auto", marginTop: 0,
+                background: alpha(c.success, "22"), color: c.success,
+                border: `1px solid ${alpha(c.success, "44")}`,
+                opacity: isBackfilling ? 0.5 : 1,
+              }}
+            >
+              ✅ Zapisz {backfill.resolved} produktów
+            </button>
+          )}
+        </div>
+
+        {backfillError && (
+          <div style={{
+            marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 13,
+            background: alpha(c.danger, "11"), color: c.dangerLight,
+            border: `1px solid ${alpha(c.danger, "33")}`,
+          }}>
+            ❌ {backfillError}
+          </div>
+        )}
+
+        {backfill && (
+          <div style={{ marginTop: 12, fontSize: 12, color: c.textSecondary, lineHeight: 1.8 }}>
+            {backfill.message ? (
+              <div style={{ color: c.success }}>✅ {backfill.message}</div>
+            ) : (
+              <>
+                <div>
+                  Przejrzano <strong style={{ color: c.text }}>{backfill.scanned}</strong> transakcji
+                  w <strong style={{ color: c.text }}>{backfill.trackedSubcategories}</strong> śledzonych subkategoriach ·
+                  brakujących pozycji: <strong style={{ color: c.text }}>{backfill.missingLines}</strong> ·
+                  unikalnych nazw: <strong style={{ color: c.text }}>{backfill.uniqueTexts}</strong>
+                </div>
+                <div>
+                  Rozpoznano: <strong style={{ color: c.success }}>{backfill.resolved}</strong>
+                  {backfill.queued !== undefined && ` z ${backfill.queued} przetworzonych`}
+                  {!!backfill.remaining && (
+                    <span style={{ color: c.warning }}> · zostało {backfill.remaining} na kolejny przebieg</span>
+                  )}
+                </div>
+                {!backfill.dryRun && (
+                  <div style={{ color: c.success }}>
+                    ✅ Zaktualizowano {backfill.updatedTransactions} transakcji
+                    {!!backfill.failed && <span style={{ color: c.danger }}> · błędów: {backfill.failed}</span>}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Preview — what the AI proposes, before anything is written */}
+            {backfill.dryRun && !!backfill.preview?.length && (
+              <div style={{ marginTop: 10, maxHeight: 260, overflowY: "auto", border: `1px solid ${c.border}`, borderRadius: 8 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                  <thead>
+                    <tr>
+                      {["Tekst z paragonu", "Produkt", "Ilość"].map((h, i) => (
+                        <th key={h} style={{
+                          position: "sticky", top: 0, background: c.surface, textAlign: i === 2 ? "right" : "left",
+                          padding: "5px 10px", fontSize: 10, color: c.textMuted, textTransform: "uppercase",
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backfill.preview.map(({ text, product }, i) => (
+                      <tr key={i} style={{ borderTop: `1px solid ${c.border}` }}>
+                        <td style={{ padding: "4px 10px", color: c.textMuted }}>{text}</td>
+                        <td style={{ padding: "4px 10px", color: c.text, fontWeight: 600 }}>{product.name}</td>
+                        <td style={{ padding: "4px 10px", textAlign: "right", color: c.textTertiary, whiteSpace: "nowrap" }}>
+                          {product.size ? `${product.size} ${product.unit ?? ""}` : "—"}
+                          {product.packCount ? ` ×${product.packCount}` : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

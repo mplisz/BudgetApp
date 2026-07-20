@@ -80,8 +80,11 @@ function mergeProductDoc(existing, line, familyId) {
     };
   }
 
-  // Canonical name: prefer the longer (more complete) spelling seen.
-  const canonicalName = line.name && line.name.length > (existing.canonicalName || "").length
+  // Canonical name: prefer the longer (more complete) spelling seen —
+  // unless the user renamed this product by hand, in which case their
+  // choice is final (a backfill sweep must not undo a correction).
+  const canonicalName = (!existing.nameLocked && line.name &&
+                         line.name.length > (existing.canonicalName || "").length)
     ? line.name
     : existing.canonicalName;
 

@@ -12,12 +12,18 @@
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const { productsContainer } = require("../cosmos");
+const { productsContainer, transactionsContainer, categoriesContainer } = require("../cosmos");
 const { requireAuth }       = require("../middleware/auth");
 const { readItemWithEtag, readItem, IdParamSchema } = require("../utils/helpers");
-const { mergeProducts } = require("../utils/productCatalog");
+const { mergeProducts, rememberProducts } = require("../utils/productCatalog");
+const { inferProducts } = require("../utils/productAi");
+const { collectCandidates, applyProducts } = require("../utils/productBackfill");
 
 router.use(requireAuth);
+
+/** Hard cap on how many distinct texts one run sends to the model —
+ *  bounds both cost and runtime. Press the button again for the rest. */
+const MAX_UNIQUE_PER_RUN = 300;
 
 const RenameSchema = z.object({
   canonicalName: z.string().min(1).max(120),
@@ -44,6 +50,124 @@ router.get("/", async (req, res) => {
   } catch (err) {
     console.error("[PRODUCTS GET]", err);
     res.status(500).json({ error: "Failed to fetch products." });
+  }
+});
+
+// ── POST /backfill — fill in missing products retroactively ──
+//
+// Finds transactions in the currently price-tracked subcategories whose
+// lines carry no structured product, asks the model to normalize the
+// DEDUPLICATED line texts, then writes the answers back and seeds the
+// catalog. Self-scoping: flag a new subcategory later and press again —
+// only its history is missing, so only that gets processed.
+//
+// body: { dryRun?: boolean }  → dryRun returns the proposal, writes nothing.
+
+router.post("/backfill", async (req, res) => {
+  const dryRun = req.body?.dryRun !== false;   // default to a preview, never a surprise write
+  const familyId = req.user.familyId;
+
+  try {
+    // 1. Which subcategories are price-tracked right now?
+    const { resources: cats } = await categoriesContainer.items
+      .query({
+        query: "SELECT c.id FROM c WHERE c.userId = @u AND c.trackPrices = true AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))",
+        parameters: [{ name: "@u", value: familyId }],
+      })
+      .fetchAll();
+    const trackedIds = cats.map(c => c.id);
+    if (trackedIds.length === 0) {
+      return res.status(400).json({ error: "Brak subkategorii oznaczonych do śledzenia cen." });
+    }
+
+    // 2. Their expense transactions.
+    const idParams = trackedIds.map((_, i) => `@s${i}`);
+    const { resources: transactions } = await transactionsContainer.items
+      .query({
+        query: `SELECT * FROM c
+                WHERE c.userId = @u AND c.type = 'EXPENSE'
+                  AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))
+                  AND c.subcategoryId IN (${idParams.join(", ")})`,
+        parameters: [
+          { name: "@u", value: familyId },
+          ...trackedIds.map((id, i) => ({ name: `@s${i}`, value: id })),
+        ],
+      })
+      .fetchAll();
+
+    // 3. What is missing — deduplicated.
+    const { candidates, uniqueDescriptions } = collectCandidates(transactions);
+    if (candidates.length === 0) {
+      return res.json({
+        dryRun, trackedSubcategories: trackedIds.length, scanned: transactions.length,
+        missingLines: 0, uniqueTexts: 0, resolved: 0, updatedTransactions: 0,
+        message: "Wszystkie pozycje w śledzonych subkategoriach mają już produkty.",
+      });
+    }
+    const batch = uniqueDescriptions.slice(0, MAX_UNIQUE_PER_RUN);
+
+    // 4. Ask the model (same contract as the live scan).
+    const productByDesc = await inferProducts(batch);
+
+    const preview = [...productByDesc.entries()]
+      .slice(0, 100)
+      .map(([text, product]) => ({ text, product }));
+
+    if (dryRun) {
+      return res.json({
+        dryRun: true,
+        trackedSubcategories: trackedIds.length,
+        scanned:      transactions.length,
+        missingLines: candidates.length,
+        uniqueTexts:  uniqueDescriptions.length,
+        queued:       batch.length,
+        resolved:     productByDesc.size,
+        remaining:    Math.max(0, uniqueDescriptions.length - batch.length),
+        preview,
+      });
+    }
+
+    // 5. Write back — only transactions that actually changed.
+    let updated = 0, failed = 0;
+    for (const tx of transactions) {
+      const next = applyProducts(tx, productByDesc);
+      if (!next) continue;
+      try {
+        const { resource: saved } = await transactionsContainer.items.upsert({
+          ...next,
+          updatedAt:   new Date().toISOString(),
+          updatedBy:   req.user.name || req.user.email,
+          updatedById: req.user.id,
+        });
+        updated++;
+        // 6. Seed the catalog from the freshly structured lines. Existing
+        //    canonical names and merges are preserved by rememberProducts.
+        await rememberProducts(productsContainer, familyId, saved);
+      } catch (err) {
+        failed++;
+        console.error(`[PRODUCTS BACKFILL] tx ${tx.id} failed:`, err.message);
+      }
+    }
+
+    console.log(`[PRODUCTS BACKFILL] ${updated} tx updated, ${productByDesc.size}/${batch.length} texts resolved, ${failed} failed`);
+    res.json({
+      dryRun: false,
+      trackedSubcategories: trackedIds.length,
+      scanned:      transactions.length,
+      missingLines: candidates.length,
+      uniqueTexts:  uniqueDescriptions.length,
+      queued:       batch.length,
+      resolved:     productByDesc.size,
+      remaining:    Math.max(0, uniqueDescriptions.length - batch.length),
+      updatedTransactions: updated,
+      failed,
+    });
+  } catch (err) {
+    console.error("[PRODUCTS BACKFILL]", err);
+    const msg = /not configured/i.test(err.message)
+      ? "Azure OpenAI nie jest skonfigurowane."
+      : "Nie udało się uzupełnić produktów.";
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -99,7 +223,12 @@ router.patch("/:id", async (req, res) => {
     if (!existing) return res.status(404).json({ error: "Product not found." });
 
     const { resource } = await productsContainer.item(idParsed.data, familyId).replace(
-      { ...existing, canonicalName: parsed.data.canonicalName.trim(), updatedAt: new Date().toISOString() },
+      {
+        ...existing,
+        canonicalName: parsed.data.canonicalName.trim(),
+        nameLocked:    true,   // a hand-picked name outranks any future AI wording
+        updatedAt:     new Date().toISOString(),
+      },
       { accessCondition: { type: "IfMatch", condition: etag } },
     );
     res.json(resource);

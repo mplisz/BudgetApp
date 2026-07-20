@@ -24,7 +24,8 @@ const { ipKeyGenerator } = require('express-rate-limit');
 // /ocr/feedback is a cheap learning write, so it falls through to the
 // cross-cutting write/api limiters instead of the tight scan budget.
 const hasDedicatedLimiter = (path) =>
-    path.startsWith('/auth/') || path.startsWith('/limits') || path === '/ocr/receipt';
+    path.startsWith('/auth/') || path.startsWith('/limits')
+    || path === '/ocr/receipt' || path === '/products/backfill';
 
 // Factory — keeps limiters DRY
 const createLimiter = (windowMs, maxRequests, baseMessage, extraOptions = {}) => {
@@ -52,6 +53,15 @@ const ocrLimiter = createLimiter(
   "Too many OCR scans",
 );
  
+
+// Retroactive product backfill: a batch of model calls plus a write pass
+// over historical transactions. Strictest budget in the app — it is a
+// maintenance action pressed a couple of times, never in a loop.
+const backfillLimiter = createLimiter(
+  parseInt(process.env.RATE_LIMIT_BACKFILL_WINDOW_MS) || 60 * 60 * 1000,
+  parseInt(process.env.RATE_LIMIT_BACKFILL_MAX)        || 6,
+  "Too many product backfill runs",
+);
 
 const loginLimiter = createLimiter(
   parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MS) || 15 * 60 * 1000,
@@ -99,6 +109,7 @@ function applyRateLimiters(app) {
     if (req.path === '/feedback') return next();
     return ocrLimiter(req, res, next);
   });
+  app.use('/api/products/backfill', backfillLimiter);
   // 2. Cross-cutting limiters — apply to /api/* but skip paths that
   //    already have a dedicated limiter (to avoid double-counting).
   app.use('/api/', (req, res, next) => {

@@ -39,7 +39,7 @@ const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
 const sharp   = require("sharp");
-const { AzureOpenAI } = require("openai");
+const { getOpenAIClient, ProductSchema, PRODUCT_RULES } = require("../utils/productAi");
 
 const { categoriesContainer, receiptsContainer, settingsContainer, productsContainer } = require("../cosmos");
 const { fetchTopProductNames } = require("../utils/productCatalog");
@@ -70,26 +70,9 @@ const MAX_ITEMS         = 100;                    // sanity cap on OCR response
 const MAX_FEEDBACK_ITEMS = 60;                    // cap on a single learning batch
 const MAX_PDF_PAGES     = 8;                      // OCR page cap (e-receipts are 1-2 pages)
 
-// ── Azure OpenAI client (lazy singleton) ─────────────────────
-// Lazy so the server still boots when OCR env vars are missing —
-// the endpoint then returns 503 instead of crashing the process.
-
-let _openaiClient = null;
-function getOpenAIClient() {
-  if (_openaiClient) return _openaiClient;
-  const endpoint   = process.env.AZURE_OPENAI_ENDPOINT;
-  const apiKey     = process.env.AZURE_OPENAI_KEY;
-  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
-  if (!endpoint || !apiKey || !deployment) return null;
-  _openaiClient = new AzureOpenAI({
-    endpoint,
-    apiKey,
-    deployment,
-    apiVersion: "2024-10-21",
-    timeout: OPENAI_TIMEOUT_MS,
-  });
-  return _openaiClient;
-}
+// The Azure OpenAI client, the product schema and the product prompt
+// rules live in utils/productAi.js — shared with the retroactive
+// backfill so both paths name products identically.
 
 // ── Rate limiting ─────────────────────────────────────────────
 // Handled centrally in middleware/rateLimiter.js (ocrLimiter) —
@@ -115,18 +98,11 @@ const LlmItemSchema = z.object({
   category:           z.string().max(100).optional().nullable(),
   subcategory:        z.string().max(100).optional().nullable(),
   categoryConfidence: z.number().min(0).max(1).optional().default(0.5),
-  // Structured product identity for price-history analytics. Optional —
-  // the frontend falls back to regex parsing of `description` without it.
-  // Every field is nullable because the model emits `null` (not omission)
-  // for "not applicable", and `.catch(undefined)` makes a malformed
-  // product degrade to "no structured data" instead of failing the WHOLE
-  // receipt scan — one bad item must not nuke the other 27.
-  product: z.object({
-    name:      z.string().min(1).max(120).nullable().optional(),  // clean name, no size/pack tokens
-    size:      z.number().positive().nullable().optional(),       // single-package size in `unit`
-    unit:      z.enum(["g", "ml", "szt"]).nullable().optional(),
-    packCount: z.number().int().positive().max(99).nullable().optional(),
-  }).optional().nullable().catch(undefined),
+  // Structured product identity for price-history analytics (shared
+  // schema — see utils/productAi.js). `.catch(undefined)` makes a
+  // malformed product degrade to "no structured data" instead of failing
+  // the WHOLE receipt scan — one bad item must not nuke the other 27.
+  product: ProductSchema.optional().nullable().catch(undefined),
 });
 
 const LlmResponseSchema = z.object({
@@ -295,17 +271,7 @@ Przykłady: "Spożywcze, Lidl"; "Chemia, Rossmann"; "Paliwo, Orlen".
 Jeśli nie da się sensownie podsumować — null.
 23. PRODUKT (pole "product" przy każdej pozycji): ustrukturyzowana tożsamość produktu do
 śledzenia historii cen.
-- "name": czysta nazwa produktu BEZ gramatury, pojemności, wielopaku i wagi — pełne słowa,
-  poprawna polska pisownia (rozwiń skróty z paragonu, np. "MLK UHT3.2" → "Mleko UHT 3,2%").
-- "size": rozmiar JEDNEGO opakowania przeliczony do jednostki bazowej ("kg"→g, "l"→ml).
-- "unit": "g", "ml" lub "szt". Dla towarów ważonych podaj wagę z paragonu w gramach.
-- "packCount": liczba sztuk w wielopaku (np. "0,5L x4" → 4). Pomiń gdy 1.
-Przykłady:
-  "ŻUBR PUSZKA 0,5L x4"        → {"name": "Żubr puszka", "size": 500, "unit": "ml", "packCount": 4}
-  "Filet kurczaka 0,442 kg"    → {"name": "Filet z piersi kurczaka", "size": 442, "unit": "g"}
-  "JAJA L 10SZT"               → {"name": "Jaja L", "size": 10, "unit": "szt"}
-  "PAPIER TOALETOWY"           → {"name": "Papier toaletowy", "size": null, "unit": null}
-Gdy nie da się ustalić rozmiaru — size/unit: null, ale "name" podaj ZAWSZE.
+${PRODUCT_RULES}
 ${productSection}KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
 
 KATEGORIE UŻYTKOWNIKA:
