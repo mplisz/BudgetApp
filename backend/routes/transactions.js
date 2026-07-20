@@ -660,11 +660,15 @@ router.delete("/:id", async (req, res) => {
 });
 
 // ── POST /deposit-return ──────────────────────────────────────
-// Bottle-deposit batch return (Zwroty butelek). Appends a return entry to
-// each selected deposit expense WITHOUT the per-transaction cross-month
-// transfer, then creates ONE consolidated TRANSFER in the current month =
+// BATCH return with ONE consolidated transfer. Appends a return entry to
+// each selected expense WITHOUT the per-transaction cross-month transfer,
+// then creates ONE consolidated TRANSFER in the current month =
 // (returns applied to past months) + surplus. Current-month returns just
 // reduce that month's expense, so they don't feed the transfer.
+//
+// Consumers: bottle deposits (Zwroty butelek) and LuxMed refunds — any
+// flow that refunds several transactions at once and wants a single
+// summary transfer instead of one per transaction.
 //
 // body: { returns: [{ txId, amount }], surplus, budgetMonth, date, reason }
 
@@ -737,7 +741,8 @@ router.post("/deposit-return", async (req, res) => {
     let transfer = null;
     if (transferAmt > 0 && target) {
       const doc = {
-        id:               `tx_${familyId}_${budgetMonth.replace("-", "")}_kaucja_${Date.now()}`,
+        // Generic slug — the endpoint serves any batch-return flow now.
+        id:               `tx_${familyId}_${budgetMonth.replace("-", "")}_batchret_${Date.now()}`,
         userId:           familyId,
         type:             "TRANSFER",
         categoryId:       target.categoryId,

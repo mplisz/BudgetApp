@@ -232,25 +232,40 @@ export default function PanelLuxmed() {
   async function handleBulkReturn() {
     setConfirmOpen(false);
     setIsSaving(true);
-    let ok = 0, fail = 0;
-    for (const row of simRows) {
-      if (row.willReturn <= 0) continue;
-      try {
-        await api.post(`/api/transactions/${row.txId}/returns`, {
-          amount: row.willReturn, cashAmount: row.willReturn, voucherAmount: 0,
-          moneyReturnedInMonth: returnMonth,
-          returnedAt: todayYMD(),
-          reason: "Zwrot LuxMed",
-        });
-        ok++;
-      } catch { fail++; }
+    try {
+      // One batch call → returns recorded on every parent tx + ONE
+      // consolidated transfer for past-month refunds (same endpoint as
+      // bottle deposits), instead of a transfer per transaction.
+      const result = await api.post<{ updated: unknown[]; transfer: unknown | null; failed: number }>(
+        "/api/transactions/deposit-return",
+        {
+          returns: simRows
+            .filter(r => r.willReturn > 0)
+            .map(r => ({ txId: r.txId, amount: r.willReturn })),
+          surplus:     0,
+          budgetMonth: returnMonth,
+          date:        todayYMD(),
+          reason:      "Zwrot LuxMed",
+        },
+        { fallback: "Nie udało się wykonać zwrotów LuxMed." },
+      );
+      const ok = result.updated.length;
+      if (result.failed === 0) {
+        showSuccess(
+          `✅ Wykonano ${ok} zwrot${ok === 1 ? "" : "ów"} — ${fmt(totalWillReturn)}` +
+          (result.transfer ? " (1 zbiorczy transfer)" : ""),
+        );
+      } else {
+        showError(`${ok} OK, ${result.failed} błędów`);
+      }
+    } catch (err) {
+      showError((err as Error).message);
+    } finally {
+      invalidate(bounds.from, bounds.to);
+      await loadRange(bounds.from, bounds.to);
+      setSelected(new Set());
+      setIsSaving(false);
     }
-    invalidate(bounds.from, bounds.to);
-    await loadRange(bounds.from, bounds.to);
-    setSelected(new Set());
-    setIsSaving(false);
-    if (fail === 0) showSuccess(`✅ Wykonano ${ok} zwrot${ok === 1 ? "" : "ów"} — ${fmt(totalWillReturn)}`);
-    else            showError(`${ok} OK, ${fail} błędów`);
   }
 
   // ── No sub banner ────────────────────────────────────────
@@ -494,7 +509,7 @@ export default function PanelLuxmed() {
       <ConfirmModal
         isOpen={confirmOpen}
         title="🏥 Potwierdź zwroty LuxMed"
-        message={`Wykonać ${simRows.filter(r => r.willReturn > 0).length} zwrot${simRows.filter(r => r.willReturn > 0).length === 1 ? "" : "ów"} na łączną kwotę ${fmt(totalWillReturn)}?\n\nZaksięgowane w bieżącym miesiącu (${returnMonth}). Dla transakcji z innych miesięcy system automatycznie utworzy transfery.`}
+        message={`Wykonać ${simRows.filter(r => r.willReturn > 0).length} zwrot${simRows.filter(r => r.willReturn > 0).length === 1 ? "" : "ów"} na łączną kwotę ${fmt(totalWillReturn)}?\n\nZaksięgowane w bieżącym miesiącu (${returnMonth}). Zwroty z wcześniejszych miesięcy trafią do JEDNEGO zbiorczego transferu.`}
         onConfirm={handleBulkReturn}
         onCancel={() => setConfirmOpen(false)}
       />
