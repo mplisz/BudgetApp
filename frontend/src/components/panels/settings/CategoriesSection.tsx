@@ -33,6 +33,7 @@ export function CategoriesSection() {
   const [newSubCanBeRecurring, setNewSubCanBeRecurring] = useState(false);
   const [newSubIsCritical,     setNewSubIsCritical]     = useState(false);
   const [newSubCanBeLuxmed,    setNewSubCanBeLuxmed]    = useState(false);
+  const [newSubTrackPrices,    setNewSubTrackPrices]    = useState(false);
   const [modalConfig,          setModalConfig]          = useState(MODAL_CLOSED);
 
   const expandedCat = useMemo(() =>
@@ -72,6 +73,7 @@ export function CategoriesSection() {
       newSubCanBeRecurring,
       newSubIsCritical,
       newSubCanBeLuxmed,
+      newSubTrackPrices,
     );
     if (success) {
       setNewSubName("");
@@ -79,6 +81,7 @@ export function CategoriesSection() {
       setNewSubCanBeRecurring(false);
       setNewSubIsCritical(false);
       setNewSubCanBeLuxmed(false);
+      setNewSubTrackPrices(false);
     }
   }
 
@@ -269,6 +272,20 @@ export function CategoriesSection() {
                       </label>
                     )}
 
+                    {expandedCat.type === "EXPENSE" && (
+                      <label
+                        title="Ceny — produkty z tej subkategorii trafią do historii cen (Analiza → Ceny produktów)"
+                        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "0 4px", whiteSpace: "nowrap" }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={newSubTrackPrices}
+                          onChange={e => setNewSubTrackPrices(e.target.checked)}
+                        />
+                        <span style={{ fontSize: 11, color: c.textSecondary }}>🏷️</span>
+                      </label>
+                    )}
+
                     <button
                       onClick={handleAddSubCategory}
                       disabled={isSavingCat}
@@ -279,12 +296,12 @@ export function CategoriesSection() {
                   </div>
 
                   {/* Subcategory list header */}
-                  {/* ONE scroll container for both axes. Two separate
-                      scrollers desynchronised the header from the rows
-                      (overflowY:auto silently forces overflowX:auto, so the
-                      rows had their own horizontal scroll). The header stays
-                      put via position:sticky instead. */}
-                  <div style={{ maxHeight: 420, overflow: "auto" }}>
+                  {/* The list grows to fit — no inner vertical scroll, so the
+                      card fills the panel instead of boxing a scrollbar into
+                      a corner. Horizontal scrolling is the ONLY scroll here,
+                      and it wraps header + rows together so they can never
+                      desynchronise (a second scroller was what skewed them). */}
+                  <div style={{ overflowX: "auto" }}>
                     <div style={{ minWidth: expandedCat.type === "EXPENSE" ? SUBCAT_MIN_WIDTH : "auto" }}>
 
                   {/* Columns come from ONE shared definition (SubcategoryRow)
@@ -293,8 +310,6 @@ export function CategoriesSection() {
                     display: "grid",
                     gridTemplateColumns: subcategoryGridColumns(expandedCat.type),
                     gap: 6, marginBottom: 8,
-                    position: "sticky", top: 0, zIndex: 1,
-                    background: c.surface, paddingBottom: 4,
                   }}>
                     <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>NAZWA</span>
                     {expandedCat.type === "EXPENSE" && (

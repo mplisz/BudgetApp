@@ -26,9 +26,6 @@ interface SubcategoryRowProps {
   onError:          (msg: string) => void;
 }
 
-/** LuxMed flags only make sense inside the health category. */
-export const LUXMED_CATEGORY_ID = "cat_zdrowie";
-
 /**
  * THE single definition of the subcategory grid columns, shared by the
  * header (CategoriesSection) and every row — when those drifted apart the
@@ -52,9 +49,6 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
   const isExpense  = parentType === "EXPENSE";
   const isDisabled = subData.isArchived || parentIsArchived;
 
-  // canBeLuxmed toggle pokazujemy tylko dla kategorii Zdrowie (EXPENSE).
-  const isZdrowieCategory = parentId === LUXMED_CATEGORY_ID;
-
   // ── Cells (zdefiniowane raz, użyte w obu układach) ────────────
 
   const nameCell = (
@@ -66,10 +60,6 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
       />
       {subData.isArchived && (
         <span style={{ fontSize: 10, color: c.danger }}>(Arch)</span>
-      )}
-      {subData.canBeLuxmed && !isZdrowieCategory && (
-        // Fallback badge jeśli subkategoria ma flagę ale nie jesteśmy w Zdrowie
-        <span style={{ fontSize: 10, color: c.cyan }}>🏥</span>
       )}
     </div>
   );
@@ -130,10 +120,11 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
     </button>
   ) : null;
 
-  // The LuxMed column exists for every EXPENSE subcategory so the grid
-  // keeps a constant shape; outside the health category the cell is
-  // simply empty (the toggle only makes sense there).
-  const luxmedBtn = !isExpense ? null : !isZdrowieCategory ? <span /> : (
+  // LuxMed is togglable on ANY expense subcategory. It used to be locked
+  // to the health category, which left a column you could see but never
+  // click everywhere else — and refunds legitimately show up outside
+  // "Zdrowie" (glasses, rehab, dentistry booked elsewhere).
+  const luxmedBtn = isExpense ? (
     <button
       onClick={() => !isDisabled && onUpdate(subData.id, subName, parentId, { canBeLuxmed: !subData.canBeLuxmed })}
       disabled={isDisabled}
@@ -156,7 +147,7 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
     >
       🏥 {subData.canBeLuxmed ? "LuxMed" : "—"}
     </button>
-  );
+  ) : null;
 
   // Price tracking: which subcategories feed the product price history.
   // Available for every EXPENSE subcategory — you decide what is worth

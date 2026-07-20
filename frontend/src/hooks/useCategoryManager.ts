@@ -108,6 +108,7 @@ export function useCategoryManager() {
     canBeRecurring = false,
     isCritical = false,
     canBeLuxmed = false,
+    trackPrices = false,
   ) {
     setIsSavingCat(true);
     try {
@@ -117,6 +118,7 @@ export function useCategoryManager() {
         canBeRecurring: canBeRecurring ?? false,
         isCritical:     isCritical     ?? false,
         canBeLuxmed:    canBeLuxmed     ?? false,
+        trackPrices:    trackPrices    ?? false,
       }, { fallback: "Nie można dodać kategorii." });
 
       setCategories(prev => {
