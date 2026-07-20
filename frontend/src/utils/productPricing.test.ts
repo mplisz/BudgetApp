@@ -34,13 +34,19 @@ function tx(o: {
   merchant?: string | null;
   items?: PricedTransaction["lineItems"];
   type?: string;
+  amount?: number;
+  description?: string | null;
+  subcategoryName?: string | null;
 }): PricedTransaction {
   return {
-    type:        o.type ?? "EXPENSE",
-    date:        o.date,
-    budgetMonth: o.date.slice(0, 7),
-    merchant:    o.merchant,
-    lineItems:   o.items,
+    type:            o.type ?? "EXPENSE",
+    date:            o.date,
+    budgetMonth:     o.date.slice(0, 7),
+    merchant:        o.merchant,
+    amount:          o.amount ?? 0,
+    description:     o.description,
+    subcategoryName: o.subcategoryName,
+    lineItems:       o.items,
   };
 }
 
@@ -188,16 +194,37 @@ describe("buildPriceHistory", () => {
     expect(MIN_OCCURRENCES).toBe(3);
   });
 
-  it("skips non-expenses, missing merchants and non-positive amounts", () => {
+  it("includes merchant-less buys under a placeholder, skips non-expenses and non-positive amounts", () => {
     const txs = [
       ...purchases("Mleko 1l", [3, 3, 3]),
       tx({ date: "2026-04-10", type: "INCOME", merchant: "Biedronka", items: [{ description: "Mleko 1l", amount: 3 }] }),
-      tx({ date: "2026-04-11", merchant: "",   items: [{ description: "Mleko 1l", amount: 3 }] }),
-      tx({ date: "2026-04-12", merchant: "Biedronka", items: [{ description: "Mleko 1l", amount: 0 }] }),
+      tx({ date: "2026-04-11", merchant: "",   items: [{ description: "Mleko 1l", amount: 3 }] }),   // no shop → placeholder
+      tx({ date: "2026-04-12", merchant: "Biedronka", items: [{ description: "Mleko 1l", amount: 0 }] }), // zero → skip
     ];
-    const { products, stats } = buildPriceHistory(txs);
+    const { products } = buildPriceHistory(txs);
+    expect(products[0].occurrences).toHaveLength(4);          // 3 + the merchant-less one
+    expect(products[0].merchants).toContain("(bez sklepu)");  // NO_MERCHANT
+  });
+
+  it("includes single-item transactions with no lineItems, named by description", () => {
+    const txs = [1, 2, 3].map(i => tx({
+      date: `2026-0${i}-10`, merchant: "Rossmann",
+      amount: 40 + i, description: "Mleko modyfikowane Bebilon 800g",
+    }));
+    const { products } = buildPriceHistory(txs);
+    expect(products).toHaveLength(1);
     expect(products[0].occurrences).toHaveLength(3);
-    expect(stats.txWithItems).toBe(4);  // the zero-amount tx still has items
+    expect(products[0].occurrences[0].size).toBe(800);   // parsed from the description
+  });
+
+  it("falls back to the subcategory name when a single-item tx has no description", () => {
+    const txs = [1, 2, 3].map(i => tx({
+      date: `2026-0${i}-10`, merchant: "Apteka",
+      amount: 45, subcategoryName: "Mleko modyfikowane",
+    }));
+    const { products } = buildPriceHistory(txs);
+    expect(products).toHaveLength(1);
+    expect(products[0].label).toBe("Mleko modyfikowane");
   });
 
   it("restricts to the given months when provided", () => {

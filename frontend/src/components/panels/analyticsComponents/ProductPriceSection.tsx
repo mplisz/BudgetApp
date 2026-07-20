@@ -91,8 +91,8 @@ export function ProductPriceSection({ transactions, months }: Props) {
   if (products.length === 0) {
     return (
       <ChartEmpty message={
-        `Brak produktów kupionych min. ${MIN_OCCURRENCES}× w zakresie. ` +
-        "Potrzebne paragony z pozycjami i przypisanym sklepem."
+        `Brak produktów kupionych min. ${MIN_OCCURRENCES}× w zakresie ` +
+        "(z paragonów lub pojedynczych transakcji)."
       } />
     );
   }
@@ -105,7 +105,7 @@ export function ProductPriceSection({ transactions, months }: Props) {
     <div>
       {/* Coverage stats */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginBottom: 12 }}>
-        <span style={statChip}>🧾 {stats.txWithItems} transakcji z pozycjami</span>
+        <span style={statChip}>🧾 {stats.txWithItems} transakcji uwzględnionych</span>
         <span style={statChip}>📦 {stats.productsTracked} produktów kupowanych ≥{MIN_OCCURRENCES}×</span>
         <span style={statChip}>⚖️ {stats.withUnitPrice} z ceną jednostkową</span>
       </div>

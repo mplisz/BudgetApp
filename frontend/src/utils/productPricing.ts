@@ -41,12 +41,18 @@ export interface PriceLineItem {
 
 /** Minimal transaction shape the aggregation needs (subset of range docs). */
 export interface PricedTransaction {
-  type:        string;
-  date:        string;
-  budgetMonth: string;
-  merchant?:   string | null;
-  lineItems?:  PriceLineItem[];
+  type:             string;
+  date:             string;
+  budgetMonth:      string;
+  merchant?:        string | null;
+  amount:           number;
+  description?:     string | null;
+  subcategoryName?: string | null;
+  lineItems?:       PriceLineItem[];
 }
+
+/** Shown as the merchant for a purchase with no recorded shop. */
+export const NO_MERCHANT = "(bez sklepu)";
 
 export interface PriceOccurrence {
   date:      string;
@@ -321,11 +327,18 @@ export function buildPriceHistory(
   for (const tx of transactions) {
     if (tx.type !== "EXPENSE") continue;
     if (months && !months.has(tx.budgetMonth)) continue;
-    const merchant = (tx.merchant ?? "").trim();
-    const items = tx.lineItems ?? [];
-    if (!merchant || items.length === 0) continue;
-    txWithItems++;
+    const merchant = (tx.merchant ?? "").trim() || NO_MERCHANT;
 
+    // Multi-item receipts carry lineItems. A single-item purchase — a
+    // manual entry, or an OCR scan of a one-line receipt — has none; treat
+    // the whole transaction as one product line, named by its description
+    // (fallback: the subcategory, e.g. "Mleko modyfikowane" as its own
+    // category). Without this, single-item buys are invisible here.
+    const items: PriceLineItem[] = (tx.lineItems && tx.lineItems.length > 0)
+      ? tx.lineItems
+      : [{ description: (tx.description || tx.subcategoryName || "").trim(), amount: tx.amount }];
+
+    let contributed = false;
     for (const item of items) {
       if (!item.description?.trim() || !(item.amount > 0)) continue;
       const parsed = parseItem(item);
@@ -351,7 +364,9 @@ export function buildPriceHistory(
         unitPrice: computeUnitPrice(item.amount, size, unit),
       });
       linesByName.get(nameKey)!.push({ date: tx.date, packSize, unit });
+      contributed = true;
     }
+    if (contributed) txWithItems++;
   }
 
   const products = [...byName.values()]
