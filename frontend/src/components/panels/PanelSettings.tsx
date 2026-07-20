@@ -12,7 +12,7 @@ import { CategoryMappingSection } from  "./settings/CategoryMappingSection";
 
 function PanelSettings() {
   return (
-    <div style={{ ...s.panel, maxWidth: 900 }}>
+    <div style={{ ...s.panel, maxWidth: 1200 }}>
       <div style={{ marginBottom: 16 }}>
         <div style={s.sectionTitle}>Ustawienia</div>
       </div>

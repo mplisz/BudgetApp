@@ -279,10 +279,12 @@ export function CategoriesSection() {
                   </div>
 
                   {/* Subcategory list header */}
-                  {/* One horizontal scroller wraps header AND rows so they
-                      scroll together; the inner min-width stops the columns
-                      from crushing on a narrow screen. */}
-                  <div style={{ overflowX: "auto" }}>
+                  {/* ONE scroll container for both axes. Two separate
+                      scrollers desynchronised the header from the rows
+                      (overflowY:auto silently forces overflowX:auto, so the
+                      rows had their own horizontal scroll). The header stays
+                      put via position:sticky instead. */}
+                  <div style={{ maxHeight: 420, overflow: "auto" }}>
                     <div style={{ minWidth: expandedCat.type === "EXPENSE" ? SUBCAT_MIN_WIDTH : "auto" }}>
 
                   {/* Columns come from ONE shared definition (SubcategoryRow)
@@ -291,6 +293,8 @@ export function CategoriesSection() {
                     display: "grid",
                     gridTemplateColumns: subcategoryGridColumns(expandedCat.type),
                     gap: 6, marginBottom: 8,
+                    position: "sticky", top: 0, zIndex: 1,
+                    background: c.surface, paddingBottom: 4,
                   }}>
                     <span style={{ color: c.textMuted, fontSize: 10, fontWeight: 700 }}>NAZWA</span>
                     {expandedCat.type === "EXPENSE" && (
@@ -304,8 +308,8 @@ export function CategoriesSection() {
                     )}
                   </div>
 
-                  {/* Subcategory rows */}
-                  <div style={{ maxHeight: 400, overflowY: "auto" }}>
+                  {/* Rows — no scroll of their own; the wrapper owns it. */}
+                  <div>
                     {(expandedCat.sub || [])
                       .filter(sub => showArchivedSubs ? true : !sub.isArchived)
                       .sort((a, b) => (a.priority || 0) - (b.priority || 0))

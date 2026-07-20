@@ -40,11 +40,11 @@ export const LUXMED_CATEGORY_ID = "cat_zdrowie";
  * A constant column count is what keeps header and rows aligned; a
  * conditional one is how they drift.
  */
-export const SUBCAT_MIN_WIDTH = 560;   // below this the table scrolls instead of crushing
+export const SUBCAT_MIN_WIDTH = 670;   // below this the table scrolls instead of crushing
 
 export function subcategoryGridColumns(type: string | undefined): string {
   if (type !== "EXPENSE") return "1fr 34px";
-  return "minmax(110px, 1fr) 120px 82px 82px 82px 82px 34px";
+  return "minmax(140px, 1fr) 120px 92px 92px 92px 92px 34px";
 }
 
 export function SubcategoryRow({ subName, subData, parentId, parentType, parentIsArchived, onUpdate, onError }: SubcategoryRowProps) {
@@ -101,7 +101,7 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
         opacity:       isDisabled ? 0.4 : 1,
       }}
     >
-      🔄 {subData.canBeRecurring ? "Cykl." : "—"}
+      🔄 {subData.canBeRecurring ? "Cykliczne" : "—"}
     </button>
   ) : null;
 
@@ -126,7 +126,7 @@ export function SubcategoryRow({ subName, subData, parentId, parentType, parentI
         opacity:       isDisabled ? 0.4 : 1,
       }}
     >
-      🔒 {subData.isCritical ? "Kryt." : "—"}
+      🔒 {subData.isCritical ? "Krytyczne" : "—"}
     </button>
   ) : null;
 
