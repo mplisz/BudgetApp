@@ -33,7 +33,6 @@ const { generateId } = require("./helpers");
 
 const POLISH_FOLD = { ą: "a", ć: "c", ę: "e", ł: "l", ń: "n", ó: "o", ś: "s", ź: "z", ż: "z" };
 
-const MAX_ALIASES = 24;   // cap the cross-shop wording record per product
 const MAX_SIZES   = 16;   // cap distinct package sizes tracked per product
 
 /** Lowercase, diacritics-folded, punctuation-stripped name — the basis
@@ -67,7 +66,7 @@ function productId(familyId, key) {
 /**
  * Pure merge — folds one receipt line into a catalog doc (or seeds a new
  * one when `existing` is null). `line` = { id, key, name, size, unit,
- * merchant, raw, date }. Deterministic given its inputs; unit-tested.
+ * merchant, date }. Deterministic given its inputs; unit-tested.
  */
 function mergeProductDoc(existing, line, familyId) {
   const now = new Date().toISOString();
@@ -84,7 +83,6 @@ function mergeProductDoc(existing, line, familyId) {
       unit:          line.unit || null,
       packSizes:     line.size ? [line.size] : [],
       merchants:     line.merchant ? [line.merchant] : [],
-      aliases:       [{ merchant: line.merchant || null, raw: line.raw || line.name }],
       purchaseCount: 1,
       firstSeen:     day,
       lastSeen:      day,
@@ -111,19 +109,11 @@ function mergeProductDoc(existing, line, familyId) {
     ? [...(existing.merchants || []), line.merchant]
     : (existing.merchants || []);
 
-  const raw = line.raw || line.name;
-  const aliasSeen = (existing.aliases || []).some(a =>
-    (a.merchant || "") === (line.merchant || "") && (a.raw || "") === raw);
-  const aliases = aliasSeen
-    ? existing.aliases
-    : [...(existing.aliases || []), { merchant: line.merchant || null, raw }].slice(-MAX_ALIASES);
-
   return {
     ...existing,
     canonicalName,
     packSizes,
     merchants,
-    aliases,
     purchaseCount: (existing.purchaseCount || 0) + 1,
     firstSeen:     day < existing.firstSeen ? day : existing.firstSeen,
     lastSeen:      day > existing.lastSeen  ? day : existing.lastSeen,
@@ -136,10 +126,10 @@ function mergeProductDoc(existing, line, familyId) {
  * product to track, before any purchase of it has been scanned. Shape
  * matches a normal catalog doc (mergeProductDoc's "new" branch) so the
  * very next matching purchase folds into it exactly like any other:
- * purchaseCount/packSizes/merchants/aliases start empty and accumulate
- * from there. `nameLocked` is set immediately — the user typed this
- * spelling on purpose, so no future purchase's own wording should ever
- * silently rename it.
+ * purchaseCount/packSizes/merchants start empty and accumulate from
+ * there. `nameLocked` is set immediately — the user typed this spelling
+ * on purpose, so no future purchase's own wording should ever silently
+ * rename it.
  */
 function newTrackedProduct(familyId, id, key, canonicalName, unit, defaultSize) {
   const now = new Date().toISOString();
@@ -154,7 +144,6 @@ function newTrackedProduct(familyId, id, key, canonicalName, unit, defaultSize) 
     defaultSize:   defaultSize ?? null,
     packSizes:     [],
     merchants:     [],
-    aliases:       [],
     purchaseCount: 0,
     firstSeen:     null,
     lastSeen:      null,
@@ -277,7 +266,6 @@ async function rememberProducts(container, familyId, tx) {
         size:     typeof p.size === "number" && p.size > 0 ? p.size : null,
         unit:     p.unit || null,
         merchant,
-        raw:      li.description || name,
         date:     tx.date,
       });
     } catch (err) {
