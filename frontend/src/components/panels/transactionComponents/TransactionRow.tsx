@@ -34,7 +34,11 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
   const isRecurring = !!tx.isRecurring;
   const lineItems   = Array.isArray(tx.lineItems) ? tx.lineItems : [];
   const hasLineItems = lineItems.length > 1;
-  
+  // Independent of hasLineItems — a singleton lineItems array (the common
+  // "one product, no breakdown" case) never shows the ▸ toggle below, but
+  // still carries a tracked product worth surfacing.
+  const trackedProducts = [...new Set(lineItems.map(li => li.product?.name).filter((n): n is string => !!n))];
+
   return (
     <>
       <tr
@@ -72,6 +76,14 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
             {tx.description || <span style={{ color: c.borderStrong }}>—</span>}
           </span>
           {isRecurring && <span style={{ marginLeft: 6 }} title="Cykliczne">🔄</span>}
+          {trackedProducts.length > 0 && (
+            <div
+              style={{ color: c.cyanLight, fontSize: 10, marginTop: 2, fontWeight: 600 }}
+              title={trackedProducts.join(", ")}
+            >
+              🏷️ {trackedProducts.length === 1 ? trackedProducts[0] : `${trackedProducts.length} śledzone produkty`}
+            </div>
+          )}
         </td>
 
         {/* Tags */}
@@ -211,6 +223,7 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
   const lineItems    = Array.isArray(tx.lineItems) ? tx.lineItems : [];
   const hasLineItems = lineItems.length > 1;
   const isForeign    = tx.originalCurrency !== "PLN";
+  const trackedProducts = [...new Set(lineItems.map(li => li.product?.name).filter((n): n is string => !!n))];
 
   return (
     <div style={{
@@ -272,6 +285,16 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
       {tx.description && (
         <div style={{ color: c.textTertiary, fontSize: 13, marginTop: 8, wordBreak: "break-word" }}>
           {tx.description}
+        </div>
+      )}
+
+      {/* Tracked product(s) */}
+      {trackedProducts.length > 0 && (
+        <div
+          style={{ color: c.cyanLight, fontSize: 11, marginTop: 4, fontWeight: 600 }}
+          title={trackedProducts.join(", ")}
+        >
+          🏷️ {trackedProducts.length === 1 ? trackedProducts[0] : `${trackedProducts.length} śledzone produkty`}
         </div>
       )}
 

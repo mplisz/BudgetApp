@@ -573,6 +573,11 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
                                   : `${line.categoryName} › ${line.subcategoryName}`}
                                 {lowConf && !noCategory && <span style={{ color: c.warning }}> · sprawdź ⚠️</span>}
                               </div>
+                              {line.product?.name && (
+                                <div style={{ color: c.cyanLight, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
+                                  🏷️ Śledzony: {line.product.name}
+                                </div>
+                              )}
                               {line.discountAmount != null && line.discountAmount > 0 && (
                                 <div style={{ color: c.warning, fontSize: 11, marginTop: 3 }}>
                                   🏷️ rabat −{fmtOcr(line.discountAmount)}

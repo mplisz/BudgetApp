@@ -408,6 +408,11 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
                   {item.description && (
                     <div style={{ color: c.textSecondary, fontSize: 11, marginTop: 2 }}>{item.description}</div>
                   )}
+                  {item._product?.name && (
+                    <div style={{ color: c.cyanLight, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
+                      🏷️ {item._product.name}
+                    </div>
+                  )}
                   {item._ocrDiscount != null && item._ocrDiscount > 0 && (
                     <div style={{ color: c.warning, fontSize: 10, marginTop: 2 }}>
                       🏷️ rabat −{fmt(item._ocrDiscount)}

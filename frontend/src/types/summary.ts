@@ -3,6 +3,8 @@
 // Domain types for PanelSummary and its sub-components.
 // ============================================================
 
+import type { LineItemProduct } from "../utils/productPricing";
+
 export type BudgetMonth = string; // "YYYY-MM"
 
 export type TransactionType = "EXPENSE" | "INCOME" | "TRANSFER" | "SAVING";
@@ -21,6 +23,7 @@ export interface TxLineItem {
   amount:           number;
   originalAmount?:   number;
   originalCurrency?: string;
+  product?:          LineItemProduct | null;
 }
 
 // Canonical transaction document. Superset of every shape the panels read —
