@@ -108,11 +108,22 @@ export default function PanelTransactions() {
     return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
   }, [enriched]);
 
+  // Merchant/tag OPTIONS are scoped to the active date range only (not the
+  // other filters — category/tags/merchant filtering their own option list
+  // would hide the currently-selected value the moment it's picked). Narrows
+  // to "shops/tags that actually occurred in these dates", per user request.
+  const dateScoped = useMemo(() =>
+    enriched.filter(tx =>
+      (!filters.dateFrom || tx.date >= toYMD(filters.dateFrom)) &&
+      (!filters.dateTo   || tx.date <= toYMD(filters.dateTo))),
+    [enriched, filters.dateFrom, filters.dateTo]
+  );
+
   const uniqueMerchants = useMemo(() => {
     const set = new Set<string>();
-    enriched.forEach(tx => { if (tx.merchant) set.add(tx.merchant); });
+    dateScoped.forEach(tx => { if (tx.merchant) set.add(tx.merchant); });
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [enriched]);
+  }, [dateScoped]);
 
   const uniqueSubs = useMemo(() => {
     if (filters.categories.length === 0) return [];
@@ -124,9 +135,9 @@ export default function PanelTransactions() {
   }, [enriched, filters.categories]);
 
   const monthTagIds = useMemo(() => {
-    const ids = new Set(enriched.flatMap(tx => tx.tags || []));
+    const ids = new Set(dateScoped.flatMap(tx => tx.tags || []));
     return tags.filter(t => ids.has(t.id));
-  }, [enriched, tags]);
+  }, [dateScoped, tags]);
 
   // ── Filtering ─────────────────────────────────────────────
 
@@ -293,8 +304,11 @@ export default function PanelTransactions() {
               showToday
               dateFrom={filters.dateFrom}
               dateTo={filters.dateTo}
-              onFrom={d => set("dateFrom", d)}
-              onTo={d => set("dateTo", d)}
+              // Merchant/tag OPTIONS are scoped to this range (see dateScoped
+              // above) — clear both selections too, so a shop/tag that falls
+              // out of the new range doesn't keep silently filtering.
+              onFrom={d => { set("dateFrom", d); set("merchant", ""); set("tags", []); }}
+              onTo={d => { set("dateTo", d); set("merchant", ""); set("tags", []); }}
               bounds={dateBounds}
               disabled={noDateRange}
               emptyMessage="Brak wydatków w tym miesiącu — filtr dat niedostępny."
