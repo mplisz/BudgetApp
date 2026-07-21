@@ -14,8 +14,13 @@ import {
 } from "../../../utils/returnUtils";
 import { c, alpha } from "../../../styles/tokens";
 import type { Transaction } from "../../../types/summary";
+import { PRIO_META } from "../../../types/summaryConstants";
 
-export const PRIO_COLORS: Record<number, string> = { 1: c.danger, 2: c.orange, 3: c.amber, 4: c.gray };
+// Derived from the shared PRIO_META (types/summaryConstants.ts) — don't
+// redefine these colors locally again.
+export const PRIO_COLORS: Record<number, string> = Object.fromEntries(
+  Object.entries(PRIO_META).map(([k, v]) => [k, v.color]),
+);
 
 export const s = {
   card:        { background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, overflow: "hidden", marginBottom: 8 } as CSSProperties,

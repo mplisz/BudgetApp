@@ -61,6 +61,7 @@ import { type PricedTransaction }                        from "../../utils/produ
 import { isFixedExpense }                                from "../../utils/monthForecast";
 import { CHART_COLORS, SERIES, isRetirementCategory }    from "./analyticsComponents/chartKit";
 import { useMonthFromUrl } from "../../hooks/useMonthFromUrl";
+import { PRIO_KEYS, PRIO_META, sumExpensesByPriority } from "../../types/summaryConstants";
 
 
 // ── Types ─────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ interface Transaction {
   subcategoryId:   string;
   subcategoryName: string;
   amount:          number;
+  priority?:       number | null;
   isRecurring?:    boolean;
   recurringId?:    string | null;
   merchant?:       string | null;
@@ -371,6 +373,26 @@ export default function PanelAnalytics() {
     { key: "variable", name: "Zmienne",           color: SERIES.variable },
   ];
 
+  // ── Expenses by priority (P1-P4) month to month — reuses the exact
+  // bucketing rule the single-month "Rozkład priorytetów" (PanelSummary)
+  // uses, via the shared sumExpensesByPriority helper. ──
+
+  const priorityData = useMemo<Array<{ month: string } & Record<string, number>>>(() => {
+    const txs = transactions as unknown as Transaction[];
+    return monthlyData.map(d => {
+      const sums = sumExpensesByPriority(txs.filter(tx => tx.budgetMonth === d.month));
+      const row = { month: d.month } as Record<string, number> & { month: string };
+      for (const p of PRIO_KEYS) row[`p${p}`] = sums[p];
+      return row;
+    });
+  }, [monthlyData, transactions]);
+
+  const prioritySeries: StackedSeries[] = PRIO_KEYS.map(p => ({
+    key:   `p${p}`,
+    name:  `${PRIO_META[p].label} – ${PRIO_META[p].desc}`,
+    color: PRIO_META[p].color,
+  }));
+
   // ── #6 Savings contributions by goal (top-level SAVING category) ──
 
   const savingsByGoal = useMemo<{
@@ -637,6 +659,12 @@ export default function PanelAnalytics() {
               </Card>
               <Card title="🏆 Top kategorie">
                 <TopCategoriesBar data={categoryTotals} topN={10} />
+              </Card>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <Card title="🎖️ Wydatki wg priorytetu">
+                <StackedMonthlyChart data={priorityData} series={prioritySeries} />
               </Card>
             </div>
 

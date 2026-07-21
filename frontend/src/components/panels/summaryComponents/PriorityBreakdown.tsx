@@ -6,7 +6,7 @@ import { c } from "../../../styles/tokens";
 import { useMemo } from "react";
 import { fmt } from "../../../utils/helpers";
 import { ProgressBar, EmptyState } from "../../ui/summaryUi";
-import { PRIO_META, PRIO_KEYS } from "../../../types/summaryConstants";
+import { PRIO_META, PRIO_KEYS, sumExpensesByPriority } from "../../../types/summaryConstants";
 import type { Transaction } from "../../../types/summary";
 
 interface PriorityBreakdownProps {
@@ -15,14 +15,7 @@ interface PriorityBreakdownProps {
 }
 
 export function PriorityBreakdown({ monthTx, totalExpenses }: PriorityBreakdownProps) {
-  const byPriority = useMemo<Record<1 | 2 | 3 | 4, number>>(() => {
-    const map: Record<1 | 2 | 3 | 4, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
-    for (const tx of monthTx) {
-      if (tx.type !== "EXPENSE") continue;
-      map[tx.priority ?? 4] += tx.amount;
-    }
-    return map;
-  }, [monthTx]);
+  const byPriority = useMemo(() => sumExpensesByPriority(monthTx), [monthTx]);
 
   if (!PRIO_KEYS.some(p => byPriority[p] > 0)) {
     return <EmptyState message="Brak wydatków" />;

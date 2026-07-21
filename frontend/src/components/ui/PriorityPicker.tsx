@@ -14,12 +14,17 @@ import { c } from "../../styles/tokens";
 import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import type { AppCategory } from "../../types/appContext";
+import { PRIO_META } from "../../types/summaryConstants";
 
+// Labels here are this picker's own (short button text) — deliberately
+// NOT PRIO_META's `desc`, which is longer prose for the Summary breakdown.
+// Colors DO come from PRIO_META — the single shared source — so a
+// transaction's priority reads the same color everywhere in the app.
 const PRIORITIES = [
-  { value: 1, label: "P1 – Krytyczny", color: c.danger },
-  { value: 2, label: "P2 – Ważny",     color: c.orange },
-  { value: 3, label: "P3 – Normalny",  color: c.amber },
-  { value: 4, label: "P4 – Niski",     color: c.successBrite },
+  { value: 1, label: "P1 – Krytyczny", color: PRIO_META[1].color },
+  { value: 2, label: "P2 – Ważny",     color: PRIO_META[2].color },
+  { value: 3, label: "P3 – Normalny",  color: PRIO_META[3].color },
+  { value: 4, label: "P4 – Niski",     color: PRIO_META[4].color },
 ];
 
 export const PRIORITY_COLORS = Object.fromEntries(PRIORITIES.map(p => [p.value, p.color]));

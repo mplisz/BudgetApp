@@ -23,18 +23,16 @@ export const POPULAR_EMOJIS = [
 
 // ── Priorities ───────────────────────────────────────────────
 
+// Single source of truth for priority colors/labels/descriptions — derived
+// into PRIO_META (types/summaryConstants.ts), the only form other modules
+// should import. Don't add a parallel PRIO_COLORS-style map here again;
+// PriorityPicker.tsx and txStyles.tsx both used to keep their own copies,
+// which had drifted before they were switched to derive from PRIO_META too.
 export const PRIORITY_LABELS = {
-  1: { label: "Krytyczne",     color: "#ef4444", desc: "Niezbędne do życia"   },
-  2: { label: "Ważne",         color: "#f97316", desc: "Potrzeby podstawowe"  },
-  3: { label: "Komforte",       color: "#eab308", desc: "Luksus i przyjemności" },
-  4: { label: "Luksusowe", color: "#6b7280", desc: "Nie wlicza się"       },
-};
-
-export const PRIO_COLORS = {
-  1: "#ef4444",
-  2: "#f97316",
-  3: "#eab308",
-  4: "#6b7280",
+  1: { label: "Krytyczne",     color: "#ef4444", desc: "Niezbędne do życia"   },   // czerwony
+  2: { label: "Ważne",         color: "#3b82f6", desc: "Potrzeby podstawowe"  },   // niebieski
+  3: { label: "Komforte",       color: "#eab308", desc: "Luksus i przyjemności" }, // żółty
+  4: { label: "Luksusowe", color: "#10b981", desc: "Nie wlicza się"       },       // zielony
 };
 
 // ── Calendar ─────────────────────────────────────────────────
