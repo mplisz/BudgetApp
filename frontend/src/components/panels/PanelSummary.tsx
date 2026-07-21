@@ -13,6 +13,7 @@ import { calculateEffectiveAmount, calculateNetAmount } from "../../utils/return
 import { fmt }              from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
 import { Card }             from "../ui/summaryUi";
+import { CollapsibleSection } from "../ui";
 import { CategoryLimitBar } from "./summaryComponents/CategoryLimitBar";
 import { SpendingPieChart } from "./summaryComponents/SpendingPieChart";
 import { TargetIndicator }  from "./summaryComponents/TargetIndicator";
@@ -407,28 +408,15 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
             )}
           </div>
 
-          {/* Virtual envelopes — shown regardless of whether the month has
-              transactions, so monthly rates are visible even before any
-              expense is booked. */}
-          {envelopeBreakdown.length > 0 && (
-            <EnvelopeBreakdown
-              items={envelopeBreakdown}
-              total={envelopeTotal}
-              activeBudgetMonth={activeBudgetMonth}
-              style={{ marginBottom: 16 }}
-              variant="card"
-            />
-          )}
-
-          {/* Run-rate forecast — only for the RUNNING calendar month; past
+          {/* 1) Run-rate forecast — only for the RUNNING calendar month; past
               months have nothing to forecast, future ones have no pace. */}
           {activeBudgetMonth === new Date().toISOString().slice(0, 7) && (
-            <Card title="🔮 Prognoza końca miesiąca" style={{ marginBottom: 16 }}>
+            <CollapsibleSection title="🔮 Prognoza końca miesiąca" defaultOpen={false}>
               <MonthForecastSection
                 transactions={monthTx as unknown as ForecastTransaction[]}
                 months={[activeBudgetMonth]}
               />
-            </Card>
+            </CollapsibleSection>
           )}
 
           {/* Empty state */}
@@ -442,86 +430,59 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
           {hasData && (
             <>
-              {/* Returns info — explains net category sums vs headline expenses */}
-              {(returnsInfo.total > 0 || returnsInfo.voucher > 0) && (
-                <Card title="🔙 Zwroty" style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, color: c.textSecondary, lineHeight: 1.7 }}>
-                    {returnsInfo.total > 0 && (
+              {/* 2) Struktura wydatków: limity kategorii + gauge */}
+              <CollapsibleSection title="🧭 Struktura wydatków" defaultOpen={false}>
+                <div style={{
+                    display: "flex",
+                    gap: 16,
+                    alignItems: "stretch",
+                  }} data-sum-row1>
+                  <Card title="📋 Limity kategorii"
+                  style={{
+                      flex: 1,
+                      minWidth: 0,
+                    }}>
+                    {categoriesWithLimit.length === 0 && categoriesWithoutLimit.length === 0 && (
+                      <div style={{ color: c.textMuted, fontSize: 13 }}>Brak wydatków.</div>
+                    )}
+                    {categoriesWithLimit.map(cat => (
+                      <CategoryLimitBar
+                        key={cat.categoryId}
+                        category={cat}
+                        subcategories={getSubcategories(cat.categoryId)}
+                      />
+                    ))}
+                    {categoriesWithoutLimit.length > 0 && (
                       <>
-                        Zwroty gotówkowe z wydatków tego miesiąca:{" "}
-                        <strong style={{ color: c.orange }}>{fmt(returnsInfo.total)} PLN</strong>{" "}
-                        — odjęte od sum kategorii.
+                        <div style={{ color: c.textMuted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginTop: 16, marginBottom: 8, letterSpacing: "0.5px" }}>
+                          Bez limitu
+                        </div>
+                        {categoriesWithoutLimit.map(cat => (
+                          <CategoryLimitBar
+                            key={cat.categoryId}
+                            category={cat}
+                            subcategories={getSubcategories(cat.categoryId)}
+                          />
+                        ))}
                       </>
                     )}
-                    {returnsInfo.crossMonth > 0 && (
-                      <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
-                        W tym <strong style={{ color: c.text }}>{fmt(returnsInfo.crossMonth)} PLN</strong>{" "}
-                        odebrane w innym miesiącu → utworzono TRANSFER. Dlatego sumy kategorii są o tę
-                        kwotę niższe niż nagłówkowe „Wydatki" (Saldo tego miesiąca bez zmian).
-                      </div>
-                    )}
-                    {returnsInfo.voucher > 0 && (
-                      <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
-                        Zwroty na voucher: <strong style={{ color: c.voucher }}>{fmt(returnsInfo.voucher)} PLN</strong>{" "}
-                        — osobny środek, nie zmniejsza wydatku gotówkowego.
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              )}
+                  </Card>
 
-              {/* ROW 1: Limits and Pie Chart*/}
-              <div style={{
-                  display: "flex",
-                  gap: 16,
-                  marginBottom: 16,
-                  alignItems: "stretch",
-                }} data-sum-row1>
-                <Card title="📋 Limity kategorii"
-                style={{
-                    flex: 1,
-                    minWidth: 0,
-                  }}>
-                  {categoriesWithLimit.length === 0 && categoriesWithoutLimit.length === 0 && (
-                    <div style={{ color: c.textMuted, fontSize: 13 }}>Brak wydatków.</div>
-                  )}
-                  {categoriesWithLimit.map(cat => (
-                    <CategoryLimitBar
-                      key={cat.categoryId}
-                      category={cat}
-                      subcategories={getSubcategories(cat.categoryId)}
+                  <Card title="🥧 Struktura wydatków"
+                  style={{
+                      flex: 1,
+                      minWidth: 0
+                    }}>
+                    <SpendingPieChart
+                      categories={expenseCategories}
+                      getSubcategories={getSubcategories}
                     />
-                  ))}
-                  {categoriesWithoutLimit.length > 0 && (
-                    <>
-                      <div style={{ color: c.textMuted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginTop: 16, marginBottom: 8, letterSpacing: "0.5px" }}>
-                        Bez limitu
-                      </div>
-                      {categoriesWithoutLimit.map(cat => (
-                        <CategoryLimitBar
-                          key={cat.categoryId}
-                          category={cat}
-                          subcategories={getSubcategories(cat.categoryId)}
-                        />
-                      ))}
-                    </>
-                  )}
-                </Card>
+                  </Card>
+                </div>
+              </CollapsibleSection>
 
-                <Card title="🥧 Struktura wydatków" 
-                style={{
-                    flex: 1,
-                    minWidth: 0
-                  }}>
-                  <SpendingPieChart
-                    categories={expenseCategories}
-                    getSubcategories={getSubcategories}
-                  />
-                </Card>
-              </div>
-
-              {/* ROW 2: Indicators */}
-              <Card title="🎯 Wskaźniki budżetowe" style={{ marginBottom: 16 }}>
+              {/* 3) Wskaźniki budżetowe */}
+              <CollapsibleSection title="🎯 Wskaźniki budżetowe" defaultOpen={false}>
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                   <TargetIndicator
                     icon="🛡️" label="Ubezpieczenia"
@@ -552,25 +513,69 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     direction="min"
                   />
                 </div>
-              </Card>
+              </CollapsibleSection>
 
-              {/* ROW 3: Prio/Top 5/Savings*/}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }} data-sum-cols3>
-                <Card title="🎖️ Rozkład priorytetów">
-                  <PriorityBreakdown monthTx={monthTx} totalExpenses={totalExpenses} />
-                </Card>
-                <Card title="🔝 Top 5 wydatków">
-                  <TopTransactions monthTx={monthTx} totalExpenses={totalExpenses} limit={5} />
-                </Card>
-                <Card title="💎 Oszczędności miesiąca">
-                  <SavingsSummary
-                    monthTx={monthTx}
-                    totalIncome={totalIncome}
-                    minSavingsPercent={targets.minSavingsPercent}
-                  />
-                </Card>
-              </div>
+              {/* 4) Szczegóły: rozkład priorytetów, top 5, oszczędności */}
+              <CollapsibleSection title="🔎 Szczegóły" defaultOpen={false}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }} data-sum-cols3>
+                  <Card title="🎖️ Rozkład priorytetów">
+                    <PriorityBreakdown monthTx={monthTx} totalExpenses={totalExpenses} />
+                  </Card>
+                  <Card title="🔝 Top 5 wydatków">
+                    <TopTransactions monthTx={monthTx} totalExpenses={totalExpenses} limit={5} />
+                  </Card>
+                  <Card title="💎 Oszczędności miesiąca">
+                    <SavingsSummary
+                      monthTx={monthTx}
+                      totalIncome={totalIncome}
+                      minSavingsPercent={targets.minSavingsPercent}
+                    />
+                  </Card>
+                </div>
+              </CollapsibleSection>
             </>
+          )}
+
+          {/* 5) Wirtualne koperty — shown regardless of whether the month has
+              transactions, so monthly rates are visible even before any
+              expense is booked. */}
+          {envelopeBreakdown.length > 0 && (
+            <CollapsibleSection title="🪙 Wirtualne koperty" defaultOpen={false}>
+              <EnvelopeBreakdown
+                items={envelopeBreakdown}
+                total={envelopeTotal}
+                activeBudgetMonth={activeBudgetMonth}
+                variant="card"
+              />
+            </CollapsibleSection>
+          )}
+
+          {/* 6) Zwroty — explains net category sums vs headline expenses */}
+          {hasData && (returnsInfo.total > 0 || returnsInfo.voucher > 0) && (
+            <CollapsibleSection title="🔙 Zwroty" defaultOpen={false}>
+              <div style={{ fontSize: 13, color: c.textSecondary, lineHeight: 1.7 }}>
+                {returnsInfo.total > 0 && (
+                  <>
+                    Zwroty gotówkowe z wydatków tego miesiąca:{" "}
+                    <strong style={{ color: c.orange }}>{fmt(returnsInfo.total)} PLN</strong>{" "}
+                    — odjęte od sum kategorii.
+                  </>
+                )}
+                {returnsInfo.crossMonth > 0 && (
+                  <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
+                    W tym <strong style={{ color: c.text }}>{fmt(returnsInfo.crossMonth)} PLN</strong>{" "}
+                    odebrane w innym miesiącu → utworzono TRANSFER. Dlatego sumy kategorii są o tę
+                    kwotę niższe niż nagłówkowe „Wydatki" (Saldo tego miesiąca bez zmian).
+                  </div>
+                )}
+                {returnsInfo.voucher > 0 && (
+                  <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
+                    Zwroty na voucher: <strong style={{ color: c.voucher }}>{fmt(returnsInfo.voucher)} PLN</strong>{" "}
+                    — osobny środek, nie zmniejsza wydatku gotówkowego.
+                  </div>
+                )}
+              </div>
+            </CollapsibleSection>
           )}
         </>
       )}
