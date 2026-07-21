@@ -49,6 +49,21 @@ export interface PricedTransaction {
   lineItems?:     PriceLineItem[];
 }
 
+/** Distinct tracked-product names present on a set of line items — the one
+ *  place that answers "does this transaction/cart item have a tracked
+ *  product, and which one(s)". Used both to badge a row and to filter by
+ *  it. Structural on purpose (not tied to PriceLineItem/TxLineItem) so any
+ *  lineItems-shaped array with a `product` field works without a cast. */
+export function trackedProductNames(
+  lineItems: Array<{ product?: { name?: string | null } | null }> | undefined | null,
+): string[] {
+  return [...new Set(
+    (lineItems ?? [])
+      .map(li => li.product?.name)
+      .filter((n): n is string => !!n)
+  )];
+}
+
 /** Shown as the merchant for a purchase with no recorded shop. */
 export const NO_MERCHANT = "(bez sklepu)";
 

@@ -29,6 +29,7 @@ import { useMonthLoad } from "../../hooks/useMonthLoad";
 import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
 import { TriFilterButton, matchTri, type Tri } from "../ui/TriFilterButton";
+import { trackedProductNames } from "../../utils/productPricing";
 
 
 const PAGE_SIZE = 25;
@@ -58,6 +59,7 @@ export default function PanelTransactions() {
     hasReturn:  "off" as Tri,
     hasReceipt: "off" as Tri,
     warranty:   "off" as Tri,
+    hasProduct: "off" as Tri,
   });
 
   const [collapsed,          setCollapsed]          = useState<Record<string, boolean>>({});
@@ -153,6 +155,7 @@ export default function PanelTransactions() {
       if (!matchTri(filters.hasReturn,  returned))            return false;
       if (!matchTri(filters.hasReceipt, !!tx.receiptBlobPath)) return false;
       if (!matchTri(filters.warranty,   !!tx.isWarranty))      return false;
+      if (!matchTri(filters.hasProduct, trackedProductNames(tx.lineItems).length > 0)) return false;
       if (filters.merchant && tx.merchant !== filters.merchant) return false;
       return true;
     }),
@@ -370,6 +373,11 @@ export default function PanelTransactions() {
             <div style={s.filterBox}>
               <div style={s.filterLabel}>Paragony</div>
               <TriFilterButton state={filters.hasReceipt} onChange={v => set("hasReceipt", v)} label="📎 Z paragonem" color={c.warning} />
+            </div>
+            {/* Tracked products */}
+            <div style={s.filterBox}>
+              <div style={s.filterLabel}>Produkty</div>
+              <TriFilterButton state={filters.hasProduct} onChange={v => set("hasProduct", v)} label="🏷️ Śledzone" color={c.cyanLight} />
             </div>
             {/* Merchant */}
             {uniqueMerchants.length > 0 && (

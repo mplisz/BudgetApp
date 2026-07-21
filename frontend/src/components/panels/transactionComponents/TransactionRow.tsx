@@ -15,6 +15,7 @@ import { fmt,fmtAmount  }                from "../../../utils/helpers";
 import { s, PrioBadge, calcReturns } from "./txStyles";
 import { EditTransactionModal }      from "./EditTransactionModal";
 import { ReceiptModal } from "./ReceiptModal";
+import { trackedProductNames } from "../../../utils/productPricing";
 import type { Transaction } from "../../../types/appContext";
 
 interface TransactionRowProps {
@@ -37,7 +38,7 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
   // Independent of hasLineItems — a singleton lineItems array (the common
   // "one product, no breakdown" case) never shows the ▸ toggle below, but
   // still carries a tracked product worth surfacing.
-  const trackedProducts = [...new Set(lineItems.map(li => li.product?.name).filter((n): n is string => !!n))];
+  const trackedProducts = trackedProductNames(lineItems);
 
   return (
     <>
@@ -223,7 +224,7 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
   const lineItems    = Array.isArray(tx.lineItems) ? tx.lineItems : [];
   const hasLineItems = lineItems.length > 1;
   const isForeign    = tx.originalCurrency !== "PLN";
-  const trackedProducts = [...new Set(lineItems.map(li => li.product?.name).filter((n): n is string => !!n))];
+  const trackedProducts = trackedProductNames(lineItems);
 
   return (
     <div style={{
