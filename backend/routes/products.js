@@ -90,6 +90,17 @@ router.post("/", async (req, res) => {
 // ── PATCH /:id — edit the canonical name and/or default size ──
 // Unit is immutable here — it's part of the identity key, so changing it
 // would orphan the doc's own id/key. Delete + re-add for that.
+//
+// A rename does NOT touch this doc's own id/key (frozen at creation —
+// Cosmos ids can't be renamed in place). But every downstream match —
+// OCR/save-time upsertProductLine, and the price-history resolver — folds
+// the CURRENT transaction/receipt text into a key computed fresh from
+// whatever name it carries. After a rename that computed key no longer
+// equals this doc's frozen key, so without help every purchase made under
+// the new name would silently stop being tracked at all. Recording the
+// new folded key in mergedKeys[] is what makes both sides still find this
+// same doc — the identical mechanism /merge used to use, just triggered
+// by a rename instead of a manual two-doc merge.
 
 router.patch("/:id", async (req, res) => {
   const idParsed = IdParamSchema.safeParse(req.params.id);
@@ -103,11 +114,33 @@ router.patch("/:id", async (req, res) => {
     const { resource: existing, etag } = await readItemWithEtag(productsContainer, idParsed.data, familyId);
     if (!existing) return res.status(404).json({ error: "Product not found." });
 
+    let mergedKeys = existing.mergedKeys || [];
+    if (parsed.data.canonicalName !== undefined) {
+      const newName = parsed.data.canonicalName.trim();
+      const newKey  = productKey(newName, existing.unit);
+      if (newKey && newKey !== existing.key && !mergedKeys.includes(newKey)) {
+        // Guard: the new name mustn't fold to a key another tracked
+        // product already owns — that would silently point two different
+        // products' future purchases at whichever doc wins the race.
+        const collisionId = productId(familyId, newKey);
+        if (collisionId !== idParsed.data) {
+          const collision = await readItem(productsContainer, collisionId, familyId);
+          if (collision) {
+            return res.status(409).json({
+              error: `„${newName}” brzmi tak samo jak już śledzony „${collision.canonicalName}”.`,
+            });
+          }
+        }
+        mergedKeys = [...mergedKeys, newKey];
+      }
+    }
+
     const { resource } = await productsContainer.item(idParsed.data, familyId).replace(
       {
         ...existing,
         ...(parsed.data.canonicalName !== undefined ? { canonicalName: parsed.data.canonicalName.trim() } : {}),
         ...(parsed.data.defaultSize    !== undefined ? { defaultSize: parsed.data.defaultSize } : {}),
+        mergedKeys,
         nameLocked: true,   // an explicit edit outranks any future AI wording
         updatedAt:  new Date().toISOString(),
       },
