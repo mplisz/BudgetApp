@@ -565,6 +565,17 @@ router.patch("/:id", async (req, res) => {
         accessCondition: { type: "IfMatch", condition: etag },
       });
       console.log(`[TX PATCH] Updated: ${resource.id}`);
+
+      // Fold any structured line-item products into the family catalog —
+      // the POST path already does this; an edit that manually assigns or
+      // corrects a tracked product needs the same side effect, or the
+      // catalog (purchaseCount, firstSeen/lastSeen, merchants) never
+      // reflects it. Fire-and-forget — a catalog failure must never fail
+      // the tx save that triggered it.
+      if (Array.isArray(resource.lineItems) && resource.lineItems.length > 0) {
+        rememberProducts(productsContainer, familyId, resource);
+      }
+
       res.json(resource);
     } catch (txErr) {
       // Tx save failed AFTER vouchers were mutated — revert the batch.
