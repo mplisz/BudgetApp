@@ -76,6 +76,10 @@ export interface FormValues {
   qty:             number;
   merchant:        string;
   lineItems:       FormLineItem[];
+  // Manual/AI-assigned tracked-product identity for a single-amount (non-
+  // breakdown) transaction. Rides into payload.lineItems[0].product — see
+  // TransactionForm.buildPayload.
+  product:         LineItemProduct | null;
 }
 
 export interface TransactionPayload {
@@ -130,4 +134,8 @@ export interface TransactionFormProps {
 export interface FormLineItem {
   description:    string;
   originalAmount: string;   // editable
+  // Not editable via this row today — carried through untouched so editing
+  // a multi-item receipt breakdown doesn't silently wipe existing product
+  // tags. See TransactionForm.buildPayload.
+  product?:       LineItemProduct | null;
 }

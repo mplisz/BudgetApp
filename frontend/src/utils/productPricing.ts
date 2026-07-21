@@ -159,6 +159,14 @@ export function formatSize(size: number, unit: SizeUnit): string {
   return `${num} ${scaled.label}`;
 }
 
+/** Parses a user-typed size/quantity field (Polish decimal comma allowed). */
+export function parseSizeInput(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const n = Number(trimmed.replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 // ── Chart metric selection ────────────────────────────────────
 
 export interface ProductMetric {

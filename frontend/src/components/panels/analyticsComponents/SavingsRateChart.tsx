@@ -40,7 +40,7 @@ export function SavingsRateChart({ data, minSavingsPercent, minRetirementPercent
         <YAxis
           stroke={AXIS_STROKE}
           fontSize={AXIS_FONT_SIZE}
-          domain={[0, "auto"]}
+          domain={["auto", "auto"]}
           tickFormatter={(v: number) => `${v}%`}
         />
         <Tooltip

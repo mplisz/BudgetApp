@@ -43,7 +43,7 @@ export function MonthlyTrendChart({ data }: MonthlyTrendChartProps) {
       <LineChart data={data} margin={{ top: 12, right: 20, bottom: 0, left: -10 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={c.border} />
         <XAxis dataKey="month" stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} />
-        <YAxis stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} />
+        <YAxis stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} domain={["auto", "auto"]} />
         <Tooltip
           contentStyle={chartTooltipStyle}
           labelStyle={chartTooltipLabelStyle}

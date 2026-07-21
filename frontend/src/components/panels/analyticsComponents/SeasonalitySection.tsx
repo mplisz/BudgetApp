@@ -102,7 +102,7 @@ export function SeasonalitySection() {
           margin={{ top: 8, right: 16, bottom: 4, left: 0 }}
         >
           <XAxis dataKey="name" stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} />
-          <YAxis stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} tickFormatter={plnTick} width={56} />
+          <YAxis stroke={AXIS_STROKE} fontSize={AXIS_FONT_SIZE} tickFormatter={plnTick} domain={["auto", "auto"]} width={56} />
           <Tooltip
             contentStyle={chartTooltipStyle}
             labelStyle={chartTooltipLabelStyle}

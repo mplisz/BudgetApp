@@ -13,7 +13,7 @@ import { theme as s } from "../../../styles/theme";
 import { CollapsibleSection } from "../../ui";
 import { ConfirmModal } from "../../ui/ConfirmModal";
 import { useProductCatalog, type CatalogProduct } from "../../../hooks/useProductCatalog";
-import { formatSize, type SizeUnit } from "../../../utils/productPricing";
+import { formatSize, parseSizeInput, type SizeUnit } from "../../../utils/productPricing";
 
 /** User-facing unit choices, each mapped to the BASE unit (g/ml/szt) the
  *  rest of the app works in — so "1,5 l" is stored as 1500/ml, matching
@@ -25,13 +25,6 @@ const UNIT_SCALE: Record<string, { base: SizeUnit; factor: number; label: string
   l:   { base: "ml",  factor: 1000, label: "l"   },
   szt: { base: "szt", factor: 1,    label: "szt" },
 };
-
-function parseSizeInput(text: string): number | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  const n = Number(trimmed.replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 
 const PRODUCT_MODAL_CLOSED = { isOpen: false, product: null as CatalogProduct | null };
 

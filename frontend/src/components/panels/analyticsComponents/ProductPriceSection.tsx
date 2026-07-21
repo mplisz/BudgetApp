@@ -8,7 +8,7 @@
 //   - searchable product pills, sorted by purchase frequency
 //   - unit-price line chart, one line per shop
 //   - shrinkflation badge + first/last change summary
-//   - merge / rename controls for catalog-backed products
+//   - rename control for catalog-backed products
 //   - occurrences table (newest first)
 // ============================================================
 
@@ -17,7 +17,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { theme as s } from "../../../styles/theme";
 import { fmt } from "../../../utils/helpers";
 import { useProductCatalog } from "../../../hooks/useProductCatalog";
 import {
@@ -39,11 +38,10 @@ const MAX_PILLS = 24;
 export function ProductPriceSection({ transactions, months }: Props) {
   const [search,      setSearch]      = useState("");
   const [selectedKey, setSelectedKey] = useState("");
-  const [mergeTarget, setMergeTarget] = useState("");
   const [renaming,    setRenaming]    = useState<string | null>(null);
   const [renameText,  setRenameText]  = useState("");
 
-  const { catalog, resolve, load: loadCatalog, merge, rename } = useProductCatalog();
+  const { catalog, resolve, load: loadCatalog, rename } = useProductCatalog();
   useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
   const monthsSet = useMemo(() => new Set(months), [months]);
@@ -102,14 +100,7 @@ export function ProductPriceSection({ transactions, months }: Props) {
     };
   }, [selected]);
 
-  // ── Merge / rename (catalog-backed products only) ──────────
-  async function handleMerge() {
-    if (!selected?.catalogId || !mergeTarget) return;
-    // Fold the CURRENT product into the picked one — the pick survives and
-    // keeps its name (reads as "to jest to samo co <pick>").
-    const ok = await merge(selected.catalogId, mergeTarget);
-    if (ok) { setSelectedKey(mergeTarget); setMergeTarget(""); }
-  }
+  // ── Rename (catalog-backed products only) ───────────────────
   async function handleRename() {
     if (!selected?.catalogId || !renameText.trim()) return;
     const ok = await rename(selected.catalogId, renameText.trim());
@@ -145,8 +136,6 @@ export function ProductPriceSection({ transactions, months }: Props) {
     cursor: enabled ? "pointer" : "not-allowed",
     background: enabled ? c.info : c.border, color: enabled ? c.white : c.textMuted,
   });
-  const mergeOptions = products.filter(p => p.catalogId && p.catalogId !== selected?.catalogId);
-
   return (
     <div>
       {/* Coverage stats */}
@@ -239,7 +228,7 @@ export function ProductPriceSection({ transactions, months }: Props) {
             </div>
           )}
 
-          {/* Merge / rename — only for catalog-backed products */}
+          {/* Rename — only for catalog-backed products */}
           {selected.catalogId && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 12 }}>
               {renaming === selected.catalogId ? (
@@ -257,27 +246,12 @@ export function ProductPriceSection({ transactions, months }: Props) {
                   <button onClick={() => setRenaming(null)} style={{ ...miniBtn(true), background: c.border, color: c.textSecondary }}>Anuluj</button>
                 </>
               ) : (
-                <>
-                  <span style={statChip}>🔗 Połącz z:</span>
-                  <select
-                    value={mergeTarget}
-                    onChange={e => setMergeTarget(e.target.value)}
-                    disabled={mergeOptions.length === 0}
-                    style={{ ...s.select, width: "auto", minWidth: 180, padding: "6px 10px", fontSize: 12 }}
-                  >
-                    <option value="">{mergeOptions.length ? "— wybierz produkt —" : "brak innych produktów"}</option>
-                    {mergeOptions.map(p => (
-                      <option key={p.catalogId} value={p.catalogId}>{p.label}</option>
-                    ))}
-                  </select>
-                  <button onClick={handleMerge} style={miniBtn(!!mergeTarget)}>Połącz</button>
-                  <button
-                    onClick={() => { setRenaming(selected.catalogId!); setRenameText(selected.label); }}
-                    style={{ ...miniBtn(true), background: c.border, color: c.textSecondary }}
-                  >
-                    ✏️ Zmień nazwę
-                  </button>
-                </>
+                <button
+                  onClick={() => { setRenaming(selected.catalogId!); setRenameText(selected.label); }}
+                  style={{ ...miniBtn(true), background: c.border, color: c.textSecondary }}
+                >
+                  ✏️ Zmień nazwę
+                </button>
               )}
             </div>
           )}

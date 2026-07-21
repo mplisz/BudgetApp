@@ -12,12 +12,18 @@ import { useState } from "react";
 import { c } from "../../../styles/tokens";
 import { TransactionForm } from "./TransactionForm";
 import type { FormValues, TransactionPayload } from "../../../types/transaction";
+import type { LineItemProduct } from "../../../utils/productPricing";
 import type { CartItem } from "./CartPanel";
 
-// The edited payload may carry a cart-only learning opt-out. It's not a
-// real transaction field — CartPanel.toPayload strips it before save; it
-// only rides back so PanelExpenses can stamp it on the cart item.
-export type CartEditPayload = TransactionPayload & { _ocrNoLearn?: boolean };
+// The edited payload may carry a cart-only learning opt-out, and the
+// tracked-product identity (manually assigned/corrected in the form). Neither
+// is a real transaction field on CartItem — CartPanel.toPayload rebuilds
+// `lineItems` from `_product` at save time; these only ride back here so
+// PanelExpenses can stamp them onto the cart item.
+export type CartEditPayload = Omit<TransactionPayload, "lineItems"> & {
+  _ocrNoLearn?: boolean;
+  _product?:    LineItemProduct | null;
+};
 
 interface CartItemEditorProps {
   item:        CartItem;
@@ -53,6 +59,7 @@ function cartItemToFormValues(item: CartItem): FormValues {
     qty:             1,
     merchant:        item.merchant || item._ocrMerchant || "",
     lineItems:       [],
+    product:         item._product ?? null,
   };
 }
 
@@ -64,8 +71,16 @@ export function CartItemEditor({ item, budgetMonth, isSaving = false, onSave, on
   const isOcrLine = !!item._ocrOrigDesc;
   const [noLearn, setNoLearn] = useState(!!item._ocrNoLearn);
 
-  const handleSubmit = (payload: TransactionPayload) =>
-    onSave(isOcrLine ? { ...payload, _ocrNoLearn: noLearn } : payload);
+  const handleSubmit = (payload: TransactionPayload) => {
+    // TransactionForm carries the product identity as a synthetic single-
+    // line `lineItems[0].product` (the shape OCR/API already use) — pull it
+    // back out into the cart's own `_product` field and drop the rest of
+    // that array, which CartPanel.toPayload rebuilds fresh from `_product`
+    // at save time (a stray `.lineItems` here would just be dead weight).
+    const { lineItems, ...rest } = payload;
+    const out: CartEditPayload = { ...rest, _product: lineItems?.[0]?.product ?? null };
+    onSave(isOcrLine ? { ...out, _ocrNoLearn: noLearn } : out);
+  };
 
   return (
     <>

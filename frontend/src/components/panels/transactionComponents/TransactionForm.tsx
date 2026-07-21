@@ -18,6 +18,8 @@ import { fmt, fmtAmount, parseDecimal, round2 } from "../../../utils/helpers";
 import { translateError } from "../../../data/constants/errorMessages";
 import { TagMultiSelect } from "../../ui/TagMultiSelect";
 import { MerchantInput } from "../../ui/MerchantInput";
+import { useProductCatalog } from "../../../hooks/useProductCatalog";
+import { parseSizeInput, formatSize, type LineItemProduct } from "../../../utils/productPricing";
 
 import type {
   FormValues, FormLineItem, TransactionPayload, TransactionFormProps, RateInfo, VoucherAllocation,
@@ -60,6 +62,7 @@ export function emptyFormValues(): FormValues {
     qty:             1,
     merchant:        "",
     lineItems:       [],
+    product:         null,
   };
 }
 
@@ -92,11 +95,18 @@ export function txToFormValues(tx: Record<string, unknown>): FormValues {
     // Load receipt breakdown so editing a multi-item transaction shows the editor.
     // We edit originalAmount (in the receipt currency); amount/PLN is derived.
     lineItems: Array.isArray(tx.lineItems)
-      ? (tx.lineItems as Array<{ description?: string; amount: number; originalAmount?: number }>).map(li => ({
+      ? (tx.lineItems as Array<{ description?: string; amount: number; originalAmount?: number; product?: LineItemProduct | null }>).map(li => ({
           description:    li.description || "",
           originalAmount: String(li.originalAmount ?? li.amount),
+          product:        li.product ?? null,
         }))
       : [],
+    // A singleton lineItems array doesn't trigger the breakdown editor
+    // (hasLineItems needs ≥2) — its product identity still needs to survive
+    // into the single-amount branch so it can be reviewed/corrected there.
+    product: Array.isArray(tx.lineItems) && tx.lineItems.length === 1
+      ? ((tx.lineItems[0] as { product?: LineItemProduct | null }).product ?? null)
+      : null,
   };
 }
 
@@ -113,7 +123,7 @@ export function TransactionForm({
   cart = [],
   showVouchers = true,
 }: TransactionFormProps) {
-  const { transactions, limits, settings } = useAppContext();
+  const { transactions, limits, settings, categories } = useAppContext();
 
   const { showError, showWarning } = useToast();
 
@@ -124,6 +134,8 @@ export function TransactionForm({
 
   const { vouchers, isLoading: vouchersLoading } = useVouchers(cart);
   const discount = useDiscount();
+  const { catalog: productCatalog, load: loadProductCatalog } = useProductCatalog();
+  useEffect(() => { loadProductCatalog(); }, [loadProductCatalog]);
 
   const dateYMD = toYMD(form.date);
 
@@ -153,13 +165,36 @@ export function TransactionForm({
     }));
   }
 
+  function updateLineItemProduct(idx: number, catalogId: string) {
+    const p = catalogId ? productCatalog.find(x => x.id === catalogId) : null;
+    const product: LineItemProduct | null = p && p.unit
+      ? { name: p.canonicalName, unit: p.unit, size: p.defaultSize ?? null, packCount: null }
+      : null;
+    setForm(prev => ({
+      ...prev,
+      lineItems: prev.lineItems.map((li, i) => i === idx ? { ...li, product } : li),
+    }));
+  }
+
+  function updateLineItemProductField(idx: number, field: "size" | "packCount", text: string) {
+    setForm(prev => ({
+      ...prev,
+      lineItems: prev.lineItems.map((li, i) => {
+        if (i !== idx || !li.product) return li;
+        return { ...li, product: { ...li.product, [field]: parseSizeInput(text) } };
+      }),
+    }));
+  }
+
   function removeLineItem(idx: number) {
     setForm(prev => {
       const next = prev.lineItems.filter((_, i) => i !== idx);
       // Collapse to 1 → transaction becomes a regular linear one: the single
-      // remaining item's amount becomes the transaction amount, breakdown drops.
+      // remaining item's amount becomes the transaction amount, breakdown
+      // drops — but its product identity survives into the linear branch's
+      // own `form.product` field (see buildPayload), not lost with the array.
       if (next.length === 1) {
-        return { ...prev, lineItems: [], amountOrig: next[0].originalAmount };
+        return { ...prev, lineItems: [], amountOrig: next[0].originalAmount, product: next[0].product ?? null };
       }
       return { ...prev, lineItems: next };
     });
@@ -198,6 +233,19 @@ export function TransactionForm({
     }
   }, [amountPLN]);
 
+  // form.categoryType is only populated by SubcategorySelect's onChange — on
+  // an EDIT load (existing cart item / saved transaction) it starts null and
+  // stays null until the user re-touches the dropdown. Resolve it from the
+  // categories tree too, so gates below work immediately on load, not just
+  // after a fresh pick.
+  const resolvedCategoryType = useMemo(() => {
+    if (form.categoryType) return form.categoryType;
+    for (const cat of categories || []) {
+      if ((cat.sub || []).some(sub => sub.id === form.subcategoryId)) return cat.type;
+    }
+    return null;
+  }, [form.categoryType, form.subcategoryId, categories]);
+
   // Voucher section visible only for EXPENSE + active vouchers + not a line-item tx,
   // and only when allowed (cart-item edits suppress it — vouchers are cart-level).
   // Voucher section only when allowed, EXPENSE, vouchers exist, not a
@@ -211,7 +259,7 @@ export function TransactionForm({
   const eligibleVouchers = normShop(form.merchant) === ""
     ? []
     : vouchers.filter(v => normShop(v.store) === normShop(form.merchant));
-  const showVoucherSection = showVouchers && form.categoryType === "EXPENSE"
+  const showVoucherSection = showVouchers && resolvedCategoryType === "EXPENSE"
     && !hasLineItems && cart.length === 0 && eligibleVouchers.length > 0;
 
   const handleRateReady = useCallback(({ activeRate, resolvedCurrency }: RateInfo) => {
@@ -260,6 +308,28 @@ export function TransactionForm({
     }
   }, [budgetMonth, transactions, limits, settings, showError, showWarning]);
 
+  // ── Tracked product (manual assign / correct AI) ──────────
+  // Only meaningful for a single-amount EXPENSE line — a receipt breakdown
+  // (hasLineItems) has no per-row picker here. Each row's existing product
+  // (if any) is still carried through untouched by buildPayload below, so
+  // editing a breakdown's description/amount never silently drops it.
+  const selectedProductId = useMemo(
+    () => productCatalog.find(p => p.canonicalName === form.product?.name)?.id ?? "",
+    [productCatalog, form.product]
+  );
+
+  function handleProductSelect(id: string) {
+    if (!id) { set("product", null); return; }
+    const p = productCatalog.find(x => x.id === id);
+    if (!p || !p.unit) { set("product", null); return; }
+    set("product", { name: p.canonicalName, unit: p.unit, size: p.defaultSize ?? null, packCount: null });
+  }
+
+  function updateProductNumberField(field: "size" | "packCount", text: string) {
+    if (!form.product) return;
+    set("product", { ...form.product, [field]: parseSizeInput(text) });
+  }
+
   // ── Build payload ─────────────────────────────────────────
 
   function buildPayload(): TransactionPayload | null {
@@ -280,6 +350,8 @@ export function TransactionForm({
           originalAmount:   orig,
           originalCurrency: cur,
           amount:           round2(orig * fx),
+          // Not editable per-row here — pass through untouched (see FormLineItem).
+          product:          li.product ?? null,
         };
       });
       const sumOrig = round2(lines.reduce((s, l) => s + l.originalAmount, 0));
@@ -332,6 +404,21 @@ export function TransactionForm({
     const allocations  = showVouchers ? form.voucherAllocations.filter(a => a.amount > 0) : [];
     const voucherTotal = round2(allocations.reduce((s, a) => s + a.amount, 0));
 
+    // Tracked-product identity rides in as a synthetic single-line
+    // breakdown — the same shape OCR/cart singleton products already use,
+    // so the backend's rememberProducts/price-history pipeline needs no
+    // special case. null clears any previously-assigned product on edit;
+    // undefined (new, untouched "add") omits the field entirely.
+    const productLine = form.product
+      ? [{
+          description:      form.description.trim() || form.product.name,
+          originalAmount:   rawAmount,
+          originalCurrency: rateInfo.resolvedCurrency,
+          amount:           amountPLN,
+          product:          form.product,
+        }]
+      : (mode === "edit" ? [] : undefined);
+
     return {
       date:             dateYMD,
       type:             form.categoryType ?? "EXPENSE",
@@ -354,9 +441,7 @@ export function TransactionForm({
       netAmount:        round2(Math.max(0, amountPLN - voucherTotal)),
       isRecurring:      false,
       recurringId:      null,
-      // On edit, send lineItems:[] so collapsing a breakdown clears it on the
-      // backend; a no-op for transactions that never had a breakdown.
-      ...(mode === "edit" ? { lineItems: [] } : {}),
+      ...(productLine !== undefined ? { lineItems: productLine } : {}),
       // Merchant is optional on manual entries — only included when set.
       ...(form.merchant?.trim() ? { merchant: form.merchant.trim() } : {}),
     };
@@ -400,25 +485,62 @@ export function TransactionForm({
         <div style={frow}>
           <label style={lbl}>Pozycje z paragonu ({form.lineItems.length})</label>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {form.lineItems.map((li, idx) => (
-              <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  value={li.description}
-                  onChange={e => updateLineItem(idx, "description", e.target.value)}
-                  placeholder="Opis pozycji"
-                  style={{ ...inp, flex: 1, padding: "7px 10px", fontSize: 13 }}
-                />
-                <input
-                  type="number" step="0.01" min="0"
-                  value={li.originalAmount}
-                  onChange={e => updateLineItem(idx, "originalAmount", e.target.value)}
-                  style={{ ...inp, width: 110, padding: "7px 10px", fontSize: 13, textAlign: "right" }}
-                />
-                <span style={{ fontSize: 12, color: c.textSecondary, width: 38 }}>{rateInfo.resolvedCurrency}</span>
-                <button onClick={() => removeLineItem(idx)} title="Usuń pozycję"
-                  style={{ background: "transparent", border: "none", color: c.danger, cursor: "pointer", fontSize: 18, padding: "0 4px" }}>×</button>
-              </div>
-            ))}
+            {form.lineItems.map((li, idx) => {
+              const rowProductId = productCatalog.find(p => p.canonicalName === li.product?.name)?.id ?? "";
+              return (
+                <div key={idx} style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, background: alpha(c.border, "44"), borderRadius: 8 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      value={li.description}
+                      onChange={e => updateLineItem(idx, "description", e.target.value)}
+                      placeholder="Opis pozycji"
+                      style={{ ...inp, flex: 1, padding: "7px 10px", fontSize: 13 }}
+                    />
+                    <input
+                      type="number" step="0.01" min="0"
+                      value={li.originalAmount}
+                      onChange={e => updateLineItem(idx, "originalAmount", e.target.value)}
+                      style={{ ...inp, width: 110, padding: "7px 10px", fontSize: 13, textAlign: "right" }}
+                    />
+                    <span style={{ fontSize: 12, color: c.textSecondary, width: 38 }}>{rateInfo.resolvedCurrency}</span>
+                    <button onClick={() => removeLineItem(idx)} title="Usuń pozycję"
+                      style={{ background: "transparent", border: "none", color: c.danger, cursor: "pointer", fontSize: 18, padding: "0 4px" }}>×</button>
+                  </div>
+                  {resolvedCategoryType === "EXPENSE" && (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 11, flexShrink: 0 }}>🏷️</span>
+                      <select
+                        value={rowProductId}
+                        onChange={e => updateLineItemProduct(idx, e.target.value)}
+                        style={{ ...inp, flex: 1, padding: "4px 8px", fontSize: 12, cursor: "pointer" }}
+                      >
+                        <option value="">— nie śledzę —</option>
+                        {productCatalog.map(p => (
+                          <option key={p.id} value={p.id}>{p.canonicalName}</option>
+                        ))}
+                      </select>
+                      {li.product && (
+                        <>
+                          <input
+                            value={li.product.size != null ? String(li.product.size) : ""}
+                            onChange={e => updateLineItemProductField(idx, "size", e.target.value.replace(/[^\d.,]/g, ""))}
+                            placeholder="rozmiar"
+                            style={{ ...inp, width: 70, padding: "4px 6px", fontSize: 12, textAlign: "right" }}
+                          />
+                          <span style={{ fontSize: 11, color: c.textSecondary, width: 24 }}>{li.product.unit}</span>
+                          <input
+                            value={li.product.packCount != null ? String(li.product.packCount) : ""}
+                            onChange={e => updateLineItemProductField(idx, "packCount", e.target.value.replace(/[^\d.,]/g, ""))}
+                            placeholder="xN"
+                            style={{ ...inp, width: 50, padding: "4px 6px", fontSize: 12, textAlign: "right" }}
+                          />
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Suma = kwota transakcji (read-only, na żywo) */}
@@ -642,6 +764,42 @@ export function TransactionForm({
           style={inp}
         />
       </div>
+
+      {/* Tracked product — manual assign or correct what AI matched */}
+      {!hasLineItems && resolvedCategoryType === "EXPENSE" && (
+        <div style={frow}>
+          <label style={lbl}>🏷️ Śledzony produkt (opcjonalnie)</label>
+          <select
+            value={selectedProductId}
+            onChange={e => handleProductSelect(e.target.value)}
+            style={{ ...inp, cursor: "pointer" }}
+          >
+            <option value="">— nie śledzę —</option>
+            {productCatalog.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.canonicalName}{p.defaultSize != null && p.unit ? ` (${formatSize(p.defaultSize, p.unit)})` : ""}
+              </option>
+            ))}
+          </select>
+          {form.product && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+              <input
+                value={form.product.size != null ? String(form.product.size) : ""}
+                onChange={e => updateProductNumberField("size", e.target.value.replace(/[^\d.,]/g, ""))}
+                placeholder="rozmiar"
+                style={{ ...inp, width: 100, padding: "6px 10px", fontSize: 13, textAlign: "right" }}
+              />
+              <span style={{ fontSize: 12, color: c.textSecondary, width: 30 }}>{form.product.unit}</span>
+              <input
+                value={form.product.packCount != null ? String(form.product.packCount) : ""}
+                onChange={e => updateProductNumberField("packCount", e.target.value.replace(/[^\d.,]/g, ""))}
+                placeholder="wielopak (xN)"
+                style={{ ...inp, width: 110, padding: "6px 10px", fontSize: 13, textAlign: "right" }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tags */}
       <div style={frow}>

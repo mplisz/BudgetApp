@@ -45,7 +45,7 @@ export interface CartItem extends TransactionPayload {
   _ocrOrigDesc?:     string; // raw OCR description — the learning key
   _ocrNoLearn?:      boolean; // user opted this one-off edit out of learning
   _ocrLearned?:      boolean; // auto-categorized from a past user correction
-  _product?:         LineItemProduct;  // structured identity → saved into lineItems
+  _product?:         LineItemProduct | null;  // structured identity → saved into lineItems
 }
 
 interface CartPanelProps {

@@ -1,11 +1,11 @@
 // ============================================================
 // File: src/hooks/useProductCatalog.ts
 // Reads the family's PRODUCT CATALOG — the personal "inflation basket" of
-// products explicitly registered in Admin → Produkty śledzone — and
+// products explicitly registered in Settings → Produkty śledzone — and
 // exposes CRUD (create/rename/updateDefault/remove) plus an identity
-// resolver + merge action for the price-history section. The catalog
-// gives that section a stable cross-shop identity and lets the user fold
-// together products the AI named differently across shops.
+// resolver for the price-history section. mergedKeys[] is still honoured
+// by the resolver (a manual Cosmos edit can still fold identities), even
+// though the UI action that used to write it has been removed.
 // ============================================================
 
 import { useState, useCallback, useMemo } from "react";
@@ -48,18 +48,6 @@ export function useProductCatalog() {
     }
     return (key: string) => map.get(key) ?? null;
   }, [catalog]);
-
-  const merge = useCallback(async (sourceId: string, targetId: string): Promise<boolean> => {
-    try {
-      await api.post("/api/products/merge", { sourceId, targetId }, { fallback: "Nie udało się połączyć produktów." });
-      await load();
-      showSuccess("Produkty połączone. ✅");
-      return true;
-    } catch (err) {
-      showError((err as Error).message);
-      return false;
-    }
-  }, [api, load, showSuccess, showError]);
 
   const rename = useCallback(async (id: string, canonicalName: string): Promise<boolean> => {
     try {
@@ -118,5 +106,5 @@ export function useProductCatalog() {
     }
   }, [api, load, showSuccess, showError]);
 
-  return { catalog, resolve, load, merge, rename, create, updateDefaultSize, remove, catalogKey };
+  return { catalog, resolve, load, rename, create, updateDefaultSize, remove, catalogKey };
 }

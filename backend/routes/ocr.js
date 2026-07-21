@@ -71,8 +71,7 @@ const MAX_FEEDBACK_ITEMS = 60;                    // cap on a single learning ba
 const MAX_PDF_PAGES     = 8;                      // OCR page cap (e-receipts are 1-2 pages)
 
 // The Azure OpenAI client, the product schema and the product prompt
-// rules live in utils/productAi.js — shared with the retroactive
-// backfill so both paths name products identically.
+// rules live in utils/productAi.js.
 
 // ── Rate limiting ─────────────────────────────────────────────
 // Handled centrally in middleware/rateLimiter.js (ocrLimiter) —

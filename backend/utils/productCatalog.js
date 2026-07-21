@@ -79,7 +79,7 @@ function mergeProductDoc(existing, line, familyId) {
       userId:        familyId,
       type:          "PRODUCT",
       key:           line.key,
-      mergedKeys:    [],      // keys of products merged INTO this one (see /merge)
+      mergedKeys:    [],      // keys folded into this one (see findByMergedKey below)
       canonicalName: line.name,
       unit:          line.unit || null,
       packSizes:     line.size ? [line.size] : [],
@@ -94,8 +94,10 @@ function mergeProductDoc(existing, line, familyId) {
   }
 
   // Canonical name: prefer the longer (more complete) spelling seen —
-  // unless the user renamed this product by hand, in which case their
-  // choice is final (a backfill sweep must not undo a correction).
+  // unless the user locked it by hand (rename, or the whitelist entry's
+  // own creation), in which case their choice is final. In practice every
+  // tracked product is nameLocked from the moment it's added in Settings,
+  // so this branch only ever fires on pre-whitelist legacy catalog docs.
   const canonicalName = (!existing.nameLocked && line.name &&
                          line.name.length > (existing.canonicalName || "").length)
     ? line.name
@@ -192,34 +194,6 @@ function resolveTrackedProduct(product, trackedProducts) {
     size:      sizeFromReceipt ?? (typeof tracked.defaultSize === "number" ? tracked.defaultSize : null),
     unit,
     packCount: (typeof product.packCount === "number" && product.packCount > 0) ? product.packCount : null,
-  };
-}
-
-/**
- * Pure merge of two catalog docs — `target` absorbs `source`. The
- * survivor keeps its own id, key and canonical name, and records the
- * source's key (+ its already-merged keys) in mergedKeys[] so future
- * receipt lines for the source fold back into the survivor. Returns the
- * updated target doc; the caller deletes the source. Unit-tested.
- */
-function mergeProducts(target, source) {
-  const dedup = (arr) => [...new Set(arr.filter(Boolean))];
-  const aliasKey = (a) => `${a.merchant || ""}|${a.raw || ""}`;
-  const aliasMap = new Map();
-  for (const a of [...(target.aliases || []), ...(source.aliases || [])]) {
-    if (!aliasMap.has(aliasKey(a))) aliasMap.set(aliasKey(a), a);
-  }
-  return {
-    ...target,
-    mergedKeys:    dedup([...(target.mergedKeys || []), source.key, ...(source.mergedKeys || [])])
-                     .filter(k => k !== target.key),
-    merchants:     dedup([...(target.merchants || []), ...(source.merchants || [])]),
-    packSizes:     dedup([...(target.packSizes || []), ...(source.packSizes || [])]).slice(-MAX_SIZES),
-    aliases:       [...aliasMap.values()].slice(-MAX_ALIASES),
-    purchaseCount: (target.purchaseCount || 0) + (source.purchaseCount || 0),
-    firstSeen:     source.firstSeen && source.firstSeen < target.firstSeen ? source.firstSeen : target.firstSeen,
-    lastSeen:      source.lastSeen  && source.lastSeen  > target.lastSeen  ? source.lastSeen  : target.lastSeen,
-    updatedAt:     new Date().toISOString(),
   };
 }
 
@@ -337,7 +311,6 @@ module.exports = {
   newTrackedProduct,
   resolveTrackedProduct,
   mergeProductDoc,
-  mergeProducts,
   rememberProducts,
   fetchTrackedProducts,
 };
