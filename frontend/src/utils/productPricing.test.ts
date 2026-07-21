@@ -295,6 +295,15 @@ describe("buildPriceHistory — catalog identity", () => {
     ];
     expect(buildPriceHistory(txs).products).toHaveLength(2);
   });
+
+  it("excludes a product no longer in the current whitelist when a resolver is supplied", () => {
+    // Historical transactions still carry the old product tag, but the
+    // resolver (built from the CURRENT catalog) knows nothing about it —
+    // e.g. it was deleted from Settings, or predates the whitelist.
+    const txs = [1, 2, 3].map(i => tx({ date: `2026-0${i}-10`, items: [line("Tofu naturalne", 4.5)] }));
+    const resolve = () => null;
+    expect(buildPriceHistory(txs, undefined, resolve).products).toHaveLength(0);
+  });
 });
 
 // ── Shrinkflation ────────────────────────────────────────────

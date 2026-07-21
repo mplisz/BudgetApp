@@ -316,11 +316,16 @@ export function buildPriceHistory(
       const { nameKey, size, unit, packSize, label } = parsed;
 
       // Catalog identity: resolve this line's catalog key to a canonical
-      // group (honours cross-shop + manual merges). Falls back to the local
-      // name key when the catalog doesn't know it — identical to the old
-      // behaviour when no resolver is supplied.
+      // group (honours cross-shop + manual merges). When a resolver IS
+      // supplied, a line whose product isn't (or is no longer) in the
+      // CURRENT whitelist is out of scope entirely — otherwise a product
+      // removed from Settings, or a stale name from before it existed,
+      // would keep showing up here forever via old transactions. With no
+      // resolver at all (some callers don't have a catalog), fall back to
+      // the old name-fold grouping unfiltered.
       const ck       = catalogKey(label, unit);
       const identity = ck && resolve ? resolve(ck) : null;
+      if (resolve && !identity) continue;
       const groupKey = identity?.groupId ?? nameKey;
 
       let product = byName.get(groupKey);

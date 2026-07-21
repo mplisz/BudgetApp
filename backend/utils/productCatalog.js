@@ -215,7 +215,15 @@ async function findByMergedKey(container, familyId, key) {
 }
 
 // Read-modify-write for one product line. Optimistic concurrency: a
-// concurrent write (412) or a create race (409) is retried once.
+// concurrent write (412) is retried once.
+//
+// Whitelist-only: this NEVER creates a catalog doc. A product only exists
+// here because the user explicitly registered it (routes/products.js
+// POST /) — a transaction save can only fold a purchase into that already-
+// existing entry. Without this guard, a stale/orphaned product name still
+// sitting on a transaction (e.g. one the user deleted from Settings) would
+// silently resurrect its own catalog doc the next time that transaction
+// was saved or edited, defeating the whole point of an explicit whitelist.
 async function upsertProductLine(container, familyId, rawLine) {
   const key = productKey(rawLine.name, rawLine.unit);
   if (!key) return;
@@ -229,26 +237,23 @@ async function upsertProductLine(container, familyId, rawLine) {
       existing = r.resource;
       etag     = r.etag;
     } catch (err) {
-      if (err.code !== 404) throw err;   // 404 = maybe new, maybe merged away
+      if (err.code !== 404) throw err;   // 404 = maybe untracked, maybe merged away
     }
     // Point-read missed — the key may have been merged into a survivor.
     if (!existing) {
       const target = await findByMergedKey(container, familyId, key);
       if (target) { existing = target; etag = target._etag; }
     }
+    if (!existing) return;   // not (or no longer) tracked — nothing to fold into
 
     const doc = mergeProductDoc(existing, line, familyId);
     try {
-      if (existing) {
-        await container.item(existing.id, familyId).replace(doc, {
-          accessCondition: { type: "IfMatch", condition: etag },
-        });
-      } else {
-        await container.items.create(doc);
-      }
+      await container.item(existing.id, familyId).replace(doc, {
+        accessCondition: { type: "IfMatch", condition: etag },
+      });
       return;
     } catch (err) {
-      if ((err.code === 412 || err.code === 409) && attempt === 0) continue;
+      if (err.code === 412 && attempt === 0) continue;
       throw err;
     }
   }
