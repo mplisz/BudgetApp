@@ -40,6 +40,11 @@ export interface PriceLineItem {
   product?:    LineItemProduct | null;
 }
 
+/** A return's per-line allocation — only the fields the exclusion needs. */
+export interface PricedReturn {
+  returnedLineItems?: Array<{ index: number; amount: number }> | null;
+}
+
 /** Minimal transaction shape the aggregation needs (subset of range docs). */
 export interface PricedTransaction {
   type:           string;
@@ -47,6 +52,7 @@ export interface PricedTransaction {
   budgetMonth:    string;
   merchant?:      string | null;
   lineItems?:     PriceLineItem[];
+  returns?:       PricedReturn[] | null;
 }
 
 /** Distinct tracked-product names present on a set of line items — the one
@@ -323,9 +329,21 @@ export function buildPriceHistory(
     // deliberately out of scope here.
     const items: PriceLineItem[] = tx.lineItems ?? [];
 
+    // Per-line returned money (returns[].returnedLineItems, summed across
+    // returns). A line returned IN FULL is excluded below — the purchase was
+    // undone, so its price must feed neither the chart nor shrink detection.
+    // A partial return keeps the occurrence: the unit price stayed real.
+    const returnedByIndex = new Map<number, number>();
+    for (const ret of tx.returns ?? []) {
+      for (const r of ret.returnedLineItems ?? []) {
+        returnedByIndex.set(r.index, (returnedByIndex.get(r.index) ?? 0) + r.amount);
+      }
+    }
+
     let contributed = false;
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       if (!item.description?.trim() || !(item.amount > 0)) continue;
+      if ((returnedByIndex.get(index) ?? 0) >= item.amount - 0.01) continue;
       const parsed = parseItem(item);
       if (!parsed) continue;
       const { nameKey, size, unit, packSize, label } = parsed;

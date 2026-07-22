@@ -45,7 +45,7 @@ const { getReceiptBlobContainer, setReceiptRetention } = require("../utils/recei
 router.use(requireAuth);
 const { cleanMerchant, merchantExists, rememberMerchant, rememberMerchantNip } = require("../utils/merchant");
 const { rememberProducts } = require("../utils/productCatalog");
-const { resolveTransferTarget } = require("../utils/transferCategory");
+const { resolveTransferTarget, buildReturnTransferDoc } = require("../utils/transferCategory");
 
 
 // ── Schemas ───────────────────────────────────────────────────
@@ -103,6 +103,15 @@ const TransactionPostSchema = TransactionBaseSchema.extend({
   isWarranty:      z.boolean().optional().default(false),
 });
 
+// A return entry's link to specific receipt lines. `index` points into the
+// parent tx's lineItems[]; description + amount are a snapshot used to detect
+// a stale client and to audit what exactly was given back.
+const ReturnedLineItemSchema = z.object({
+  index:       z.number().int().min(0),
+  description: z.string().max(200),
+  amount:      z.number().positive(),
+});
+
 // PATCH = base made fully optional, plus the patch-only `returns` array.
 // Omitted fields resolve to `undefined` (defaults don't fire under
 // .partial()), so the route's `v !== undefined` filter leaves existing
@@ -115,11 +124,14 @@ const TransactionPatchSchema = TransactionBaseSchema.partial()
       currency:             z.string().length(3).default("PLN"),
       voucherAmount:        z.number().min(0).default(0),
       cashAmount:           z.number().min(0),
+      surplusAmount:        z.number().min(0).optional(),
       moneyReturnedInMonth: z.string().regex(BUDGET_MONTH_REGEX),
       returnedAt:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       reason:               z.string().max(500).optional().default("").transform(v => v?.trim() ?? ""),
       returnedBy:           z.string().optional().default(""),
       returnedById:         z.string().optional().default(""),
+      createdAt:            z.string().optional(),
+      returnedLineItems:    z.array(ReturnedLineItemSchema).max(60).optional(),
     })).optional(),
   })
   .refine(d => Object.keys(d).length > 0, { message: "No fields to update." })
@@ -132,12 +144,18 @@ const ReturnSchema = z.object({
   amount:               z.number().positive(),
   voucherAmount:        z.number().min(0).default(0),
   cashAmount:           z.number().min(0),
+  // Money received ABOVE the transaction amount (shop rounded up, receipt
+  // was under-priced…). Never enters returns[].amount — the returnUtils
+  // math assumes Σ returns ≤ tx.amount — it always materializes as a
+  // TRANSFER instead, even for a same-month return.
+  surplusAmount:        z.number().min(0).default(0),
   moneyReturnedInMonth: z.string().regex(BUDGET_MONTH_REGEX),
   returnedAt:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   reason:               z.string().max(500).optional().default("").transform(v => v?.trim() ?? ""),
   createVoucher:        z.boolean().optional().default(false),
   voucherCode:          z.string().max(100).optional().default(""),
   voucherExpiresAt:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  returnedLineItems:    z.array(ReturnedLineItemSchema).max(60).optional(),
 });
 
 // ── GET ───────────────────────────────────────────────────────
@@ -524,6 +542,30 @@ router.patch("/:id", async (req, res) => {
       Object.entries(parsed.data).filter(([, v]) => v !== undefined),
     );
 
+    // Returns reference line items BY INDEX (returns[].returnedLineItems),
+    // so a lineItems edit that removes/reorders lines would silently point
+    // those references at the wrong products. Allow the patch only when
+    // every referenced index still holds the same description + amount.
+    if (patchFields.lineItems !== undefined) {
+      const referenced = new Set();
+      for (const ret of existing.returns || []) {
+        for (const p of ret.returnedLineItems || []) referenced.add(p.index);
+      }
+      if (referenced.size > 0) {
+        const oldLines = Array.isArray(existing.lineItems) ? existing.lineItems : [];
+        const newLines = Array.isArray(patchFields.lineItems) ? patchFields.lineItems : [];
+        const intact = newLines.length === oldLines.length &&
+          [...referenced].every(i =>
+            newLines[i]?.description === oldLines[i]?.description &&
+            newLines[i]?.amount      === oldLines[i]?.amount);
+        if (!intact) {
+          return res.status(409).json({
+            error: "Nie można zmienić pozycji paragonu objętych zwrotem. Zostaw zwrócone pozycje bez zmian albo usuń powiązany zwrot.",
+          });
+        }
+      }
+    }
+
     const updated = {
       ...existing,
       ...patchFields,
@@ -762,39 +804,17 @@ router.post("/deposit-return", async (req, res) => {
     // STEP 3 — one consolidated transfer for past-month returns + surplus.
     let transfer = null;
     if (transferAmt > 0 && target) {
-      const doc = {
-        // Generic slug — the endpoint serves any batch-return flow now.
-        id:               `tx_${familyId}_${budgetMonth.replace("-", "")}_batchret_${Date.now()}`,
-        userId:           familyId,
-        type:             "TRANSFER",
-        categoryId:       target.categoryId,
-        categoryName:     target.categoryName,
-        subcategoryId:    target.subcategoryId,
-        subcategoryName:  target.subcategoryName,
-        amount:           transferAmt,
-        originalAmount:   transferAmt,
-        originalCurrency: "PLN",
-        fxRate:           1,
+      const doc = buildReturnTransferDoc({
+        familyId,
+        target,
+        amount:      transferAmt,
         date,
         budgetMonth,
-        description:      desc,
-        tags:             [],
-        priority:         2,
-        isRecurring:      false,
-        recurringId:      null,
-        useVoucher:       false,
-        voucherId:        null,
-        voucherAmount:    0,
-        netAmount:        transferAmt,
-        returns:          [],
-        author:           req.user.name || req.user.email,
-        authorId:         req.user.id,
-        isArchived:       false,
-        archivedAt:       null,
-        archivedBy:       null,
-        archivedById:     null,
-        createdAt:        new Date().toISOString(),
-      };
+        description: desc,
+        user:        req.user,
+        // Generic slug — the endpoint serves any batch-return flow now.
+        idSlug:      "batchret",
+      });
       const { resource } = await transactionsContainer.items.create(doc);
       transfer = resource;
     }
@@ -854,6 +874,7 @@ router.post("/:id/returns", async (req, res) => {
     const amount         = roundMoney(data.amount);
     const cashAmount     = roundMoney(data.cashAmount);
     const voucherAmount  = roundMoney(data.voucherAmount);
+    const surplusAmount  = roundMoney(data.surplusAmount);
     const totalReturnedSoFar = sumMoney((existing.returns || []).map(r => r.amount));
     const newTotal           = roundMoney(totalReturnedSoFar + amount);
 
@@ -862,6 +883,44 @@ router.post("/:id/returns", async (req, res) => {
     }
     if (Math.abs(cashAmount + voucherAmount - amount) > 0.01) {
       return res.status(400).json({ error: "cashAmount + voucherAmount must equal amount." });
+    }
+
+    // ── Per-line-item allocation checks ───────────────────────
+    // The snapshot (description) must match the CURRENT lineItems — a
+    // mismatch means the client selected lines on a stale document.
+    // Per-line money is cumulative across every prior return's allocation.
+    const returnedLineItems = (data.returnedLineItems ?? []).map(r => ({
+      index:       r.index,
+      description: r.description,
+      amount:      roundMoney(r.amount),
+    }));
+    if (returnedLineItems.length > 0) {
+      const lines = Array.isArray(existing.lineItems) ? existing.lineItems : [];
+      if (lines.length === 0) {
+        return res.status(400).json({ error: "Transaction has no line items to allocate the return to." });
+      }
+      const seen = new Set();
+      const prevByIndex = new Map();
+      for (const ret of existing.returns || []) {
+        for (const p of ret.returnedLineItems || []) {
+          prevByIndex.set(p.index, roundMoney((prevByIndex.get(p.index) || 0) + p.amount));
+        }
+      }
+      for (const r of returnedLineItems) {
+        if (r.index >= lines.length)                return res.status(400).json({ error: "returnedLineItems index out of range." });
+        if (seen.has(r.index))                      return res.status(400).json({ error: "Duplicate line item in returnedLineItems." });
+        seen.add(r.index);
+        if ((lines[r.index].description ?? "") !== r.description) {
+          return res.status(409).json({ error: "Line items changed since the return was prepared. Refresh and try again." });
+        }
+        const cumulative = roundMoney((prevByIndex.get(r.index) || 0) + r.amount);
+        if (cumulative > lines[r.index].amount + 0.01) {
+          return res.status(400).json({ error: "Returned amount exceeds the line item amount." });
+        }
+      }
+      if (sumMoney(returnedLineItems.map(r => r.amount)) > amount + 0.01) {
+        return res.status(400).json({ error: "Line item allocation exceeds the return amount." });
+      }
     }
 
     // Target month closed check
@@ -874,12 +933,16 @@ router.post("/:id/returns", async (req, res) => {
       return res.status(403).json({ error: "Target month is closed." });
     }
 
-    // Resolve transfer target month and validate it BEFORE saving anything
-    const isCrossMonth = data.moneyReturnedInMonth !== existing.budgetMonth;
+    // Resolve transfer target month and validate it BEFORE saving anything.
+    // A transfer is needed for cross-month cash (as before) and for ANY
+    // surplus — surplus can't reduce an expense, it is new money, so it
+    // transfers even when the return lands in the purchase month.
+    const isCrossMonth   = data.moneyReturnedInMonth !== existing.budgetMonth;
+    const transferAmount = roundMoney((isCrossMonth ? cashAmount : 0) + surplusAmount);
     let transferBudgetMonth = null;
     let transferTarget = null;
 
-    if (isCrossMonth && cashAmount > 0) {
+    if (transferAmount > 0) {
       transferBudgetMonth = data.moneyReturnedInMonth < serverNow
         ? serverNow
         : data.moneyReturnedInMonth;
@@ -895,7 +958,7 @@ router.post("/:id/returns", async (req, res) => {
         }
       }
 
-      // A cross-month cash return spawns a TRANSFER — require the configured
+      // Cross-month cash / surplus spawns a TRANSFER — require the configured
       // return-transfer subcategory (no env fallback).
       const t = await resolveTransferTarget(familyId, "returnTransferSubcategoryId");
       if (!t.ok) {
@@ -915,6 +978,10 @@ router.post("/:id/returns", async (req, res) => {
       returnedBy:           req.user.name || req.user.email,
       returnedById:         req.user.id,
       createdAt:            new Date().toISOString(),
+      // Audit-only mirrors: surplus lives in the TRANSFER, allocations feed
+      // the price-history exclusion — neither enters the returnUtils sums.
+      ...(surplusAmount > 0 ? { surplusAmount } : {}),
+      ...(returnedLineItems.length > 0 ? { returnedLineItems } : {}),
     };
 
     const updatedTx = {
@@ -933,55 +1000,39 @@ router.post("/:id/returns", async (req, res) => {
       transferCreated:     false,
       voucherCreated:      false,
       transferBudgetMonth: null,
+      transferAmount:      0,
       partialFailure:      false,
     };
 
     // ── STEP 2: Create TRANSFER (best effort) ─────────────────
-    if (isCrossMonth && cashAmount > 0 && transferBudgetMonth) {
+    // One consolidated document: cross-month cash + surplus together.
+    if (transferAmount > 0 && transferBudgetMonth && transferTarget) {
       try {
-        const transferId  = `tx_${familyId}_${transferBudgetMonth.replace("-","")}_zwrot_${Date.now()}`;
-        const transferDoc = {
-          id:               transferId,
-          userId:           familyId,
-          type:             "TRANSFER",
-          categoryId:       transferTarget.categoryId,
-          categoryName:     transferTarget.categoryName,
-          subcategoryId:    transferTarget.subcategoryId,
-          subcategoryName:  transferTarget.subcategoryName,
-          amount:           cashAmount,
-          originalAmount:   cashAmount,
-          originalCurrency: "PLN",
-          fxRate:           1,
-          date:             data.returnedAt,
-          budgetMonth:      transferBudgetMonth,
-          priority:         2,
-          tags:             [],
-          description:      `Zwrot: ${existing.categoryName} › ${existing.subcategoryName}${data.reason ? ` — ${data.reason}` : ""}${data.moneyReturnedInMonth !== transferBudgetMonth ? ` (faktyczny zwrot: ${data.moneyReturnedInMonth})` : ""}`,
+        const transferDoc = buildReturnTransferDoc({
+          familyId,
+          target:      transferTarget,
+          amount:      transferAmount,
+          date:        data.returnedAt,
+          budgetMonth: transferBudgetMonth,
+          description:
+            `Zwrot: ${existing.categoryName} › ${existing.subcategoryName}` +
+            `${data.reason ? ` — ${data.reason}` : ""}` +
+            `${data.moneyReturnedInMonth !== transferBudgetMonth ? ` (faktyczny zwrot: ${data.moneyReturnedInMonth})` : ""}` +
+            `${surplusAmount > 0 ? ` (w tym nadwyżka ${surplusAmount.toFixed(2)} PLN)` : ""}`,
+          user:                req.user,
+          idSlug:              "zwrot",
           sourceTransactionId: existing.id,
-          useVoucher:       false,
-          voucherId:        null,
-          voucherAmount:    0,
-          isRecurring:      false,
-          recurringId:      null,
-          netAmount:        cashAmount,
-          returns:          [],
-          author:           req.user.name || req.user.email,
-          authorId:         req.user.id,
-          isArchived:       false,
-          archivedAt:       null,
-          archivedBy:       null,
-          archivedById:     null,
-          createdAt:        new Date().toISOString(),
-        };
+        });
 
         await transactionsContainer.items.upsert(transferDoc);
         sideEffects.transferCreated     = true;
         sideEffects.transferBudgetMonth = transferBudgetMonth;
-        console.log(`[TX RETURN] TRANSFER created: ${transferId} → ${transferBudgetMonth}`);
+        sideEffects.transferAmount      = transferAmount;
+        console.log(`[TX RETURN] TRANSFER created: ${transferDoc.id} → ${transferBudgetMonth}`);
       } catch (transferErr) {
         console.error(
           `[TX RETURN] TRANSFER creation failed for ${existing.id}. ` +
-          `Return is saved but cross-month transfer is MISSING. Error:`,
+          `Return is saved but the transfer (cross-month cash / surplus) is MISSING. Error:`,
           transferErr,
         );
         sideEffects.partialFailure = true;

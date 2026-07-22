@@ -42,4 +42,51 @@ async function resolveTransferTarget(familyId, settingsField) {
   return { ok: true, target };
 }
 
-module.exports = { resolveSubcategoryFull, resolveTransferTarget };
+/**
+ * Full TRANSFER document for money coming back from a return flow — the
+ * single-transaction return (incl. surplus over the purchase amount) and
+ * the consolidated batch/deposit return build the exact same shape here,
+ * so the two endpoints can't drift apart field by field.
+ * `sourceTransactionId` is only stamped when the transfer traces back to
+ * one specific transaction (batch transfers don't).
+ */
+function buildReturnTransferDoc({
+  familyId, target, amount, date, budgetMonth, description, user,
+  idSlug, sourceTransactionId = null,
+}) {
+  return {
+    id:               `tx_${familyId}_${budgetMonth.replace("-", "")}_${idSlug}_${Date.now()}`,
+    userId:           familyId,
+    type:             "TRANSFER",
+    categoryId:       target.categoryId,
+    categoryName:     target.categoryName,
+    subcategoryId:    target.subcategoryId,
+    subcategoryName:  target.subcategoryName,
+    amount,
+    originalAmount:   amount,
+    originalCurrency: "PLN",
+    fxRate:           1,
+    date,
+    budgetMonth,
+    priority:         2,
+    tags:             [],
+    description,
+    ...(sourceTransactionId ? { sourceTransactionId } : {}),
+    useVoucher:       false,
+    voucherId:        null,
+    voucherAmount:    0,
+    isRecurring:      false,
+    recurringId:      null,
+    netAmount:        amount,
+    returns:          [],
+    author:           user.name || user.email,
+    authorId:         user.id,
+    isArchived:       false,
+    archivedAt:       null,
+    archivedBy:       null,
+    archivedById:     null,
+    createdAt:        new Date().toISOString(),
+  };
+}
+
+module.exports = { resolveSubcategoryFull, resolveTransferTarget, buildReturnTransferDoc };

@@ -9,11 +9,28 @@ export type BudgetMonth = string; // "YYYY-MM"
 
 export type TransactionType = "EXPENSE" | "INCOME" | "TRANSFER" | "SAVING";
 
+// A return entry's link to one receipt line: `index` points into the parent
+// tx's lineItems[]; description + amount are a snapshot (stale-client guard,
+// audit). A line whose cumulative returned amount covers its full price is
+// excluded from the price history.
+export interface ReturnedLineItem {
+  index:       number;
+  description: string;
+  amount:      number;
+}
+
 // A returned portion of a transaction (cross-month refund splits cash/voucher).
 export interface Return {
+  amount:               number;
   moneyReturnedInMonth: string;
   cashAmount?:    number;
   voucherAmount?: number;
+  // Money received above the transaction amount — materialized as a TRANSFER
+  // by the backend, never part of `amount` (returnUtils assumes Σ ≤ tx.amount).
+  surplusAmount?: number;
+  returnedAt?:    string;
+  reason?:        string;
+  returnedLineItems?: ReturnedLineItem[];
 }
 
 // One scanned/merged receipt line. A transaction with ≥2 line items shows a

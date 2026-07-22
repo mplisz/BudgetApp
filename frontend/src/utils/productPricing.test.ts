@@ -52,6 +52,7 @@ function tx(o: {
   merchant?: string | null;
   items?: PriceLineItem[];
   type?: string;
+  returns?: PricedTransaction["returns"];
 }): PricedTransaction {
   return {
     type:        o.type ?? "EXPENSE",
@@ -59,6 +60,7 @@ function tx(o: {
     budgetMonth: o.date.slice(0, 7),
     merchant:    o.merchant,
     lineItems:   o.items,
+    returns:     o.returns,
   };
 }
 
@@ -152,6 +154,93 @@ describe("buildPriceHistory — scope", () => {
     const txs = buys("Mleko", [3, 3, 3, 4], { size: 1000, unit: "ml" });   // 2026-01..04
     const { products } = buildPriceHistory(txs, new Set(["2026-01", "2026-02", "2026-03"]));
     expect(products[0].occurrences).toHaveLength(3);
+  });
+});
+
+// ── Returned line items ──────────────────────────────────────
+
+describe("buildPriceHistory — returned line items", () => {
+  it("excludes a line returned in full — its price never really happened", () => {
+    const txs = [
+      ...buys("Chleb żytni", [5, 5, 5], { size: 500, unit: "g" }),
+      tx({
+        date: "2026-04-10", merchant: "Biedronka",
+        items:   [line("Chleb żytni", 12.99, 500, "g")],   // wrong price, given back
+        returns: [{ returnedLineItems: [{ index: 0, amount: 12.99 }] }],
+      }),
+    ];
+    const { products } = buildPriceHistory(txs);
+    expect(products[0].occurrences).toHaveLength(3);
+    expect(products[0].occurrences.every(o => o.price === 5)).toBe(true);
+  });
+
+  it("keeps a partially returned line — the unit price stayed real", () => {
+    const txs = [
+      ...buys("Chleb żytni", [5, 5, 5], { size: 500, unit: "g" }),
+      tx({
+        date: "2026-04-10", merchant: "Biedronka",
+        items:   [line("Chleb żytni", 10, 1000, "g")],     // two loaves, one back
+        returns: [{ returnedLineItems: [{ index: 0, amount: 5 }] }],
+      }),
+    ];
+    expect(buildPriceHistory(txs).products[0].occurrences).toHaveLength(4);
+  });
+
+  it("ignores transaction-level returns with no line allocation (old data)", () => {
+    const txs = [
+      ...buys("Chleb żytni", [5, 5], { size: 500, unit: "g" }),
+      tx({
+        date: "2026-03-10", merchant: "Biedronka",
+        items:   [line("Chleb żytni", 5, 500, "g")],
+        returns: [{}],
+      }),
+    ];
+    expect(buildPriceHistory(txs).products[0].occurrences).toHaveLength(3);
+  });
+
+  it("sums several partial returns of one line into a full exclusion", () => {
+    const txs = [
+      ...buys("Chleb żytni", [5, 5, 5], { size: 500, unit: "g" }),
+      tx({
+        date: "2026-04-10", merchant: "Biedronka",
+        items:   [line("Chleb żytni", 6, 500, "g")],
+        returns: [
+          { returnedLineItems: [{ index: 0, amount: 2.5 }] },
+          { returnedLineItems: [{ index: 0, amount: 3.5 }] },
+        ],
+      }),
+    ];
+    expect(buildPriceHistory(txs).products[0].occurrences).toHaveLength(3);
+  });
+
+  it("only the returned line drops — the rest of the receipt still counts", () => {
+    const txs = [
+      ...buys("Mleko", [3, 3], { size: 1000, unit: "ml" }),
+      tx({
+        date: "2026-03-10", merchant: "Biedronka",
+        items: [
+          line("Chleb żytni", 12.99, 500, "g"),
+          line("Mleko", 3, 1000, "ml"),
+        ],
+        returns: [{ returnedLineItems: [{ index: 0, amount: 12.99 }] }],
+      }),
+    ];
+    const { products } = buildPriceHistory(txs);
+    expect(products.map(p => p.label)).toEqual(["Mleko"]);   // Chleb: 1 occurrence returned → 0 left
+    expect(products[0].occurrences).toHaveLength(3);
+  });
+
+  it("a fully returned line does not feed shrink detection", () => {
+    const txs = [
+      ...buys("Masło Ekstra", [7, 7], { size: 200, unit: "g" }),
+      tx({
+        date: "2026-03-10", merchant: "Biedronka",
+        items:   [line("Masło Ekstra", 7, 180, "g")],       // smaller pack, but returned
+        returns: [{ returnedLineItems: [{ index: 0, amount: 7 }] }],
+      }),
+      tx({ date: "2026-04-10", merchant: "Biedronka", items: [line("Masło Ekstra", 7, 200, "g")] }),
+    ];
+    expect(buildPriceHistory(txs).products[0].shrink).toBeNull();
   });
 });
 

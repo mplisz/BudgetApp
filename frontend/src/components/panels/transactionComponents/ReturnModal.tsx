@@ -5,10 +5,14 @@
 //   - Cross-month returns (creates TRANSFER in target month)
 //   - Cash + voucher split
 //   - Voucher creation on return
+//   - Per-line-item returns (checkbox list when the tx has receipt lines;
+//     a fully returned line drops out of the price history)
+//   - Surplus above the transaction amount (user got back more than they
+//     paid) — confirmed explicitly, lands as a TRANSFER on the backend
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useToast }       from "../../../hooks/useToast";
 import { useApi }         from "../../../hooks/useApi";
 import { AppDatePicker, toYMD, todayLocal } from "../../ui/AppDatePicker";
@@ -46,7 +50,10 @@ interface ReturnFormState {
 interface ReturnSideEffects {
   transferCreated?: boolean;
   voucherCreated?:  boolean;
+  transferAmount?:  number;
 }
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 interface ReturnResponse {
   warning?:     string;
@@ -117,23 +124,64 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
 
   function setField(k: keyof ReturnFormState, v: unknown) { setForm(p => ({ ...p, [k]: v })); }
 
-  // Pure cap logic:
-  // CAP = remaining
-  // amount  <= CAP - voucherAmount
-  // voucher <= CAP - amount
-  const amt     = parseFloat(String(form.amount))        || 0;
-  const vchAmt  = form.hasVoucher ? (parseFloat(String(form.voucherAmount)) || 0) : 0;
-  const cashAmt = Math.max(0, amt - vchAmt);
+  // Per-line-item selection — only offered when the tx carries receipt lines.
+  const lineItems = Array.isArray(tx.lineItems) ? tx.lineItems : [];
+  const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
+  const [surplusAck,    setSurplusAck]    = useState(false);
 
-  const maxAmount  = remaining - vchAmt;   // how much left for cash return
-  const maxVoucher = remaining - amt;      // how much left for voucher
+  // How much of each line has already been given back (across all returns).
+  const returnedPerLine = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const ret of tx.returns ?? []) {
+      for (const r of ret.returnedLineItems ?? []) {
+        map.set(r.index, round2((map.get(r.index) ?? 0) + r.amount));
+      }
+    }
+    return map;
+  }, [tx.returns]);
+
+  const lineRemaining = (idx: number) =>
+    round2(lineItems[idx].amount - (returnedPerLine.get(idx) ?? 0));
+
+  const availableLineIdx = lineItems
+    .map((_, idx) => idx)
+    .filter(idx => lineRemaining(idx) > 0.009);
+
+  function toggleLine(idx: number) {
+    const next = new Set(selectedLines);
+    if (next.has(idx)) next.delete(idx); else next.add(idx);
+    const sum = [...next].reduce((s, i) => s + lineRemaining(i), 0);
+    setSelectedLines(next);
+    setSurplusAck(false);
+    setField("amount", next.size > 0 ? round2(Math.min(sum, remaining)) : "");
+  }
+
+  // Pure cap logic:
+  // CAP = the SCOPE of the return — the selected lines' remaining sum when
+  // any are checked, else the whole transaction's remaining. The field
+  // accepts MORE than the cap: the part above is a SURPLUS (shop gave back
+  // more than that scope was worth), acknowledged explicitly and turned
+  // into a TRANSFER by the backend. Checking only the beer and typing 2 zł
+  // over its price must NOT silently eat into the unchecked cola.
+  // voucher <= CAP - amount (a surplus is always cash — voucher UI hides
+  // once the typed amount reaches the cap).
+  const selectionSum = round2([...selectedLines].reduce((s, i) => s + lineRemaining(i), 0));
+  const returnCap    = selectedLines.size > 0 ? Math.min(selectionSum, remaining) : remaining;
+
+  const typedAmt = parseFloat(String(form.amount)) || 0;
+  const amt      = Math.min(round2(typedAmt), returnCap);   // the actual return
+  const surplus  = round2(Math.max(0, round2(typedAmt) - returnCap));
+  const vchAmt   = form.hasVoucher ? (parseFloat(String(form.voucherAmount)) || 0) : 0;
+  const cashAmt  = Math.max(0, amt - vchAmt);
+
+  const maxAmount  = returnCap - vchAmt;               // cap hint for cash return
+  const maxVoucher = Math.max(0, returnCap - amt);     // how much left for voucher
 
   const crossMonth = isCrossMonthReturn(tx, form.moneyReturnedInMonth);
 
   async function handleSubmit() {
-    const amount = parseFloat(String(form.amount));
-    if (!amount || amount <= 0)        { showError("Podaj kwotę zwrotu.");              return; }
-    if (amount > remaining)            { showError(`Maksymalny zwrot to ${fmt(remaining)} PLN.`); return; }
+    if (!typedAmt || typedAmt <= 0)    { showError("Podaj kwotę zwrotu.");              return; }
+    if (surplus > 0 && !surplusAck)    { showError("Potwierdź nadwyżkę zwrotu, aby kontynuować."); return; }
     if (!isReturnMonthAllowed(form.moneyReturnedInMonth)) {
       showError(`Miesiąc zwrotu nie może być wcześniejszy niż ${minMonth}.`);
       return;
@@ -143,16 +191,32 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
       return;
     }
 
+    // Per-line allocation: each selected line gets its remaining amount,
+    // scaled down proportionally when the return covers less than the
+    // selection (partial per-line return). Floor to cents so the sum never
+    // exceeds the return amount the backend validates against.
+    const selectedIdx = [...selectedLines].sort((a, b) => a - b);
+    const scale = selectionSum > 0 ? Math.min(1, amt / selectionSum) : 0;
+    const returnedLineItems = selectedIdx
+      .map(i => ({
+        index:       i,
+        description: lineItems[i].description ?? "",
+        amount:      Math.floor(lineRemaining(i) * scale * 100) / 100,
+      }))
+      .filter(r => r.amount > 0);
+
     const payload = {
-      amount,
+      amount:               amt,
       voucherAmount:        vchAmt,
-      cashAmount:           Math.max(0, amount - vchAmt),
+      cashAmount:           Math.max(0, amt - vchAmt),
+      surplusAmount:        surplus,
       moneyReturnedInMonth: form.moneyReturnedInMonth,
       returnedAt:           toYMD(form.returnedAt),
       reason:               form.reason,
       createVoucher:        form.createVoucher,
       voucherCode:          form.voucherCode,
       voucherExpiresAt:     form.voucherExpiresAt ? toYMD(form.voucherExpiresAt) : null,
+      ...(returnedLineItems.length > 0 ? { returnedLineItems } : {}),
     };
 
     setSaving(true);
@@ -162,7 +226,11 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
       if (data.warning) showError(data.warning);
       else {
         let msg = "Zwrot zapisany! 🔙";
-        if (data.sideEffects?.transferCreated) msg += " Utworzono TRANSFER w miesiącu zwrotu.";
+        if (data.sideEffects?.transferCreated) {
+          msg += surplus > 0
+            ? ` Utworzono TRANSFER (w tym nadwyżka ${fmt(surplus)} PLN).`
+            : " Utworzono TRANSFER w miesiącu zwrotu.";
+        }
         if (data.sideEffects?.voucherCreated)  msg += " Voucher dodany.";
         showSuccess(msg);
       }
@@ -212,6 +280,59 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
           </div>
         </div>
 
+        {/* Receipt lines — pick what exactly came back */}
+        {lineItems.length > 0 && (
+          <div style={s.formRow}>
+            <label style={s.lbl}>Zwracane pozycje paragonu</label>
+            <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 8, maxHeight: 220, overflowY: "auto" }}>
+              {lineItems.map((li, idx) => {
+                const returned   = returnedPerLine.get(idx) ?? 0;
+                const leftOnLine = round2(li.amount - returned);
+                const gone       = leftOnLine <= 0.009;
+                return (
+                  <label
+                    key={idx}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "7px 10px",
+                      borderBottom: idx < lineItems.length - 1 ? `1px solid ${c.border}` : "none",
+                      opacity: gone ? 0.45 : 1, cursor: gone ? "default" : "pointer", fontSize: 13,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      disabled={gone}
+                      checked={selectedLines.has(idx)}
+                      onChange={() => toggleLine(idx)}
+                    />
+                    <span style={{ flex: 1, color: c.text, wordBreak: "break-word" }}>
+                      {li.description || "—"}
+                      {li.product?.name && (
+                        <span
+                          style={{ color: c.cyanLight, fontSize: 10, fontWeight: 600, marginLeft: 6 }}
+                          title={`Śledzony produkt: ${li.product.name}`}
+                        >
+                          🏷️ {li.product.name}
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ color: gone ? c.textMuted : c.text, whiteSpace: "nowrap", fontSize: 12 }}>
+                      {gone
+                        ? "zwrócono ✅"
+                        : returned > 0
+                          ? `pozostało ${fmt(leftOnLine)} PLN`
+                          : `${fmt(li.amount)} PLN`}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: c.textTertiary, marginTop: 4 }}>
+              Zaznacz, czego dotyczy zwrot — kwota policzy się sama (możesz ją potem zmienić).
+              W pełni zwrócona pozycja przestaje zasilać Historię cen.
+            </div>
+          </div>
+        )}
+
         {/* Amount + MAX + % calculator */}
         <div style={s.formRow}>
           <label style={s.lbl}>Kwota zwrotu (PLN) *</label>
@@ -222,9 +343,10 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
               step={0.01}
               value={form.amount}
               onChange={e => {
-                const raw = parseFloat(e.target.value) || 0;
-                const capped = Math.round(Math.min(raw, maxAmount) * 100) / 100;
-                setField("amount", raw > maxAmount ? capped : e.target.value);
+                // No hard cap — anything above `remaining` is a surplus,
+                // surfaced below and confirmed explicitly before saving.
+                setSurplusAck(false);
+                setField("amount", e.target.value);
               }}
               placeholder={`max. ${fmt(maxAmount)}`}
               style={{ ...s.inp, flex: 1 }}
@@ -234,7 +356,7 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
               onChange={e => {
                 const pct = parseFloat(e.target.value);
                 if (!pct) return;
-                const calculated = Math.round(remaining * pct) / 100;
+                const calculated = Math.round(returnCap * pct) / 100;
                 const rounded = Math.round(Math.min(calculated, maxAmount) * 100) / 100;
                 setField("amount", rounded);
                 setField("voucherAmount", 0);
@@ -255,10 +377,12 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
                 <option key={p} value={p}>{p}%</option>
               ))}
             </select>
-            {/* MAX — sets full amount, zeros voucher */}
+            {/* MAX — full remaining amount + every unreturned line selected */}
             <button
               onClick={() => {
-                setField("amount", Math.round(maxAmount * 100) / 100);
+                setSelectedLines(new Set(availableLineIdx));
+                setSurplusAck(false);
+                setField("amount", Math.round(remaining * 100) / 100);
                 setField("voucherAmount", 0);
                 setForm(p => ({ ...p, hasVoucher: false, createVoucher: false, voucherCode: "", voucherExpiresAt: null }));
               }}
@@ -271,9 +395,33 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
               }}
             >MAX</button>
           </div>
-          {amt > 0 && amt < remaining && (
+          {amt > 0 && amt < returnCap && (
             <div style={{ fontSize: 11, color: c.textSecondary, marginTop: 4 }}>
-              {Math.round(amt / remaining * 100)}% z {fmt(remaining)} PLN
+              {Math.round(amt / returnCap * 100)}% z {fmt(returnCap)} PLN
+            </div>
+          )}
+
+          {/* Surplus — got back more than was paid; explicit confirmation */}
+          {surplus > 0 && (
+            <div style={{ marginTop: 8, padding: "10px 12px", background: "#1a0d00", border: `1px solid ${alpha(c.orange, "66")}`, borderRadius: 8, fontSize: 12, color: c.orange }}>
+              ⚠️ Kwota przekracza {selectedLines.size > 0
+                ? "wartość zaznaczonych pozycji"
+                : "pozostałą wartość transakcji"} o <strong>{fmt(surplus)} PLN</strong>.
+              Zwrot zostanie zapisany na <strong>{fmt(amt)} PLN</strong>, a nadwyżka trafi jako{" "}
+              <strong>TRANSFER › Zwroty</strong> (kategoria z Ustawień → Mapowanie kategorii).
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, cursor: "pointer", color: c.text, fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={surplusAck}
+                  onChange={e => setSurplusAck(e.target.checked)}
+                />
+                Potwierdzam — oddano mi {fmt(surplus)} PLN ponad kwotę zakupu
+              </label>
+              {!surplusAck && (
+                <div style={{ marginTop: 6, fontSize: 11, color: c.dangerLight }}>
+                  ⛔ Bez tego potwierdzenia zapis zwrotu jest zablokowany.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -330,7 +478,7 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
         </div>
 
         {/* Voucher toggle — hidden only when full amount is being returned */}
-        {(form.amount === "" || amt < remaining) && (
+        {(form.amount === "" || amt < returnCap) && (
         <div style={{ background: c.bg, borderRadius: 10, padding: "12px 14px", marginBottom: 14, border: `1px solid ${c.border}` }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: form.hasVoucher ? 12 : 0 }}>
             <input
@@ -441,8 +589,17 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
         )}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
           <button style={s.btn("secondary")} onClick={onClose} disabled={saving}>Anuluj</button>
-          <button style={s.btn("primary")}   onClick={handleSubmit} disabled={saving}>
-            {saving ? "Zapisuję…" : "🔙 Zapisz zwrot"}
+          <button
+            style={s.btn("primary")}
+            onClick={handleSubmit}
+            disabled={saving || (surplus > 0 && !surplusAck)}
+            title={surplus > 0 && !surplusAck ? "Najpierw zaznacz potwierdzenie nadwyżki powyżej" : undefined}
+          >
+            {saving
+              ? "Zapisuję…"
+              : surplus > 0 && !surplusAck
+                ? "⚠️ Potwierdź nadwyżkę"
+                : "🔙 Zapisz zwrot"}
           </button>
         </div>
       </div>
