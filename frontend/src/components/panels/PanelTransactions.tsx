@@ -151,7 +151,11 @@ export default function PanelTransactions() {
       if (filters.dateTo   && tx.date > toYMD(filters.dateTo))                             return false;
       if (filters.prio.length && !filters.prio.includes(tx.priority || 2))                 return false;
       if (filters.tags.length && !filters.tags.some(t => (tx.tags || []).includes(t)))     return false;
-      const returned = (tx.sameMonthReturned ?? 0) > 0 || (tx.voucherAmount ?? 0) > 0;
+      // voucherAmount is how the purchase was PAID (a voucher used as a
+      // payment method) — unrelated to whether it was ever returned. Only
+      // actual cash-back (sameMonthReturned, which despite the name now
+      // carries the total across any month) counts here.
+      const returned = (tx.sameMonthReturned ?? 0) > 0;
       if (!matchTri(filters.hasReturn,  returned))            return false;
       if (!matchTri(filters.hasReceipt, !!tx.receiptBlobPath)) return false;
       if (!matchTri(filters.warranty,   !!tx.isWarranty))      return false;
