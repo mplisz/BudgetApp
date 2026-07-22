@@ -123,14 +123,18 @@ describe("buildReturnAnalytics — KPI", () => {
         ret({ amount: 5,  kind: "store" }),
       ] }),
     ];
-    const { kpi, byCategory } = buildReturnAnalytics(txs, MONTHS);
+    const { kpi, byCategory, recent } = buildReturnAnalytics(txs, MONTHS);
     expect(kpi.deposit).toBe(18);
+    expect(kpi.depositCount).toBe(2);
     expect(kpi.reimbursement).toBe(20);
     expect(kpi.reimbursementCompany).toBe(20);   // legacy LuxMed → company
     expect(kpi.store).toBe(5);
     expect(kpi.unknown).toBe(0);
     expect(kpi.returnRate).toBeCloseTo(5, 5);           // 5 / 100
     expect(byCategory[0].returned).toBe(5);             // rankings: store only
+    // Deposits stay out of the recent list (bottle batches flood it).
+    expect(recent).toHaveLength(2);
+    expect(recent.every(r => r.kind !== "deposit")).toBe(true);
   });
 
   it("drops returns whose return month is outside the range", () => {

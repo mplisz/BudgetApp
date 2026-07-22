@@ -122,13 +122,20 @@ export function ReturnsSection({ transactions, months }: Props) {
 
   return (
     <div>
-      {/* KPI chips */}
+      {/* KPI chips — zero-value chips are noise, only the non-empty show */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
         <Chip label="Zwroty łącznie" value={fmt(kpi.total)} color={c.orange} />
         <Chip label="Stopa zwrotów (sklep)" value={`${kpi.returnRate.toFixed(1)}%`} />
-        <Chip label="Liczba zwrotów" value={String(kpi.count)} />
-        <Chip label="🏪 Do sklepu" value={fmt(kpi.store)} />
-        <Chip label="👥 Koszty od osób" value={fmt(kpi.reimbursementPerson)} color={c.info} />
+        <Chip
+          label="Liczba zwrotów"
+          value={kpi.depositCount > 0
+            ? `${kpi.count - kpi.depositCount} (+${kpi.depositCount} 🍾)`
+            : String(kpi.count)}
+        />
+        {kpi.store > 0 && <Chip label="🏪 Do sklepu" value={fmt(kpi.store)} />}
+        {kpi.reimbursementPerson > 0 && (
+          <Chip label="👥 Koszty od osób" value={fmt(kpi.reimbursementPerson)} color={c.info} />
+        )}
         {kpi.reimbursementCompany > 0 && (
           <Chip label="🏢 Koszty od firm" value={fmt(kpi.reimbursementCompany)} color={c.voucherLight} />
         )}
@@ -201,10 +208,12 @@ export function ReturnsSection({ transactions, months }: Props) {
         </div>
       )}
 
-      {/* Recent returns */}
+      {/* Recent returns — deposits excluded (batch bottle returns would
+          flood the table with identical rows) */}
+      {recent.length > 0 && (
       <div style={{ marginTop: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 6 }}>
-          🕓 Ostatnie zwroty
+          🕓 Ostatnie zwroty <span style={{ color: c.textTertiary, fontWeight: 400 }}>(bez kaucji)</span>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -259,6 +268,7 @@ export function ReturnsSection({ transactions, months }: Props) {
           </table>
         </div>
       </div>
+      )}
 
       <div style={{
         marginTop: 12, padding: "8px 12px", borderRadius: 8, fontSize: 11,

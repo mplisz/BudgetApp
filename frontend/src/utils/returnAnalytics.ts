@@ -67,7 +67,10 @@ export interface ReturnKpi {
   cash:           number;
   voucher:        number;
   surplus:        number;   // Σ surplus — extra money, always a TRANSFER
-  count:          number;   // number of return entries
+  count:          number;   // number of return entries (deposits included)
+  depositCount:   number;   // how many of them are deposit refunds — the UI
+                            // reports them separately (batch bottle returns
+                            // would drown the interesting numbers)
   store:          number;   // amount split by kind
   reimbursement:  number;   // person + company together
   reimbursementPerson:  number;
@@ -171,7 +174,7 @@ export function buildReturnAnalytics(
   const monthSet = new Set(months);
 
   const kpi: ReturnKpi = {
-    total: 0, cash: 0, voucher: 0, surplus: 0, count: 0,
+    total: 0, cash: 0, voucher: 0, surplus: 0, count: 0, depositCount: 0,
     store: 0, reimbursement: 0, reimbursementPerson: 0, reimbursementCompany: 0,
     deposit: 0, unknown: 0,
     expensesGross: 0, returnRate: 0,
@@ -216,6 +219,7 @@ export function buildReturnAnalytics(
       kpi.surplus += surplus;
       kpi.count   += 1;
       kpi[bucket] += ret.amount;
+      if (bucket === "deposit")   kpi.depositCount += 1;
       if (detailed === "person")  kpi.reimbursementPerson  += ret.amount;
       if (detailed === "company") kpi.reimbursementCompany += ret.amount;
 
@@ -245,6 +249,10 @@ export function buildReturnAnalytics(
           row.tracked = row.tracked || tracked;
         }
       }
+
+      // Deposits stay out of the recent list — a single bottle-panel batch
+      // writes one entry per source transaction and would flood the table.
+      if (bucket === "deposit") continue;
 
       recent.push({
         date:            ret.returnedAt || ret.moneyReturnedInMonth,
