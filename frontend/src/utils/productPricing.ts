@@ -42,6 +42,7 @@ export interface PriceLineItem {
 
 /** A return's per-line allocation — only the fields the exclusion needs. */
 export interface PricedReturn {
+  kind?:              string | null;
   returnedLineItems?: Array<{ index: number; amount: number }> | null;
 }
 
@@ -333,8 +334,11 @@ export function buildPriceHistory(
     // returns). A line returned IN FULL is excluded below — the purchase was
     // undone, so its price must feed neither the chart nor shrink detection.
     // A partial return keeps the occurrence: the unit price stayed real.
+    // REIMBURSEMENTS don't count: someone paying the user back means the
+    // goods were kept, so the purchase (and its price point) still happened.
     const returnedByIndex = new Map<number, number>();
     for (const ret of tx.returns ?? []) {
+      if (ret.kind === "reimbursement") continue;
       for (const r of ret.returnedLineItems ?? []) {
         returnedByIndex.set(r.index, (returnedByIndex.get(r.index) ?? 0) + r.amount);
       }

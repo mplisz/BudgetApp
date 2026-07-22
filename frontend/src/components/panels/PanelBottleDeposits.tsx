@@ -125,6 +125,7 @@ export default function PanelBottleDeposits() {
         budgetMonth: cur,
         date: todayYMD(),
         reason: "Zwrot butelek",
+        kind: "deposit",   // keeps deposits out of the shop-return analytics
       });
       invalidate(fromMonth, cur);
       await loadRange(fromMonth, cur);

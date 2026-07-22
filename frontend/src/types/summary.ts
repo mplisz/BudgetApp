@@ -19,10 +19,23 @@ export interface ReturnedLineItem {
   amount:      number;
 }
 
+// What kind of return this is: money back FROM THE SHOP (goods returned),
+// someone REIMBURSING the user (goods kept — family for groceries, LuxMed
+// refunds), or a bottle-DEPOSIT refund (batch endpoint). Old entries carry
+// no kind ("unknown" in analytics, treated like a store return by the
+// price history).
+export type ReturnKind = "store" | "reimbursement" | "deposit";
+
+// For reimbursements: who paid the user back — a person (family, friends)
+// or a company/institution (employer, LuxMed, an office). Reporting-only.
+export type ReturnSource = "person" | "company";
+
 // A returned portion of a transaction (cross-month refund splits cash/voucher).
 export interface Return {
   amount:               number;
   moneyReturnedInMonth: string;
+  kind?:          ReturnKind;
+  source?:        ReturnSource;
   cashAmount?:    number;
   voucherAmount?: number;
   // Money received above the transaction amount — materialized as a TRANSFER

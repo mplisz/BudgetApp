@@ -129,6 +129,12 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
   const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
   const [surplusAck,    setSurplusAck]    = useState(false);
 
+  // Store return (goods went back), reimbursement (goods kept, someone paid
+  // the user back — reimbursed lines stay in the price history) or a
+  // bottle-deposit refund. For reimbursements, `source` says WHO paid back.
+  const [kind,   setKind]   = useState<"store" | "reimbursement" | "deposit">("store");
+  const [source, setSource] = useState<"person" | "company">("person");
+
   // How much of each line has already been given back (across all returns).
   const returnedPerLine = useMemo(() => {
     const map = new Map<number, number>();
@@ -210,6 +216,8 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
       voucherAmount:        vchAmt,
       cashAmount:           Math.max(0, amt - vchAmt),
       surplusAmount:        surplus,
+      kind,
+      ...(kind === "reimbursement" ? { source } : {}),
       moneyReturnedInMonth: form.moneyReturnedInMonth,
       returnedAt:           toYMD(form.returnedAt),
       reason:               form.reason,
@@ -280,6 +288,56 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
           </div>
         </div>
 
+        {/* Kind — shop return / reimbursement (person|company) / deposit */}
+        <div style={s.formRow}>
+          <label style={s.lbl}>Rodzaj zwrotu *</label>
+          <select
+            value={kind}
+            onChange={e => setKind(e.target.value as typeof kind)}
+            style={{ ...s.inp, width: "100%", cursor: "pointer" }}
+          >
+            <option value="store">🏪 Zwrot do sklepu</option>
+            <option value="reimbursement">💼 Zwrot kosztów (ktoś oddaje kasę)</option>
+            <option value="deposit">🍾 Kaucja</option>
+          </select>
+
+          {kind === "reimbursement" && (
+            <>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                {([
+                  { value: "person"  as const, label: "👥 od osoby" },
+                  { value: "company" as const, label: "🏢 od firmy / instytucji" },
+                ]).map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSource(opt.value)}
+                    style={{
+                      flex: 1, padding: "7px 10px", borderRadius: 8, fontSize: 12,
+                      cursor: "pointer", fontWeight: source === opt.value ? 700 : 400,
+                      background: source === opt.value ? alpha(c.info, "22") : "transparent",
+                      border: `1px solid ${source === opt.value ? alpha(c.info, "88") : c.border}`,
+                      color: source === opt.value ? c.infoSky : c.textSecondary,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: c.textTertiary, marginTop: 4 }}>
+                Towar/usługa zostaje u Ciebie, ktoś trzeci oddaje pieniądze (rodzina,
+                pracodawca, LuxMed) — zaznaczone pozycje <strong>nie</strong> znikają
+                z Historii cen i nie liczą się jako zwroty sklepowe w analityce.
+              </div>
+            </>
+          )}
+          {kind === "deposit" && (
+            <div style={{ fontSize: 11, color: c.textTertiary, marginTop: 4 }}>
+              Zwrot kaucji (butelki, opakowania) — nie liczy się jako zwrot sklepowy
+              w analityce. Masowe zwroty kaucji wygodniej robić w Panelu Kaucji.
+            </div>
+          )}
+        </div>
+
         {/* Receipt lines — pick what exactly came back */}
         {lineItems.length > 0 && (
           <div style={s.formRow}>
@@ -328,7 +386,7 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
             </div>
             <div style={{ fontSize: 11, color: c.textTertiary, marginTop: 4 }}>
               Zaznacz, czego dotyczy zwrot — kwota policzy się sama (możesz ją potem zmienić).
-              W pełni zwrócona pozycja przestaje zasilać Historię cen.
+              {kind === "store" && " W pełni zwrócona pozycja przestaje zasilać Historię cen."}
             </div>
           </div>
         )}

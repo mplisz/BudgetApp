@@ -15,6 +15,7 @@ import { fmt,fmtAmount  }                from "../../../utils/helpers";
 import { s, PrioBadge, calcReturns } from "./txStyles";
 import { EditTransactionModal }      from "./EditTransactionModal";
 import { ReceiptModal } from "./ReceiptModal";
+import { ReturnEntriesModal } from "./ReturnEntriesModal";
 import { trackedProductNames } from "../../../utils/productPricing";
 import type { Transaction } from "../../../types/appContext";
 
@@ -29,6 +30,7 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
   const [editOpen, setEditOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lineItemsOpen, setLineItemsOpen] = useState(false);
+  const [returnsOpen, setReturnsOpen] = useState(false);
   const { isFullyReturned, isPartiallyReturned, totalReturnedAmount } = calcReturns(tx);
 
   const hasReturns  = (tx.returns || []).length > 0;
@@ -112,8 +114,16 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
               voucher: {fmt(tx.voucherAmount ?? 0)} | cash: {fmt(tx.netAmount ?? tx.amount - (tx.voucherAmount ?? 0))}
             </div>
           )}
-          {isFullyReturned     && <span style={s.badge(c.success)}>✅ zwrócono</span>}
-          {isPartiallyReturned && <span style={s.badge(c.orange)}>🔄 częściowy {fmt(totalReturnedAmount)} PLN</span>}
+          {(isFullyReturned || isPartiallyReturned) && (
+            <span
+              onClick={() => setReturnsOpen(true)}
+              title="Zwroty tej transakcji — kliknij, aby obejrzeć / zmienić rodzaj"
+              style={{ cursor: "pointer" }}
+            >
+              {isFullyReturned     && <span style={s.badge(c.success)}>✅ zwrócono</span>}
+              {isPartiallyReturned && <span style={s.badge(c.orange)}>🔄 częściowy {fmt(totalReturnedAmount)} PLN</span>}
+            </span>
+          )}
         </td>
 
         {/* Author */}
@@ -200,6 +210,14 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
         <ReceiptModal txId={tx.id} onClose={() => setReceiptOpen(false)} />,
         document.body
       )}
+      {returnsOpen && createPortal(
+        <ReturnEntriesModal
+          tx={tx}
+          onClose={() => setReturnsOpen(false)}
+          onSaved={onUpdated}
+        />,
+        document.body
+      )}
     </>
   );
 }
@@ -217,6 +235,7 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
   const [editOpen, setEditOpen]           = useState(false);
   const [receiptOpen, setReceiptOpen]     = useState(false);
   const [lineItemsOpen, setLineItemsOpen] = useState(false);
+  const [returnsOpen, setReturnsOpen]     = useState(false);
   const { isFullyReturned, isPartiallyReturned, totalReturnedAmount } = calcReturns(tx);
 
   const hasReturns   = (tx.returns || []).length > 0;
@@ -263,9 +282,13 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
         </div>
       </div>
 
-      {/* Return status badges */}
+      {/* Return status badges — tap to inspect / reclassify the returns */}
       {(isFullyReturned || isPartiallyReturned) && (
-        <div style={{ marginTop: 6 }}>
+        <div
+          style={{ marginTop: 6, cursor: "pointer" }}
+          onClick={() => setReturnsOpen(true)}
+          title="Zwroty tej transakcji — kliknij, aby obejrzeć / zmienić rodzaj"
+        >
           {isFullyReturned     && <span style={s.badge(c.success)}>✅ zwrócono</span>}
           {isPartiallyReturned && <span style={s.badge(c.orange)}>🔄 częściowy {fmt(totalReturnedAmount)} PLN</span>}
         </div>
@@ -359,6 +382,14 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
       )}
       {receiptOpen && createPortal(
         <ReceiptModal txId={tx.id} onClose={() => setReceiptOpen(false)} />,
+        document.body
+      )}
+      {returnsOpen && createPortal(
+        <ReturnEntriesModal
+          tx={tx}
+          onClose={() => setReturnsOpen(false)}
+          onSaved={onUpdated}
+        />,
         document.body
       )}
     </div>

@@ -11,6 +11,7 @@
 //   🧩 Subkategorie w czasie — pills + line chart + heatmap + subcat delta
 //   🏷️ Tagi               — per-tag heatmap + top tags
 //   🛒 Ceny produktów      — receipt line-item price history (per shop)
+//   🔙 Analiza zwrotów     — store returns vs reimbursements, rates, products
 //   📆 Sezonowość          — year overlay + same-month-last-year (own 24m window)
 //   🕐 Wzorce czasowe      — weekday/day-of-month profiles + payday markers
 //   💰 Wpływy i oszczędności — income structure, savings rate, goals
@@ -50,6 +51,8 @@ import { MonthlyDeltaChart, type CategoryDelta }         from "./analyticsCompon
 import { SubcategoryComparison, type SubcatTransaction } from "./analyticsComponents/SubcategoryComparison";
 import { TagSpendingSection, type TagTransaction }       from "./analyticsComponents/TagSpendingSection";
 import { ProductPriceSection }                           from "./analyticsComponents/ProductPriceSection";
+import { ReturnsSection }                                from "./analyticsComponents/ReturnsSection";
+import { type ReturnAnalyticsTx }                        from "../../utils/returnAnalytics";
 import { RecurringCostsSection }                         from "./analyticsComponents/RecurringCostsSection";
 import { MerchantProfileSection }                        from "./analyticsComponents/MerchantProfileSection";
 import { type MerchantTx }                               from "../../utils/merchantProfile";
@@ -740,6 +743,16 @@ export default function PanelAnalytics() {
             <Card title="🛒 Historia cen z paragonów">
               <ProductPriceSection
                 transactions={transactions as unknown as PricedTransaction[]}
+                months={monthsInRange}
+              />
+            </Card>
+          </CollapsibleSection>
+
+          {/* 🔙 Returns — money coming back: store returns vs reimbursements */}
+          <CollapsibleSection title="🔙 Analiza zwrotów" defaultOpen={false}>
+            <Card title="🔙 Zwroty w zakresie">
+              <ReturnsSection
+                transactions={transactions as unknown as ReturnAnalyticsTx[]}
                 months={monthsInRange}
               />
             </Card>

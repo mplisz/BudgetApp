@@ -125,6 +125,8 @@ const TransactionPatchSchema = TransactionBaseSchema.partial()
       voucherAmount:        z.number().min(0).default(0),
       cashAmount:           z.number().min(0),
       surplusAmount:        z.number().min(0).optional(),
+      kind:                 z.enum(["store", "reimbursement", "deposit"]).optional(),
+      source:               z.enum(["person", "company"]).optional(),
       moneyReturnedInMonth: z.string().regex(BUDGET_MONTH_REGEX),
       returnedAt:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       reason:               z.string().max(500).optional().default("").transform(v => v?.trim() ?? ""),
@@ -144,6 +146,16 @@ const ReturnSchema = z.object({
   amount:               z.number().positive(),
   voucherAmount:        z.number().min(0).default(0),
   cashAmount:           z.number().min(0),
+  // What KIND of return this is: money back from the shop (goods returned)
+  // vs someone reimbursing the user (goods kept — e.g. family paying for
+  // their part of the groceries) vs a bottle-deposit refund ("deposit",
+  // written by the batch endpoint). Only store returns count as shop
+  // returns in analytics or knock price points out of the price history.
+  kind:                 z.enum(["store", "reimbursement", "deposit"]).optional().default("store"),
+  // For reimbursements: WHO paid the user back — a person (family, friends)
+  // or a company/institution (employer, LuxMed, an office). Reporting-only
+  // dimension; every hard rule keys off `kind` alone.
+  source:               z.enum(["person", "company"]).optional(),
   // Money received ABOVE the transaction amount (shop rounded up, receipt
   // was under-priced…). Never enters returns[].amount — the returnUtils
   // math assumes Σ returns ≤ tx.amount — it always materializes as a
@@ -734,17 +746,28 @@ router.delete("/:id", async (req, res) => {
 // flow that refunds several transactions at once and wants a single
 // summary transfer instead of one per transaction.
 //
-// body: { returns: [{ txId, amount }], surplus, budgetMonth, date, reason }
+// body: { returns: [{ txId, amount }], surplus, budgetMonth, date, reason, kind }
+//   kind: "deposit" (bottle deposits, default) | "reimbursement" (LuxMed) |
+//         "store" — recorded on every return entry so analytics and the
+//         price history can tell these flows apart from real shop returns.
 
 router.post("/deposit-return", async (req, res) => {
-  const { returns, surplus, budgetMonth, date, reason } = req.body;
+  const { returns, surplus, budgetMonth, date, reason, kind, source } = req.body;
   if (!Array.isArray(returns))                               return res.status(400).json({ error: "returns must be an array." });
   if (!budgetMonth || !BUDGET_MONTH_REGEX.test(budgetMonth)) return res.status(400).json({ error: "budgetMonth is required (YYYY-MM)." });
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date))            return res.status(400).json({ error: "date is required (YYYY-MM-DD)." });
+  if (kind !== undefined && !["store", "reimbursement", "deposit"].includes(kind)) {
+    return res.status(400).json({ error: "kind must be store | reimbursement | deposit." });
+  }
+  if (source !== undefined && !["person", "company"].includes(source)) {
+    return res.status(400).json({ error: "source must be person | company." });
+  }
 
   const familyId   = req.user.familyId;
   const surplusAmt = Math.max(0, roundMoney(Number(surplus) || 0));
   const desc       = reason || "Zwrot butelek";
+  const returnKind = kind ?? "deposit";
+  const returnSource = returnKind === "reimbursement" ? (source ?? null) : null;
 
   // Pure surplus (returned bottles you never logged) is valid — only reject
   // when there's genuinely nothing to do.
@@ -787,6 +810,8 @@ router.post("/deposit-return", async (req, res) => {
     for (const it of items) {
       const entry = {
         amount: it.amt, cashAmount: it.amt, voucherAmount: 0,
+        kind: returnKind,
+        ...(returnSource ? { source: returnSource } : {}),
         moneyReturnedInMonth: budgetMonth,   // current month
         returnedAt: date, reason: desc,
         returnedBy: req.user.name || req.user.email, returnedById: req.user.id,
@@ -972,6 +997,8 @@ router.post("/:id/returns", async (req, res) => {
       amount,
       cashAmount,
       voucherAmount,
+      kind:                 data.kind,
+      ...(data.kind === "reimbursement" && data.source ? { source: data.source } : {}),
       moneyReturnedInMonth: data.moneyReturnedInMonth,
       returnedAt:           data.returnedAt,
       reason:               data.reason,

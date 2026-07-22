@@ -230,6 +230,18 @@ describe("buildPriceHistory — returned line items", () => {
     expect(products[0].occurrences).toHaveLength(3);
   });
 
+  it("keeps a line fully covered by a REIMBURSEMENT — goods were kept, price was real", () => {
+    const txs = [
+      ...buys("Chleb żytni", [5, 5, 5], { size: 500, unit: "g" }),
+      tx({
+        date: "2026-04-10", merchant: "Biedronka",
+        items:   [line("Chleb żytni", 5, 500, "g")],       // mom paid this back
+        returns: [{ kind: "reimbursement", returnedLineItems: [{ index: 0, amount: 5 }] }],
+      }),
+    ];
+    expect(buildPriceHistory(txs).products[0].occurrences).toHaveLength(4);
+  });
+
   it("a fully returned line does not feed shrink detection", () => {
     const txs = [
       ...buys("Masło Ekstra", [7, 7], { size: 200, unit: "g" }),

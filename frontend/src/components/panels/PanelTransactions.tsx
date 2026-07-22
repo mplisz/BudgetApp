@@ -30,9 +30,20 @@ import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
 import { TriFilterButton, matchTri, type Tri } from "../ui/TriFilterButton";
 import { trackedProductNames } from "../../utils/productPricing";
+import { detailedKindOf, type DetailedReturnBucket } from "../../utils/returnAnalytics";
 
 
 const PAGE_SIZE = 25;
+
+// Options for the return-kind sub-filter (shown only while filtering FOR
+// returns); the list rendered is scoped to kinds present in the month.
+const RETURN_KIND_OPTIONS: Array<{ id: DetailedReturnBucket; label: string }> = [
+  { id: "store",   label: "🏪 Do sklepu" },
+  { id: "person",  label: "👥 Koszty od osoby" },
+  { id: "company", label: "🏢 Koszty od firmy" },
+  { id: "deposit", label: "🍾 Kaucja" },
+  { id: "unknown", label: "❔ Nieoznaczone" },
+];
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -57,6 +68,7 @@ export default function PanelTransactions() {
     tags:       [] as string[],
     merchant:    "",
     hasReturn:  "off" as Tri,
+    returnKinds: [] as DetailedReturnBucket[],
     hasReceipt: "off" as Tri,
     warranty:   "off" as Tri,
     hasProduct: "off" as Tri,
@@ -141,6 +153,16 @@ export default function PanelTransactions() {
     return tags.filter(t => ids.has(t.id));
   }, [dateScoped, tags]);
 
+  // Return-kind options scoped to kinds that actually occur in the month —
+  // no point offering "🍾 Kaucja" when nothing here is a deposit refund.
+  const monthReturnKinds = useMemo(() => {
+    const present = new Set<DetailedReturnBucket>();
+    for (const tx of dateScoped) {
+      for (const r of tx.returns ?? []) present.add(detailedKindOf(r));
+    }
+    return RETURN_KIND_OPTIONS.filter(o => present.has(o.id));
+  }, [dateScoped]);
+
   // ── Filtering ─────────────────────────────────────────────
 
   const filtered = useMemo<Transaction[]>(() =>
@@ -157,6 +179,10 @@ export default function PanelTransactions() {
       // carries the total across any month) counts here.
       const returned = (tx.sameMonthReturned ?? 0) > 0;
       if (!matchTri(filters.hasReturn,  returned))            return false;
+      // Kind sub-filter (only reachable while hasReturn === "yes"): the tx
+      // passes when ANY of its returns is of a selected kind.
+      if (filters.returnKinds.length > 0 &&
+          !(tx.returns ?? []).some(r => filters.returnKinds.includes(detailedKindOf(r)))) return false;
       if (!matchTri(filters.hasReceipt, !!tx.receiptBlobPath)) return false;
       if (!matchTri(filters.warranty,   !!tx.isWarranty))      return false;
       if (!matchTri(filters.hasProduct, trackedProductNames(tx.lineItems).length > 0)) return false;
@@ -371,8 +397,42 @@ export default function PanelTransactions() {
             {/* Returns */}
             <div style={s.filterBox}>
               <div style={s.filterLabel}>Zwroty</div>
-              <TriFilterButton state={filters.hasReturn}  onChange={v => set("hasReturn", v)}  label="🔙 Zwroty"      color={c.successLight} />
+              <TriFilterButton
+                state={filters.hasReturn}
+                // The kind sub-filter only makes sense while filtering FOR
+                // returns — clear it when leaving that state, so it doesn't
+                // keep silently filtering.
+                onChange={v => { set("hasReturn", v); if (v !== "yes") set("returnKinds", []); }}
+                label="🔙 Zwroty"
+                color={c.successLight}
+              />
             </div>
+
+            {/* Return kind — visible only when filtering FOR returns (like
+                the subcategory filter under categories) */}
+            {filters.hasReturn === "yes" && monthReturnKinds.length > 0 && (
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Rodzaj zwrotu</div>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {monthReturnKinds.map(o => (
+                    <button
+                      key={o.id}
+                      onClick={() => set("returnKinds", filters.returnKinds.includes(o.id)
+                        ? filters.returnKinds.filter(x => x !== o.id)
+                        : [...filters.returnKinds, o.id]
+                      )}
+                      style={{
+                        padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
+                        background: filters.returnKinds.includes(o.id) ? c.successLight : c.border,
+                        color:      filters.returnKinds.includes(o.id) ? "#000" : c.textSecondary,
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
               {/* Receipts */}
             <div style={s.filterBox}>
               <div style={s.filterLabel}>Paragony</div>

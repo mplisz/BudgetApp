@@ -246,6 +246,8 @@ export default function PanelLuxmed() {
           budgetMonth: returnMonth,
           date:        todayYMD(),
           reason:      "Zwrot LuxMed",
+          kind:        "reimbursement",   // insurer pays back — not a shop return
+          source:      "company",
         },
         { fallback: "Nie udało się wykonać zwrotów LuxMed." },
       );
