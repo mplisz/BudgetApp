@@ -17,6 +17,7 @@ import { TransactionForm, emptyFormValues } from "./transactionComponents/Transa
 import { fmt, currentCalendarMonth } from "../../utils/helpers";
 import { theme as s }     from "../../styles/theme";
 import { RangePicker, type DateRange } from "../ui/RangePicker";
+import { CategoryMultiSelect } from "../ui/CategoryMultiSelect";
 import { AppDatePicker, toYM } from "../ui/AppDatePicker";
 import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload } from "../../hooks/usePlanned";
 import type { FormValues, TransactionPayload, Priority } from "../../types/transaction";
@@ -75,6 +76,8 @@ export default function PanelPlanned() {
 
   const [range,         setRange]         = useState<DateRange>({ months: 3, from: null, to: null });
   const [filterMode,    setFilterMode]    = useState<"all" | "envelope" | "oneoff">("all");
+  const [filterCategories, setFilterCategories] = useState<string[]>([]);
+  const [filterSubs,       setFilterSubs]       = useState<string[]>([]);
   const [filterMonth,   setFilterMonth]   = useState<Date | null>(null);
   const [currentMonthOnly, setCurrentMonthOnly] = useState(false);
   const [showModal,     setShowModal]     = useState(false);
@@ -120,6 +123,23 @@ export default function PanelPlanned() {
 
   // ── Filter ────────────────────────────────────────────────
 
+  // Category/subcategory OPTIONS come from the active (non-archived) plans,
+  // analogous to the Wydatki panel; subcategories narrow to selected categories.
+  const uniqueCats = useMemo(() => {
+    const set = new Set<string>();
+    planned.forEach(doc => { if (!doc.isArchived && doc.targetCategoryName) set.add(doc.targetCategoryName); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [planned]);
+
+  const uniqueSubs = useMemo(() => {
+    if (filterCategories.length === 0) return [];
+    const set = new Set<string>();
+    planned
+      .filter(doc => !doc.isArchived && filterCategories.includes(doc.targetCategoryName))
+      .forEach(doc => { if (doc.targetSubcategoryName) set.add(doc.targetSubcategoryName); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [planned, filterCategories]);
+
 const filtered = useMemo<PlannedDoc[]>(() => {
   const filterMonthStr = filterMonth ? toYM(filterMonth) : "";
 
@@ -134,6 +154,8 @@ const filtered = useMemo<PlannedDoc[]>(() => {
   return planned.filter(doc => {
     if (doc.isArchived) return false;
     if (filterMode !== "all" && doc.mode !== filterMode) return false;
+    if (filterCategories.length > 0 && !filterCategories.includes(doc.targetCategoryName))  return false;
+    if (filterSubs.length       > 0 && !filterSubs.includes(doc.targetSubcategoryName))     return false;
 
     // ── "Bieżący miesiąc" view — everything actionable / done this month.
     // This is where confirming happens and confirmed items stay as read-only.
@@ -174,7 +196,7 @@ const filtered = useMemo<PlannedDoc[]>(() => {
     if (maxMonth  && doc.plannedMonth > maxMonth)  return false;
     return true;
   }).sort((a, b) => a.plannedMonth.localeCompare(b.plannedMonth));
-}, [planned, range, filterMode, filterMonth, currentMonthOnly, cur]);
+}, [planned, range, filterMode, filterCategories, filterSubs, filterMonth, currentMonthOnly, cur]);
 
   // ── Totals ────────────────────────────────────────────────
 
@@ -351,6 +373,27 @@ const filtered = useMemo<PlannedDoc[]>(() => {
             {m === "all" ? "Wszystkie tryby" : m === "envelope" ? "🪙 Koperty" : "💳 Jednorazowe"}
           </button>
         ))}
+
+        <div style={{ width: 1, height: 20, background: c.border }} />
+
+        {/* Category / subcategory filter — analogous to the Wydatki panel */}
+        <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          Kategoria:
+        </span>
+        <CategoryMultiSelect
+          value={filterCategories}
+          onChange={v => { setFilterCategories(v); setFilterSubs([]); }}
+          categories={uniqueCats.map(name => ({ name }))}
+          placeholder="Wszystkie kategorie"
+        />
+        {filterCategories.length > 0 && uniqueSubs.length > 0 && (
+          <CategoryMultiSelect
+            value={filterSubs}
+            onChange={setFilterSubs}
+            categories={uniqueSubs.map(name => ({ name }))}
+            placeholder="Wszystkie subkategorie"
+          />
+        )}
 
         <div style={{ width: 1, height: 20, background: c.border }} />
 
