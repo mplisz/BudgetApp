@@ -116,59 +116,12 @@ export default function PanelTransactions() {
   const dateBounds  = useMemo(() => dateBoundsOf(enriched), [enriched]);
   const noDateRange = enriched.length === 0;
 
-  const uniqueCats = useMemo(() => {
-    const map: Record<string, string> = {};
-    enriched.forEach(tx => { if (tx.categoryId) map[tx.categoryId] = tx.categoryName; });
-    return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [enriched]);
-
-  // Merchant/tag OPTIONS are scoped to the active date range only (not the
-  // other filters — category/tags/merchant filtering their own option list
-  // would hide the currently-selected value the moment it's picked). Narrows
-  // to "shops/tags that actually occurred in these dates", per user request.
-  const dateScoped = useMemo(() =>
-    enriched.filter(tx =>
-      (!filters.dateFrom || tx.date >= toYMD(filters.dateFrom)) &&
-      (!filters.dateTo   || tx.date <= toYMD(filters.dateTo))),
-    [enriched, filters.dateFrom, filters.dateTo]
-  );
-
-  const uniqueMerchants = useMemo(() => {
-    const set = new Set<string>();
-    dateScoped.forEach(tx => { if (tx.merchant) set.add(tx.merchant); });
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [dateScoped]);
-
-  const uniqueSubs = useMemo(() => {
-    if (filters.categories.length === 0) return [];
-    const map: Record<string, string> = {};
-    enriched
-      .filter(tx => filters.categories.includes(tx.categoryName))
-      .forEach(tx => { if (tx.subcategoryId) map[tx.subcategoryId] = tx.subcategoryName; });
-    return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [enriched, filters.categories]);
-
-  const monthTagIds = useMemo(() => {
-    const ids = new Set(dateScoped.flatMap(tx => tx.tags || []));
-    return tags.filter(t => ids.has(t.id));
-  }, [dateScoped, tags]);
-
-  // Return-kind options scoped to kinds that actually occur in the month —
-  // no point offering "🍾 Kaucja" when nothing here is a deposit refund.
-  const monthReturnKinds = useMemo(() => {
-    const present = new Set<DetailedReturnBucket>();
-    for (const tx of dateScoped) {
-      for (const r of tx.returns ?? []) present.add(detailedKindOf(r));
-    }
-    return RETURN_KIND_OPTIONS.filter(o => present.has(o.id));
-  }, [dateScoped]);
-
-  // ── Filtering ─────────────────────────────────────────────
-
-  const filtered = useMemo<Transaction[]>(() =>
+  // Everything EXCEPT the category/subcategory filter — both the final list
+  // and the category/subcategory OPTION lists derive from this, so the
+  // dropdowns only offer categories that actually occur under the other
+  // active filters (dates, priority, tags, merchant, returns, …).
+  const otherFiltered = useMemo<Transaction[]>(() =>
     enriched.filter(tx => {
-      if (filters.categories.length > 0 && !filters.categories.includes(tx.categoryName)) return false;
-      if (filters.subs.length       > 0 && !filters.subs.includes(tx.subcategoryName))    return false;
       if (filters.dateFrom && tx.date < toYMD(filters.dateFrom))                           return false;
       if (filters.dateTo   && tx.date > toYMD(filters.dateTo))                             return false;
       if (filters.prio.length && !filters.prio.includes(tx.priority || 2))                 return false;
@@ -190,6 +143,64 @@ export default function PanelTransactions() {
       return true;
     }),
     [enriched, filters]
+  );
+
+  const uniqueCats = useMemo(() => {
+    const map: Record<string, string> = {};
+    otherFiltered.forEach(tx => { if (tx.categoryId) map[tx.categoryId] = tx.categoryName; });
+    return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [otherFiltered]);
+
+  // Merchant/tag OPTIONS are scoped to the active date range only (not the
+  // other filters — category/tags/merchant filtering their own option list
+  // would hide the currently-selected value the moment it's picked). Narrows
+  // to "shops/tags that actually occurred in these dates", per user request.
+  const dateScoped = useMemo(() =>
+    enriched.filter(tx =>
+      (!filters.dateFrom || tx.date >= toYMD(filters.dateFrom)) &&
+      (!filters.dateTo   || tx.date <= toYMD(filters.dateTo))),
+    [enriched, filters.dateFrom, filters.dateTo]
+  );
+
+  const uniqueMerchants = useMemo(() => {
+    const set = new Set<string>();
+    dateScoped.forEach(tx => { if (tx.merchant) set.add(tx.merchant); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [dateScoped]);
+
+  const uniqueSubs = useMemo(() => {
+    if (filters.categories.length === 0) return [];
+    const map: Record<string, string> = {};
+    otherFiltered
+      .filter(tx => filters.categories.includes(tx.categoryName))
+      .forEach(tx => { if (tx.subcategoryId) map[tx.subcategoryId] = tx.subcategoryName; });
+    return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [otherFiltered, filters.categories]);
+
+  const monthTagIds = useMemo(() => {
+    const ids = new Set(dateScoped.flatMap(tx => tx.tags || []));
+    return tags.filter(t => ids.has(t.id));
+  }, [dateScoped, tags]);
+
+  // Return-kind options scoped to kinds that actually occur in the month —
+  // no point offering "🍾 Kaucja" when nothing here is a deposit refund.
+  const monthReturnKinds = useMemo(() => {
+    const present = new Set<DetailedReturnBucket>();
+    for (const tx of dateScoped) {
+      for (const r of tx.returns ?? []) present.add(detailedKindOf(r));
+    }
+    return RETURN_KIND_OPTIONS.filter(o => present.has(o.id));
+  }, [dateScoped]);
+
+  // ── Filtering ─────────────────────────────────────────────
+
+  const filtered = useMemo<Transaction[]>(() =>
+    otherFiltered.filter(tx => {
+      if (filters.categories.length > 0 && !filters.categories.includes(tx.categoryName)) return false;
+      if (filters.subs.length       > 0 && !filters.subs.includes(tx.subcategoryName))    return false;
+      return true;
+    }),
+    [otherFiltered, filters.categories, filters.subs]
   );
 
   // ── Grouping by category ──────────────────────────────────

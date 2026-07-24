@@ -123,24 +123,10 @@ export default function PanelPlanned() {
 
   // ── Filter ────────────────────────────────────────────────
 
-  // Category/subcategory OPTIONS come from the active (non-archived) plans,
-  // analogous to the Wydatki panel; subcategories narrow to selected categories.
-  const uniqueCats = useMemo(() => {
-    const set = new Set<string>();
-    planned.forEach(doc => { if (!doc.isArchived && doc.targetCategoryName) set.add(doc.targetCategoryName); });
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [planned]);
-
-  const uniqueSubs = useMemo(() => {
-    if (filterCategories.length === 0) return [];
-    const set = new Set<string>();
-    planned
-      .filter(doc => !doc.isArchived && filterCategories.includes(doc.targetCategoryName))
-      .forEach(doc => { if (doc.targetSubcategoryName) set.add(doc.targetSubcategoryName); });
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [planned, filterCategories]);
-
-const filtered = useMemo<PlannedDoc[]>(() => {
+// Everything EXCEPT the category/subcategory filter — the option lists for
+// those dropdowns derive from this set, so they only offer categories that
+// actually occur in the current view (mode/range/month already applied).
+const baseFiltered = useMemo<PlannedDoc[]>(() => {
   const filterMonthStr = filterMonth ? toYM(filterMonth) : "";
 
   // A specific month fully overrides the range pill.
@@ -154,8 +140,6 @@ const filtered = useMemo<PlannedDoc[]>(() => {
   return planned.filter(doc => {
     if (doc.isArchived) return false;
     if (filterMode !== "all" && doc.mode !== filterMode) return false;
-    if (filterCategories.length > 0 && !filterCategories.includes(doc.targetCategoryName))  return false;
-    if (filterSubs.length       > 0 && !filterSubs.includes(doc.targetSubcategoryName))     return false;
 
     // ── "Bieżący miesiąc" view — everything actionable / done this month.
     // This is where confirming happens and confirmed items stay as read-only.
@@ -195,8 +179,34 @@ const filtered = useMemo<PlannedDoc[]>(() => {
     if (maxMonth  && doc.plannedMonth < cur)       return false;
     if (maxMonth  && doc.plannedMonth > maxMonth)  return false;
     return true;
-  }).sort((a, b) => a.plannedMonth.localeCompare(b.plannedMonth));
-}, [planned, range, filterMode, filterCategories, filterSubs, filterMonth, currentMonthOnly, cur]);
+  });
+}, [planned, range, filterMode, filterMonth, currentMonthOnly, cur]);
+
+  // Category/subcategory OPTIONS come from the base-filtered view, so only
+  // categories actually present under the other filters are offered;
+  // subcategories additionally narrow to the selected categories.
+  const uniqueCats = useMemo(() => {
+    const set = new Set<string>();
+    baseFiltered.forEach(doc => { if (doc.targetCategoryName) set.add(doc.targetCategoryName); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [baseFiltered]);
+
+  const uniqueSubs = useMemo(() => {
+    if (filterCategories.length === 0) return [];
+    const set = new Set<string>();
+    baseFiltered
+      .filter(doc => filterCategories.includes(doc.targetCategoryName))
+      .forEach(doc => { if (doc.targetSubcategoryName) set.add(doc.targetSubcategoryName); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [baseFiltered, filterCategories]);
+
+  const filtered = useMemo<PlannedDoc[]>(() =>
+    baseFiltered
+      .filter(doc =>
+        (filterCategories.length === 0 || filterCategories.includes(doc.targetCategoryName)) &&
+        (filterSubs.length       === 0 || filterSubs.includes(doc.targetSubcategoryName)))
+      .sort((a, b) => a.plannedMonth.localeCompare(b.plannedMonth)),
+  [baseFiltered, filterCategories, filterSubs]);
 
   // ── Totals ────────────────────────────────────────────────
 
@@ -376,27 +386,6 @@ const filtered = useMemo<PlannedDoc[]>(() => {
 
         <div style={{ width: 1, height: 20, background: c.border }} />
 
-        {/* Category / subcategory filter — analogous to the Wydatki panel */}
-        <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-          Kategoria:
-        </span>
-        <CategoryMultiSelect
-          value={filterCategories}
-          onChange={v => { setFilterCategories(v); setFilterSubs([]); }}
-          categories={uniqueCats.map(name => ({ name }))}
-          placeholder="Wszystkie kategorie"
-        />
-        {filterCategories.length > 0 && uniqueSubs.length > 0 && (
-          <CategoryMultiSelect
-            value={filterSubs}
-            onChange={setFilterSubs}
-            categories={uniqueSubs.map(name => ({ name }))}
-            placeholder="Wszystkie subkategorie"
-          />
-        )}
-
-        <div style={{ width: 1, height: 20, background: c.border }} />
-
         {/* Specific month filter — uses AppDatePicker (clickable anywhere in input) */}
         <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
           Konkretny miesiąc:
@@ -427,6 +416,28 @@ const filtered = useMemo<PlannedDoc[]>(() => {
         >
           🗄️ Zarchiwizowane{archived !== null ? ` (${archived.length})` : ""}
         </button>
+      </div>
+
+      {/* Category / subcategory filter — own row; options reflect the current
+          view (only categories/subcategories present under the other filters) */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
+        <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          Kategoria:
+        </span>
+        <CategoryMultiSelect
+          value={filterCategories}
+          onChange={v => { setFilterCategories(v); setFilterSubs([]); }}
+          categories={uniqueCats.map(name => ({ name }))}
+          placeholder="Wszystkie kategorie"
+        />
+        {filterCategories.length > 0 && uniqueSubs.length > 0 && (
+          <CategoryMultiSelect
+            value={filterSubs}
+            onChange={setFilterSubs}
+            categories={uniqueSubs.map(name => ({ name }))}
+            placeholder="Wszystkie subkategorie"
+          />
+        )}
       </div>
 
       {/* Overdue warning — unrealized plans from past months */}
