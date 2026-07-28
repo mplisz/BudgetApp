@@ -94,7 +94,11 @@ function AuthenticatedLayout() {
   const { closedMonths } = useAppContext();
 
   // When ?m= is absent, land on the first OPEN budget month.
-  // Runs once when no explicit month is in the URL.
+  // Nav links (Sidebar/MobileNav/MoreSheet) are plain paths, so this fires
+  // on EVERY panel switch — the month deliberately resets to the current
+  // open one instead of following the user across panels (adding expenses
+  // to a stale month twice was enough). Replace, not push, so the reset
+  // doesn't pollute browser history.
   useEffect(() => {
     if (isExplicit) return;                 // user has ?m=, respect it
     if (closedMonths === undefined) return; // wait for bootstrap
@@ -103,7 +107,7 @@ function AuthenticatedLayout() {
     let m = now.getMonth();
     for (let i = 0; i < 24; i++) {
       const bm = `${y}-${String(m + 1).padStart(2, "0")}`;
-      if (!closedMonths.has(bm)) { setBudgetMonth(bm); return; }
+      if (!closedMonths.has(bm)) { setBudgetMonth(bm, { replace: true }); return; }
       m++;
       if (m > 11) { m = 0; y++; }
     }

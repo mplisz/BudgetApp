@@ -57,8 +57,9 @@ export interface UseMonthFromUrlResult {
   year:        number;
   /** True when ?m= is present AND parses correctly */
   isExplicit:  boolean;
-  /** Update ?m=, preserving other query params */
-  setBudgetMonth: (next: string) => void;
+  /** Update ?m=, preserving other query params. Pass { replace: true }
+   *  for automatic corrections that shouldn't pollute browser history. */
+  setBudgetMonth: (next: string, opts?: { replace?: boolean }) => void;
 }
 
 export function useMonthFromUrl(): UseMonthFromUrlResult {
@@ -66,12 +67,12 @@ export function useMonthFromUrl(): UseMonthFromUrlResult {
   const raw = searchParams.get("m");
   const parsed = parseBudgetMonth(raw);
 
-  const setBudgetMonth = useCallback((next: string) => {
+  const setBudgetMonth = useCallback((next: string, opts?: { replace?: boolean }) => {
     setSearchParams(prev => {
       const out = new URLSearchParams(prev);
       out.set("m", next);
       return out;
-    }, { replace: false });
+    }, { replace: opts?.replace ?? false });
   }, [setSearchParams]);
 
   return {

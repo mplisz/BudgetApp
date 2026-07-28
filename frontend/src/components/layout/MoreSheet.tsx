@@ -12,8 +12,8 @@
 //   - Closes on: overlay tap, item tap, Escape, route change
 //     (route change is handled by MobileNav's useEffect).
 //   - Locks body scroll while open.
-//   - NavLink + useLinkWithMonth → ?m=YYYY-MM follows the user,
-//     identical to Sidebar behaviour.
+//   - Links are PLAIN paths (no `?m=`) — switching panels resets
+//     the month to the first open one, identical to Sidebar.
 //   - z-index: nav is 300 → overlay 400, sheet 401.
 // ============================================================
 
@@ -23,7 +23,6 @@ import { createPortal } from "react-dom";
 import { NavLink } from "react-router-dom";
 import { PANEL_META } from "../../data/constants";
 import { PANEL_PATHS } from "../../data/routes";
-import { useLinkWithMonth } from "../../hooks/useLinkWithMonth";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -79,8 +78,6 @@ interface MoreSheetProps {
 }
 
 export function MoreSheet({ open, onClose }: MoreSheetProps) {
-  const linkWithMonth = useLinkWithMonth();
-
   // Escape-to-close + body scroll lock while open.
   useEffect(() => {
     if (!open) return;
@@ -151,7 +148,7 @@ export function MoreSheet({ open, onClose }: MoreSheetProps) {
               {sec.items.map(item => (
                 <NavLink
                   key={item.id}
-                  to={linkWithMonth(item.path)}
+                  to={item.path}
                   end
                   onClick={onClose}
                   style={({ isActive }) => ({

@@ -6,9 +6,10 @@
 // Key behaviour:
 //   - Active highlighting comes from NavLink's isActive — no
 //     need to compare panel IDs anymore.
-//   - useLinkWithMonth() preserves `?m=YYYY-MM` across panels,
-//     so jumping from /transactions?m=2026-03 to "Summary" lands
-//     on /summary?m=2026-03 (not "today").
+//   - Links are PLAIN paths (no `?m=`): switching panels resets
+//     the month to the first open budget month (AuthenticatedLayout
+//     fills ?m= in). Browsing an old/future month is per-panel only —
+//     prevents accidentally adding expenses to a stale month.
 // ============================================================
 
 import { c, alpha } from "../../styles/tokens";
@@ -16,7 +17,6 @@ import { NavLink } from "react-router-dom";
 import { useAppContext } from "../../context/AppContext";
 import { PANEL_META } from "../../data/constants";
 import { PANEL_PATHS } from "../../data/routes";
-import { useLinkWithMonth } from "../../hooks/useLinkWithMonth";
 
 interface PanelMetaEntry {
   icon:    string;
@@ -52,7 +52,6 @@ const SIDEBAR_ITEMS: SidebarItem[] = (() => {
 
 export function Sidebar() {
   const { vouchers, settings } = useAppContext();
-  const linkWithMonth = useLinkWithMonth();
 
   // Badge: count active vouchers expiring within configured window
   const warnDays = settings?.voucherExpiryWarningDays ?? 14;
@@ -85,7 +84,7 @@ export function Sidebar() {
         ) : (
           <NavLink
             key={item.id}
-            to={linkWithMonth(item.path!)}
+            to={item.path!}
             end
             style={({ isActive }) => ({
               display: "flex", alignItems: "center", gap: 10,

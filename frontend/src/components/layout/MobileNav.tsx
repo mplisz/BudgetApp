@@ -13,15 +13,15 @@
 //   - the active panel is one of the sheet's panels (so the bar
 //     always shows *where you are*, even after the sheet closes).
 //
-// Preserves the current ?m=YYYY-MM via useLinkWithMonth so the
-// month context follows the user between screens.
+// Links are PLAIN paths (no `?m=`): switching panels resets the
+// month to the first open budget month (AuthenticatedLayout fills
+// ?m= in) — prevents adding expenses to a stale month.
 // ============================================================
 
 import { c } from "../../styles/tokens";
 import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { PANEL_PATHS, panelIdFromPath } from "../../data/routes";
-import { useLinkWithMonth } from "../../hooks/useLinkWithMonth";
 import { MoreSheet, MORE_SHEET_PANEL_IDS } from "./MoreSheet";
 
 interface MobileItem {
@@ -49,7 +49,6 @@ const slotStyle = (active: boolean): React.CSSProperties => ({
 });
 
 export function MobileNav() {
-  const linkWithMonth = useLinkWithMonth();
   const { pathname } = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -74,7 +73,7 @@ export function MobileNav() {
           return (
             <NavLink
               key={item.panelId}
-              to={linkWithMonth(path)}
+              to={path}
               end
               onClick={() => setSheetOpen(false)}
               style={({ isActive }) => slotStyle(isActive)}
