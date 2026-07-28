@@ -496,9 +496,10 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
       learned,
       // Enforcement point for the whitelist: only a match against the
       // user's tracked products survives (name forced to canonical
-      // spelling, size/unit defaulted when unreadable) — see
+      // spelling, size/unit defaulted when unreadable, missing purchase
+      // count recovered from an "xN" in the description) — see
       // productCatalog.resolveTrackedProduct.
-      product:            resolveTrackedProduct(item.product, trackedProducts),
+      product:            resolveTrackedProduct(item.product, trackedProducts, item.description),
     };
   });
 }

@@ -154,6 +154,23 @@ function newTrackedProduct(familyId, id, key, canonicalName, unit, defaultSize) 
 }
 
 /**
+ * Deterministic backstop for the purchase quantity: an "xN" / "N x" token
+ * standing alone in the line description ("Coca-Cola 1.5L x2", "2 x Mleko").
+ * The prompt's duplicate-merging rule writes exactly this shape into the
+ * description, but the model regularly forgets to ALSO set packCount —
+ * this recovers it. Deliberately narrow: glued compounds like "4x100g"
+ * (size notation, not a quantity) don't match, and only 2..99 counts
+ * (an explicit "x1" adds nothing over null).
+ */
+function packCountFromDescription(description) {
+  const text = String(description || "");
+  const m = /(?:^|\s)[x×]\s?(\d{1,2})(?=\s|$)/i.exec(text)
+         || /(?:^|\s)(\d{1,2})\s?[x×](?=\s|$)/i.exec(text);
+  const n = m ? parseInt(m[1], 10) : 0;
+  return n >= 2 && n <= 99 ? n : null;
+}
+
+/**
  * Enforcement point for the whitelist: the model's own per-line product
  * guess is only kept when its NAME (folded) matches one of the user's
  * tracked products — otherwise it's dropped entirely (return null), no
@@ -164,10 +181,12 @@ function newTrackedProduct(familyId, id, key, canonicalName, unit, defaultSize) 
  * The tracked entry's own `unit` is authoritative (a product's dimension
  * is part of its registered identity, not up for the model to reinterpret
  * per receipt) — the model's `size` is only trusted when its own `unit`
- * agrees, otherwise the tracked `defaultSize` fills in. `packCount` (a
- * multiplier read off "xN" text) is independent of unit and always kept.
+ * agrees, otherwise the tracked `defaultSize` fills in. `packCount` (the
+ * TOTAL purchased count — multipack or receipt quantity column) is
+ * independent of unit; when the model didn't set it, an "xN" token in the
+ * line description fills in (packCountFromDescription).
  */
-function resolveTrackedProduct(product, trackedProducts) {
+function resolveTrackedProduct(product, trackedProducts, description) {
   const rawName = product && typeof product.name === "string" ? product.name.trim() : "";
   if (!rawName) return null;
   const folded = foldProductName(rawName);
@@ -178,11 +197,14 @@ function resolveTrackedProduct(product, trackedProducts) {
   const sizeFromReceipt = product.unit === unit && typeof product.size === "number" && product.size > 0
     ? product.size
     : null;
+  const packCount = (typeof product.packCount === "number" && product.packCount > 0)
+    ? product.packCount
+    : packCountFromDescription(description);
   return {
     name:      tracked.canonicalName,
     size:      sizeFromReceipt ?? (typeof tracked.defaultSize === "number" ? tracked.defaultSize : null),
     unit,
-    packCount: (typeof product.packCount === "number" && product.packCount > 0) ? product.packCount : null,
+    packCount,
   };
 }
 
@@ -302,6 +324,7 @@ module.exports = {
   productKey,
   productId,
   newTrackedProduct,
+  packCountFromDescription,
   resolveTrackedProduct,
   mergeProductDoc,
   rememberProducts,

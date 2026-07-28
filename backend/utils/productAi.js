@@ -52,18 +52,24 @@ const PRODUCT_RULES = `- "name": czysta nazwa produktu BEZ gramatury, pojemnośc
   poprawna polska pisownia (rozwiń skróty z paragonu, np. "MLK UHT3.2" → "Mleko UHT 3,2%").
 - "size": rozmiar JEDNEGO opakowania przeliczony do jednostki bazowej ("kg"→g, "l"→ml).
 - "unit": "g", "ml" lub "szt". Dla towarów ważonych podaj wagę z paragonu w gramach.
-- "packCount": liczba sztuk w wielopaku (np. "0,5L x4" → 4). Pomiń gdy 1.
-- KRYTYCZNE: "size" to rozmiar JEDNEJ sztuki — NIGDY liczba sztuk z "xN".
-  Gdy pozycja ma "xN", ale nie znasz pojemności/wagi jednej sztuki, ustaw
-  size: null, unit: "szt", packCount: N. Nie powtarzaj N w "size" —
-  inaczej wyjdzie N×N (np. "x2" zostanie policzone jako 4 sztuki).
+- "packCount": ŁĄCZNA liczba sztuk kupionych, niezależnie od tego skąd wynika:
+  · wielopak w nazwie ("0,5L x4" → 4),
+  · KOLUMNA ILOŚCI paragonu ("2 * 4,99 9,98" → 2; "2 szt. x 4,99" → 2; "3 x2,39 7,17" → 3),
+  · scalenie identycznych pozycji (dwie linie "Coca-Cola 6,99" → 2).
+  Pomiń gdy 1. TYLKO ilości CAŁKOWITE (sztuki) — dla towarów ważonych
+  (np. "0,442 * 19,99") ilość to WAGA: trafia do "size" w gramach, packCount zostaje null.
+- KRYTYCZNE: "size" to rozmiar JEDNEJ sztuki — NIGDY liczba sztuk z "xN" ani
+  z kolumny ilości. Gdy znasz ilość, ale nie znasz pojemności/wagi jednej
+  sztuki, ustaw size: null, unit: "szt", packCount: N. Nie powtarzaj N w
+  "size" — inaczej wyjdzie N×N (np. "x2" zostanie policzone jako 4 sztuki).
 Przykłady:
-  "ŻUBR PUSZKA 0,5L x4"        → {"name": "Żubr puszka", "size": 500, "unit": "ml", "packCount": 4}
-  "Napój Coca-Cola Zero x2"    → {"name": "Coca-Cola Zero", "size": null, "unit": "szt", "packCount": 2}
-  "Filet kurczaka 0,442 kg"    → {"name": "Filet z piersi kurczaka", "size": 442, "unit": "g"}
-  "JAJA L 10SZT"               → {"name": "Jaja L", "size": 10, "unit": "szt"}
-  "JAJA L 10SZT x2"            → {"name": "Jaja L", "size": 10, "unit": "szt", "packCount": 2}
-  "PAPIER TOALETOWY"           → {"name": "Papier toaletowy", "size": null, "unit": null}
+  "ŻUBR PUSZKA 0,5L x4"          → {"name": "Żubr puszka", "size": 500, "unit": "ml", "packCount": 4}
+  "Napój Coca-Cola Zero x2"      → {"name": "Coca-Cola Zero", "size": null, "unit": "szt", "packCount": 2}
+  "MLEKO UHT 3,2% 1L  2 *3,49"   → {"name": "Mleko UHT 3,2%", "size": 1000, "unit": "ml", "packCount": 2}
+  "Filet kurczaka 0,442 kg"      → {"name": "Filet z piersi kurczaka", "size": 442, "unit": "g"}
+  "JAJA L 10SZT"                 → {"name": "Jaja L", "size": 10, "unit": "szt"}
+  "JAJA L 10SZT x2"              → {"name": "Jaja L", "size": 10, "unit": "szt", "packCount": 2}
+  "PAPIER TOALETOWY"             → {"name": "Papier toaletowy", "size": null, "unit": null}
 Gdy nie da się ustalić rozmiaru — size/unit: null, ale "name" podaj ZAWSZE.`;
 
 module.exports = {
