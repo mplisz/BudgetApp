@@ -37,9 +37,13 @@ interface RangePickerProps {
   allowCustom?: boolean;
   // Show "Wszystkie" pill (no upper bound)
   allowAll?: boolean;
+  // Optional second line under each pill spelling out the months it covers
+  // (e.g. "08.2026 – 10.2026"). Supplied by the caller because the direction
+  // differs per panel: Analytics looks back, Planowane looks forward.
+  describeMonths?: (months: number) => string | null;
 }
 
-export function RangePicker({ value, onChange, allowCustom = true, allowAll = true }: RangePickerProps) {
+export function RangePicker({ value, onChange, allowCustom = true, allowAll = true, describeMonths }: RangePickerProps) {
   const pills = allowAll ? PRESET_PILLS : PRESET_PILLS.filter(p => p.months > 0);
   const hasCustomRange = !!(value.from || value.to);
 
@@ -65,18 +69,26 @@ export function RangePicker({ value, onChange, allowCustom = true, allowAll = tr
       {/* Preset pills */}
       {pills.map(pill => {
         const isActive = !hasCustomRange && value.months === pill.months;
+        const hint     = describeMonths ? describeMonths(pill.months) : null;
         return (
           <button
             key={pill.months}
             onClick={() => selectPreset(pill.months)}
+            title={hint ?? undefined}
             style={{
-              padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer",
-              fontWeight: 700, fontSize: 12,
+              padding: hint ? "4px 14px" : "6px 14px",
+              borderRadius: 20, border: "none", cursor: "pointer",
+              fontWeight: 700, fontSize: 12, lineHeight: 1.3,
               background: isActive ? c.success : c.border,
               color:      isActive ? c.white     : c.textSecondary,
             }}
           >
-            {pill.label}
+            <span style={{ display: "block" }}>{pill.label}</span>
+            {hint && (
+              <span style={{ display: "block", fontSize: 9, fontWeight: 600, opacity: 0.75 }}>
+                {hint}
+              </span>
+            )}
           </button>
         );
       })}

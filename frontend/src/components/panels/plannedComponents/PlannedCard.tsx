@@ -6,7 +6,7 @@
 
 import { c, alpha } from "../../../styles/tokens";
 import { useEnvelopePay }         from "../../../hooks/useEnvelopePay";
-import { fmt, todayYMD }          from "../../../utils/helpers";
+import { fmt }                    from "../../../utils/helpers";
 import type { PlannedDoc }       from "../../../hooks/usePlanned";
 
 interface PlannedCardProps {
@@ -33,11 +33,11 @@ function safeHttpUrl(raw: string): string | null {
   }
 }
 export function PlannedCard({ doc, onEdit, onArchive, onPurchase, actualSpent }: PlannedCardProps) {
-  const currentMonth = todayYMD().slice(0, 7);
   const isForeign    = doc.originalCurrency && doc.originalCurrency !== "PLN";
 
+  // The active BUDGET month — the one the pay/skip actions below write to.
   const {
-    open, dismiss, modal, suggestion, canPay,
+    open, dismiss, modal, suggestion, canPay, month: currentMonth,
     paid, totalPLN, progressPct, ready, rateLoading,
   } = useEnvelopePay(doc);
 

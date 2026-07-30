@@ -14,11 +14,12 @@ import { ConfirmModal }   from "../ui/ConfirmModal";
 import { PlannedCard }    from "./plannedComponents/PlannedCard";
 import { PlannedForm }    from "./plannedComponents/PlannedForm";
 import { TransactionForm, emptyFormValues } from "./transactionComponents/TransactionForm";
-import { fmt, currentCalendarMonth } from "../../utils/helpers";
+import { fmt }             from "../../utils/helpers";
+import { MONTHS }          from "../../data/constants";
 import { theme as s }     from "../../styles/theme";
 import { RangePicker, type DateRange } from "../ui/RangePicker";
 import { CategoryMultiSelect } from "../ui/CategoryMultiSelect";
-import { AppDatePicker, toYM } from "../ui/AppDatePicker";
+import { toYM }            from "../ui/AppDatePicker";
 import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload } from "../../hooks/usePlanned";
 import type { FormValues, TransactionPayload, Priority } from "../../types/transaction";
 
@@ -28,6 +29,18 @@ function addMonths(monthStr: string, n: number): string {
   const [y, m] = monthStr.split("-").map(Number);
   const total  = (y * 12 + m - 1) + n;
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+}
+
+/** "2026-08" → "Sierpień 2026" — group headers. */
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split("-");
+  return (MONTHS as string[])[Number(m) - 1] ? `${(MONTHS as string[])[Number(m) - 1]} ${y}` : ym;
+}
+
+/** "2026-08" → "08.2026" — the tight second line on filter pills. */
+function monthShort(ym: string): string {
+  const [y, m] = ym.split("-");
+  return `${m}.${y}`;
 }
 
 // Pre-fill the expense form from a planned expense, so realizing it opens an
@@ -78,8 +91,9 @@ export default function PanelPlanned() {
   const [filterMode,    setFilterMode]    = useState<"all" | "envelope" | "oneoff">("all");
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [filterSubs,       setFilterSubs]       = useState<string[]>([]);
-  const [filterMonth,   setFilterMonth]   = useState<Date | null>(null);
   const [currentMonthOnly, setCurrentMonthOnly] = useState(false);
+  // Month group headers start expanded — collapsing is opt-in, per month.
+  const [collapsed,     setCollapsed]     = useState<Record<string, boolean>>({});
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState<PlannedDoc | null>(null);
   const [archiveModal,  setArchiveModal]  = useState<ArchiveModalState>({
@@ -103,13 +117,13 @@ export default function PanelPlanned() {
     }
   }, [showArchived, archived, loadArchived]);
 
-  const cur = currentCalendarMonth();
+  // "Bieżący miesiąc" everywhere in this panel means the active BUDGET month,
+  // not the calendar one — closing a month has to move the rates with it.
+  const cur = activeBudgetMonth;
 
   // Transactions carry the ACTUAL spent amount for realized plans (linked via
-  // plannedExpenseId), which can differ from the plan. Load the explicitly
-  // filtered month when set (historical review), otherwise the current month.
-  const txMonth = filterMonth ? toYM(filterMonth) : cur;
-  useEffect(() => { loadTransactions(txMonth); }, [txMonth, loadTransactions]);
+  // plannedExpenseId), which can differ from the plan.
+  useEffect(() => { loadTransactions(cur); }, [cur, loadTransactions]);
 
   // planId → actual booked expense amount, from the real transactions.
   const actualSpentByPlan = useMemo(() => {
@@ -127,15 +141,11 @@ export default function PanelPlanned() {
 // those dropdowns derive from this set, so they only offer categories that
 // actually occur in the current view (mode/range/month already applied).
 const baseFiltered = useMemo<PlannedDoc[]>(() => {
-  const filterMonthStr = filterMonth ? toYM(filterMonth) : "";
-
-  // A specific month fully overrides the range pill.
-  const useRange  = !filterMonthStr;
-  const maxMonth  = useRange && range.months > 0 && !range.from && !range.to
+  const maxMonth  = range.months > 0 && !range.from && !range.to
     ? addMonths(cur, range.months)
     : null;
-  const fromMonth = useRange && range.from ? toYM(range.from) : null;
-  const toMonth   = useRange && range.to   ? toYM(range.to)   : null;
+  const fromMonth = range.from ? toYM(range.from) : null;
+  const toMonth   = range.to   ? toYM(range.to)   : null;
 
   return planned.filter(doc => {
     if (doc.isArchived) return false;
@@ -152,17 +162,12 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
       return hasCurRate || isReadyToPurchase(doc) || doc.purchasedMonth === cur;
     }
 
-    // Historical review: an explicit month, or a custom range whose upper
-    // bound (Do) is at or before the current month, may include realized
-    // (purchased) plans. Forward-looking presets stay purchase-free.
-    const historicalView =
-      (!!filterMonthStr && filterMonthStr <= cur) ||
-      (toMonth != null && toMonth <= cur);
+    // Historical review: a custom range whose upper bound (Do) is at or before
+    // the active month may include realized (purchased) plans. Forward-looking
+    // presets stay purchase-free.
+    const historicalView = toMonth != null && toMonth <= cur;
 
     if (doc.isPurchased && !historicalView) return false;
-
-    // An explicit month filter is authoritative — respect it exactly.
-    if (filterMonthStr) return doc.plannedMonth === filterMonthStr;
 
     // In forward-looking views, always surface envelopes with an outstanding
     // contribution for the current month (pay the rate now even when the
@@ -180,7 +185,7 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
     if (maxMonth  && doc.plannedMonth > maxMonth)  return false;
     return true;
   });
-}, [planned, range, filterMode, filterMonth, currentMonthOnly, cur]);
+}, [planned, range, filterMode, currentMonthOnly, cur]);
 
   // Category/subcategory OPTIONS come from the base-filtered view, so only
   // categories actually present under the other filters are offered;
@@ -207,6 +212,31 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
         (filterSubs.length       === 0 || filterSubs.includes(doc.targetSubcategoryName)))
       .sort((a, b) => a.plannedMonth.localeCompare(b.plannedMonth)),
   [baseFiltered, filterCategories, filterSubs]);
+
+  // ── Grouping by planned month ─────────────────────────────
+  // One collapsible card per month, oldest first — same pattern as the
+  // "📁 Grupy" view in Wydatki. A past month still holding an unrealized
+  // plan is flagged overdue (a realized one there is just history).
+
+  const groups = useMemo(() => {
+    const map = new Map<string, PlannedDoc[]>();
+    for (const doc of filtered) {
+      const list = map.get(doc.plannedMonth);
+      if (list) list.push(doc); else map.set(doc.plannedMonth, [doc]);
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, items]) => ({
+        month,
+        items,
+        total:   items.reduce((sum, d) => sum + d.totalAmountPLN, 0),
+        overdue: month < cur && items.some(d => !d.isPurchased),
+      }));
+  }, [filtered, cur]);
+
+  function toggleGroup(month: string) {
+    setCollapsed(prev => ({ ...prev, [month]: !prev[month] }));
+  }
 
   // ── Totals ────────────────────────────────────────────────
 
@@ -338,7 +368,7 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
             </span>
             {currentMonthOnly && (
               <span>
-                🪙 Koperty ({cur}) — Suma rat:{" "}
+                🪙 Koperty ({monthLabel(cur)}) — Suma rat:{" "}
                 <strong style={{ color: c.text }}>{fmt(summary.envRateTotal)}</strong>
                 {" / "}Faktycznie zebrano:{" "}
                 <strong style={{ color: c.success }}>{fmt(summary.envRateCollected)}</strong>
@@ -348,22 +378,30 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters — every month-scoped pill spells out the months it covers.
+          Presets look FORWARD from the active budget month. */}
       <div style={{ marginBottom: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button
-          onClick={() => { setCurrentMonthOnly(true); setFilterMonth(null); }}
+          onClick={() => setCurrentMonthOnly(true)}
+          title={`Plany i raty na ${monthLabel(cur)}`}
           style={{
-            padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer",
-            fontWeight: 700, fontSize: 12,
+            padding: "4px 14px", borderRadius: 20, border: "none", cursor: "pointer",
+            fontWeight: 700, fontSize: 12, lineHeight: 1.3,
             background: currentMonthOnly ? c.success : c.border,
             color:      currentMonthOnly ? c.white     : c.textSecondary,
           }}
         >
-          📅 Bieżący miesiąc
+          <span style={{ display: "block" }}>📅 Bieżący miesiąc</span>
+          <span style={{ display: "block", fontSize: 9, fontWeight: 600, opacity: 0.75 }}>
+            {monthShort(cur)}
+          </span>
         </button>
         <RangePicker
           value={currentMonthOnly ? { months: -1, from: null, to: null } : range}
           onChange={r => { setRange(r); setCurrentMonthOnly(false); }}
+          describeMonths={months => months > 0
+            ? `${monthShort(cur)} – ${monthShort(addMonths(cur, months))}`
+            : "bez limitu"}
         />
       </div>
 
@@ -383,24 +421,6 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
             {m === "all" ? "Wszystkie tryby" : m === "envelope" ? "🪙 Koperty" : "💳 Jednorazowe"}
           </button>
         ))}
-
-        <div style={{ width: 1, height: 20, background: c.border }} />
-
-        {/* Specific month filter — uses AppDatePicker (clickable anywhere in input) */}
-        <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-          Konkretny miesiąc:
-        </span>
-        <AppDatePicker
-          value={filterMonth}
-          onChange={(d: Date) => { setFilterMonth(d); setRange({ months: 0, from: null, to: null }); setCurrentMonthOnly(false); }}
-          monthPicker
-        />
-        {filterMonth && (
-          <button onClick={() => setFilterMonth(null)}
-            style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${c.borderStrong}`, background: "transparent", color: c.textSecondary, fontSize: 12, cursor: "pointer" }}>
-            ✕
-          </button>
-        )}
 
         <div style={{ width: 1, height: 20, background: c.border }} />
 
@@ -460,19 +480,53 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
         </div>
       )}
 
-      {!isLoading && filtered.map(doc => (
-        <PlannedCard
-          key={doc.id}
-          doc={doc}
-          actualSpent={actualSpentByPlan[doc.id]}
-          onEdit={openEdit}
-          onArchive={d => setArchiveModal({
-            isOpen: true, id: d.id, name: d.description,
-            doc: d, paidSoFar: sumPaid(d.virtualSavings),
-          })}
-          onPurchase={d => setPurchaseModal({ isOpen: true, doc: d })}
-        />
-      ))}
+      {/* Grouped by planned month — click a header to collapse that month */}
+      {!isLoading && groups.map(group => {
+        const isCollapsed = !!collapsed[group.month];
+        return (
+          <div key={group.month} style={{ marginBottom: 14 }}>
+            <button
+              onClick={() => toggleGroup(group.month)}
+              aria-expanded={!isCollapsed}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", gap: 10,
+                background: c.bgDeepest, border: `1px solid ${group.month === cur ? alpha(c.success, "55") : c.border}`,
+                borderRadius: 10, padding: "10px 14px", marginBottom: isCollapsed ? 0 : 8,
+                cursor: "pointer", textAlign: "left", font: "inherit",
+              }}
+            >
+              <span style={{ color: c.textMuted, fontSize: 11 }}>{isCollapsed ? "▶" : "▼"}</span>
+              <span style={{ fontWeight: 800, fontSize: 13, color: group.month === cur ? c.success : c.text }}>
+                {monthLabel(group.month)}
+              </span>
+              {group.month === cur && (
+                <span style={{ ...s.chip(c.success), fontSize: 10 }}>bieżący</span>
+              )}
+              {group.overdue && (
+                <span style={{ ...s.chip(c.danger), fontSize: 10 }}>zaległe</span>
+              )}
+              <span style={{ marginLeft: "auto", fontSize: 12, color: c.textSecondary, whiteSpace: "nowrap" }}>
+                {group.items.length} poz. ·{" "}
+                <strong style={{ color: c.text }}>{fmt(group.total)} PLN</strong>
+              </span>
+            </button>
+
+            {!isCollapsed && group.items.map(doc => (
+              <PlannedCard
+                key={doc.id}
+                doc={doc}
+                actualSpent={actualSpentByPlan[doc.id]}
+                onEdit={openEdit}
+                onArchive={d => setArchiveModal({
+                  isOpen: true, id: d.id, name: d.description,
+                  doc: d, paidSoFar: sumPaid(d.virtualSavings),
+                })}
+                onPurchase={d => setPurchaseModal({ isOpen: true, doc: d })}
+              />
+            ))}
+          </div>
+        );
+      })}
 
       {/* Archived list — dimmed, read-only, with the "why we dropped it" note */}
       {showArchived && (

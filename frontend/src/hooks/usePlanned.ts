@@ -7,6 +7,7 @@ import { useState, useCallback, useMemo } from "react";
 import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
 import { useApi }        from "./useApi";
+import { useMonthFromUrl } from "./useMonthFromUrl";
 import type { Transaction } from "../types/appContext";
 
 // ── Domain types ──────────────────────────────────────────────
@@ -114,31 +115,44 @@ export function isReadyToPurchase(doc: PlannedDoc): boolean {
   return sumPaid(doc.virtualSavings) >= doc.totalAmountPLN;
 }
 
-export function shouldNotifyPlanned(doc: PlannedDoc, todayStr: string, daysBefore = 3): boolean {
+/**
+ * Whether the bell should nag about this plan. `budgetMonth` is the ACTIVE
+ * budget month, not the calendar one: after closing a month the whole app
+ * moves to the next open one, and the reminder (like the payment itself)
+ * has to follow — otherwise the bell keeps pointing at a closed month while
+ * every panel already shows the new one. `todayStr` stays the real date; it
+ * only answers "are we within daysBefore of the saving day".
+ */
+export function shouldNotifyPlanned(
+  doc: PlannedDoc, todayStr: string, budgetMonth: string, daysBefore = 3,
+): boolean {
   if (doc.isArchived || doc.isPurchased) return false;
 
   const [ty, tm, td] = todayStr.split("-").map(Number);
   const today = new Date(ty, tm - 1, td);
-  const currentMonth = `${ty}-${String(tm).padStart(2, "0")}`;
+  const [by, bm] = budgetMonth.split("-").map(Number);
 
-  // Bell ✕ dismissed this month's reminder — hide until next month.
-  if (doc.notifiedAt && doc.notifiedAt.slice(0, 7) === currentMonth) return false;
+  // Bell ✕ dismissed this month's reminder — hide until the budget month moves on.
+  if (doc.notifiedAt && doc.notifiedAt.slice(0, 7) === budgetMonth) return false;
 
   if (isReadyToPurchase(doc)) return true;   // ← zawsze pokazuj gdy gotowe do zakupu
 
   // oneoff mode
   if (doc.mode === "oneoff") {
-    if (doc.plannedMonth !== currentMonth) return false;
-    return checkTrigger(today, ty, tm, doc.monthlySavingDay, daysBefore);
+    if (doc.plannedMonth !== budgetMonth) return false;
+    return checkTrigger(today, by, bm, doc.monthlySavingDay, daysBefore);
   }
 
   // envelope mode
-  const entry = (doc.virtualSavings || []).find(v => v.month === currentMonth);
+  const entry = (doc.virtualSavings || []).find(v => v.month === budgetMonth);
   if (!entry || entry.paidByUser || entry.dismissedByUser) return false;
-  return checkTrigger(today, ty, tm, doc.monthlySavingDay, daysBefore);
+  return checkTrigger(today, by, bm, doc.monthlySavingDay, daysBefore);
 }
 
-// Helper to avoid duplication
+// Helper to avoid duplication. No lower clamp on the trigger date: when the
+// budget month runs AHEAD of the calendar (a month closed early), the rate is
+// already actionable, so the reminder is due. A budget month further out still
+// stays quiet — its trigger date simply hasn't arrived yet.
 function checkTrigger(today: Date, year: number, month: number, plannedDay: number | undefined, daysBefore: number): boolean {
   const lastDay = new Date(year, month, 0).getDate();
   const day = Math.min(plannedDay || 1, lastDay);
@@ -146,10 +160,7 @@ function checkTrigger(today: Date, year: number, month: number, plannedDay: numb
   const triggerDate = new Date(plannedDate);
   triggerDate.setDate(triggerDate.getDate() - daysBefore);
 
-  const firstOfMonth = new Date(year, month - 1, 1);
-  const effectiveTrigger = triggerDate < firstOfMonth ? firstOfMonth : triggerDate;
-
-  return today >= effectiveTrigger;
+  return today >= triggerDate;
 }
 
 // Generate virtualSavings months from startMonth to plannedMonth.
@@ -218,6 +229,9 @@ export function usePlanned(): UsePlannedResult {
   const api                                      = useApi();
   const { planned, setPlanned, setTransactions, settings } = useAppContext();
   const { showSuccess, showError } = useToast();
+  // Reminders follow the active budget month, same as the payment itself
+  // (useMonthFromUrl directly — useMonthStatus would be a needless round trip).
+  const { budgetMonth } = useMonthFromUrl();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving,  setIsSaving]  = useState(false);
@@ -397,8 +411,8 @@ export function usePlanned(): UsePlannedResult {
 
   const daysBefore = settings?.notifyDaysBefore ?? 3;
   const pendingNotifications = useMemo(
-    () => (planned || []).filter(p => shouldNotifyPlanned(p, today, daysBefore)),
-    [planned, today, daysBefore]
+    () => (planned || []).filter(p => shouldNotifyPlanned(p, today, budgetMonth, daysBefore)),
+    [planned, today, budgetMonth, daysBefore]
   );
 
   return {

@@ -4,12 +4,18 @@
 // (NBP rate + progress figures + PaymentConfirmModal + payMonth call).
 // Used by both the NotificationBell and PanelPlanned/PlannedCard so the
 // monthly contribution can be made early — before the bell reminder fires.
+//
+// The contribution always targets the ACTIVE BUDGET MONTH, not the calendar
+// month. Closing a month moves the whole app to the next open one, and the
+// envelope rate has to move with it — otherwise the rate for the new month
+// stays unpayable until the calendar catches up.
 // ============================================================
 
 import { useState, useEffect } from "react";
 import { c } from "../styles/tokens";
 import { usePlanned, sumPaid, computeSuggestion, isReadyToPurchase } from "./usePlanned";
 import { useCurrencyConverter }                   from "./useCurrencyConverter";
+import { useMonthStatus }                          from "./useMonthStatus";
 import { PaymentConfirmModal }                     from "../components/ui/PaymentConfirmModal";
 import { fmt, todayYMD }                            from "../utils/helpers";
 import type { PlannedDoc }                         from "./usePlanned";
@@ -19,6 +25,8 @@ export interface UseEnvelopePay {
   open:        () => void;
   /** Skip this month's rate (marks it dismissed, recomputes the suggestion). */
   dismiss:     () => void;
+  /** The budget month every action here reads and writes ("YYYY-MM"). */
+  month:       string;
   /** The modal element — render it once in the consumer's tree. */
   modal:       React.ReactNode;
   /** Suggested monthly contribution (PLN), or null for non-envelope docs. */
@@ -40,7 +48,7 @@ export interface UseEnvelopePay {
 }
 
 export function useEnvelopePay(doc: PlannedDoc): UseEnvelopePay {
-  const currentMonth = todayYMD().slice(0, 7);
+  const { activeBudgetMonth: currentMonth } = useMonthStatus();
   const paid         = sumPaid(doc.virtualSavings);
   const suggestion   = computeSuggestion(doc, currentMonth);
   const ready        = isReadyToPurchase(doc);
@@ -94,6 +102,7 @@ export function useEnvelopePay(doc: PlannedDoc): UseEnvelopePay {
   return {
     open: () => setShowModal(true),
     dismiss: () => { dismissMonth(doc.id, currentMonth); },
+    month: currentMonth,
     modal, suggestion, remaining, canPay,
     paid, totalPLN, progressPct, ready, isForeign, rateLoading,
   };
