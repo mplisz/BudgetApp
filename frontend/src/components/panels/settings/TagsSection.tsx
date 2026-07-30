@@ -2,14 +2,16 @@
 // File: src/components/panels/settings/TagsSection.jsx
 // ============================================================
 
-import { c } from "../../../styles/tokens";
-import { useState }          from "react";
+import { c, alpha } from "../../../styles/tokens";
+import { useState, useEffect } from "react";
 import { theme as s }        from "../../../styles/theme";
 import { CollapsibleSection } from "../../ui/index";
 import { EmojiSelector }     from "../../ui/EmojiSelector";
 import { ConfirmModal }      from "../../ui/ConfirmModal";
 import { ArchiveToggleButton } from "./ArchiveToggleButton";
 import { useTagManager }     from "../../../hooks/useTagManager";
+import { useSettings }       from "../../../hooks/useSettings";
+import { TagMultiSelect }    from "../../ui/TagMultiSelect";
 import { EditableLabel }     from "../../ui/EditableLabel";
 import type { Tag } from "../../../types/appContext";
 
@@ -27,7 +29,25 @@ export function TagsSection() {
   const [showArchived, setShowArchived] = useState(false);
   const [modalConfig,  setModalConfig]  = useState(MODAL_CLOSED);
 
+  // ── Auto-tags ("holiday mode") ─────────────────────────────
+  // Pre-selected on every new expense rather than forced on at save time:
+  // the whole point is being able to drop the tag on the one purchase that
+  // doesn't belong, which only works if it is visible in the form first.
+  const { settings, isSaving: isSavingSettings, updateSettings } = useSettings();
+  const [autoTags, setAutoTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!settings) return;
+    setAutoTags(Array.isArray(settings.autoTagIds) ? settings.autoTagIds : []);
+  }, [settings]);
+
+  const savedAutoTags = Array.isArray(settings?.autoTagIds) ? settings!.autoTagIds! : [];
+  const autoTagsDirty =
+    autoTags.length !== savedAutoTags.length ||
+    autoTags.some(id => !savedAutoTags.includes(id));
+
   const archivedTags = allTags.filter(t => t.isArchived);
+  const activeAutoTags = allTags.filter(t => savedAutoTags.includes(t.id));
 
   function confirmArchive(tag: Tag) {
     setModalConfig({
@@ -113,6 +133,59 @@ export function TagsSection() {
             style={{ ...s.btn(), width: "auto", padding: "10px 18px", marginTop: 0, opacity: (isSaving || !newTagName.trim()) ? 0.4 : 1, cursor: !newTagName.trim() ? "not-allowed" : "pointer" }}>
             {isSaving ? "..." : "➕ Dodaj"}
           </button>
+        </div>
+
+        {/* ── Auto-tags ── */}
+        <div style={{
+          marginTop: 18, paddingTop: 14, borderTop: `1px solid ${c.border}`,
+        }}>
+          <div style={{ color: c.textTertiary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>
+            Tag automatyczny
+          </div>
+          <div style={{ color: c.textMuted, fontSize: 11, marginBottom: 10 }}>
+            Wybrane tagi będą <strong>wstępnie zaznaczone</strong> przy każdym nowym wydatku —
+            wygodne na czas wyjazdu. Nie są narzucane: przy pojedynczym wydatku możesz je
+            odznaczyć przed zapisem. Zostaw puste, żeby wyłączyć.
+          </div>
+
+          {activeAutoTags.length > 0 && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+              background: alpha(c.info, "11"), border: `1px solid ${alpha(c.info, "44")}`,
+              borderRadius: 8, padding: "8px 12px", marginBottom: 10,
+              fontSize: 12, color: c.info,
+            }}>
+              <span>🏷️ Aktywne:</span>
+              <strong>{activeAutoTags.map(t => `${t.icon ?? ""} ${t.name}`.trim()).join(", ")}</strong>
+              <button
+                onClick={() => { setAutoTags([]); updateSettings({ autoTagIds: [] }); }}
+                disabled={isSavingSettings}
+                style={{
+                  marginLeft: "auto", background: "transparent", border: `1px solid ${alpha(c.info, "55")}`,
+                  color: c.info, borderRadius: 6, padding: "2px 10px", fontSize: 11,
+                  fontWeight: 700, cursor: isSavingSettings ? "not-allowed" : "pointer",
+                }}
+              >
+                Wyłącz
+              </button>
+            </div>
+          )}
+
+          <TagMultiSelect
+            value={autoTags}
+            onChange={setAutoTags}
+            placeholder="Wybierz tagi doklejane do nowych wydatków…"
+          />
+
+          {autoTagsDirty && (
+            <button
+              onClick={() => updateSettings({ autoTagIds: autoTags })}
+              disabled={isSavingSettings}
+              style={{ ...s.btn(), width: "auto", padding: "8px 16px", marginTop: 10, opacity: isSavingSettings ? 0.4 : 1 }}
+            >
+              {isSavingSettings ? "Zapisuję…" : "💾 Zapisz tag automatyczny"}
+            </button>
+          )}
         </div>
       </CollapsibleSection>
 

@@ -67,6 +67,9 @@ const SettingsSchema = z.object({
   currencies:    z.array(CurrencySchema).max(30).optional(),
   voucherExpiryWarningDays: z.number().int().min(1).max(90).optional(),
   notifyDaysBefore: z.number().int().min(0).max(14).optional(),
+  // Tags pre-selected on every new expense until cleared (holiday mode).
+  // Capped low on purpose: this is a temporary switch, not a tagging policy.
+  autoTagIds: z.array(z.string().min(1).max(200)).max(5).optional(),
   // First month visible in MonthNavigator — blocks navigating before this month
   appStartMonth: z.string()
     .regex(BUDGET_MONTH_REGEX, "Nieprawidłowy format appStartMonth (YYYY-MM)")
@@ -91,6 +94,7 @@ const SettingsSchema = z.object({
        || data.targets
        || data.currencies
        || data.appStartMonth !== undefined
+       || data.autoTagIds !== undefined
        || data.voucherExpiryWarningDays !== undefined
        || data.safetyNet !== undefined
        || data.notifyDaysBefore !== undefined
@@ -127,6 +131,7 @@ const DEFAULT_SETTINGS = {
   voucherExpiryWarningDays: 14,
   notifyDaysBefore: 3,
   appStartMonth: null,  // null = no restriction
+  autoTagIds:    [],    // empty = no tag pre-selected on new expenses
   safetyNet:     null,  // null = user hasn't configured the panel yet
   depositSubcategoryId: null,          // null = Bottle Deposits panel not configured
   returnTransferSubcategoryId: null,   // null = transfers on returns not configured
@@ -165,6 +170,7 @@ router.get('/', async (req, res) => {
 
     // Backfill missing fields for old documents
     if (!("appStartMonth"            in doc)) doc.appStartMonth = null;
+    if (!("autoTagIds"               in doc)) doc.autoTagIds = [];
     if (!("voucherExpiryWarningDays" in doc)) doc.voucherExpiryWarningDays = 14;
     if (!("safetyNet"                in doc)) doc.safetyNet = null;
     if (!("luxmed"    in doc)) doc.luxmed    = { maxPercent: 90, maxTotal: 500 };
@@ -229,6 +235,9 @@ router.patch('/', async (req, res) => {
       appStartMonth: parsed.data.appStartMonth !== undefined
         ? parsed.data.appStartMonth
         : (existing.appStartMonth ?? null),
+      autoTagIds: parsed.data.autoTagIds !== undefined
+        ? parsed.data.autoTagIds
+        : (existing.autoTagIds ?? []),
       // Safety net: shallow merge so partial patches don't wipe other fields.
       // Frontend currently always sends the full object, but be defensive.
       safetyNet: parsed.data.safetyNet !== undefined

@@ -80,7 +80,18 @@ const OCR_MAX_FILE_BYTES = 5 * 1024 * 1024;
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelExpenses() {
-  const { cart, setCart, categories } = useAppContext();
+  const { cart, setCart, categories, settings, tags } = useAppContext();
+  // Tags pre-selected on every new expense ("holiday mode"). Archived tags are
+  // dropped — a tag retired mid-trip must not keep attaching itself.
+  const autoTagIds = useMemo<string[]>(() => {
+    const ids = Array.isArray(settings?.autoTagIds) ? settings!.autoTagIds! : [];
+    return ids.filter(id => tags.some(t => t.id === id && !t.isArchived));
+  }, [settings, tags]);
+  const autoTagNames = useMemo(
+    () => autoTagIds.map(id => tags.find(t => t.id === id)).filter(Boolean)
+                    .map(t => `${t!.icon ?? ""} ${t!.name}`.trim()),
+    [autoTagIds, tags],
+  );
   const { addTransaction, isSaving, loadTransactions  } = useTransactions();
   const { isActiveMonthClosed, activeBudgetMonth, isFutureMonth } = useMonthStatus();
   const api = useApi();
@@ -238,15 +249,16 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
         isDuplicate:      !!data.isDuplicate,
         currency:        normalizeCurrency(data.metadata?.currency), 
         duplicateWarning: data.duplicateWarning   ?? null,
-        summary: data.metadata?.summary ?? null, 
+        summary: data.metadata?.summary ?? null,
       });
+      setOcrTags(autoTagIds);        // holiday mode — pre-selected, still removable
       if (data.warning) showWarning(data.warning);
     } catch (err) {
       showError(err instanceof Error ? err.message : "Błąd analizy paragonu.");
     } finally {
       setOcrLoading(false);
     }
-  }, [api, showError, showWarning]);
+  }, [api, showError, showWarning, autoTagIds]);
 
   // Selected OCR lines → cart items. Items WITHOUT a matched category
   // still go in — the user fixes them via the cart's ✏️ edit flow.
@@ -324,8 +336,8 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
     setOcrMeta(null);
     setOcrWarranty(false);
     setEditingMerchant(false);
-    setOcrTags([]);
-  }, [ocrLines, ocrMeta, ocrWarranty, budgetMonth, categories, setCart, showWarning, activeRate, baseCurrency.code, showError,ocrTags]);
+    setOcrTags(autoTagIds);          // back to the trip default, not to nothing
+  }, [ocrLines, ocrMeta, ocrWarranty, budgetMonth, categories, setCart, showWarning, activeRate, baseCurrency.code, showError, ocrTags, autoTagIds]);
 
   // ── Form initial values ───────────────────────────────────
     // Cart-aware default date — sticky to first cart item's date.
@@ -347,9 +359,14 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
     return (!code || code === baseCurrency.code) ? null : code;
   }, [cart, baseCurrency.code]);
 
-  const formInitialValues = cartDate
-    ? { ...emptyFormValues(), date: cartDate, ...(cartCurrency ? { currency: cartCurrency, customCurrency: "" } : {}) }
-    : undefined;
+  // Always seeded now — the auto-tags have to reach the form even with an empty
+  // cart, which is exactly the state at the start of a trip.
+  const formInitialValues = {
+    ...emptyFormValues(),
+    ...(autoTagIds.length ? { tags: autoTagIds } : {}),
+    ...(cartDate     ? { date: cartDate } : {}),
+    ...(cartCurrency ? { currency: cartCurrency, customCurrency: "" } : {}),
+  };
 
   // ── Guards ────────────────────────────────────────────────
 
@@ -416,6 +433,23 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
               ➕ Dodaj wydatek
             </div>
           </div>
+
+          {/* Holiday mode — deliberately loud and always in view. A tag that
+              silently attaches itself to everything is easy to forget about
+              long after the trip is over; the settings page is too far away
+              to be the only place it's visible. */}
+          {autoTagIds.length > 0 && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+              background: alpha(c.info, "11"), border: `1px solid ${alpha(c.info, "44")}`,
+              borderRadius: 10, padding: "8px 12px", marginBottom: 16,
+              fontSize: 12, color: c.info,
+            }}>
+              <span>🏷️ Każdy nowy wydatek dostaje:</span>
+              <strong>{autoTagNames.join(", ")}</strong>
+              <span style={{ color: c.textMuted }}>· możesz odznaczyć przy pojedynczym wydatku</span>
+            </div>
+          )}
 
 
           {/* Mode toggle: manual / OCR */}
