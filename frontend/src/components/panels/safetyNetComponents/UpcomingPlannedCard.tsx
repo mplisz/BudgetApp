@@ -7,7 +7,7 @@
 
 import { c, alpha } from "../../../styles/tokens";
 import { useMemo } from "react";
-import { fmt } from "../../../utils/helpers";
+import { fmt, plural } from "../../../utils/helpers";
 import { Card, EmptyState } from "../../ui/summaryUi";
 import { LEVEL_META } from "./types";
 import type { UpcomingPlanned, PriorityLevel } from "./types";
@@ -113,7 +113,7 @@ export function UpcomingPlannedCard({
             <SummaryTile
               label="Razem w horyzoncie"
               value={sumAll}
-              hint={`${upcoming.length} ${upcoming.length === 1 ? "pozycja" : "pozycji"}`}
+              hint={`${upcoming.length} ${plural(upcoming.length, "pozycja", "pozycje", "pozycji")}`}
               color={c.textBody}
             />
             <SummaryTile

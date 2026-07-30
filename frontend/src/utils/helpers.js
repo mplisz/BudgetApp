@@ -3,6 +3,29 @@
 // Pure utility functions: formatting, date helpers, budget math
 // ============================================================
 
+import { MONTHS } from "../data/constants";
+
+// "2026-08" → "Sierpień 2026" — the human form of a budget month, used in
+// panel titles and group headers. Falls back to the raw string when it isn't
+// a parseable YYYY-MM, and to "" when there is nothing to format.
+export function monthLabel(ym) {
+  if (!ym) return "";
+  const name = MONTHS[Number(String(ym).split("-")[1]) - 1];
+  return name ? `${name} ${String(ym).split("-")[0]}` : String(ym);
+}
+
+// Polish plural: 1 → `one`, 2–4 → `few`, everything else → `many`.
+// The teens are the catch — 12–14 take the `many` form ("12 pozycji", not
+// "12 pozycje") — so this is NOT the `n < 5` shortcut it is usually written
+// as, which also gets 22–24 wrong in the other direction.
+export function plural(n, one, few, many) {
+  const abs = Math.abs(Number(n) || 0);
+  if (abs === 1) return one;
+  const mod10  = abs % 10;
+  const mod100 = abs % 100;
+  return (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) ? few : many;
+}
+
 // Format a number as PLN currency string
 export const fmt = (n) =>
   new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN" }).format(n || 0);

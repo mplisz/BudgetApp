@@ -17,7 +17,7 @@ import { useTransactions }  from "../../../hooks/useTransactions";
 import { useVouchers }      from "../../../hooks/useVouchers";
 import { useApi }           from "../../../hooks/useApi";
 import { useToast }         from "../../../hooks/useToast";
-import { fmt, round2 }      from "../../../utils/helpers";
+import { fmt, round2, plural } from "../../../utils/helpers";
 import { PRIORITY_COLORS }  from "../../ui/PriorityPicker";
 import { VoucherSection }   from "./VoucherSection";
 import type { TransactionPayload, VoucherAllocation } from "../../../types/transaction";
@@ -307,7 +307,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       return;
     }
 
-    const noun = (n: number) => (n === 1 ? "pozycję" : n < 5 ? "pozycje" : "pozycji");
+    const noun = (n: number) => plural(n, "pozycję", "pozycje", "pozycji");
     const voucherIds = cartAllocations.map(a => a.voucherId);
     setSaving(true);
 
@@ -522,8 +522,8 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
         <div>
           <div style={{ fontWeight: 700, color: c.text, fontSize: 15 }}>🛒 Koszyk</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
-            {cart.length} {cart.length === 1 ? "pozycja" : cart.length < 5 ? "pozycje" : "pozycji"}
-            {isGrouped && ` · ${purchaseGroups.length} ${purchaseGroups.length < 5 ? "zakupy" : "zakupów"}`}
+            {cart.length} {plural(cart.length, "pozycja", "pozycje", "pozycji")}
+            {isGrouped && ` · ${purchaseGroups.length} ${plural(purchaseGroups.length, "zakup", "zakupy", "zakupów")}`}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -568,7 +568,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
                   {group.isReceipt ? "🧾" : "🏬"} {group.label}
                 </span>
                 <span style={{ marginLeft: "auto", fontSize: 11, color: c.textSecondary, whiteSpace: "nowrap" }}>
-                  {group.items.length} poz. ·{" "}
+                  {group.items.length} {plural(group.items.length, "pozycja", "pozycje", "pozycji")} ·{" "}
                   <strong style={{ color: c.success }}>{fmt(group.total)}</strong>
                 </span>
               </button>

@@ -11,9 +11,53 @@ import {
   roundToNearest,
   formatBudgetMonth,
   budgetMonthAfter,
+  monthLabel,
+  plural,
   getActiveLimit,
   recurringActiveForMonth,
 } from "./helpers";
+
+describe("plural", () => {
+  const poz = (n: number) => plural(n, "pozycja", "pozycje", "pozycji");
+
+  it("uses the singular only for exactly 1", () => {
+    expect(poz(1)).toBe("pozycja");
+    expect(poz(0)).toBe("pozycji");
+  });
+  it("uses the 2-4 form", () => {
+    expect(poz(2)).toBe("pozycje");
+    expect(poz(4)).toBe("pozycje");
+    expect(poz(5)).toBe("pozycji");
+  });
+  it("keeps the teens on the many form", () => {
+    expect(poz(12)).toBe("pozycji");
+    expect(poz(13)).toBe("pozycji");
+    expect(poz(14)).toBe("pozycji");
+  });
+  it("returns to the 2-4 form past the teens", () => {
+    expect(poz(22)).toBe("pozycje");
+    expect(poz(23)).toBe("pozycje");
+    expect(poz(102)).toBe("pozycje");
+    expect(poz(111)).toBe("pozycji");
+  });
+});
+
+describe("monthLabel", () => {
+  it("renders a budget month in Polish", () => {
+    expect(monthLabel("2026-08")).toBe("Sierpień 2026");
+    expect(monthLabel("2026-01")).toBe("Styczeń 2026");
+    expect(monthLabel("2026-12")).toBe("Grudzień 2026");
+  });
+  it("returns an empty string when there is nothing to format", () => {
+    expect(monthLabel("")).toBe("");
+    expect(monthLabel(null)).toBe("");
+    expect(monthLabel(undefined)).toBe("");
+  });
+  it("passes through anything that isn't a parseable YYYY-MM", () => {
+    expect(monthLabel("2026-13")).toBe("2026-13");
+    expect(monthLabel("nonsense")).toBe("nonsense");
+  });
+});
 
 describe("parseDecimal", () => {
   it("returns empty string for empty/null/undefined", () => {

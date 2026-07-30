@@ -10,7 +10,7 @@ import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useLimits, buildLimitMap } from "../../hooks/useLimits";
 import { calculateEffectiveAmount, calculateNetAmount } from "../../utils/returnUtils";
-import { fmt }              from "../../utils/helpers";
+import { fmt, monthLabel }  from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
 import { Card }             from "../ui/summaryUi";
 import { CollapsibleSection } from "../ui";
@@ -22,14 +22,12 @@ import { TopTransactions }  from "./summaryComponents/TopTransactions";
 import { SavingsSummary }   from "./summaryComponents/SavingsSummary";
 import { DEFAULT_TARGETS }  from "../../types/summaryConstants";
 import { SkeletonKpiCard, SkeletonCard, SkeletonChart, Skeleton } from "../ui/Skeleton";
-import { MONTHS } from "../../data/constants";
 
 import type {
   Transaction,
   CategorySummary,
   SubcategorySummary,
   SettingsTargets,
-  BudgetMonth,
 } from "../../types/summary";
 import { EnvelopeBreakdown }  from "../ui/EnvelopeBreakdown";
 import type { EnvelopeBreakdownItem } from "../ui/EnvelopeBreakdown";
@@ -46,12 +44,6 @@ interface KpiPillProps {
   sub?: string;
 }
 // ── Pure helpers ──────────────────────────────────────────────
-
-function formatMonthTitle(budgetMonth: BudgetMonth): string {
-  if (!budgetMonth) return "";
-  const [y, m] = budgetMonth.split("-");
-  return `${MONTHS[Number(m) - 1]} ${y}`;
-}
 
 function sumTx(
   txList:      Transaction[],
@@ -312,7 +304,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
       {/* Header */}
       <div style={{ marginBottom: 20, marginTop: 8 }}>
-        <div style={s.sectionTitle}>📊 Podsumowanie — {formatMonthTitle(activeBudgetMonth)}</div>
+        <div style={s.sectionTitle}>📊 Podsumowanie — {monthLabel(activeBudgetMonth)}</div>
         <div style={s.sectionSub}>Przegląd budżetu miesiąca</div>
       </div>
 

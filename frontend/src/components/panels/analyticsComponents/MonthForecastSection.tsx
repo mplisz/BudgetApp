@@ -17,7 +17,7 @@ import { useAppContext } from "../../../context/AppContext";
 import { useRecurring } from "../../../hooks/useRecurring";
 import { buildLimitMap } from "../../../hooks/useLimits";
 import { ProgressBar } from "../../ui/summaryUi";
-import { fmt } from "../../../utils/helpers";
+import { fmt, plural } from "../../../utils/helpers";
 import {
   computeMonthForecast, upcomingRecurringForMonth, plannedTotalForMonth,
   MIN_PACE_DAYS, type ForecastTransaction,
@@ -137,7 +137,7 @@ export function MonthForecastSection({ transactions, months }: Props) {
           <span style={label}>
             🛍️ Poza prognozą: planowane zakupy{" "}
             <strong style={{ color: c.textTertiary }}>+{fmt(plannedInfo.total)}</strong>{" "}
-            ({plannedInfo.count} {plannedInfo.count === 1 ? "pozycja" : "pozycje"}) — mogą, ale nie muszą się wydarzyć
+            ({plannedInfo.count} {plural(plannedInfo.count, "pozycja", "pozycje", "pozycji")}) — mogą, ale nie muszą się wydarzyć
           </span>
         )}
       </div>

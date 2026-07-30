@@ -14,8 +14,8 @@ import { ConfirmModal }   from "../ui/ConfirmModal";
 import { PlannedCard }    from "./plannedComponents/PlannedCard";
 import { PlannedForm }    from "./plannedComponents/PlannedForm";
 import { TransactionForm, emptyFormValues } from "./transactionComponents/TransactionForm";
-import { fmt }             from "../../utils/helpers";
-import { MONTHS }          from "../../data/constants";
+import { fmt, monthLabel, plural } from "../../utils/helpers";
+import { addMonthsToYM }   from "../../hooks/useMonthFromUrl";
 import { theme as s }     from "../../styles/theme";
 import { RangePicker, type DateRange } from "../ui/RangePicker";
 import { CategoryMultiSelect } from "../ui/CategoryMultiSelect";
@@ -24,18 +24,6 @@ import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload } from "../../
 import type { FormValues, TransactionPayload, Priority } from "../../types/transaction";
 
 // ── Helpers ───────────────────────────────────────────────────
-
-function addMonths(monthStr: string, n: number): string {
-  const [y, m] = monthStr.split("-").map(Number);
-  const total  = (y * 12 + m - 1) + n;
-  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
-}
-
-/** "2026-08" → "Sierpień 2026" — group headers. */
-function monthLabel(ym: string): string {
-  const [y, m] = ym.split("-");
-  return (MONTHS as string[])[Number(m) - 1] ? `${(MONTHS as string[])[Number(m) - 1]} ${y}` : ym;
-}
 
 /** "2026-08" → "08.2026" — the tight second line on filter pills. */
 function monthShort(ym: string): string {
@@ -142,7 +130,7 @@ export default function PanelPlanned() {
 // actually occur in the current view (mode/range/month already applied).
 const baseFiltered = useMemo<PlannedDoc[]>(() => {
   const maxMonth  = range.months > 0 && !range.from && !range.to
-    ? addMonths(cur, range.months)
+    ? addMonthsToYM(cur,range.months)
     : null;
   const fromMonth = range.from ? toYM(range.from) : null;
   const toMonth   = range.to   ? toYM(range.to)   : null;
@@ -400,7 +388,7 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
           value={currentMonthOnly ? { months: -1, from: null, to: null } : range}
           onChange={r => { setRange(r); setCurrentMonthOnly(false); }}
           describeMonths={months => months > 0
-            ? `${monthShort(cur)} – ${monthShort(addMonths(cur, months))}`
+            ? `${monthShort(cur)} – ${monthShort(addMonthsToYM(cur,months))}`
             : "bez limitu"}
         />
       </div>
@@ -506,7 +494,7 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
                 <span style={{ ...s.chip(c.danger), fontSize: 10 }}>zaległe</span>
               )}
               <span style={{ marginLeft: "auto", fontSize: 12, color: c.textSecondary, whiteSpace: "nowrap" }}>
-                {group.items.length} poz. ·{" "}
+                {group.items.length} {plural(group.items.length, "pozycja", "pozycje", "pozycji")} ·{" "}
                 <strong style={{ color: c.text }}>{fmt(group.total)} PLN</strong>
               </span>
             </button>
