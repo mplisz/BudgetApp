@@ -6,6 +6,7 @@ import { c, alpha } from "../../../styles/tokens";
 import { useState, useEffect } from "react";
 import { theme as s }          from "../../../styles/theme";
 import { CollapsibleSection }  from "../../ui";
+import { ConfirmModal }        from "../../ui/ConfirmModal";
 import { useSettings }         from "../../../hooks/useSettings";
 import { AppDatePicker, fromYM, toYM } from "../../ui/AppDatePicker";
 
@@ -26,6 +27,12 @@ export function SettingsSection() {
   const [startMonthEnabled, setStartMonthEnabled] = useState(false);
   // Date object for AppDatePicker; defaults to first day of current month
   const [startMonthValue,   setStartMonthValue]   = useState(fromYM(null) ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  // Whether the user touched the start-month control in THIS editing session.
+  // Saving is a single button for the whole section, so without this a plain
+  // threshold edit would rewrite the navigation lock with whatever the form
+  // happened to hold — including its "current month" default.
+  const [startMonthTouched, setStartMonthTouched] = useState(false);
+  const [confirmLockOpen,   setConfirmLockOpen]   = useState(false);
 
   useEffect(() => {
     if (!settings) return;
@@ -39,9 +46,14 @@ export function SettingsSection() {
     setVoucherExpiryDays(settings.voucherExpiryWarningDays ?? 14);
     setRecurringNotifyDays(settings.notifyDaysBefore  ?? 3);
 
-    const sm = settings.appStartMonth ?? null;
+    // `||` on purpose, not `??`: a stored empty string must count as "not set".
+    // With `??` the toggle lit up while the value silently stayed on its
+    // current-month default, and the next save persisted that.
+    const sm = settings.appStartMonth || null;
     setStartMonthEnabled(sm !== null);
     if (sm) setStartMonthValue(fromYM(sm) ?? new Date());
+    // Re-synced from the server (mount, or right after a save) — nothing to send.
+    setStartMonthTouched(false);
   }, [settings]);
 
   const isThresholdsValid = Number(warningPercent) < Number(criticalPercent);
@@ -75,7 +87,11 @@ export function SettingsSection() {
         minRetirementPercent:  Number(minRetirement),
         minSavingsPercent:     Number(minSavings),
       },
-      appStartMonth: startMonthEnabled ? toYM(startMonthValue) : null,
+      // Only sent when actually edited — the backend keeps the stored value for
+      // an absent field, so an untouched lock survives a threshold save.
+      ...(startMonthTouched
+        ? { appStartMonth: startMonthEnabled ? toYM(startMonthValue) : null }
+        : {}),
       voucherExpiryWarningDays: Number(voucherExpiryDays),
       notifyDaysBefore: Number(recurringNotifyDays),
     });
@@ -188,12 +204,19 @@ export function SettingsSection() {
           <div style={{ ...rowStyle, alignItems: "flex-start", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
               <div>
-                <div style={labelStyle}>Najwcześniejszy dostępny miesiąc</div>
-                <div style={descStyle}>Blokuje cofanie nawigacji przed tą datą</div>
+                <div style={labelStyle}>🔒 Najwcześniejszy dostępny miesiąc</div>
+                <div style={descStyle}>
+                  Po włączeniu <strong>nikt nie cofnie się przed ten miesiąc</strong> — wcześniejsze
+                  miesiące znikają z nawigacji razem z ich danymi. Zostaw wyłączone, jeśli chcesz
+                  mieć dostęp do całej historii.
+                </div>
               </div>
-              {/* Toggle */}
+              {/* Toggle — enabling asks first (it hides data), disabling doesn't */}
               <div
-                onClick={() => setStartMonthEnabled(e => !e)}
+                onClick={() => {
+                  if (startMonthEnabled) { setStartMonthEnabled(false); setStartMonthTouched(true); }
+                  else                   { setConfirmLockOpen(true); }
+                }}
                 style={{
                   width: 40, height: 22, borderRadius: 99, cursor: "pointer", position: "relative", flexShrink: 0,
                   background:  startMonthEnabled ? c.success : c.border,
@@ -211,7 +234,7 @@ export function SettingsSection() {
             {startMonthEnabled && (
               <AppDatePicker
                 value={startMonthValue}
-                onChange={d => setStartMonthValue(d)}
+                onChange={d => { setStartMonthValue(d); setStartMonthTouched(true); }}
                 monthPicker
                 maxDate={null}
                 style={{ width: "auto", minWidth: 160 }}
@@ -219,10 +242,22 @@ export function SettingsSection() {
             )}
             {!startMonthEnabled && settings?.appStartMonth && (
               <div style={{ fontSize: 11, color: c.textMuted }}>
-                Aktualnie: <strong style={{ color: c.textTertiary }}>{settings.appStartMonth}</strong> — wyłącz toggle i zapisz żeby usunąć
+                Aktualnie: <strong style={{ color: c.textTertiary }}>{settings.appStartMonth}</strong> — zapisz, żeby zdjąć blokadę
               </div>
             )}
           </div>
+
+          <ConfirmModal
+            isOpen={confirmLockOpen}
+            title="🔒 Zablokować wcześniejsze miesiące?"
+            message={
+              "Po zapisaniu nikt w rodzinie nie przejdzie do miesięcy wcześniejszych niż wybrany — " +
+              "znikną one z nawigacji razem z transakcjami, podsumowaniami i analizą.\n\n" +
+              "To ustawienie widoczności, nie usuwanie danych: wyłączenie blokady przywraca wszystko."
+            }
+            onConfirm={() => { setStartMonthEnabled(true); setStartMonthTouched(true); setConfirmLockOpen(false); }}
+            onCancel={() => setConfirmLockOpen(false)}
+          />
 
           {/* Voucher expiry warning window */}
           <div style={{ ...rowStyle, marginTop: 8 }}>
