@@ -426,6 +426,25 @@ function LimitRow({
   );
 }
 
+// ── Unlisted-spend note ───────────────────────────────────────
+// Money that IS in the total above but has no row here, because its category
+// is archived without a limit, deleted, or no longer of this type. Silence
+// would mean the section quietly under-reports.
+
+function UnlistedNote({ amount }: { amount: number }) {
+  if (amount <= 0.005) return null;
+  return (
+    <div style={{
+      margin: "-4px 0 12px", padding: "8px 14px",
+      background: alpha(c.warning, "11"), border: `1px solid ${alpha(c.warning, "44")}`,
+      borderRadius: 8, fontSize: 12, color: c.warning,
+    }}>
+      ⚠️ W sumie ujęto <strong>{fmt(amount)}</strong> z transakcji bez pasującego wiersza
+      (kategoria zarchiwizowana, usunięta lub o zmienionym typie).
+    </div>
+  );
+}
+
 // ── TotalsRow ─────────────────────────────────────────────────
 
 function TotalsRow({ activeLimit, spent, recurring, planned, showExtra = true, isMobile }: {
@@ -770,30 +789,52 @@ export default function PanelBaseBudget() {
 
   // ── Totals ───────────────────────────────────────────────
 
+  // "Wydano" is summed over TRANSACTIONS BY TYPE, never over the category rows
+  // above: a transaction whose category has since been archived without a
+  // limit, deleted, or retyped belongs to no listed row, and summing per row
+  // dropped its money from the total without a trace. `unlisted` is that gap,
+  // surfaced under the section instead of hidden.
+  const spentByType = useMemo(() => {
+    let expense = 0, saving = 0;
+    for (const t of transactions) {
+      if (t.budgetMonth !== activeBudgetMonth || t.isArchived) continue;
+      if      (t.type === "EXPENSE") expense += t.amount;
+      else if (t.type === "SAVING")  saving  += t.amount;
+    }
+    return { expense, saving };
+  }, [transactions, activeBudgetMonth]);
+
   const expenseTotals = useMemo(() => {
-    let activeLimit = 0, spentSum = 0, recurringSum = 0, plannedSum = 0;
+    let activeLimit = 0, listedSpent = 0, recurringSum = 0, plannedSum = 0;
     for (const cat of expenseCategories) {
       const doc    = limits.find((l: LimitDoc) => l.categoryId === cat.id) ?? null;
       const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
       if (active) activeLimit += active.amount;
-      spentSum     += sumSpentForCategory(transactions, cat.id, activeBudgetMonth);
+      listedSpent  += sumSpentForCategory(transactions, cat.id, activeBudgetMonth);
       recurringSum += sumRecurringForCategory(recurring, cat.id, activeBudgetMonth);
       plannedSum   += plannedItemsForCategory(planned, cat.id, activeBudgetMonth)
         .reduce((s, p) => s + p.amount, 0);
     }
-    return { activeLimit, spent: spentSum, recurring: recurringSum, planned: plannedSum };
-  }, [expenseCategories, limits, transactions, recurring, planned, activeBudgetMonth]);
+    return {
+      activeLimit, spent: spentByType.expense,
+      recurring: recurringSum, planned: plannedSum,
+      unlisted: spentByType.expense - listedSpent,
+    };
+  }, [expenseCategories, limits, transactions, recurring, planned, activeBudgetMonth, spentByType]);
 
   const savingTotals = useMemo(() => {
-    let activeLimit = 0, spentSum = 0;
+    let activeLimit = 0, listedSpent = 0;
     for (const cat of savingCategories) {
       const doc    = limits.find((l: LimitDoc) => l.categoryId === cat.id) ?? null;
       const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
       if (active) activeLimit += active.amount;
-      spentSum += sumSpentForCategory(transactions, cat.id, activeBudgetMonth, "SAVING");
+      listedSpent += sumSpentForCategory(transactions, cat.id, activeBudgetMonth, "SAVING");
     }
-    return { activeLimit, spent: spentSum, recurring: 0, planned: 0 };
-  }, [savingCategories, limits, transactions, activeBudgetMonth]);
+    return {
+      activeLimit, spent: spentByType.saving, recurring: 0, planned: 0,
+      unlisted: spentByType.saving - listedSpent,
+    };
+  }, [savingCategories, limits, transactions, activeBudgetMonth, spentByType]);
 
   // ── Row renderers ─────────────────────────────────────────
 
@@ -856,12 +897,27 @@ export default function PanelBaseBudget() {
           {/* ── EXPENSE ── */}
           <SectionHeader title="💸 Wydatki" activeBudgetMonth={activeBudgetMonth} isMobile={isMobile} />
           {expenseCategories.map(renderExpenseRow)}
-          <TotalsRow {...expenseTotals} isMobile={isMobile} />
+          <TotalsRow
+            activeLimit={expenseTotals.activeLimit}
+            spent={expenseTotals.spent}
+            recurring={expenseTotals.recurring}
+            planned={expenseTotals.planned}
+            isMobile={isMobile}
+          />
+          <UnlistedNote amount={expenseTotals.unlisted} />
 
           {/* ── SAVING ── */}
           <SectionHeader title="🏦 Oszczędności" activeBudgetMonth={activeBudgetMonth} showExtra="spent-only" isMobile={isMobile} />
           {savingCategories.map(renderSavingRow)}
-          <TotalsRow {...savingTotals} showExtra="spent-only" isMobile={isMobile} />
+          <TotalsRow
+            activeLimit={savingTotals.activeLimit}
+            spent={savingTotals.spent}
+            recurring={savingTotals.recurring}
+            planned={savingTotals.planned}
+            showExtra="spent-only"
+            isMobile={isMobile}
+          />
+          <UnlistedNote amount={savingTotals.unlisted} />
 
           {/* ── GRAND TOTAL ── */}
           {(expenseTotals.activeLimit + savingTotals.activeLimit) > 0 && (() => {

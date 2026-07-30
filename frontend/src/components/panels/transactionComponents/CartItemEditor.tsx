@@ -50,6 +50,7 @@ function cartItemToFormValues(item: CartItem): FormValues {
     categoryId:      item.categoryId,
     categoryName:    item.categoryName,
     categoryType:    null,
+    originalType:    item.type ?? null,
     priority:        item.priority,
     description:     item.description,
     tags:            item.tags || [],

@@ -67,6 +67,10 @@ export interface FormValues {
   categoryId:      string;
   categoryName:    string;
   categoryType:    string | null;
+  /** Type the record was LOADED with (edit paths only; null when adding).
+   *  Last-resort fallback in buildPayload — without it an unresolvable
+   *  category silently rewrites an existing SAVING record to EXPENSE. */
+  originalType:    string | null;
   priority:        Priority;
   description:     string;
   tags:            string[];

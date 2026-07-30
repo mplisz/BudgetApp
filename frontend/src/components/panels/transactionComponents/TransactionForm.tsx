@@ -53,6 +53,7 @@ export function emptyFormValues(): FormValues {
     categoryId:      "",
     categoryName:    "",
     categoryType:    null,
+    originalType:    null,
     priority:        2,
     description:     "",
     tags:            [],
@@ -79,7 +80,11 @@ export function txToFormValues(tx: Record<string, unknown>): FormValues {
     subcategoryName: (tx.subcategoryName as string) || "",
     categoryId:      (tx.categoryId      as string) || "",
     categoryName:    (tx.categoryName    as string) || "",
+    // Stays null on purpose: only a fresh pick in SubcategorySelect sets it,
+    // so `resolvedCategoryType` is free to re-derive the type from the
+    // category tree (and thereby repair a record whose type drifted).
     categoryType:    null,
+    originalType:    (tx.type as string) || null,
     priority:        ((tx.priority as number) || 2) as 1 | 2 | 3 | 4,
     description:     (tx.description    as string) || "",
     tags:            (tx.tags           as string[]) || [],
@@ -337,6 +342,14 @@ export function TransactionForm({
     if (!rateInfo.activeRate || rateInfo.activeRate <= 0) { showError(translateError("Missing exchange rate.")); return null; }
     if (rateInfo.resolvedCurrency.length !== 3)           { showError(translateError("Select a currency.")); return null; }
 
+    // The category owns the transaction type, so resolve it from the tree
+    // (which also honours a fresh pick in SubcategorySelect) rather than from
+    // form.categoryType alone — that field is null on every edit load, and
+    // defaulting it straight to EXPENSE silently converted SAVING records.
+    // Only when the category can't be resolved at all do we fall back: to the
+    // type the record already had, and finally to EXPENSE for a brand-new one.
+    const payloadType = resolvedCategoryType ?? form.originalType ?? "EXPENSE";
+
     // ── Line-items branch ──
     // Edit originalAmount per line (receipt currency); one fxRate per transaction.
     // amount (PLN) per line = round2(orig × fx); sums keep the invariant exact.
@@ -360,7 +373,7 @@ export function TransactionForm({
 
       return {
         date:             dateYMD,
-        type:             form.categoryType ?? "EXPENSE",
+        type:             payloadType,
         budgetMonth,
         subcategoryId:    form.subcategoryId,
         subcategoryName:  form.subcategoryName,
@@ -421,7 +434,7 @@ export function TransactionForm({
 
     return {
       date:             dateYMD,
-      type:             form.categoryType ?? "EXPENSE",
+      type:             payloadType,
       budgetMonth,
       subcategoryId:    form.subcategoryId,
       subcategoryName:  form.subcategoryName,
