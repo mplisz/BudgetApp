@@ -225,6 +225,15 @@ ZASADY SCALANIA RABATÓW (KRYTYCZNE):
 8. Niektóre sklepy drukują rabaty w OSOBNYM BLOKU na dole paragonu (np. polskie
    "OPUST SK. NAZWA -X,XX", ale też analogiczne bloki w innych sieciach/krajach).
    Przypisz je do właściwych pozycji tak samo jak rabaty inline.
+8a. RABAT OGÓLNY — korekta, której NIE DA SIĘ przypisać do żadnej konkretnej
+   pozycji (np. rabat lojalnościowy, "rabat za aplikację", kupon od całości
+   zakupów): rozdziel go PROPORCJONALNIE do wartości wszystkich pozycji
+   (każdą pomniejsz o jej udział w rabacie), a różnicę groszy z zaokrągleń
+   skoryguj na NAJWIĘKSZEJ pozycji tak, by suma "amount" zgadzała się
+   z totalem paragonu CO DO GROSZA. W każdej zmienionej pozycji ustaw
+   grossAmount (cena sprzed rabatu), discountAmount (jej udział w rabacie)
+   oraz "mergeNote" np. "część rabatu ogólnego -0,37". NIGDY nie pomijaj
+   takiego rabatu i nie zwracaj go jako osobnej pozycji.
 9. Wypisz KAŻDĄ pozycję zakupową — paragon może mieć kilkadziesiąt pozycji. Nie pomijaj żadnej i nie skracaj listy.
 10. Jeśli paragon jest dostarczony jako kilka nakładających się fragmentów: pozycje widoczne na styku dwóch fragmentów potraktuj JEDEN raz (deduplikuj po nazwie i cenie).
 11. Ujemna linia o PEŁNEJ wartości pozycji (np. "BATON X 3,48" oraz osobno "BATON X -3,48") oznacza ZWROT/anulowanie — pomiń tę pozycję całkowicie.
