@@ -57,7 +57,12 @@ function SubcategoryList({ subcategories }: SubcategoryListProps) {
 export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const hasLimit  = category.limit !== null && category.limit > 0;
+  // A limit of 0 is a real limit, not a missing one — it takes the with-limit
+  // rendering, matching how PanelSummary groups these rows. (The two used to
+  // disagree: grouped as "has a limit", drawn as "no limit".) Spend against a
+  // zero limit arrives here as an infinite percent, which clamps to a full
+  // red bar below.
+  const hasLimit  = category.limit !== null;
   const rawPct    = category.percent ?? 0;
   const barPct    = Math.min(rawPct, 100);
   const barColor  = hasLimit ? getBarColor(rawPct) : c.borderStrong;
@@ -125,8 +130,10 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
           padding: "1px 6px",
           minWidth: 46,
           textAlign: "right",
-        }}>
-          {rawPct.toFixed(1)}%
+        }}
+          title={Number.isFinite(rawPct) ? undefined : "Wydatek przy zerowym limicie"}
+        >
+          {Number.isFinite(rawPct) ? `${rawPct.toFixed(1)}%` : "∞"}
         </span>
       </div>
 

@@ -196,9 +196,14 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
       catMap.get(tx.categoryId)!.spent += calculateNetAmount(tx);
     }
     for (const cat of catMap.values()) {
-      if (cat.limit !== null && cat.limit > 0) {
-        cat.percent = (cat.spent / cat.limit) * 100;
-      }
+      if (cat.limit === null) continue;              // genuinely no limit set
+      // A limit of 0 ("nothing here this month") is a REAL limit, not the
+      // absence of one — any spend against it is over budget. Guard the
+      // division instead of skipping it, otherwise percent stays null and the
+      // row renders as if the category had no limit at all: grey and barless.
+      cat.percent = cat.limit > 0
+        ? (cat.spent / cat.limit) * 100
+        : (cat.spent > 0 ? Infinity : 0);
     }
     return Array.from(catMap.values());
   }, [monthTx, categories, limitMap]);
