@@ -62,13 +62,38 @@ const STATUS: Record<string, ItemStatus> = {
   ERROR:   "error",
 };
 
+// ── Purchase identity ─────────────────────────────────────────
+// One cart can hold several receipts (scan → add → scan again) plus manually
+// typed lines. This is the answer to "which purchase does this line belong
+// to": the receipt when there is one, otherwise the shop, otherwise the
+// manual bucket. Used both to keep aggregation inside a single purchase and
+// to group the cart visually.
+
+export function purchaseKey(item: CartItem): string {
+  if (item._ocrReceiptId)   return `r:${item._ocrReceiptId}`;
+  if (item._ocrReceiptPath) return `r:${item._ocrReceiptPath}`;
+  const shop = (item.merchant || item._ocrMerchant || "").trim().toLowerCase();
+  return shop ? `s:${shop}` : "manual";
+}
+
+function purchaseLabel(item: CartItem): string {
+  return (item.merchant || item._ocrMerchant || "").trim() || "Bez sklepu";
+}
+
 // ── Cart aggregation ──────────────────────────────────────────
-// Two items are mergeable when they share: subcategoryId, priority,
-// tags (sorted), originalCurrency, fxRate, useVoucher, voucherId.
+// Two items are mergeable when they come from the SAME purchase and share:
+// subcategoryId, priority, tags (sorted), originalCurrency, fxRate,
+// useVoucher, voucherId.
 
 function aggregationKey(item: CartItem): string {
   const tags = [...(item.tags || [])].sort().join(",");
   return [
+    // Purchase first. Without it, a "Nabiał" line from one receipt merged with
+    // a "Nabiał" line from the next: the merged row keeps only the FIRST
+    // item's fields, so the second receipt never got a transaction pointing at
+    // it — it stayed pending and died on its 2h ttl — and its money was
+    // stamped with the first receipt's shop.
+    purchaseKey(item),
     item.subcategoryId,
     item.priority,
     tags,
@@ -196,6 +221,9 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
 
   const [statuses,   setStatuses]   = useState<Record<string, ItemStatus>>({});
   const [saving,     setSaving]     = useState(false);
+  // Per-purchase collapse, only ever rendered when the cart holds more than
+  // one. Expanded by default — nothing hides without a click.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   // ── Cart-level vouchers ────────────────────────────────────
   // Vouchers apply to the WHOLE cart (per decyzja 2); the backend /batch
@@ -345,6 +373,145 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
   const doneItems    = cart.filter(i => statuses[i._cartId] === STATUS.DONE);
   const allDisplay   = [...displayItems, ...doneItems];
 
+  // Group by purchase (receipt / shop). Plain computation, not useMemo — this
+  // sits below an early return, and a cart is a few dozen items at most.
+  const purchaseGroups = (() => {
+    const map = new Map<string, { key: string; label: string; isReceipt: boolean; items: CartItem[] }>();
+    for (const item of allDisplay) {
+      const key = purchaseKey(item);
+      let group = map.get(key);
+      if (!group) {
+        group = { key, label: purchaseLabel(item), isReceipt: key.startsWith("r:"), items: [] };
+        map.set(key, group);
+      }
+      group.items.push(item);
+    }
+    return [...map.values()].map(g => ({
+      ...g,
+      total: g.items.reduce((sum, i) => sum + (i.amount || 0), 0),
+    }));
+  })();
+
+  // A single purchase renders flat, exactly as before — grouping chrome only
+  // earns its space once there's something to tell apart.
+  const isGrouped = purchaseGroups.length > 1;
+
+  function toggleGroup(key: string) {
+    setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  // One cart row. Lifted out of the JSX so the flat and the grouped layout
+  // render identical items. `showShop` is off when grouped — the group header
+  // already names the shop, repeating it on every row is just noise.
+  function renderItem(item: CartItem, showShop: boolean) {
+    const status = statuses[item._cartId] || STATUS.PENDING;
+    const pColor = (PRIORITY_COLORS as Record<number, string>)[item.priority] || c.textSecondary;
+    const itemNet = item.useVoucher && item.voucherAmount > 0
+      ? Math.max(0, item.amount - item.voucherAmount)
+      : item.amount;
+    const shop = (item.merchant || item._ocrMerchant || "").trim();
+
+    return (
+      <div key={item._cartId} style={{
+        background:   c.border,
+        borderRadius: 8,
+        padding:      "10px 12px",
+        marginBottom: 8,
+        opacity:      status === STATUS.DONE ? 0.5 : 1,
+        border:       status === STATUS.ERROR ? `1px solid ${alpha(c.danger, "44")}`
+                      : (item._ocrNeedsReview && status !== STATUS.DONE) ? `1px solid ${alpha(c.warning, "66")}`
+                      : "1px solid transparent",
+      }}>
+        {/* Row 1: name + amount + status icon */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: item.subcategoryId ? c.text : c.danger, fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.subcategoryId
+                ? `${item.categoryName} › ${item.subcategoryName}`
+                : "❓ Wybierz kategorię (✏️)"}
+            </div>
+            {item.description && (
+              <div style={{ color: c.textSecondary, fontSize: 11, marginTop: 2 }}>{item.description}</div>
+            )}
+            {item._product?.name && (
+              <div style={{ color: c.cyanLight, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
+                🏷️ {item._product.name}
+              </div>
+            )}
+            {item._ocrDiscount != null && item._ocrDiscount > 0 && (
+              <div style={{ color: c.warning, fontSize: 10, marginTop: 2 }}>
+                🏷️ rabat −{fmt(item._ocrDiscount)}
+                {item._ocrGross != null && <span style={{ color: c.warningDark }}> (z {fmt(item._ocrGross)})</span>}
+              </div>
+            )}
+            {item._ocrNeedsReview && status !== STATUS.DONE && (
+              <div style={{ color: c.warning, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
+                ⚠️ AI niepewne — sprawdź kategorię (✏️)
+              </div>
+            )}
+            {item._ocrLearned && status !== STATUS.DONE && (
+              <div style={{ color: c.success, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
+                ✓ z Twoich poprawek
+              </div>
+            )}
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+            {item.useVoucher && item.voucherAmount > 0 ? (
+              <>
+                <div style={{ fontSize: 11, color: c.textSecondary, textDecoration: "line-through" }}>{fmt(item.amount)}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(itemNet)}</div>
+                <div style={{ fontSize: 10, color: c.voucher }}>🎫 {fmt(item.voucherAmount)}</div>
+              </>
+            ) : (
+              <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(item.amount)}</div>
+            )}
+            <span style={{ fontSize: 12 }}>
+              {status === STATUS.SAVING ? "⏳" : status === STATUS.DONE ? "✅" : status === STATUS.ERROR ? "❌" : ""}
+            </span>
+          </div>
+        </div>
+
+        {/* Row 2: meta + action buttons */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, color: pColor, fontWeight: 700, border: `1px solid ${pColor}`, borderRadius: 4, padding: "1px 5px" }}>
+              P{item.priority}
+            </span>
+            <span style={{ fontSize: 10, color: c.borderStrong }}>{item.date}</span>
+            {showShop && shop && (
+              <span style={{ fontSize: 10, color: c.textTertiary }} title="Sklep">
+                {item._ocrReceiptId ? "🧾" : "🏬"} {shop}
+              </span>
+            )}
+            {item.originalCurrency !== "PLN" && (
+              <span style={{ fontSize: 10, color: c.textMuted }}>
+                {item.originalAmount} {item.originalCurrency}
+              </span>
+            )}
+          </div>
+          {status !== STATUS.DONE && status !== STATUS.SAVING && (
+            <div style={{ display: "flex", gap: 4 }}>
+              <button
+                onClick={() => handleLoadToForm(item)}
+                title="Edytuj"
+                style={{ background: "none", border: "none", color: c.info, cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
+              >
+                ✏️
+              </button>
+              <button
+                onClick={() => removeFromCart(item._cartId)}
+                title="Usuń z koszyka"
+                style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ── Cart content (shared between desktop and mobile) ──────
 
   const cartContent = (
@@ -356,6 +523,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
           <div style={{ fontWeight: 700, color: c.text, fontSize: 15 }}>🛒 Koszyk</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
             {cart.length} {cart.length === 1 ? "pozycja" : cart.length < 5 ? "pozycje" : "pozycji"}
+            {isGrouped && ` · ${purchaseGroups.length} ${purchaseGroups.length < 5 ? "zakupy" : "zakupów"}`}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -379,105 +547,32 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
       {/* Item list — capped height with scroll on desktop (OCR can add
           15+ items at once); mobile scrolls the page naturally */}
       <div className="cart-item-list" style={{ marginBottom: 12 }}>
-        {allDisplay.map(item => {
-          const status = statuses[item._cartId] || STATUS.PENDING;
-          const pColor = (PRIORITY_COLORS as Record<number, string>)[item.priority] || c.textSecondary;
-          const itemNet = item.useVoucher && item.voucherAmount > 0
-            ? Math.max(0, item.amount - item.voucherAmount)
-            : item.amount;
+        {!isGrouped && allDisplay.map(item => renderItem(item, true))}
 
+        {isGrouped && purchaseGroups.map(group => {
+          const isCollapsed = !!collapsedGroups[group.key];
           return (
-            <div key={item._cartId} style={{
-              background:   c.border,
-              borderRadius: 8,
-              padding:      "10px 12px",
-              marginBottom: 8,
-              opacity:      status === STATUS.DONE ? 0.5 : 1,
-              border:       status === STATUS.ERROR ? `1px solid ${alpha(c.danger, "44")}`
-                            : (item._ocrNeedsReview && status !== STATUS.DONE) ? `1px solid ${alpha(c.warning, "66")}`
-                            : "1px solid transparent",
-            }}>
-              {/* Row 1: name + amount + status icon */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: item.subcategoryId ? c.text : c.danger, fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.subcategoryId
-                      ? `${item.categoryName} › ${item.subcategoryName}`
-                      : "❓ Wybierz kategorię (✏️)"}
-                  </div>
-                  {item.description && (
-                    <div style={{ color: c.textSecondary, fontSize: 11, marginTop: 2 }}>{item.description}</div>
-                  )}
-                  {item._product?.name && (
-                    <div style={{ color: c.cyanLight, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
-                      🏷️ {item._product.name}
-                    </div>
-                  )}
-                  {item._ocrDiscount != null && item._ocrDiscount > 0 && (
-                    <div style={{ color: c.warning, fontSize: 10, marginTop: 2 }}>
-                      🏷️ rabat −{fmt(item._ocrDiscount)}
-                      {item._ocrGross != null && <span style={{ color: c.warningDark }}> (z {fmt(item._ocrGross)})</span>}
-                    </div>
-                  )}
-                  {item._ocrNeedsReview && status !== STATUS.DONE && (
-                    <div style={{ color: c.warning, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
-                      ⚠️ AI niepewne — sprawdź kategorię (✏️)
-                    </div>
-                  )}
-                  {item._ocrLearned && status !== STATUS.DONE && (
-                    <div style={{ color: c.success, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
-                      ✓ z Twoich poprawek
-                    </div>
-                  )}
-                </div>
-                <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
-                  {item.useVoucher && item.voucherAmount > 0 ? (
-                    <>
-                      <div style={{ fontSize: 11, color: c.textSecondary, textDecoration: "line-through" }}>{fmt(item.amount)}</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(itemNet)}</div>
-                      <div style={{ fontSize: 10, color: c.voucher }}>🎫 {fmt(item.voucherAmount)}</div>
-                    </>
-                  ) : (
-                    <div style={{ fontSize: 14, fontWeight: 700, color: c.success }}>{fmt(item.amount)}</div>
-                  )}
-                  <span style={{ fontSize: 12 }}>
-                    {status === STATUS.SAVING ? "⏳" : status === STATUS.DONE ? "✅" : status === STATUS.ERROR ? "❌" : ""}
-                  </span>
-                </div>
-              </div>
-
-              {/* Row 2: meta + action buttons */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <span style={{ fontSize: 10, color: pColor, fontWeight: 700, border: `1px solid ${pColor}`, borderRadius: 4, padding: "1px 5px" }}>
-                    P{item.priority}
-                  </span>
-                  <span style={{ fontSize: 10, color: c.borderStrong }}>{item.date}</span>
-                  {item.originalCurrency !== "PLN" && (
-                    <span style={{ fontSize: 10, color: c.textMuted }}>
-                      {item.originalAmount} {item.originalCurrency}
-                    </span>
-                  )}
-                </div>
-                {status !== STATUS.DONE && status !== STATUS.SAVING && (
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <button
-                      onClick={() => handleLoadToForm(item)}
-                      title="Edytuj"
-                      style={{ background: "none", border: "none", color: c.info, cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => removeFromCart(item._cartId)}
-                      title="Usuń z koszyka"
-                      style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-              </div>
+            <div key={group.key} style={{ marginBottom: 10 }}>
+              <button
+                onClick={() => toggleGroup(group.key)}
+                aria-expanded={!isCollapsed}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 8,
+                  background: c.bgDeepest, border: `1px solid ${c.border}`,
+                  borderRadius: 8, padding: "8px 10px", marginBottom: isCollapsed ? 0 : 8,
+                  cursor: "pointer", textAlign: "left", font: "inherit",
+                }}
+              >
+                <span style={{ color: c.textMuted, fontSize: 10 }}>{isCollapsed ? "▶" : "▼"}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {group.isReceipt ? "🧾" : "🏬"} {group.label}
+                </span>
+                <span style={{ marginLeft: "auto", fontSize: 11, color: c.textSecondary, whiteSpace: "nowrap" }}>
+                  {group.items.length} poz. ·{" "}
+                  <strong style={{ color: c.success }}>{fmt(group.total)}</strong>
+                </span>
+              </button>
+              {!isCollapsed && group.items.map(item => renderItem(item, false))}
             </div>
           );
         })}
