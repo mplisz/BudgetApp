@@ -27,7 +27,7 @@
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const { transactionsContainer, vouchersContainer, monthsContainer, receiptsContainer, settingsContainer, productsContainer } = require("../cosmos");
+const { transactionsContainer, vouchersContainer, monthsContainer, receiptsContainer, settingsContainer, productsContainer, categoriesContainer } = require("../cosmos");
 const { requireAuth }                                                 = require("../middleware/auth");
 const {
   generateId, readItem, readItemWithEtag,
@@ -46,6 +46,7 @@ router.use(requireAuth);
 const { cleanMerchant, merchantExists, rememberMerchant, rememberMerchantNip } = require("../utils/merchant");
 const { rememberProducts } = require("../utils/productCatalog");
 const { resolveTransferTarget, buildReturnTransferDoc } = require("../utils/transferCategory");
+const { resolveTxType, applyTxType } = require("../utils/categoryType");
 
 
 // ── Schemas ───────────────────────────────────────────────────
@@ -368,6 +369,9 @@ router.post("/", async (req, res) => {
     const newId  = `tx_${familyId}_${data.date.replace(/-/g,"")}_${generateId(data.subcategoryName)}_${Date.now()}`;
     const amount = roundMoney(data.amount);
 
+    // The category owns the type — never store the client's word for it.
+    const typed = await applyTxType(categoriesContainer, familyId, data);
+
     // Resolve voucher allocations: server-trusts amounts, recomputes percent
     // vouchers against the gross amount, and enforces the store-match rule.
     // getVoucherAllocations reads the new array OR falls back to legacy scalars.
@@ -377,7 +381,7 @@ router.post("/", async (req, res) => {
     if (!resolved.ok) return res.status(400).json({ error: resolved.error });
 
     const newTx = withVoucherFields(
-      scaffoldTx(data, newId, familyId, req), amount, resolved.allocations,
+      scaffoldTx(typed, newId, familyId, req), amount, resolved.allocations,
     );
 
     // ── STEP 1: Create the transaction ────────────────────────
@@ -481,9 +485,17 @@ router.post("/batch", async (req, res) => {
     // 2. Proportional split across the resulting txs.
     const perTx = splitVouchersAcrossTxs(vouchers, items.map(t => ({ amount: roundMoney(t.amount) })));
 
-    // 3. Build + create tx docs.
+    // 3. Build + create tx docs. Types come from the category tree, with one
+    //    cache across the batch — a 40-line receipt then costs one read per
+    //    DISTINCT subcategory, not one per line.
+    const typeCache = new Map();
+    const typedItems = [];
+    for (const data of items) {
+      typedItems.push(await applyTxType(categoriesContainer, familyId, data, typeCache));
+    }
+
     const stamp = Date.now();
-    const docs = items.map((data, i) => withVoucherFields(
+    const docs = typedItems.map((data, i) => withVoucherFields(
       scaffoldTx(data, `tx_${familyId}_${data.budgetMonth.replace("-","")}_${stamp}_${i}`, familyId, req),
       roundMoney(data.amount),
       perTx[i] || [],
@@ -585,6 +597,19 @@ router.patch("/:id", async (req, res) => {
       updatedBy:   req.user.name || req.user.email,
       updatedById: req.user.id,
     };
+
+    // Re-derive the type from the category on EVERY edit, not just when the
+    // category changes: that way a record damaged by a client which sent the
+    // wrong type repairs itself the next time it is touched.
+    updated.type = await resolveTxType(
+      categoriesContainer,
+      familyId,
+      {
+        subcategoryId: patchFields.subcategoryId ?? existing.subcategoryId,
+        categoryId:    patchFields.categoryId    ?? existing.categoryId,
+      },
+      patchFields.type ?? existing.type ?? "EXPENSE",
+    );
 
     // ── Voucher allocations (diff) ────────────────────────────
     const amount         = roundMoney(patchFields.amount ?? existing.amount);
