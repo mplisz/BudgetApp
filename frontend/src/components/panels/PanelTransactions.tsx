@@ -79,10 +79,20 @@ export default function PanelTransactions() {
   const [confirmLinkedModal, setConfirmLinkedModal] = useState<LinkedModal>({ isOpen: false, txId: null });
   const [returnTarget,       setReturnTarget]       = useState<Transaction | null>(null);
   const [grouped,            setGrouped]            = useState(false);
-  const isFirstLoad                                 = useMonthLoad(activeBudgetMonth, loadTransactions, () => {
+  const isLoadingMonth                              = useMonthLoad(activeBudgetMonth, loadTransactions, () => {
                                                         set("dateFrom", null);
                                                         set("dateTo", null);
                                                       });
+
+  // Re-entering the panel you are already on remounts it and refetches the
+  // same month. Everything below is filtered to activeBudgetMonth by value, so
+  // showing what is already in memory while that refresh runs is safe — only a
+  // month we genuinely hold nothing for needs the skeleton.
+  const hasMonthData = useMemo(
+    () => transactions.some(tx => tx.budgetMonth === activeBudgetMonth),
+    [transactions, activeBudgetMonth],
+  );
+  const showSkeleton = isLoadingMonth && !hasMonthData;
   const isMobile = useIsMobile();
 
 
@@ -287,7 +297,7 @@ export default function PanelTransactions() {
         <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 }}>🧾 Wydatki</div>
         <div style={{ fontSize: 13, color: c.textSecondary }}>
           {activeBudgetMonth} ·{" "}
-          {isFirstLoad ? (
+          {showSkeleton ? (
             <span style={{ color: c.textMuted }}>ładowanie…</span>
           ) : (
             <>
@@ -308,7 +318,7 @@ export default function PanelTransactions() {
       </div>
 
       {/* Filters */}
-      {!isFirstLoad && (
+      {!showSkeleton && (
         <div style={{ background: c.bgDeepest, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
@@ -486,20 +496,20 @@ export default function PanelTransactions() {
         </div>
       )}
 
-      {isFirstLoad && (
+      {showSkeleton && (
         <div style={s.card}>
           <SkeletonListRow columns={6} count={8} height={48} />
         </div>
       )}
 
-      {!isFirstLoad && filtered.length === 0 && (
+      {!showSkeleton && filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: c.borderStrong }}>
           Brak transakcji{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
         </div>
       )}
 
       {/* Flat list */}
-      {!isFirstLoad && !grouped && filtered.length > 0 && (
+      {!showSkeleton && !grouped && filtered.length > 0 && (
         <>
           <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {flatPage} z {flatTotalPages}
@@ -550,7 +560,7 @@ export default function PanelTransactions() {
         )}
 
       {/* Grouped view */}
-      {!isFirstLoad && grouped && groups.length > 0 && (
+      {!showSkeleton && grouped && groups.length > 0 && (
         <>
           <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {groups.length} grup · strona {groupPage} z {groupTotalPages}
@@ -621,7 +631,7 @@ export default function PanelTransactions() {
       )}
 
       {/* Totals row */}
-      {!isFirstLoad && filtered.length > 0 && (
+      {!showSkeleton && filtered.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "12px 4px", gap: 24 }}>
           {totalReturnedSum > 0 && (
             <span style={{ fontSize: 12, color: c.successLight }}>

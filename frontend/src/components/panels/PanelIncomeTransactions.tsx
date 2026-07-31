@@ -242,11 +242,23 @@ export default function PanelIncomeTransactions() {
 
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; txId: string | null }>({ isOpen: false, txId: null });
 
-  // Per-month load + isFirstLoad; reset month-specific date filters on change.
-  const isFirstLoad = useMonthLoad(activeBudgetMonth, loadTransactions, () => {
+  // Per-month load; reset month-specific date filters on change.
+  const isLoadingMonth = useMonthLoad(activeBudgetMonth, loadTransactions, () => {
     set("dateFrom", null);
     set("dateTo", null);
   });
+
+  // Re-entering the panel you are already on remounts it and refetches the
+  // same month. Everything below is filtered to activeBudgetMonth by value, so
+  // whatever is already in memory for it is safe to show while that refresh
+  // runs — blanking the screen would buy nothing. Only a month we genuinely
+  // hold nothing for gets the skeleton. (Before the list was month-scoped this
+  // shortcut would have re-opened the "June rows under August" bug.)
+  const hasMonthData = useMemo(
+    () => transactions.some(tx => tx.budgetMonth === activeBudgetMonth),
+    [transactions, activeBudgetMonth],
+  );
+  const showSkeleton = isLoadingMonth && !hasMonthData;
 
   // Scoped to the active month by VALUE, not by trusting that the shared
   // `transactions` array happens to hold the right one. It is replaced
@@ -308,7 +320,7 @@ export default function PanelIncomeTransactions() {
       {/* Header */}
       <div style={{ fontSize: 13, color: c.textSecondary }}>
         {activeBudgetMonth} ·{" "}
-        {isFirstLoad ? (
+        {showSkeleton ? (
           <span style={{ color: c.textMuted }}>ładowanie…</span>
         ) : (
           <>
@@ -322,7 +334,7 @@ export default function PanelIncomeTransactions() {
       </div>
 
       {/* Filters — hidden while the month's data is still loading */}
-      {!isFirstLoad && (
+      {!showSkeleton && (
         <div style={{ background: c.bgDeepest, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
           <div style={s.filterRow}>
 
@@ -369,7 +381,7 @@ export default function PanelIncomeTransactions() {
           is shared state, so rendering mid-load puts the PREVIOUS month's rows
           under the new month's header (same guard the Wydatki panel already
           had; this one only gated the header and the filters). */}
-      {isFirstLoad ? (
+      {showSkeleton ? (
         <div style={s.card}>
           <SkeletonListRow columns={6} count={6} height={48} />
         </div>
