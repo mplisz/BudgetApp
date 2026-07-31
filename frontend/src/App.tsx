@@ -175,7 +175,13 @@ function AuthenticatedLayout() {
               when the user navigates to a different panel. */}
           <ErrorBoundary name="Panel" key={pathname}>
             <Suspense fallback={<PanelLoader />}>
-              <Outlet />
+              {/* Hold the panel back until ?m= is resolved. Nav links carry no
+                  month, so for one tick budgetMonth falls back to the CALENDAR
+                  month — and a panel mounted in that tick fires a load for the
+                  wrong month, whose response then lands in shared state under
+                  the corrected month's header. The effect above fills ?m= on
+                  the same commit, so this costs a single frame. */}
+              {isExplicit ? <Outlet /> : <PanelLoader />}
             </Suspense>
           </ErrorBoundary>
         </div>

@@ -20,6 +20,7 @@ import { s }               from "./transactionComponents/txStyles";
 import { EditIncomeModal }  from "./transactionComponents/EditIncomeModal";
 import { usePagination }   from "../../hooks/usePagination";
 import { Pagination }      from "../ui/Pagination";
+import { SkeletonListRow } from "../ui/Skeleton";
 import { CategoryMultiSelect } from "../ui/CategoryMultiSelect";
 import { useFilters }      from "../../hooks/useFilters";
 import { useMonthLoad } from "../../hooks/useMonthLoad";
@@ -358,8 +359,15 @@ export default function PanelIncomeTransactions() {
           </div>
         </div>
       )}
-      {/* Table */}
-      {filtered.length === 0 ? (
+      {/* Table — withheld until THIS month's data has arrived. `transactions`
+          is shared state, so rendering mid-load puts the PREVIOUS month's rows
+          under the new month's header (same guard the Wydatki panel already
+          had; this one only gated the header and the filters). */}
+      {isFirstLoad ? (
+        <div style={s.card}>
+          <SkeletonListRow columns={6} count={6} height={48} />
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 0", color: c.borderStrong }}>
           Brak wpływów{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
         </div>
