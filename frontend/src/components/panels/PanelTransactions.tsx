@@ -93,6 +93,9 @@ export default function PanelTransactions() {
 
   const enriched = useMemo<Transaction[]>(() =>
     transactions
+      // Scoped to the active month by VALUE, not by trusting that the shared
+      // array holds the right one — same guard as the Wpływy panel.
+      .filter(tx => tx.budgetMonth === activeBudgetMonth)
       .filter(tx => tx.type !== "INCOME" && tx.type !== "TRANSFER")
       .map(tx => {
         // Net of ALL cash returns (incl. cross-month) so the header total

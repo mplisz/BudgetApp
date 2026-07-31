@@ -248,8 +248,14 @@ export default function PanelIncomeTransactions() {
     set("dateTo", null);
   });
 
+  // Scoped to the active month by VALUE, not by trusting that the shared
+  // `transactions` array happens to hold the right one. It is replaced
+  // wholesale per month, so anything else in it (a month you were just
+  // viewing, a transfer loaded for another month by the returns flow) would
+  // otherwise render straight under this month's header.
   const enriched = useMemo(() =>
     transactions
+      .filter(tx => tx.budgetMonth === activeBudgetMonth)
       .filter(tx => tx.type === "INCOME" || tx.type === "TRANSFER")
       .map(tx => ({
         ...tx,
@@ -257,7 +263,7 @@ export default function PanelIncomeTransactions() {
           .map(id => tags.find(t => t.id === id)?.name)
           .filter((n): n is string => Boolean(n)),
       })),
-    [transactions, tags]
+    [transactions, tags, activeBudgetMonth]
   );
 
   const uniqueCats = useMemo(() => {
