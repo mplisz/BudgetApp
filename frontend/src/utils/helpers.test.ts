@@ -13,9 +13,32 @@ import {
   budgetMonthAfter,
   monthLabel,
   plural,
+  autoTagsExpired,
   getActiveLimit,
   recurringActiveForMonth,
 } from "./helpers";
+
+describe("autoTagsExpired", () => {
+  it("never expires without a date", () => {
+    expect(autoTagsExpired(null, "2026-07-30")).toBe(false);
+    expect(autoTagsExpired(undefined, "2026-07-30")).toBe(false);
+    expect(autoTagsExpired("", "2026-07-30")).toBe(false);
+  });
+  it("still applies on the last day of the window", () => {
+    expect(autoTagsExpired("2026-07-29", "2026-07-29")).toBe(false);
+  });
+  it("expires the day after", () => {
+    expect(autoTagsExpired("2026-07-29", "2026-07-30")).toBe(true);
+  });
+  it("is not expired before the window closes", () => {
+    expect(autoTagsExpired("2026-07-29", "2026-07-01")).toBe(false);
+  });
+  it("compares across month and year boundaries", () => {
+    expect(autoTagsExpired("2026-07-31", "2026-08-01")).toBe(true);
+    expect(autoTagsExpired("2026-12-31", "2027-01-01")).toBe(true);
+    expect(autoTagsExpired("2027-01-01", "2026-12-31")).toBe(false);
+  });
+});
 
 describe("plural", () => {
   const poz = (n: number) => plural(n, "pozycja", "pozycje", "pozycji");

@@ -25,6 +25,7 @@ import { useCurrencyConverter } from "../../hooks/useCurrencyConverter";
 import { useCurrencyManager }   from "../../hooks/useCurrencyManager";
 import { TagMultiSelect } from "../ui/TagMultiSelect";
 import { CartItemEditorModal } from "./transactionComponents/CartItemEditorModal";
+import { useAutoTags } from "../../hooks/useAutoTags";
 import type { CartEditPayload } from "./transactionComponents/CartItemEditor";
 
 // ── Cart ID generator ─────────────────────────────────────────
@@ -80,18 +81,11 @@ const OCR_MAX_FILE_BYTES = 5 * 1024 * 1024;
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelExpenses() {
-  const { cart, setCart, categories, settings, tags } = useAppContext();
-  // Tags pre-selected on every new expense ("holiday mode"). Archived tags are
-  // dropped — a tag retired mid-trip must not keep attaching itself.
-  const autoTagIds = useMemo<string[]>(() => {
-    const ids = Array.isArray(settings?.autoTagIds) ? settings!.autoTagIds! : [];
-    return ids.filter(id => tags.some(t => t.id === id && !t.isArchived));
-  }, [settings, tags]);
-  const autoTagNames = useMemo(
-    () => autoTagIds.map(id => tags.find(t => t.id === id)).filter(Boolean)
-                    .map(t => `${t!.icon ?? ""} ${t!.name}`.trim()),
-    [autoTagIds, tags],
-  );
+  const { cart, setCart, categories } = useAppContext();
+  // Holiday mode. Read through the hook, never off `settings` directly — it is
+  // what applies the expiry date and drops archived tags.
+  const { ids: autoTagIds, tags: autoTagList, until: autoTagUntil } = useAutoTags();
+  const autoTagNames = autoTagList.map(t => `${t.icon ?? ""} ${t.name}`.trim());
   const { addTransaction, isSaving, loadTransactions  } = useTransactions();
   const { isActiveMonthClosed, activeBudgetMonth, isFutureMonth } = useMonthStatus();
   const api = useApi();
@@ -447,6 +441,7 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
             }}>
               <span>🏷️ Każdy nowy wydatek dostaje:</span>
               <strong>{autoTagNames.join(", ")}</strong>
+              {autoTagUntil && <span style={{ color: c.textMuted }}>· do {autoTagUntil}</span>}
               <span style={{ color: c.textMuted }}>· możesz odznaczyć przy pojedynczym wydatku</span>
             </div>
           )}

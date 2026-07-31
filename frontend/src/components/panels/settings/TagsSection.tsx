@@ -11,7 +11,9 @@ import { ConfirmModal }      from "../../ui/ConfirmModal";
 import { ArchiveToggleButton } from "./ArchiveToggleButton";
 import { useTagManager }     from "../../../hooks/useTagManager";
 import { useSettings }       from "../../../hooks/useSettings";
+import { useAutoTags }       from "../../../hooks/useAutoTags";
 import { TagMultiSelect }    from "../../ui/TagMultiSelect";
+import { AppDatePicker, fromYMD, toYMD } from "../../ui/AppDatePicker";
 import { EditableLabel }     from "../../ui/EditableLabel";
 import type { Tag } from "../../../types/appContext";
 
@@ -34,20 +36,28 @@ export function TagsSection() {
   // the whole point is being able to drop the tag on the one purchase that
   // doesn't belong, which only works if it is visible in the form first.
   const { settings, isSaving: isSavingSettings, updateSettings } = useSettings();
-  const [autoTags, setAutoTags] = useState<string[]>([]);
+  const { tags: liveAutoTags, until: savedUntil, isExpired, isConfigured } = useAutoTags();
+
+  const [autoTags,  setAutoTags]  = useState<string[]>([]);
+  const [autoUntil, setAutoUntil] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!settings) return;
     setAutoTags(Array.isArray(settings.autoTagIds) ? settings.autoTagIds : []);
+    setAutoUntil(fromYMD((settings.autoTagUntil as string | null) ?? null));
   }, [settings]);
 
   const savedAutoTags = Array.isArray(settings?.autoTagIds) ? settings!.autoTagIds! : [];
   const autoTagsDirty =
     autoTags.length !== savedAutoTags.length ||
-    autoTags.some(id => !savedAutoTags.includes(id));
+    autoTags.some(id => !savedAutoTags.includes(id)) ||
+    (autoUntil ? toYMD(autoUntil) : null) !== savedUntil;
+
+  function saveAutoTags(ids: string[], until: Date | null) {
+    updateSettings({ autoTagIds: ids, autoTagUntil: ids.length && until ? toYMD(until) : null });
+  }
 
   const archivedTags = allTags.filter(t => t.isArchived);
-  const activeAutoTags = allTags.filter(t => savedAutoTags.includes(t.id));
 
   function confirmArchive(tag: Tag) {
     setModalConfig({
@@ -148,25 +158,31 @@ export function TagsSection() {
             odznaczyć przed zapisem. Zostaw puste, żeby wyłączyć.
           </div>
 
-          {activeAutoTags.length > 0 && (
+          {isConfigured && (
             <div style={{
               display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-              background: alpha(c.info, "11"), border: `1px solid ${alpha(c.info, "44")}`,
+              background: alpha(isExpired ? c.textMuted : c.info, "11"),
+              border: `1px solid ${alpha(isExpired ? c.textMuted : c.info, "44")}`,
               borderRadius: 8, padding: "8px 12px", marginBottom: 10,
-              fontSize: 12, color: c.info,
+              fontSize: 12, color: isExpired ? c.textMuted : c.info,
             }}>
-              <span>🏷️ Aktywne:</span>
-              <strong>{activeAutoTags.map(t => `${t.icon ?? ""} ${t.name}`.trim()).join(", ")}</strong>
+              <span>{isExpired ? "⌛ Wygasł:" : "🏷️ Aktywne:"}</span>
+              <strong>{liveAutoTags.map(t => `${t.icon ?? ""} ${t.name}`.trim()).join(", ")}</strong>
+              {savedUntil && (
+                <span style={{ color: c.textMuted }}>
+                  {isExpired ? `— skończyło się ${savedUntil}` : `— do ${savedUntil} włącznie`}
+                </span>
+              )}
               <button
-                onClick={() => { setAutoTags([]); updateSettings({ autoTagIds: [] }); }}
+                onClick={() => { setAutoTags([]); setAutoUntil(null); saveAutoTags([], null); }}
                 disabled={isSavingSettings}
                 style={{
-                  marginLeft: "auto", background: "transparent", border: `1px solid ${alpha(c.info, "55")}`,
-                  color: c.info, borderRadius: 6, padding: "2px 10px", fontSize: 11,
+                  marginLeft: "auto", background: "transparent", border: `1px solid ${c.borderStrong}`,
+                  color: c.textSecondary, borderRadius: 6, padding: "2px 10px", fontSize: 11,
                   fontWeight: 700, cursor: isSavingSettings ? "not-allowed" : "pointer",
                 }}
               >
-                Wyłącz
+                Wyczyść
               </button>
             </div>
           )}
@@ -177,9 +193,33 @@ export function TagsSection() {
             placeholder="Wybierz tagi doklejane do nowych wydatków…"
           />
 
+          {autoTags.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Doklejaj do:
+              </span>
+              <AppDatePicker
+                value={autoUntil}
+                onChange={d => setAutoUntil(d)}
+                maxDate={null}
+                style={{ width: "auto", minWidth: 150 }}
+              />
+              {autoUntil
+                ? (
+                  <button
+                    onClick={() => setAutoUntil(null)}
+                    style={{ background: "transparent", border: "none", color: c.textMuted, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    bez daty końca
+                  </button>
+                )
+                : <span style={{ fontSize: 11, color: c.textMuted }}>puste = dopóki nie wyczyścisz ręcznie</span>}
+            </div>
+          )}
+
           {autoTagsDirty && (
             <button
-              onClick={() => updateSettings({ autoTagIds: autoTags })}
+              onClick={() => saveAutoTags(autoTags, autoUntil)}
               disabled={isSavingSettings}
               style={{ ...s.btn(), width: "auto", padding: "8px 16px", marginTop: 10, opacity: isSavingSettings ? 0.4 : 1 }}
             >

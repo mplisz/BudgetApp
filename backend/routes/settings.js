@@ -70,6 +70,13 @@ const SettingsSchema = z.object({
   // Tags pre-selected on every new expense until cleared (holiday mode).
   // Capped low on purpose: this is a temporary switch, not a tagging policy.
   autoTagIds: z.array(z.string().min(1).max(200)).max(5).optional(),
+  // Last day the auto-tags still apply (inclusive). null = no expiry. One date
+  // for the whole set: a window where only SOME purchases belong to the tag
+  // isn't an auto-tag case in the first place, so per-tag dates buy nothing.
+  autoTagUntil: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Nieprawidłowy format autoTagUntil (YYYY-MM-DD)")
+    .nullable()
+    .optional(),
   // First month visible in MonthNavigator — blocks navigating before this month
   appStartMonth: z.string()
     .regex(BUDGET_MONTH_REGEX, "Nieprawidłowy format appStartMonth (YYYY-MM)")
@@ -95,6 +102,7 @@ const SettingsSchema = z.object({
        || data.currencies
        || data.appStartMonth !== undefined
        || data.autoTagIds !== undefined
+       || data.autoTagUntil !== undefined
        || data.voucherExpiryWarningDays !== undefined
        || data.safetyNet !== undefined
        || data.notifyDaysBefore !== undefined
@@ -132,6 +140,7 @@ const DEFAULT_SETTINGS = {
   notifyDaysBefore: 3,
   appStartMonth: null,  // null = no restriction
   autoTagIds:    [],    // empty = no tag pre-selected on new expenses
+  autoTagUntil:  null,  // null = the auto-tag window never closes on its own
   safetyNet:     null,  // null = user hasn't configured the panel yet
   depositSubcategoryId: null,          // null = Bottle Deposits panel not configured
   returnTransferSubcategoryId: null,   // null = transfers on returns not configured
@@ -171,6 +180,7 @@ router.get('/', async (req, res) => {
     // Backfill missing fields for old documents
     if (!("appStartMonth"            in doc)) doc.appStartMonth = null;
     if (!("autoTagIds"               in doc)) doc.autoTagIds = [];
+    if (!("autoTagUntil"             in doc)) doc.autoTagUntil = null;
     if (!("voucherExpiryWarningDays" in doc)) doc.voucherExpiryWarningDays = 14;
     if (!("safetyNet"                in doc)) doc.safetyNet = null;
     if (!("luxmed"    in doc)) doc.luxmed    = { maxPercent: 90, maxTotal: 500 };
@@ -238,6 +248,9 @@ router.patch('/', async (req, res) => {
       autoTagIds: parsed.data.autoTagIds !== undefined
         ? parsed.data.autoTagIds
         : (existing.autoTagIds ?? []),
+      autoTagUntil: parsed.data.autoTagUntil !== undefined
+        ? parsed.data.autoTagUntil
+        : (existing.autoTagUntil ?? null),
       // Safety net: shallow merge so partial patches don't wipe other fields.
       // Frontend currently always sends the full object, but be defensive.
       safetyNet: parsed.data.safetyNet !== undefined

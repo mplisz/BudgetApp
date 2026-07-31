@@ -14,6 +14,14 @@ export function monthLabel(ym) {
   return name ? `${name} ${String(ym).split("-")[0]}` : String(ym);
 }
 
+// Has an auto-tag window closed? `untilYMD` is the LAST day the tags still
+// apply (inclusive), so the trip's final day still tags. A missing date means
+// the window never closes. Lexicographic compare is safe on "YYYY-MM-DD".
+export function autoTagsExpired(untilYMD, todayYMD) {
+  if (!untilYMD) return false;
+  return String(todayYMD) > String(untilYMD);
+}
+
 // Polish plural: 1 → `one`, 2–4 → `few`, everything else → `many`.
 // The teens are the catch — 12–14 take the `many` form ("12 pozycji", not
 // "12 pozycje") — so this is NOT the `n < 5` shortcut it is usually written
