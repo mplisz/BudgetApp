@@ -39,7 +39,7 @@ import { MonthStatusButton } from "./components/layout/MonthStatusButton";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { PANEL_META, MONTH_SELECTOR_PANELS, MONTH_TITLE_PANELS } from "./data/constants";
 import { panelIdFromPath, getDefaultPath } from "./data/routes";
-import { useMonthFromUrl, useMonthGuard } from "./hooks/useMonthFromUrl";
+import { useMonthFromUrl, useMonthGuard, currentMonthYMD } from "./hooks/useMonthFromUrl";
 import { PanelLoader }   from "./components/ui/PanelLoader";
 import { useAppContext } from "./context/AppContext";
 
@@ -111,6 +111,10 @@ function AuthenticatedLayout() {
       m++;
       if (m > 11) { m = 0; y++; }
     }
+    // Every month in range closed. The panel below waits for ?m= to resolve,
+    // so bailing out here would leave it on the loader forever — land on the
+    // calendar month instead and let the closed-month banner explain itself.
+    setBudgetMonth(currentMonthYMD(), { replace: true });
   }, [isExplicit, closedMonths, setBudgetMonth]);
   
   return (

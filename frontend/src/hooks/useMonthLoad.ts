@@ -22,8 +22,12 @@ export function useMonthLoad(
   useEffect(() => {
     setLoadedMonth(null);
     onMonthChange?.();
-    // Promise.resolve tolerates loaders that don't return a promise.
-    Promise.resolve(load(activeBudgetMonth)).then(() => setLoadedMonth(activeBudgetMonth));
+    // Promise.resolve tolerates loaders that don't return a promise. The catch
+    // matters because panels hide their whole list behind this flag: a load
+    // that rejects must still clear it, or the skeleton stays up forever.
+    Promise.resolve(load(activeBudgetMonth))
+      .catch(() => {})
+      .then(() => setLoadedMonth(activeBudgetMonth));
     // Keyed only on the month — we deliberately ignore identity changes of
     // load/onMonthChange so we don't reload on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
