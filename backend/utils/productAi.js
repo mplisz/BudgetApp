@@ -2,7 +2,7 @@
 // File: backend/utils/productAi.js
 // THE single definition of "what a product is" for the AI — the shared
 // schema (ProductSchema) and prompt fragment (PRODUCT_RULES) that
-// routes/ocr.js injects into the live receipt scan (rule 23).
+// routes/ocr.js injects into the live receipt scan (rule 26).
 //
 // Also owns the lazy Azure OpenAI client used by the scan.
 // ============================================================

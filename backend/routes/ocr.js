@@ -180,7 +180,9 @@ async function mistralOcrExtract(buffer, mime = "image/jpeg") {
 
 // ── Prompt builder ────────────────────────────────────────────
 
-function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "", trackedProductNames = []) {
+// `scanDate` ("YYYY-MM-DD") is injected because the model has no clock of its
+// own — without it, "fall back to today" would just make it invent a date.
+function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "", trackedProductNames = [], scanDate = "") {
   // categoryTree: [{ name, subcategories: [name, ...] }, ...]
   const catLines = categoryTree
     .map(c => `- ${c.name}: ${c.subcategories.join(", ") || "(brak podkategorii)"}`)
@@ -188,7 +190,7 @@ function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "
   const merchantLine = knownMerchants.length
     ? knownMerchants.join(", ")
     : "(brak zapisanych sklepów)";
-  // The user's personal "inflation basket" — see rule 23. Without any
+  // The user's personal "inflation basket" — see rule 26. Without any
   // tracked products, the whole product feature is simply off.
   const trackedSection = trackedProductNames.length
     ? `\nŚLEDZONE PRODUKTY:\n${trackedProductNames.join(", ")}\n`
@@ -196,11 +198,11 @@ function buildSystemPrompt(categoryTree, knownMerchants = [], learnedSection = "
 
   return `Jesteś asystentem OCR analizującym zdjęcia paragonów fiskalnych (zwykle polskich, ale możliwe też zagraniczne).
 
-
 ZADANIE: Wyodrębnij pozycje zakupowe z paragonu i zwróć je jako JSON.
 Paragon otrzymasz jako odczytany tekst (markdown z OCR) LUB jako zdjęcie/fragmenty zdjęcia.
+DATA SKANOWANIA: ${scanDate} — paragon pochodzi z przeszłości, nigdy z przyszłości.
 
-ZASADY SCALANIA RABATÓW (KRYTYCZNE):
+═══ A. RABATY I KOREKTY (KRYTYCZNE) ═══
 1. Korekta to linia, która OBNIŻA cenę innej pozycji — rozpoznawaj ją po FUNKCJI, nie po
    konkretnym słowie: ujemna kwota, znak "-" na początku, lub wiersz odnoszący się do
    pozycji powyżej/poniżej. Słowa-klucze (lista PRZYKŁADOWA, nie wyczerpująca, różne języki):
@@ -219,13 +221,10 @@ ZASADY SCALANIA RABATÓW (KRYTYCZNE):
 5. Pole "grossAmount" to suma przed rabatem, "discountAmount" to wartość rabatu.
    Gdy nie było rabatu — pomiń oba pola lub ustaw discountAmount: 0.
 6. W polu "mergeNote" krótko opisz scalenie. Gdy nie było scalania — null.
-7. Suma wszystkich "amount" MUSI zgadzać się z finalnym totalem paragonu, niezależnie od
-   tego, jak jest podpisany ("Do zapłaty", "Suma", "Celkem", "K úhradě", "Gesamt",
-   "Summe", "Total", "À payer", ...). Jeśli się nie zgadza, dodaj wyjaśnienie w "warning".
-8. Niektóre sklepy drukują rabaty w OSOBNYM BLOKU na dole paragonu (np. polskie
+7. Niektóre sklepy drukują rabaty w OSOBNYM BLOKU na dole paragonu (np. polskie
    "OPUST SK. NAZWA -X,XX", ale też analogiczne bloki w innych sieciach/krajach).
    Przypisz je do właściwych pozycji tak samo jak rabaty inline.
-8a. RABAT OGÓLNY — korekta, której NIE DA SIĘ przypisać do żadnej konkretnej
+8. RABAT OGÓLNY — korekta, której NIE DA SIĘ przypisać do żadnej konkretnej
    pozycji (np. rabat lojalnościowy, "rabat za aplikację", kupon od całości
    zakupów): rozdziel go PROPORCJONALNIE do wartości wszystkich pozycji
    (każdą pomniejsz o jej udział w rabacie), a różnicę groszy z zaokrągleń
@@ -234,65 +233,89 @@ ZASADY SCALANIA RABATÓW (KRYTYCZNE):
    grossAmount (cena sprzed rabatu), discountAmount (jej udział w rabacie)
    oraz "mergeNote" np. "część rabatu ogólnego -0,37". NIGDY nie pomijaj
    takiego rabatu i nie zwracaj go jako osobnej pozycji.
-9. Wypisz KAŻDĄ pozycję zakupową — paragon może mieć kilkadziesiąt pozycji. Nie pomijaj żadnej i nie skracaj listy.
-10. Jeśli paragon jest dostarczony jako kilka nakładających się fragmentów: pozycje widoczne na styku dwóch fragmentów potraktuj JEDEN raz (deduplikuj po nazwie i cenie).
-11. Ujemna linia o PEŁNEJ wartości pozycji (np. "BATON X 3,48" oraz osobno "BATON X -3,48") oznacza ZWROT/anulowanie — pomiń tę pozycję całkowicie.
-12. OPISY: usuń kody produktów (ciągi cyfr z literą, np. "298378C") i rozwiń oczywiste skróty na naturalne polskie nazwy: "M#KA PSZEN" → "Mąka pszenna", "JAGODA KAM" → "Jagoda kamczacka", "NAPOJ G NS" → "Napój gazowany". Gdy skrót jest niejednoznaczny, zostaw jak jest.
-13. ARYTMETYKA: dla każdej pozycji ZWERYFIKUJ, że amount = grossAmount − discountAmount oraz że grossAmount = cena_jednostkowa × ilość, dokładnie jak na paragonie. Nie zaokrąglaj, nie szacuj — przepisuj liczby.
-14. KATEGORIE SPECJALNE: piwo, wino, wódka i inne alkohole → kategoria/podkategoria alkoholowa jeśli istnieje na liście użytkownika (NIE "napoje"). Zawsze wybieraj NAJBARDZIEJ szczegółową pasującą podkategorię.
-15. KAUCJE I OPAKOWANIA ZWROTNE (np. "OPAKOWANIA ZWROTNE WYDANIA", "KAUCJA", "Opakowanie zwr."): potraktuj jako JEDNĄ zbiorczą pozycję (description: "Kaucja za opakowania", amount: suma kaucji) i przypisz do kategorii kaucji/opakowań zwrotnych jeśli istnieje u użytkownika. Kaucje ZWRÓCONE (ujemne) nadal pomijaj.
-16. ROZRÓŻNIANIE KATEGORII DOMOWYCH (jeśli użytkownik ma takie kategorie):
+9. ŻADNA pozycja w "items" nie może mieć ujemnego "amount". Ujemne wartości na paragonie to
+   rabaty (reguła 1 — scal z odpowiednią pozycją) albo zwroty/anulowania (reguła 12 — pomiń
+   całkowicie). Nigdy nie zwracaj korekty jako osobnej pozycji.
+
+═══ B. KOMPLETNOŚĆ I ARYTMETYKA ═══
+10. Wypisz KAŻDĄ pozycję zakupową — paragon może mieć kilkadziesiąt pozycji. Nie pomijaj żadnej i nie skracaj listy.
+11. Jeśli paragon jest dostarczony jako kilka nakładających się fragmentów: pozycje widoczne na styku dwóch fragmentów potraktuj JEDEN raz (deduplikuj po nazwie i cenie).
+12. Ujemna linia o PEŁNEJ wartości pozycji (np. "BATON X 3,48" oraz osobno "BATON X -3,48") oznacza ZWROT/anulowanie — pomiń tę pozycję całkowicie.
+13. POMIJAJ CAŁKOWICIE: linie VAT/PTU, numery NIP, formy płatności, wydaną resztę, punkty lojalnościowe i naklejki, kaucje zwrócone (ujemne).
+14. Suma wszystkich "amount" MUSI zgadzać się z finalnym totalem paragonu, niezależnie od
+    tego, jak jest podpisany ("Do zapłaty", "Suma", "Celkem", "K úhradě", "Gesamt",
+    "Summe", "Total", "À payer", ...). Jeśli się nie zgadza, dodaj wyjaśnienie w "warning".
+15. ARYTMETYKA: dla każdej pozycji ZWERYFIKUJ, że amount = grossAmount − discountAmount oraz że grossAmount = cena_jednostkowa × ilość, dokładnie jak na paragonie. Nie zaokrąglaj, nie szacuj — przepisuj liczby.
+
+═══ C. OPISY POZYCJI ═══
+16. Usuń kody produktów (ciągi cyfr z literą, np. "298378C") i rozwiń oczywiste skróty na naturalne polskie nazwy: "M#KA PSZEN" → "Mąka pszenna", "JAGODA KAM" → "Jagoda kamczacka", "NAPOJ G NS" → "Napój gazowany". Gdy skrót jest niejednoznaczny, zostaw jak jest.
+17. TŁUMACZENIE NAZW: Jeśli paragon jest w obcym języku, w "description" podaj polski rodzaj
+    produktu, a oryginalną nazwę rodzajową dodaj w nawiasie. Nazwy własne/marki ZOSTAW w oryginale
+    w cudzysłowie. NIE tłumacz marek, kodów produktów ani jednostek.
+    Format:  <polski rodzaj> (<oryginał rodzajowy>) ['marka']
+    Przykłady:
+      "Non" (uzb.)              → "Chleb (Non)"
+      "Sūris" (lt.)             → "Ser (Sūris)"
+      "Mléko Pribináček" (cz.)  → "Mleko (Mléko) 'Pribináček'"
+
+═══ D. KATEGORYZACJA ═══
+Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z listy KATEGORIE UŻYTKOWNIKA
+(dokładne nazwy, na dole promptu). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
+18. KATEGORIE SPECJALNE: piwo, wino, wódka i inne alkohole → kategoria/podkategoria alkoholowa jeśli istnieje na liście użytkownika (NIE "napoje"). Zawsze wybieraj NAJBARDZIEJ szczegółową pasującą podkategorię.
+19. KAUCJE I OPAKOWANIA ZWROTNE (np. "OPAKOWANIA ZWROTNE WYDANIA", "KAUCJA", "Opakowanie zwr."): potraktuj jako JEDNĄ zbiorczą pozycję (description: "Kaucja za opakowania", amount: suma kaucji) i przypisz do kategorii kaucji/opakowań zwrotnych jeśli istnieje u użytkownika. Kaucje ZWRÓCONE (ujemne) nadal pomijaj.
+20. ROZRÓŻNIANIE KATEGORII DOMOWYCH (jeśli użytkownik ma takie kategorie):
    - PŁYNY I DETERGENTY: środki czystości, płyny do prania/zmywania/podłóg, proszki, kapsułki, udrażniacze, odświeżacze powietrza → "Chemia domowa"
    - PRZEDMIOTY GOSPODARCZE (nie-chemiczne): gąbki, ścierki, worki na śmieci, ręczniki papierowe, miotły, mopy, folia/papier śniadaniowy, baterie, żarówki → "Artykuły gospodarcze"
    - HIGIENA OSOBISTA: mydła, żele pod prysznic, szampony, pasty i szczoteczki do zębów, dezodoranty, papier toaletowy, chusteczki, podpaski, golenie → "Higiena"
    - PIELĘGNACJA I URODA: perfumy, kremy, balsamy, makijaż, pielęgnacja twarzy → "Kosmetyki"
-17. SUMA KOŃCOWA: jako metadata.totalSum przyjmij kwotę FAKTYCZNIE ZAPŁACONĄ ("DO ZAPŁATY" / "RAZEM DO ZAPŁATY"), która zawiera kaucje. Suma wszystkich pozycji (wraz z pozycją kaucji) musi się z nią zgadzać.
-18. METADANE PARAGONU:
+
+═══ E. METADANE PARAGONU ═══
+21. DATA (metadata.date), format YYYY-MM-DD — przepisz datę sprzedaży z paragonu.
+   - Widoczny tylko dzień i miesiąc, bez roku → uzupełnij rok tak, by data wypadła
+     NAJBLIŻEJ PRZED datą skanowania (${scanDate}).
+   - Data nieczytelna, brakująca lub sprzeczna → użyj DATY SKANOWANIA: ${scanDate}.
+     NIE zwracaj null i NIE zgaduj żadnej innej daty.
+   - Gdy podstawiasz datę skanowania, napisz o tym krótko w "warning".
+   - Nigdy nie zwracaj daty późniejszej niż data skanowania.
+22. IDENTYFIKACJA SPRZEDAWCY:
    - "merchant": krótka, potoczna nazwa sieci. ZNANE SKLEPY UŻYTKOWNIKA: ${merchantLine}. Jeśli sklep z paragonu pasuje do któregoś ze znanych — użyj DOKŁADNIE tej nazwy z listy (kanonizacja). Jeśli nie pasuje do żadnego — zwróć nową krótką, potoczną nazwę sieci (np. "AUCHAN POLSKA SP. Z O.O." → "Auchan"), NIE pełną nazwę prawną.
    - "receiptNumber": numer wydruku/paragonu jeśli widoczny (np. przy "nr:", "WYDRUK NR", "PARAGON NR") — same znaki numeru, bez etykiety.
    - "sellerTaxId": NIP sprzedawcy jeśli widoczny (przy "NIP") — same cyfry, bez spacji i myślników.
-19. WALUTA (metadata.currency):
-- Rozpoznaj walutę paragonu po symbolach/kodach: "zł"/"PLN" → PLN, "Kč"/"CZK" → CZK,
-  "€"/"EUR" → EUR, "$"/"USD" → USD, "£"/"GBP" → GBP, "kr" → SEK/NOK/DKK wg kraju sklepu.
-- W metadata.currency zwróć ZAWSZE kod ISO 4217 (3 wielkie litery), nigdy symbol.
-- Gdy symbol jest niejednoznaczny ($, kr, £, ¥, Rs), ustal walutę na podstawie
-  kraju/adresu sklepu, języka paragonu i formatu podatku (np. "$" + adres w Kanadzie
-  lub "GST/HST" → CAD; "$" + "MwSt"/Austria nie dotyczy; "kr" + ".se"/szwedzki → SEK).
-  Dopiero gdy brak jakichkolwiek wskazówek — przyjmij walutę domyślną regionu.
-- Jeśli paragon nie wskazuje waluty jednoznacznie i wygląda na polski → "PLN".
-   Gdy któregoś z tych pól nie ma na paragonie, ustaw null.
-20. TŁUMACZENIE NAZW: Jeśli paragon jest w obcym języku, w "description" podaj polski rodzaj
-produktu, a oryginalną nazwę rodzajową dodaj w nawiasie. Nazwy własne/marki ZOSTAW w oryginale
-w cudzysłowie. NIE tłumacz marek, kodów produktów ani jednostek.
-Format:  <polski rodzaj> (<oryginał rodzajowy>) ['marka']
-Przykłady:
-  "Non" (uzb.)              → "Chleb (Non)"
-  "Sūris" (lt.)             → "Ser (Sūris)"
-  "Mléko Pribináček" (cz.)  → "Mleko (Mléko) 'Pribináček'"
-21. ŻADNA pozycja w "items" nie może mieć ujemnego "amount". Ujemne wartości na paragonie to
-rabaty (reguła 1 — scal z odpowiednią pozycją) albo zwroty/anulowania (reguła 11 — pomiń
-całkowicie). Nigdy nie zwracaj korekty jako osobnej pozycji.
-POMIJAJ: linie VAT/PTU, numery NIP, formy płatności, wydaną resztę, punkty lojalnościowe i naklejki, kaucje zwrócone (ujemne).
-22. PODSUMOWANIE PARAGONU (metadata.summary): krótka, ogólna etykieta CAŁEGO paragonu po polsku
-— typ zakupów + sklep, NIE lista pozycji. Maks ~6 słów.
-Przykłady: "Spożywcze, Lidl"; "Chemia, Rossmann"; "Paliwo, Orlen".
-Jeśli nie da się sensownie podsumować — null.
-23. PRODUKT (pole "product" przy każdej pozycji): pole to WYPEŁNIASZ WYŁĄCZNIE gdy pozycja
-odpowiada jednemu z produktów na liście ŚLEDZONE PRODUKTY poniżej (dopuszczalne drobne różnice
-pisowni, skrótów czy marki — rozpoznajesz PO ZNACZENIU, nie po dokładnym brzmieniu z paragonu).
-Gdy pozycja nie pasuje do ŻADNEGO z nich — pomiń pole "product" całkowicie (ustaw null). NIE
-twórz nowych śledzonych produktów samodzielnie, nawet jeśli pozycja wygląda jak dobry kandydat.
-Gdy pozycja pasuje: w polu "name" użyj DOKŁADNIE pisowni z listy ŚLEDZONE PRODUKTY (nie
-przepisuj tekstu z paragonu). Rozmiar/jednostkę/wielopak ustal z poniższych zasad — gdy nie da
-się ich odczytać z paragonu, zostaw null (system dobierze wartość domyślną automatycznie, Ty
-nie musisz jej znać):
+   Gdy któregoś z tych trzech pól nie ma na paragonie, ustaw null.
+23. SUMA KOŃCOWA: jako metadata.totalSum przyjmij kwotę FAKTYCZNIE ZAPŁACONĄ ("DO ZAPŁATY" / "RAZEM DO ZAPŁATY"), która zawiera kaucje. Suma wszystkich pozycji (wraz z pozycją kaucji) musi się z nią zgadzać.
+24. WALUTA (metadata.currency):
+   - Rozpoznaj walutę paragonu po symbolach/kodach: "zł"/"PLN" → PLN, "Kč"/"CZK" → CZK,
+     "€"/"EUR" → EUR, "$"/"USD" → USD, "£"/"GBP" → GBP, "kr" → SEK/NOK/DKK wg kraju sklepu.
+   - W metadata.currency zwróć ZAWSZE kod ISO 4217 (3 wielkie litery), nigdy symbol.
+   - Gdy symbol jest niejednoznaczny ($, kr, £, ¥, Rs), ustal walutę na podstawie
+     kraju/adresu sklepu, języka paragonu i formatu podatku (np. "$" + adres w Kanadzie
+     lub "GST/HST" → CAD; "kr" + ".se"/szwedzki → SEK).
+     Dopiero gdy brak jakichkolwiek wskazówek — przyjmij walutę domyślną regionu.
+   - Jeśli paragon nie wskazuje waluty jednoznacznie i wygląda na polski → "PLN".
+25. PODSUMOWANIE PARAGONU (metadata.summary): krótka, ogólna etykieta CAŁEGO paragonu po polsku
+    — typ zakupów + sklep, NIE lista pozycji. Maks ~6 słów.
+    Przykłady: "Spożywcze, Lidl"; "Chemia, Rossmann"; "Paliwo, Orlen".
+    Jeśli nie da się sensownie podsumować — null.
+
+═══ F. PRODUKTY ŚLEDZONE ═══
+26. PRODUKT (pole "product" przy każdej pozycji): pole to WYPEŁNIASZ WYŁĄCZNIE gdy pozycja
+odpowiada jednemu z produktów na liście ŚLEDZONE PRODUKTY (na dole promptu; dopuszczalne drobne
+różnice pisowni, skrótów czy marki — rozpoznajesz PO ZNACZENIU, nie po dokładnym brzmieniu
+z paragonu). Gdy pozycja nie pasuje do ŻADNEGO z nich — pomiń pole "product" całkowicie
+(ustaw null). NIE twórz nowych śledzonych produktów samodzielnie, nawet jeśli pozycja wygląda
+jak dobry kandydat. Gdy pozycja pasuje: w polu "name" użyj DOKŁADNIE pisowni z listy ŚLEDZONE
+PRODUKTY (nie przepisuj tekstu z paragonu). Rozmiar/jednostkę/wielopak ustal z poniższych zasad
+— gdy nie da się ich odczytać z paragonu, zostaw null (system dobierze wartość domyślną
+automatycznie, Ty nie musisz jej znać):
 ${PRODUCT_RULES}
-${trackedSection}KATEGORYZACJA: Przypisz każdej pozycji kategorię i podkategorię WYŁĄCZNIE z poniższej listy użytkownika (dokładne nazwy). Gdy żadna nie pasuje, ustaw null i obniż categoryConfidence.
+
+═══ DANE UŻYTKOWNIKA ═══
 
 KATEGORIE UŻYTKOWNIKA:
 ${catLines}
-${learnedSection}
-FORMAT ODPOWIEDZI — wyłącznie poprawny JSON, bez markdown, bez komentarzy:
+${trackedSection}${learnedSection}
+═══ FORMAT ODPOWIEDZI ═══
+Wyłącznie poprawny JSON, bez markdown, bez komentarzy:
 {
   "items": [
     {
@@ -685,7 +708,8 @@ router.post("/receipt", async (req, res) => {
             name: c.name,
             subcategories: c.subcategories.map(s => s.name),
           })), knownMerchants, buildLearnedSection(corrections),
-          trackedProducts.map(p => p.canonicalName)) },
+          trackedProducts.map(p => p.canonicalName),
+          new Date().toISOString().slice(0, 10)) },
         { role: "user", content: userContent },
       ],
       // gpt-5.x renamed max_tokens → max_completion_tokens and rejects
