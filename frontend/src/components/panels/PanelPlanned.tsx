@@ -13,6 +13,7 @@ import { useAppContext }  from "../../context/AppContext";
 import { ConfirmModal }   from "../ui/ConfirmModal";
 import { PlannedCard }    from "./plannedComponents/PlannedCard";
 import { PlannedForm }    from "./plannedComponents/PlannedForm";
+import { WishSection }    from "./plannedComponents/WishSection";
 import { TransactionForm, emptyFormValues } from "./transactionComponents/TransactionForm";
 import { fmt, monthLabel, plural } from "../../utils/helpers";
 import { addMonthsToYM }   from "../../hooks/useMonthFromUrl";
@@ -20,7 +21,7 @@ import { theme as s }     from "../../styles/theme";
 import { RangePicker, type DateRange } from "../ui/RangePicker";
 import { CategoryMultiSelect } from "../ui/CategoryMultiSelect";
 import { toYM }            from "../ui/AppDatePicker";
-import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload } from "../../hooks/usePlanned";
+import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload, WishPostPayload } from "../../hooks/usePlanned";
 import type { FormValues, TransactionPayload, Priority } from "../../types/transaction";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -69,6 +70,7 @@ export default function PanelPlanned() {
   const {
     planned, isLoading, isSaving,
     loadAll, loadArchived, updatePlanned, archivePlanned, purchasePlanned,
+    loadWishes, createWish, promoteWish,
   } = usePlanned();
 
   const { activeBudgetMonth } = useMonthStatus();
@@ -97,6 +99,12 @@ export default function PanelPlanned() {
   const [showArchived, setShowArchived] = useState(false);
   const [archived, setArchived] = useState<PlannedDoc[] | null>(null);
 
+  // Wishes live in the same container but are filtered out of the shared list
+  // server-side, so they get their own local slice — same deal as archived.
+  const [showWishes, setShowWishes] = useState(false);
+  const [wishes, setWishes] = useState<PlannedDoc[] | null>(null);
+  const [promoteTarget, setPromoteTarget] = useState<PlannedDoc | null>(null);
+
   useEffect(() => { loadAll(); }, []);
 
   useEffect(() => {
@@ -104,6 +112,12 @@ export default function PanelPlanned() {
       loadArchived().then(setArchived);
     }
   }, [showArchived, archived, loadArchived]);
+
+  useEffect(() => {
+    if (showWishes && wishes === null) {
+      loadWishes().then(setWishes);
+    }
+  }, [showWishes, wishes, loadWishes]);
 
   // "Bieżący miesiąc" everywhere in this panel means the active BUDGET month,
   // not the calendar one — closing a month has to move the rates with it.
@@ -281,6 +295,27 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
     closeModal();
   }
 
+  // ── Wish handlers ─────────────────────────────────────────
+  // Each keeps the local wish slice in sync by hand: wishes are absent from
+  // AppContext on purpose, so nothing else will do it for us.
+
+  async function handleCreateWish(payload: WishPostPayload) {
+    const created = await createWish(payload);
+    if (created) setWishes(prev => [created, ...(prev ?? [])]);
+  }
+
+  async function handlePromote(payload: PlannedPostPayload | PlannedPatchPayload) {
+    if (!promoteTarget) return;
+    const done = await promoteWish(promoteTarget.id, payload as PlannedPostPayload);
+    if (done) setWishes(prev => (prev ?? []).filter(w => w.id !== promoteTarget.id));
+    setPromoteTarget(null);
+  }
+
+  async function handleArchiveWish(wish: PlannedDoc) {
+    const ok = await archivePlanned(wish.id);
+    if (ok) setWishes(prev => (prev ?? []).filter(w => w.id !== wish.id));
+  }
+
   async function handleArchive() {
     if (!archiveModal.id) return;
     await archivePlanned(archiveModal.id, archiveReason);
@@ -412,6 +447,19 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
 
         <div style={{ width: 1, height: 20, background: c.border }} />
 
+        {/* Wishes toggle — hidden by default, loads lazily */}
+        <button
+          onClick={() => setShowWishes(v => !v)}
+          style={{
+            padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer",
+            fontWeight: 700, fontSize: 12,
+            background: showWishes ? c.info : c.border,
+            color:      showWishes ? c.white : c.textSecondary,
+          }}
+        >
+          💭 Zachcianki{wishes !== null ? ` (${wishes.length})` : ""}
+        </button>
+
         {/* Archived toggle — hidden by default, loads lazily */}
         <button
           onClick={() => setShowArchived(v => !v)}
@@ -516,6 +564,17 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
         );
       })}
 
+      {/* Wishes — ideas without a month or a price; never part of any total */}
+      {showWishes && (
+        <WishSection
+          wishes={wishes}
+          isSaving={isSaving}
+          onCreate={handleCreateWish}
+          onPromote={setPromoteTarget}
+          onArchive={handleArchiveWish}
+        />
+      )}
+
       {/* Archived list — dimmed, read-only, with the "why we dropped it" note */}
       {showArchived && (
         <div style={{ marginTop: 24 }}>
@@ -558,6 +617,44 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
 
       {/* Edit modal */}
       {modalEl}
+
+      {/* Promote a wish — the SAME form used to create a plan, pre-filled from
+          the wish. mode="add" on purpose: this is where the full plan rules
+          (month, positive amount, oneoff/envelope) finally have to hold. */}
+      {promoteTarget && createPortal(
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+          onClick={() => setPromoteTarget(null)}
+        >
+          <div
+            style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 16, padding: "24px", maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 800, fontSize: 16, color: c.text, marginBottom: 6 }}>
+              📅 Zaplanuj zachciankę
+            </div>
+            <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 16 }}>
+              💭 {promoteTarget.description}
+              {promoteTarget.estimatedAmount != null && <> · szacowano {fmt(promoteTarget.estimatedAmount)}</>}
+            </div>
+            <PlannedForm
+              key={promoteTarget.id}
+              initialValues={{
+                ...promoteTarget,
+                // The ballpark becomes the starting amount; the user confirms
+                // or corrects it before this turns into a real commitment.
+                totalAmount: promoteTarget.estimatedAmount ?? undefined,
+              }}
+              startMonth={cur}
+              onSubmit={handlePromote}
+              onCancel={() => setPromoteTarget(null)}
+              isSaving={isSaving}
+              mode="add"
+            />
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Archive confirm — with an optional "why" note stored on the doc */}
       <ConfirmModal

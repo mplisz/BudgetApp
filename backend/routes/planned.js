@@ -75,6 +75,24 @@ const PlannedPostSchema = PlannedBaseSchema.extend({
 const PlannedPatchSchema = PlannedBaseSchema.partial()
   .refine(d => Object.keys(d).length > 0, { message: "No fields to update." });
 
+// A WISH ("zachcianka") is an undecided plan: no month, no committed price.
+// Deliberately its OWN schema rather than a loosened PlannedBaseSchema — the
+// month regex and the positive-amount rule are what keep real plans sane, and
+// they must not be weakened just to let an idea through. Everything here
+// beyond the description exists only to make the later promotion one click.
+const WishPostSchema = z.object({
+  description:          z.string().min(1).max(500).transform(v => v.trim()),
+  estimatedAmount:      z.number().positive().nullable().optional(),
+  originalCurrency:     z.string().length(3).default("PLN"),
+  targetCategoryId:     z.string().max(200).optional().default(""),
+  targetCategoryName:   z.string().max(200).optional().default(""),
+  targetSubcategoryId:  z.string().max(200).optional().default(""),
+  targetSubcategoryName:z.string().max(200).optional().default(""),
+  tags:                 z.array(z.string()).optional().default([]),
+  priority:             z.number().int().min(1).max(4).optional().default(2),
+  url:                  urlSchema,
+});
+
 // ── Helpers ───────────────────────────────────────────────────
 
 // Sum of paid savings in PLN
@@ -99,6 +117,9 @@ function computeSuggestion(doc, currentMonth) {
 // Check if purchase is ready (collected >= target)
 function isReadyToPurchase(doc) {
   if (doc.isPurchased || doc.isArchived) return false;
+  // A wish has totalAmountPLN = null, and `0 >= null` is TRUE in JS — without
+  // this guard every wish would report itself as ready to buy.
+  if (doc.isWish || doc.totalAmountPLN == null) return false;
   return sumPaid(doc.virtualSavings) >= doc.totalAmountPLN;
 }
 
@@ -138,11 +159,26 @@ router.get("/", async (req, res) => {
       ? ""
       : "AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))";
 
+    // Wishes are undecided ideas — no month, no committed price. They must
+    // NEVER reach the shared planned list: the forecast, the Baza budżetu
+    // column, the safety net and the bell all sum over it, and an amount-less
+    // doc would quietly skew every one of them. Excluding them here, at the
+    // query boundary, means no consumer has to remember to do it — the same
+    // trick already used for archived docs above.
+    const wantWishes = req.query.wishes === "true";
+    const wishFilter = wantWishes
+      ? "AND c.isWish = true"
+      : "AND (c.isWish = false OR NOT IS_DEFINED(c.isWish))";
+    // Cosmos DROPS documents from an ORDER BY when the property is undefined,
+    // and a wish has no plannedMonth — so the wish listing orders by creation.
+    const orderBy = wantWishes ? "ORDER BY c.createdAt DESC" : "ORDER BY c.plannedMonth ASC";
+
     const { resources } = await plannedContainer.items
       .query({
         query: `SELECT * FROM c WHERE c.userId = @userId
                 ${archivedFilter}
-                ORDER BY c.plannedMonth ASC`,
+                ${wishFilter}
+                ${orderBy}`,
         parameters: [{ name: "@userId", value: familyId }],
       })
       .fetchAll();
@@ -235,6 +271,134 @@ router.post("/", async (req, res) => {
   } catch (err) {
     console.error("[PLANNED POST]", err);
     res.status(500).json({ error: "Failed to create planned expense." });
+  }
+});
+
+// ── POST /api/planned/wish ────────────────────────────────────
+// Park an idea without committing to a month or a price. Same container and
+// same document shape as a real plan — undecided fields are simply null, so
+// promoting later fills them in rather than migrating anything.
+
+router.post("/wish", async (req, res) => {
+  const parsed = WishPostSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  try {
+    const familyId = req.user.familyId;
+    const d        = parsed.data;
+
+    const doc = {
+      id:                   `planned_${familyId}_${Date.now()}`,
+      userId:               familyId,
+      isWish:               true,
+      description:          d.description,
+      // Informational only — never summed anywhere. It exists so the promotion
+      // form opens with a number already in it.
+      estimatedAmount:      d.estimatedAmount ?? null,
+      originalCurrency:     d.originalCurrency,
+      fxRate:               1,
+      totalAmount:          null,
+      totalAmountPLN:       null,
+      targetCategoryId:     d.targetCategoryId,
+      targetCategoryName:   d.targetCategoryName,
+      targetSubcategoryId:  d.targetSubcategoryId,
+      targetSubcategoryName:d.targetSubcategoryName,
+      tags:                 d.tags,
+      priority:             d.priority,
+      mode:                 null,          // decided at promotion time
+      plannedMonth:         null,
+      monthlySavingDay:     1,
+      virtualSavings:       [],
+      isPurchased:          false,
+      purchasedMonth:       null,
+      isArchived:           false,
+      archivedAt:           null,
+      archivedBy:           null,
+      archivedById:         null,
+      createdAt:            new Date().toISOString(),
+      createdBy:            req.user.name || req.user.email,
+      createdById:          req.user.id,
+      url:                  d.url || "",
+    };
+
+    const { resource } = await plannedContainer.items.create(doc);
+    console.log(`[PLANNED WISH] Created: ${resource.id}`);
+    res.status(201).json(resource);
+  } catch (err) {
+    console.error("[PLANNED WISH]", err);
+    res.status(500).json({ error: "Failed to create wish." });
+  }
+});
+
+// ── POST /api/planned/:id/promote ─────────────────────────────
+// Wish → real plan. A dedicated action route rather than a looser PATCH:
+// promotion is the one moment the full plan rules (month, positive amount,
+// mode) must ALL hold at once, so it validates against PlannedPostSchema
+// exactly like a fresh plan would.
+
+router.post("/:id/promote", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
+  const parsed = PlannedPostSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  try {
+    const id       = idParsed.data;
+    const familyId = req.user.familyId;
+    const d        = parsed.data;
+
+    const { resource: existing, etag } = await readItemWithEtag(plannedContainer, id, familyId);
+    if (!existing)           return res.status(404).json({ error: "Planned expense not found." });
+    if (!existing.isWish)    return res.status(409).json({ error: "To nie jest zachcianka — ten plan jest już zaplanowany." });
+    if (existing.isArchived) return res.status(409).json({ error: "Planned expense is archived." });
+
+    let virtualSavings = d.virtualSavings;
+    if (d.mode === "envelope" && !virtualSavings.length) {
+      const startMonth = currentServerMonth();
+      const monthCount = (() => {
+        const [sy, sm] = startMonth.split("-").map(Number);
+        const [ey, em] = d.plannedMonth.split("-").map(Number);
+        return Math.max(1, (ey - sy) * 12 + (em - sm) + 1);
+      })();
+      const suggestion = round2(d.totalAmount / monthCount);
+      virtualSavings   = generateSavingsMonths(startMonth, d.plannedMonth, suggestion, d.originalCurrency, d.fxRate);
+    }
+
+    const promoted = {
+      ...existing,
+      isWish:               false,
+      estimatedAmount:      null,
+      description:          d.description,
+      totalAmount:          d.totalAmount,
+      originalCurrency:     d.originalCurrency,
+      fxRate:               d.fxRate,
+      totalAmountPLN:       d.totalAmountPLN,
+      targetCategoryId:     d.targetCategoryId,
+      targetCategoryName:   d.targetCategoryName,
+      targetSubcategoryId:  d.targetSubcategoryId,
+      targetSubcategoryName:d.targetSubcategoryName,
+      tags:                 d.tags,
+      priority:             d.priority,
+      mode:                 d.mode,
+      plannedMonth:         d.plannedMonth,
+      monthlySavingDay:     d.monthlySavingDay,
+      virtualSavings,
+      url:                  d.url || existing.url || "",
+      promotedAt:           new Date().toISOString(),
+      updatedAt:            new Date().toISOString(),
+      updatedBy:            req.user.name || req.user.email,
+    };
+
+    const { resource } = await plannedContainer.items.upsert(promoted, {
+      accessCondition: { type: "IfMatch", condition: etag },
+    });
+    console.log(`[PLANNED PROMOTE] Wish → plan: ${id}`);
+    res.json(resource);
+  } catch (err) {
+    if (err.code === 412) return res.status(409).json({ error: "Data was modified by another user. Please refresh and try again." });
+    console.error("[PLANNED PROMOTE]", err);
+    res.status(500).json({ error: "Failed to promote wish." });
   }
 });
 

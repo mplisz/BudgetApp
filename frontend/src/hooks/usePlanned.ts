@@ -42,6 +42,13 @@ export interface PlannedDoc {
   isPurchased:          boolean;
   purchasedMonth:       string | null;
   isArchived:           boolean;
+  /** Undecided idea: no month, no committed price. Kept in the same container
+   *  but filtered out of the shared list server-side — see loadWishes. */
+  isWish?:              boolean;
+  /** Ballpark price on a wish. Informational ONLY — never summed anywhere;
+   *  it exists so the promotion form opens with a number already in it. */
+  estimatedAmount?:     number | null;
+  promotedAt?:          string | null;
   archivedAt?:          string | null;
   archivedBy?:          string | null;
   archivedReason?:      string | null;   // optional "why we dropped this" note
@@ -68,6 +75,19 @@ export interface PlannedPostPayload {
   monthlySavingDay:     number;
   virtualSavings:       VirtualSaving[];
   url?: string;
+}
+
+export interface WishPostPayload {
+  description:           string;
+  estimatedAmount?:      number | null;
+  originalCurrency?:     string;
+  targetCategoryId?:     string;
+  targetCategoryName?:   string;
+  targetSubcategoryId?:  string;
+  targetSubcategoryName?:string;
+  tags?:                 string[];
+  priority?:             number;
+  url?:                  string;
 }
 
 export interface PlannedPatchPayload {
@@ -216,6 +236,11 @@ interface UsePlannedResult {
   loadAll:         () => Promise<void>;
   /** Archived docs only — fetched on demand, NOT stored in AppContext. */
   loadArchived:    () => Promise<PlannedDoc[]>;
+  /** Wishes only — fetched on demand, NOT stored in AppContext (same reason). */
+  loadWishes:      () => Promise<PlannedDoc[]>;
+  createWish:      (payload: WishPostPayload) => Promise<PlannedDoc | null>;
+  /** Wish → real plan. The result DOES join the shared list. */
+  promoteWish:     (id: string, payload: PlannedPostPayload) => Promise<PlannedDoc | null>;
   createPlanned:   (payload: PlannedPostPayload) => Promise<PlannedDoc | null>;
   updatePlanned:   (id: string, patch: PlannedPatchPayload) => Promise<PlannedDoc | null>;
   archivePlanned:  (id: string, reason?: string) => Promise<boolean>;
@@ -270,6 +295,54 @@ export function usePlanned(): UsePlannedResult {
       return [];
     }
   }, [api, showError]);
+
+  // ── Wishes ─────────────────────────────────────────────────
+  // Same container, same document shape — undecided fields are null. The
+  // backend keeps them out of the default listing, so they can never reach
+  // the forecast, the Baza budżetu column, the safety net or the bell.
+
+  const loadWishes = useCallback(async (): Promise<PlannedDoc[]> => {
+    try {
+      return await api.get<PlannedDoc[]>(
+        "/api/planned?wishes=true",
+        { fallback: "Nie udało się pobrać zachcianek." },
+      );
+    } catch (err) {
+      showError((err as Error).message);
+      return [];
+    }
+  }, [api, showError]);
+
+  const createWish = useCallback(async (payload: WishPostPayload): Promise<PlannedDoc | null> => {
+    setIsSaving(true);
+    try {
+      // Deliberately NOT added to `planned` — a wish has no amount and no
+      // month, and every consumer of that list assumes both.
+      const data = await api.post<PlannedDoc>("/api/planned/wish", payload, { fallback: "Nie udało się dodać zachcianki." });
+      showSuccess("Dodano do zachcianek! ✨");
+      return data;
+    } catch (err) {
+      showError((err as Error).message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [api, showSuccess, showError]);
+
+  const promoteWish = useCallback(async (id: string, payload: PlannedPostPayload): Promise<PlannedDoc | null> => {
+    setIsSaving(true);
+    try {
+      const data = await api.post<PlannedDoc>(`/api/planned/${id}/promote`, payload, { fallback: "Nie udało się zaplanować zachcianki." });
+      setPlanned(prev => [...prev, data]);   // now a real plan → joins the shared list
+      showSuccess("Zachcianka zaplanowana! 📅");
+      return data;
+    } catch (err) {
+      showError((err as Error).message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [api, setPlanned, showSuccess, showError]);
 
   // ── Create ─────────────────────────────────────────────────
 
@@ -418,7 +491,8 @@ export function usePlanned(): UsePlannedResult {
   return {
     planned, isLoading, isSaving,
     pendingNotifications,
-    loadAll, loadArchived, createPlanned, updatePlanned,
+    loadAll, loadArchived, loadWishes, createWish, promoteWish,
+    createPlanned, updatePlanned,
     archivePlanned, purchasePlanned,
     payMonth, dismissMonth, markNotified,
   };
