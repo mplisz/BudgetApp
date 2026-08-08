@@ -34,6 +34,8 @@ import PanelIncomeTransactions from "../components/panels/PanelIncomeTransaction
 import PanelPlanned            from "../components/panels/PanelPlanned";
 import PanelAddRecurring       from "../components/panels/PanelAddRecurring";
 import PanelAddPlanned         from "../components/panels/PanelAddPlanned";
+import PanelAddWish            from "../components/panels/PanelAddWish";
+import PanelWishlist           from "../components/panels/PanelWishlist";
 import PanelSummary            from "../components/panels/PanelSummary";
 import PanelAnalytics          from "../components/panels/PanelAnalytics";
 import PanelSafetyNet          from "../components/panels/PanelSafetyNet";
@@ -97,6 +99,8 @@ const PANELS: Array<[string, () => ReactElement]> = [
   ["PanelPlanned",            () => <PanelPlanned />],
   ["PanelAddRecurring",       () => <PanelAddRecurring />],
   ["PanelAddPlanned",         () => <PanelAddPlanned />],
+  ["PanelAddWish",            () => <PanelAddWish />],
+  ["PanelWishlist",           () => <PanelWishlist />],
   ["PanelSummary",            () => <PanelSummary />],
   ["PanelAnalytics",          () => <PanelAnalytics />],
   ["PanelSafetyNet",          () => <PanelSafetyNet />],

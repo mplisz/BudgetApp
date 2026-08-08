@@ -23,6 +23,10 @@ export const PANEL_META = {
   addincome:          { icon: "💵", label: "Dodaj wpływ",       section: "Główne"            },
   addrecurring:       { icon: "🔄", label: "Dodaj cykliczny",   section: "Główne"            },
   addplanned:         { icon: "📅", label: "Dodaj planowany",   section: "Główne"            },
+  // Quick-add panels normally skip `mobile` because they sit in the bottom
+  // bar — but that bar has four fixed slots, so this one would be
+  // unreachable on a phone without the flag.
+  addwish:            { icon: "🛒", label: "Dodaj do listy zakupowej", section: "Główne",    mobile: true },
 
   // Per-month analysis
   transactions:       { icon: "🧾", label: "Wydatki",           section: "Analiza miesiąca", mobile: true },
@@ -33,6 +37,9 @@ export const PANEL_META = {
   basebudget:         { icon: "🏦", label: "Baza budżetu",      section: "Analiza miesiąca", mobile: true },
 
   // Tools (month-independent)
+  // The shopping list has no month by design — that is what separates it from
+  // a planned expense — so it belongs here rather than under "Analiza miesiąca".
+  wishlist:           { icon: "🛒", label: "Lista zakupowa",     section: "Narzędzia",       mobile: true },
   vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia",       mobile:true },
   safetynet:          { icon: "🛡️", label: "Poduszka",         section: "Narzędzia",        mobile: true },
   analytics:          { icon: "📊", label: "Analiza",           section: "Narzędzia",       mobile: true},

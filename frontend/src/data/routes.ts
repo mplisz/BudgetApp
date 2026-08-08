@@ -23,6 +23,7 @@ export const PANEL_PATHS: Record<string, string> = {
   addincome:          "/income/add",
   addrecurring:       "/recurring/add",
   addplanned:         "/planned/add",
+  addwish:            "/wishlist/add",
 
   // Per-month analysis
   transactions:       "/transactions",
@@ -33,6 +34,7 @@ export const PANEL_PATHS: Record<string, string> = {
   basebudget:         "/basebudget",
 
   // Tools
+  wishlist:           "/wishlist",
   vouchers:           "/vouchers",
   safetynet:          "/safetynet",
   analytics:          "/analytics",

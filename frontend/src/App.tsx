@@ -58,6 +58,8 @@ const PanelIncomeTransactions = lazy(() => import("./components/panels/PanelInco
 const PanelPlanned            = lazy(() => import("./components/panels/PanelPlanned"));
 const PanelAddRecurring       = lazy(() => import("./components/panels/PanelAddRecurring"));
 const PanelAddPlanned         = lazy(() => import("./components/panels/PanelAddPlanned"));
+const PanelAddWish            = lazy(() => import("./components/panels/PanelAddWish"));
+const PanelWishlist           = lazy(() => import("./components/panels/PanelWishlist"));
 const PanelSummary            = lazy(() => import("./components/panels/PanelSummary"));
 const PanelAnalytics          = lazy(() => import("./components/panels/PanelAnalytics"));
 const PanelSafetyNet          = lazy(() => import("./components/panels/PanelSafetyNet"));
@@ -244,6 +246,7 @@ function AppContent() {
         <Route path="income/add"    element={<PanelAddIncome />} />
         <Route path="recurring/add" element={<PanelAddRecurring />} />
         <Route path="planned/add"   element={<PanelAddPlanned />} />
+        <Route path="wishlist/add"  element={<PanelAddWish />} />
 
         {/* Per-month panels (month read from ?m=) */}
         <Route path="transactions"        element={<PanelTransactions />} />
@@ -255,6 +258,7 @@ function AppContent() {
 
         {/* Lists & tools */}
 
+        <Route path="wishlist"  element={<PanelWishlist />} />
         <Route path="vouchers"  element={<PanelVouchers />} />
         <Route path="safetynet" element={<PanelSafetyNet />} />
         <Route path="analytics" element={<PanelAnalytics />} />
