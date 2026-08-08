@@ -12,9 +12,7 @@
 
 import { c, alpha } from "../../../styles/tokens";
 import { useState, useCallback, useRef, useMemo } from "react";
-import { SubcategorySelect }   from "../../ui/SubcategorySelect";
-import { PriorityPicker }      from "../../ui/PriorityPicker";
-import { TagMultiSelect }      from "../../ui/TagMultiSelect";
+import { DescriptionField, CategoryField, UrlField, PriorityField, TagsField } from "./planFields";
 import { CurrencyRateField }   from "../../ui/CurrencyRateField";
 import { useToast }            from "../../../hooks/useToast";
 import { useCurrencyManager }  from "../../../hooks/useCurrencyManager";
@@ -232,21 +230,14 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
   return (
     <div>
       {/* Description */}
-      <div style={frow}>
-        <label style={s.label}>
-          Opis *{" "}
-          <span style={{ color: c.textMuted, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
-            (nazwa planowanego wydatku)
-          </span>
-        </label>
-        <input
-          type="text" maxLength={500}
-          value={form.description}
-          onChange={e => set("description", e.target.value)}
-          placeholder="np. Laptop, wakacje, hulajnoga..."
-          style={{ ...s.input, border: `1px solid ${!form.description?.trim() ? alpha(c.danger, "66") : c.border}` }}
-        />
-      </div>
+      <DescriptionField
+        label="Opis *"
+        hint="(nazwa planowanego wydatku)"
+        placeholder="np. Laptop, wakacje, hulajnoga..."
+        value={form.description}
+        onChange={v => set("description", v)}
+        highlightEmpty
+      />
 
       {/* Mode toggle (disabled in edit) */}
       <div style={frow}>
@@ -277,44 +268,18 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
       </div>
 
       {/* Target subcategory */}
-      <div style={frow}>
-        <label style={s.label}>Kategoria zakupu</label>
-        <SubcategorySelect
-          value={form.targetSubcategoryId}
-          onChange={({ subcategoryId, subcategoryName, categoryId, categoryName }: {
-            subcategoryId: string; subcategoryName: string;
-            categoryId: string; categoryName: string;
-          }) =>
-            setForm(f => ({ ...f,
-              targetSubcategoryId:   subcategoryId,
-              targetSubcategoryName: subcategoryName,
-              targetCategoryId:      categoryId,
-              targetCategoryName:    categoryName,
-            }))
-          }
-          allowedTypes={["EXPENSE", "SAVING"]}
-          placeholder="— Kategoria zakupu - gdzie trafi wydatek? —"
-        />
-        {form.targetCategoryName && (
-          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{form.targetCategoryName}</div>
-        )}
-      </div>
+      <CategoryField
+        subcategoryId={form.targetSubcategoryId}
+        categoryName={form.targetCategoryName}
+        onChange={sel => setForm(f => ({ ...f,
+          targetSubcategoryId:   sel.subcategoryId,
+          targetSubcategoryName: sel.subcategoryName,
+          targetCategoryId:      sel.categoryId,
+          targetCategoryName:    sel.categoryName,
+        }))}
+      />
       {/* URL (optional) */}
-      <div style={frow}>
-        <label style={s.label}>
-          Link{" "}
-          <span style={{ color: c.textMuted, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
-            (opcjonalnie — np. strona produktu)
-          </span>
-        </label>
-        <input
-          type="url" maxLength={2000}
-          value={form.url}
-          onChange={e => set("url", e.target.value)}
-          placeholder="https://..."
-          style={s.input}
-        />
-      </div>
+      <UrlField value={form.url} onChange={v => set("url", v)} />
       {/* Currency + amount */}
       <div style={frow}>
         <CurrencyRateField
@@ -391,19 +356,14 @@ export function PlannedForm({ initialValues, startMonth, onSubmit, onCancel, isS
       )}
 
       {/* Priority */}
-      <div style={frow}>
-        <PriorityPicker
-          value={form.priority}
-          onChange={(v) => set("priority", v as 1 | 2 | 3 | 4)}
-          subcategoryId={form.targetSubcategoryId}
-        />
-      </div>
+      <PriorityField
+        value={form.priority}
+        onChange={v => set("priority", v)}
+        subcategoryId={form.targetSubcategoryId}
+      />
 
       {/* Tags */}
-      <div style={frow}>
-        <label style={s.label}>Tagi</label>
-        <TagMultiSelect value={form.tags} onChange={(v: string[]) => set("tags", v)} />
-      </div>
+      <TagsField value={form.tags} onChange={v => set("tags", v)} />
 
       {/* Buttons */}
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>

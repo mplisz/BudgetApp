@@ -10,9 +10,7 @@
 import { c } from "../../../styles/tokens";
 import { useState } from "react";
 import { theme as s } from "../../../styles/theme";
-import { SubcategorySelect } from "../../ui/SubcategorySelect";
-import { TagMultiSelect } from "../../ui/TagMultiSelect";
-import { PriorityPicker } from "../../ui/PriorityPicker";
+import { DescriptionField, CategoryField, UrlField, PriorityField, TagsField, FieldRow } from "./planFields";
 import type { WishPostPayload } from "../../../hooks/usePlanned";
 
 interface WishFormProps {
@@ -31,8 +29,6 @@ const EMPTY = {
   priority:              2 as 1 | 2 | 3 | 4,
   url:                   "",
 };
-
-const frow: React.CSSProperties = { marginBottom: 16 };
 
 export function WishForm({ onSubmit, isSaving = false }: WishFormProps) {
   const [form, setForm] = useState(EMPTY);
@@ -64,69 +60,50 @@ export function WishForm({ onSubmit, isSaving = false }: WishFormProps) {
 
   return (
     <div>
-      <div style={frow}>
-        <label style={s.label}>Co chcesz kupić?</label>
+      <DescriptionField
+        label="Co chcesz kupić?"
+        hint="(jedyne wymagane pole)"
+        placeholder="np. Rower gravelowy"
+        value={form.description}
+        onChange={v => set("description", v)}
+        onEnter={submit}
+        highlightEmpty
+      />
+      <div style={{ fontSize: 11, color: c.textMuted, marginTop: -12, marginBottom: 16 }}>
+        Cenę i termin ustalisz, gdy będziesz gotowy — wtedy przeniesiesz pozycję do planowanych.
+      </div>
+
+      <FieldRow label="Szacunkowa cena" hint="(opcjonalnie)">
         <input
-          autoFocus
           style={s.input}
-          value={form.description}
-          onChange={e => set("description", e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") submit(); }}
-          placeholder="np. Rower gravelowy"
-          maxLength={200}
+          value={form.estimatedAmount}
+          onChange={e => set("estimatedAmount", e.target.value.replace(/[^\d.,]/g, ""))}
+          placeholder="— nie wiem jeszcze —"
+          inputMode="decimal"
         />
-        <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>
-          Jedyne wymagane pole. Cenę i termin ustalisz, gdy będziesz gotowy —
-          wtedy przeniesiesz pozycję do planowanych.
-        </div>
-      </div>
+      </FieldRow>
 
-      <div style={{ ...frow, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 180px" }}>
-          <label style={s.label}>Szacunkowa cena</label>
-          <input
-            style={s.input}
-            value={form.estimatedAmount}
-            onChange={e => set("estimatedAmount", e.target.value.replace(/[^\d.,]/g, ""))}
-            placeholder="— nie wiem jeszcze —"
-            inputMode="decimal"
-          />
-        </div>
-        <div style={{ flex: "1 1 180px" }}>
-          <label style={s.label}>Link</label>
-          <input
-            style={s.input}
-            value={form.url}
-            onChange={e => set("url", e.target.value)}
-            placeholder="https://…"
-            maxLength={500}
-          />
-        </div>
-      </div>
+      <UrlField value={form.url} onChange={v => set("url", v)} />
 
-      <div style={frow}>
-        <label style={s.label}>Kategoria</label>
-        <SubcategorySelect
-          value={form.targetSubcategoryId}
-          allowedTypes={["EXPENSE", "SAVING"]}
-          onChange={({ subcategoryId, subcategoryName, categoryId, categoryName }) => {
-            set("targetSubcategoryId", subcategoryId);
-            set("targetSubcategoryName", subcategoryName);
-            set("targetCategoryId", categoryId);
-            set("targetCategoryName", categoryName);
-          }}
-        />
-      </div>
+      <CategoryField
+        label="Kategoria"
+        subcategoryId={form.targetSubcategoryId}
+        categoryName={form.targetCategoryName}
+        onChange={sel => setForm(f => ({ ...f,
+          targetSubcategoryId:   sel.subcategoryId,
+          targetSubcategoryName: sel.subcategoryName,
+          targetCategoryId:      sel.categoryId,
+          targetCategoryName:    sel.categoryName,
+        }))}
+      />
 
-      <div style={frow}>
-        <label style={s.label}>Jak bardzo tego chcesz?</label>
-        <PriorityPicker value={form.priority} onChange={p => set("priority", p as 1 | 2 | 3 | 4)} />
-      </div>
+      <PriorityField
+        value={form.priority}
+        onChange={p => set("priority", p)}
+        subcategoryId={form.targetSubcategoryId}
+      />
 
-      <div style={frow}>
-        <label style={s.label}>Tagi</label>
-        <TagMultiSelect value={form.tags} onChange={t => set("tags", t)} />
-      </div>
+      <TagsField value={form.tags} onChange={t => set("tags", t)} />
 
       <button
         onClick={submit}
