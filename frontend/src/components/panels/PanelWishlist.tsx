@@ -31,10 +31,11 @@ export default function PanelWishlist() {
 
   useEffect(() => { loadWishes().then(setWishes); }, [loadWishes]);
 
-  // Most-wanted first, then newest. Priority 1 is the strongest want.
+  // Newest first. Not sorted by priority: that field describes how essential
+  // a spend is and is derived from the subcategory when the item is promoted,
+  // so it says nothing meaningful about an item still on the list.
   const sorted = useMemo(
     () => [...(wishes ?? [])].sort((a, b) =>
-      (a.priority ?? 4) - (b.priority ?? 4) ||
       (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
     [wishes],
   );

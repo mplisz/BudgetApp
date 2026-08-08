@@ -7,6 +7,7 @@
 import { c, alpha } from "../../../styles/tokens";
 import { useEnvelopePay }         from "../../../hooks/useEnvelopePay";
 import { fmt }                    from "../../../utils/helpers";
+import { safeHttpUrl }            from "../../../utils/safeUrl";
 import type { PlannedDoc }       from "../../../hooks/usePlanned";
 
 interface PlannedCardProps {
@@ -18,20 +19,6 @@ interface PlannedCardProps {
   actualSpent?: number;
 }
 
-function safeHttpUrl(raw: string): string | null {
-  const trimmed = (raw || "").trim();
-  if (!trimmed) return null;
-  // must be  http(s) — blocks  javascript:, data:, vbscript etc.,
-  const scheme = trimmed.match(/^([a-z][a-z0-9+.-]*):/i);
-  if (scheme && !/^https?$/i.test(scheme[1])) return null;
-  const candidate = scheme ? trimmed : `https://${trimmed}`;
-  try {
-    const u = new URL(candidate);
-    return (u.protocol === "http:" || u.protocol === "https:") ? u.href : null;
-  } catch {
-    return null;
-  }
-}
 export function PlannedCard({ doc, onEdit, onArchive, onPurchase, actualSpent }: PlannedCardProps) {
   const isForeign    = doc.originalCurrency && doc.originalCurrency !== "PLN";
 

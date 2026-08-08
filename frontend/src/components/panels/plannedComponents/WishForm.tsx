@@ -10,7 +10,7 @@
 import { c } from "../../../styles/tokens";
 import { useState } from "react";
 import { theme as s } from "../../../styles/theme";
-import { DescriptionField, CategoryField, UrlField, PriorityField, TagsField, FieldRow } from "./planFields";
+import { DescriptionField, CategoryField, UrlField, TagsField, FieldRow } from "./planFields";
 import type { WishPostPayload } from "../../../hooks/usePlanned";
 
 interface WishFormProps {
@@ -26,7 +26,6 @@ const EMPTY = {
   targetSubcategoryId:   "",
   targetSubcategoryName: "",
   tags:                  [] as string[],
-  priority:              2 as 1 | 2 | 3 | 4,
   url:                   "",
 };
 
@@ -52,7 +51,6 @@ export function WishForm({ onSubmit, isSaving = false }: WishFormProps) {
       targetSubcategoryId:   form.targetSubcategoryId,
       targetSubcategoryName: form.targetSubcategoryName,
       tags:                  form.tags,
-      priority:              form.priority,
       url:                   form.url.trim(),
     });
     setForm(EMPTY);
@@ -97,12 +95,10 @@ export function WishForm({ onSubmit, isSaving = false }: WishFormProps) {
         }))}
       />
 
-      <PriorityField
-        value={form.priority}
-        onChange={p => set("priority", p)}
-        subcategoryId={form.targetSubcategoryId}
-      />
-
+      {/* No priority here on purpose: priority describes how essential a
+          SPEND is, and it is derived from the subcategory at promotion time.
+          Asking for it on an item that has no price and no date would be
+          asking a question the answer to which is computed later anyway. */}
       <TagsField value={form.tags} onChange={t => set("tags", t)} />
 
       <button

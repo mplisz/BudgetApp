@@ -8,27 +8,14 @@
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { theme as s } from "../../../styles/theme";
 import { fmt } from "../../../utils/helpers";
+import { safeHttpUrl } from "../../../utils/safeUrl";
 import type { PlannedDoc } from "../../../hooks/usePlanned";
 
 interface WishCardProps {
   wish:      PlannedDoc;
   onPromote: (wish: PlannedDoc) => void;
   onArchive: (wish: PlannedDoc) => void;
-}
-
-function safeHttpUrl(raw: string): string | null {
-  const trimmed = (raw || "").trim();
-  if (!trimmed) return null;
-  const scheme = trimmed.match(/^([a-z][a-z0-9+.-]*):/i);
-  if (scheme && !/^https?$/i.test(scheme[1])) return null;
-  try {
-    const u = new URL(scheme ? trimmed : `https://${trimmed}`);
-    return (u.protocol === "http:" || u.protocol === "https:") ? u.href : null;
-  } catch {
-    return null;
-  }
 }
 
 export function WishCard({ wish, onPromote, onArchive }: WishCardProps) {
@@ -43,7 +30,6 @@ export function WishCard({ wish, onPromote, onArchive }: WishCardProps) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: c.text }}>{wish.description}</span>
-            <span style={{ ...s.chip(c.info), fontSize: 10 }}>P{wish.priority}</span>
             {safeUrl && (
               <a href={safeUrl} target="_blank" rel="noopener noreferrer" title={wish.url}
                 style={{ fontSize: 12, color: c.info, textDecoration: "none" }}>
