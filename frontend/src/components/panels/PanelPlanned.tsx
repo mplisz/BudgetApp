@@ -507,6 +507,20 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
         </div>
       )}
 
+      {/* Wishes — ideas without a month or a price; never part of any total.
+          Sits ABOVE the plan list, unlike the archive at the bottom: archive is
+          something you look at, this is something you add to, so it has to be
+          where the toggle that opened it is. */}
+      {showWishes && (
+        <WishSection
+          wishes={wishes}
+          isSaving={isSaving}
+          onCreate={handleCreateWish}
+          onPromote={setPromoteTarget}
+          onArchive={handleArchiveWish}
+        />
+      )}
+
       {/* List */}
       {isLoading && <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>}
 
@@ -563,17 +577,6 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
           </div>
         );
       })}
-
-      {/* Wishes — ideas without a month or a price; never part of any total */}
-      {showWishes && (
-        <WishSection
-          wishes={wishes}
-          isSaving={isSaving}
-          onCreate={handleCreateWish}
-          onPromote={setPromoteTarget}
-          onArchive={handleArchiveWish}
-        />
-      )}
 
       {/* Archived list — dimmed, read-only, with the "why we dropped it" note */}
       {showArchived && (
