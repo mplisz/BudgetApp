@@ -21,10 +21,11 @@ const { productsContainer } = require("../cosmos");
 const { requireAuth }       = require("../middleware/auth");
 const { readItemWithEtag, readItem, IdParamSchema } = require("../utils/helpers");
 const { productKey, productId, newTrackedProduct } = require("../utils/productCatalog");
+const { PRODUCT_UNIT_CODES } = require("../utils/productUnits");
 
 router.use(requireAuth);
 
-const UNIT_ENUM = z.enum(["g", "ml", "szt"]);
+const UNIT_ENUM = z.enum(PRODUCT_UNIT_CODES);
 
 const CreateSchema = z.object({
   canonicalName: z.string().min(1).max(120),

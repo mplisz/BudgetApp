@@ -13,18 +13,10 @@ import { theme as s } from "../../../styles/theme";
 import { CollapsibleSection } from "../../ui";
 import { ConfirmModal } from "../../ui/ConfirmModal";
 import { useProductCatalog, type CatalogProduct } from "../../../hooks/useProductCatalog";
-import { formatSize, parseSizeInput, type SizeUnit } from "../../../utils/productPricing";
+import { formatSize, parseSizeInput } from "../../../utils/productPricing";
+import { UNIT_ENTRY_OPTIONS, type UnitEntryKey } from "../../../data/constants/productUnits";
 
-/** User-facing unit choices, each mapped to the BASE unit (g/ml/szt) the
- *  rest of the app works in — so "1,5 l" is stored as 1500/ml, matching
- *  every other size already parsed off a receipt. */
-const UNIT_SCALE: Record<string, { base: SizeUnit; factor: number; label: string }> = {
-  g:   { base: "g",   factor: 1,    label: "g"   },
-  kg:  { base: "g",   factor: 1000, label: "kg"  },
-  ml:  { base: "ml",  factor: 1,    label: "ml"  },
-  l:   { base: "ml",  factor: 1000, label: "l"   },
-  szt: { base: "szt", factor: 1,    label: "szt" },
-};
+const UNIT_SCALE = UNIT_ENTRY_OPTIONS;
 
 const PRODUCT_MODAL_CLOSED = { isOpen: false, product: null as CatalogProduct | null };
 
@@ -34,7 +26,7 @@ export function TrackedProductsSection() {
 
   const [newName,     setNewName]     = useState("");
   const [newSize,     setNewSize]     = useState("");
-  const [newUnitKey,  setNewUnitKey]  = useState<keyof typeof UNIT_SCALE>("szt");
+  const [newUnitKey,  setNewUnitKey]  = useState<UnitEntryKey>("szt");
   const [isSaving,    setIsSaving]    = useState(false);
 
   const [editingId,   setEditingId]   = useState<string | null>(null);

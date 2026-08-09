@@ -16,7 +16,11 @@
 // Everything here is a pure function — see productPricing.test.ts.
 // ============================================================
 
-export type SizeUnit = "g" | "ml" | "szt";
+import { PRODUCT_UNITS, type SizeUnit } from "../data/constants/productUnits";
+
+// Re-exported so the many existing `import { SizeUnit } from productPricing`
+// call sites keep working; the definition itself lives with the unit table.
+export type { SizeUnit };
 
 export interface ParsedName {
   nameKey:  string;          // folded product name (no size token)
@@ -165,18 +169,19 @@ export function computeUnitPrice(
 ): number | null {
   if (!unit || !size || size <= 0) return null;
   const perBase = price / size;
-  return unit === "szt" ? perBase : perBase * 1000;  // zł/kg | zł/l
+  return perBase * PRODUCT_UNITS[unit].priceFactor;   // zł/kg | zł/l | zł/szt | zł/kWh | zł/m³
 }
 
 export function unitPriceLabel(unit: SizeUnit): string {
-  return unit === "g" ? "zł/kg" : unit === "ml" ? "zł/l" : "zł/szt";
+  return PRODUCT_UNITS[unit].priceLabel;
 }
 
-/** "200 g", "1,5 kg", "10 szt" — human size for tables/badges. */
+/** "200 g", "1,5 kg", "10 szt", "250 kWh" — human size for tables/badges. */
 export function formatSize(size: number, unit: SizeUnit): string {
-  const scaled = unit !== "szt" && size >= 1000
-    ? { value: size / 1000, label: unit === "g" ? "kg" : "l" }
-    : { value: size, label: unit };
+  const def = PRODUCT_UNITS[unit];
+  const scaled = def.bigUnit && size >= def.priceFactor
+    ? { value: size / def.priceFactor, label: def.bigUnit }
+    : { value: size, label: def.label };
   const num = Number(scaled.value.toFixed(2)).toString().replace(".", ",");
   return `${num} ${scaled.label}`;
 }
@@ -277,14 +282,15 @@ function parseItem(item: PriceLineItem): (ParsedName & { label: string }) | null
   const unit = structured.unit ?? null;
   const packSize = unit && structured.size && structured.size > 0 ? structured.size : null;
 
-  // For "szt" both fields carry the SAME dimension — a count — so a model
-  // that echoes "x2" into size AND packCount would square it (2 cans → 4).
+  // For COUNT units both fields carry the same dimension, so a model that
+  // echoes "x2" into size AND packCount would square it (2 cans → 4).
   // Collapse only when they match: different values are a real nesting
   // ("Jaja 10szt x2" = 10 per pack × 2 packs = 20), which must still multiply.
-  const countEchoed = unit === "szt" && packSize !== null && packSize === pack;
+  const isCount = !!unit && PRODUCT_UNITS[unit].isCount;
+  const countEchoed = isCount && packSize !== null && packSize === pack;
   const size = packSize !== null
     ? (countEchoed ? packSize : packSize * pack)
-    : (unit === "szt" && pack > 1 ? pack : null);
+    : (isCount && pack > 1 ? pack : null);
   const label = structured.name.trim();
   return { nameKey: foldText(label).replace(/\s+/g, " ").trim(), size, unit, packSize, label };
 }

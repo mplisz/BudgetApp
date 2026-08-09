@@ -21,6 +21,7 @@ import {
   catalogKey,
   computeUnitPrice,
   formatSize,
+  unitPriceLabel,
   productMetric,
   buildPriceHistory,
   MIN_OCCURRENCES,
@@ -107,9 +108,23 @@ describe("computeUnitPrice", () => {
   it("computes zł/szt from pieces", () => {
     expect(computeUnitPrice(12, 10, "szt")).toBe(1.2);
   });
+  it("prices utility units per their own unit — no ×1000 scale", () => {
+    expect(computeUnitPrice(180, 300, "kWh")).toBe(0.6);   // 180 zł / 300 kWh
+    expect(computeUnitPrice(120, 40,  "m3")).toBe(3);      // 120 zł / 40 m³
+  });
   it("returns null without a size", () => {
     expect(computeUnitPrice(5, null, null)).toBeNull();
     expect(computeUnitPrice(5, 0, "g")).toBeNull();
+  });
+});
+
+describe("unitPriceLabel", () => {
+  it("labels every unit from the shared table", () => {
+    expect(unitPriceLabel("g")).toBe("zł/kg");
+    expect(unitPriceLabel("ml")).toBe("zł/l");
+    expect(unitPriceLabel("szt")).toBe("zł/szt");
+    expect(unitPriceLabel("kWh")).toBe("zł/kWh");
+    expect(unitPriceLabel("m3")).toBe("zł/m³");
   });
 });
 
@@ -122,6 +137,10 @@ describe("formatSize", () => {
   it("scales up to kg / l with a Polish decimal comma", () => {
     expect(formatSize(1500, "g")).toBe("1,5 kg");
     expect(formatSize(2000, "ml")).toBe("2 l");
+  });
+  it("never scales utility units — kWh and m³ are already the billed unit", () => {
+    expect(formatSize(2500, "kWh")).toBe("2500 kWh");
+    expect(formatSize(40, "m3")).toBe("40 m³");
   });
 });
 

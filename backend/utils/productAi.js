@@ -9,6 +9,7 @@
 
 const { z } = require("zod");
 const { AzureOpenAI } = require("openai");
+const { PRODUCT_UNIT_CODES, PRODUCT_UNIT_LIST } = require("./productUnits");
 
 const OPENAI_TIMEOUT_MS = 120000;
 
@@ -40,7 +41,7 @@ function getOpenAIClient() {
 const ProductSchema = z.object({
   name:      z.string().min(1).max(120).nullable().optional(),
   size:      z.number().positive().nullable().optional(),
-  unit:      z.enum(["g", "ml", "szt"]).nullable().optional(),
+  unit:      z.enum(PRODUCT_UNIT_CODES).nullable().optional(),
   packCount: z.number().int().positive().max(99).nullable().optional(),
 });
 
@@ -51,7 +52,9 @@ const ProductSchema = z.object({
 const PRODUCT_RULES = `- "name": czysta nazwa produktu BEZ gramatury, pojemności, wielopaku i wagi — pełne słowa,
   poprawna polska pisownia (rozwiń skróty z paragonu, np. "MLK UHT3.2" → "Mleko UHT 3,2%").
 - "size": rozmiar JEDNEGO opakowania przeliczony do jednostki bazowej ("kg"→g, "l"→ml).
-- "unit": "g", "ml" lub "szt". Dla towarów ważonych podaj wagę z paragonu w gramach.
+- "unit": jedna z: ${PRODUCT_UNIT_LIST}. Dla towarów ważonych podaj wagę z paragonu w gramach.
+  "kWh" i "m3" dotyczą wyłącznie rachunków za media (prąd, gaz, woda) — na paragonie
+  sklepowym nie występują. Wtedy "size" to zużycie z rachunku w tej jednostce.
 - "packCount": ŁĄCZNA liczba sztuk kupionych, niezależnie od tego skąd wynika:
   · wielopak w nazwie ("0,5L x4" → 4),
   · KOLUMNA ILOŚCI paragonu ("2 * 4,99 9,98" → 2; "2 szt. x 4,99" → 2; "3 x2,39 7,17" → 3),

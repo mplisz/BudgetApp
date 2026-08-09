@@ -47,6 +47,7 @@ const { cleanMerchant, merchantExists, rememberMerchant, rememberMerchantNip } =
 const { rememberProducts } = require("../utils/productCatalog");
 const { resolveTransferTarget, buildReturnTransferDoc } = require("../utils/transferCategory");
 const { resolveTxType, applyTxType } = require("../utils/categoryType");
+const { PRODUCT_UNIT_CODES } = require("../utils/productUnits");
 
 
 // ── Schemas ───────────────────────────────────────────────────
@@ -84,7 +85,7 @@ const TransactionBaseSchema = z.object({
                       product:          z.object({
                         name:      z.string().max(120).nullable().optional(),
                         size:      z.number().nullable().optional(),
-                        unit:      z.enum(["g", "ml", "szt"]).nullable().optional(),
+                        unit:      z.enum(PRODUCT_UNIT_CODES).nullable().optional(),
                         packCount: z.number().int().positive().max(99).nullable().optional(),
                       }).nullable().optional().catch(undefined),
                     })).max(60).optional(),
