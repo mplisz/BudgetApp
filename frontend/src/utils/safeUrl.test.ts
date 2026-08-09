@@ -38,6 +38,31 @@ describe("safeHttpUrl", () => {
     expect(out === null || out.startsWith("https://")).toBe(true);
   });
 
+  it("blocks data: URLs, base64 payload or not", () => {
+    // <script>alert(1)</script>
+    expect(safeHttpUrl("data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==")).toBeNull();
+    expect(safeHttpUrl("DATA:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==")).toBeNull();
+    expect(safeHttpUrl("  data:text/html;base64,PHNjcmlwdD4=")).toBeNull();
+    // Legitimate data URIs go too — we only ever want real links here.
+    expect(safeHttpUrl("data:image/png;base64,iVBORw0KGgo=")).toBeNull();
+  });
+
+  it("cannot be tricked by encoding the scheme itself", () => {
+    // base64 of "javascript:alert(1)" — no scheme, so it can only become a
+    // (nonsense) https host. Nothing in the app ever base64-decodes an href.
+    const out = safeHttpUrl("amF2YXNjcmlwdDphbGVydCgxKQ==");
+    expect(out === null || out.startsWith("https://")).toBe(true);
+    // percent-encoded "j" in javascript:
+    const pct = safeHttpUrl("%6Aavascript:alert(1)");
+    expect(pct === null || pct.startsWith("https://")).toBe(true);
+  });
+
+  it("allows base64 that is merely part of a normal https link", () => {
+    // Not an injection: the payload is just path/fragment data on a real host.
+    expect(safeHttpUrl("https://example.com/p?d=PHNjcmlwdD4="))
+      .toBe("https://example.com/p?d=PHNjcmlwdD4=");
+  });
+
   it("returns null for nothing to link to", () => {
     expect(safeHttpUrl("")).toBeNull();
     expect(safeHttpUrl("   ")).toBeNull();
