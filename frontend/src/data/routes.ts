@@ -35,6 +35,7 @@ export const PANEL_PATHS: Record<string, string> = {
 
   // Tools
   wishlist:           "/wishlist",
+  tags:               "/tags",
   vouchers:           "/vouchers",
   safetynet:          "/safetynet",
   analytics:          "/analytics",

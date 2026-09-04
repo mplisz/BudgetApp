@@ -60,6 +60,7 @@ const PanelAddRecurring       = lazy(() => import("./components/panels/PanelAddR
 const PanelAddPlanned         = lazy(() => import("./components/panels/PanelAddPlanned"));
 const PanelAddWish            = lazy(() => import("./components/panels/PanelAddWish"));
 const PanelWishlist           = lazy(() => import("./components/panels/PanelWishlist"));
+const PanelTagAnalysis        = lazy(() => import("./components/panels/PanelTagAnalysis"));
 const PanelSummary            = lazy(() => import("./components/panels/PanelSummary"));
 const PanelAnalytics          = lazy(() => import("./components/panels/PanelAnalytics"));
 const PanelSafetyNet          = lazy(() => import("./components/panels/PanelSafetyNet"));
@@ -259,6 +260,7 @@ function AppContent() {
         {/* Lists & tools */}
 
         <Route path="wishlist"  element={<PanelWishlist />} />
+        <Route path="tags"      element={<PanelTagAnalysis />} />
         <Route path="vouchers"  element={<PanelVouchers />} />
         <Route path="safetynet" element={<PanelSafetyNet />} />
         <Route path="analytics" element={<PanelAnalytics />} />

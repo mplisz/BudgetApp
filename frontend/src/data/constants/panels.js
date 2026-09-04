@@ -40,6 +40,9 @@ export const PANEL_META = {
   // The shopping list has no month by design — that is what separates it from
   // a planned expense — so it belongs here rather than under "Analiza miesiąca".
   wishlist:           { icon: "🛒", label: "Lista zakupowa",     section: "Narzędzia",       mobile: true },
+  // Range-based, not month-based: a trip is a span of dates, so this belongs
+  // beside Analiza rather than under "Analiza miesiąca".
+  tags:               { icon: "🏷️", label: "Analiza tagów",      section: "Narzędzia",       mobile: true },
   vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia",       mobile:true },
   safetynet:          { icon: "🛡️", label: "Poduszka",         section: "Narzędzia",        mobile: true },
   analytics:          { icon: "📊", label: "Analiza",           section: "Narzędzia",       mobile: true},
