@@ -56,12 +56,42 @@ describe("buildTagBreakdown", () => {
     expect(out.total).toBe(60);
   });
 
-  it("reports the biggest purchase gross, as it appeared on the receipt", () => {
+  it("keeps paid, returned and net apart so the UI can show the arithmetic", () => {
+    const out = buildTagBreakdown([
+      tx({ amount: 300, returns: [{ cashAmount: 100 }] }),
+      tx({ amount: 200 }),
+    ], "trip");
+    expect(out.money).toEqual({ paid: 500, returned: 100, net: 400 });
+    expect(out.total).toBe(out.money.net);
+  });
+
+  it("counts what actually left the account, so a voucher-paid purchase isn't overstated", () => {
+    const out = buildTagBreakdown([
+      tx({ amount: 200, netAmount: 150 }),   // 50 covered by a voucher
+    ], "trip");
+    expect(out.money).toEqual({ paid: 150, returned: 0, net: 150 });
+  });
+
+  it("reports no return split when nothing came back", () => {
+    const out = buildTagBreakdown([tx({ amount: 120 })], "trip");
+    expect(out.money).toEqual({ paid: 120, returned: 0, net: 120 });
+  });
+
+  it("ranks the biggest purchase by what it ACTUALLY cost", () => {
+    // Refunded almost entirely, so despite the bigger sticker price the
+    // overnight stay contributed less to the trip than the meal did.
     const out = buildTagBreakdown([
       tx({ amount: 300, description: "Nocleg", date: "2026-07-16", returns: [{ cashAmount: 250 }] }),
       tx({ amount: 100, description: "Obiad",  date: "2026-07-15" }),
     ], "trip");
-    expect(out.biggest).toMatchObject({ description: "Nocleg", amount: 300 });
+    expect(out.biggest).toMatchObject({ description: "Obiad", paid: 100, returned: 0, net: 100 });
+  });
+
+  it("carries all three figures on the biggest purchase", () => {
+    const out = buildTagBreakdown([
+      tx({ amount: 400, description: "Hotel", returns: [{ cashAmount: 50 }] }),
+    ], "trip");
+    expect(out.biggest).toMatchObject({ description: "Hotel", paid: 400, returned: 50, net: 350 });
   });
 
   it("separates days WITH spend from the calendar span", () => {

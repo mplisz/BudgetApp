@@ -33,7 +33,7 @@ import { theme as s } from "../../styles/theme";
 import { fmt, plural } from "../../utils/helpers";
 import {
   buildTagBreakdown, DAILY_SERIES_MAX_DAYS,
-  type TagTransaction, type BreakdownSlice,
+  type TagTransaction, type BreakdownSlice, type MoneySplit,
 } from "../../utils/tagBreakdown";
 
 // BreakdownSlice → the shape TopCategoriesBar already speaks.
@@ -51,6 +51,40 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
       <div style={{ ...s.statLab, marginTop: 0, marginBottom: 4 }}>{label}</div>
       <div style={{ ...s.statVal, fontSize: 20 }}>{value}</div>
       {sub && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * A money tile that shows its arithmetic when part of it came back.
+ *
+ * The headline is always the NET figure — what the thing actually cost — so
+ * the number you read first is the true one. Paid and refunded appear beneath
+ * it only when a refund exists, so an ordinary purchase stays a single clean
+ * number instead of carrying two zeroes it doesn't need.
+ */
+function MoneyTile({ label, money, sub }: { label: string; money: MoneySplit; sub?: string }) {
+  const hasReturn = money.returned > 0.005;
+  return (
+    <div style={{ ...s.statBox, textAlign: "left", flex: "1 1 190px", minWidth: 0 }}>
+      <div style={{ ...s.statLab, marginTop: 0, marginBottom: 4 }}>{label}</div>
+      <div style={{ ...s.statVal, fontSize: 20 }}>{fmt(money.net)}</div>
+
+      {hasReturn && (
+        <div style={{
+          display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap",
+          marginTop: 6, paddingTop: 6, borderTop: `1px solid ${c.border}`,
+          fontSize: 11,
+        }}>
+          <span style={{ color: c.textMuted }}>zapłacono</span>
+          <span style={{ color: c.textTertiary, fontWeight: 600 }}>{fmt(money.paid)}</span>
+          <span style={{ color: c.borderStrong }}>−</span>
+          <span style={{ color: c.textMuted }}>zwrot</span>
+          <span style={{ color: c.successLight, fontWeight: 600 }}>{fmt(money.returned)}</span>
+        </div>
+      )}
+
+      {sub && <div style={{ fontSize: 10, color: c.textMuted, marginTop: hasReturn ? 4 : 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -182,26 +216,18 @@ export default function PanelTagAnalysis() {
           ) : (
             <>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-                <Tile label="Suma" value={fmt(breakdown.total)} />
-                <Tile
-                  label="Transakcje"
-                  value={String(breakdown.count)}
-                  sub={`${breakdown.spendingDays} ${plural(breakdown.spendingDays, "dzień", "dni", "dni")} z wydatkami`}
-                />
-                <Tile
-                  label="Okres"
-                  value={`${breakdown.spanDays} ${plural(breakdown.spanDays, "dzień", "dni", "dni")}`}
-                  sub={`${breakdown.firstDate} → ${breakdown.lastDate}`}
-                />
+                <MoneyTile label="Suma" money={breakdown.money} />
                 <Tile
                   label="Średnio dziennie"
+                  // The span is the denominator, so it belongs here as the
+                  // explanation rather than as a tile of its own.
                   value={fmt(breakdown.spanDays > 0 ? breakdown.total / breakdown.spanDays : 0)}
-                  sub="na dzień okresu"
+                  sub={`${breakdown.firstDate} → ${breakdown.lastDate}`}
                 />
                 {breakdown.biggest && (
-                  <Tile
+                  <MoneyTile
                     label="Największy wydatek"
-                    value={fmt(breakdown.biggest.amount)}
+                    money={breakdown.biggest}
                     sub={breakdown.biggest.description}
                   />
                 )}

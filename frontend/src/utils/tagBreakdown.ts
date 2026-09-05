@@ -18,7 +18,7 @@
 // Everything here is a pure function — see tagBreakdown.test.ts.
 // ============================================================
 
-import { calculateNetAmount } from "./returnUtils";
+import { calculateNetAmount, calculateTotalCashReturned } from "./returnUtils";
 
 /** Structural on purpose: any transaction-shaped object works, no cast. */
 export interface TagTransaction {
@@ -47,8 +47,22 @@ export interface BreakdownSlice {
   share:  number;   // 0–100, of the tag's total
 }
 
+/** The three figures a returned purchase has, kept apart so the UI never has
+ *  to pick one and hide the rest. `net` is what the thing actually cost. */
+export interface MoneySplit {
+  /** What left the account — voucher-adjusted, before any refund came back. */
+  paid:     number;
+  /** Cash refunded, across any month. Voucher refunds are a separate asset
+   *  and deliberately excluded, matching calculateNetAmount. */
+  returned: number;
+  net:      number;
+}
+
 export interface TagBreakdown {
+  /** Net of returns — the figure every share and slice below is based on. */
   total:         number;
+  /** Same total, split into paid / returned / net for display. */
+  money:         MoneySplit;
   count:         number;
   firstDate:     string | null;
   lastDate:      string | null;
@@ -58,7 +72,11 @@ export interface TagBreakdown {
   spendingDays:  number;
   /** Calendar days from first to last transaction, inclusive. */
   spanDays:      number;
-  biggest:       { description: string; amount: number; date: string } | null;
+  /** The single purchase that cost the most — ranked by what it ACTUALLY
+   *  cost, so a fully refunded item can't top a trip it contributed nothing
+   *  to. All three figures travel with it, so nothing is hidden by the
+   *  choice. */
+  biggest:       ({ description: string; date: string } & MoneySplit) | null;
   categories:    BreakdownSlice[];
   subcategories: BreakdownSlice[];
   merchants:     BreakdownSlice[];
@@ -119,7 +137,8 @@ export function buildTagBreakdown(
   const rows = transactions.filter(tx => isTaggedExpense(tx, tagId));
 
   const empty: TagBreakdown = {
-    total: 0, count: 0, firstDate: null, lastDate: null,
+    total: 0, money: { paid: 0, returned: 0, net: 0 },
+    count: 0, firstDate: null, lastDate: null,
     spendingDays: 0, spanDays: 0, biggest: null,
     categories: [], subcategories: [], merchants: [], daily: [], monthly: [],
   };
@@ -132,6 +151,8 @@ export function buildTagBreakdown(
   const byMonth = new Map<string, number>();
 
   let total = 0;
+  let paidTotal = 0;
+  let returnedTotal = 0;
   let firstDate = rows[0].date;
   let lastDate  = rows[0].date;
   let biggest: TagBreakdown["biggest"] = null;
@@ -146,16 +167,21 @@ export function buildTagBreakdown(
   };
 
   for (const tx of rows) {
-    const net = calculateNetAmount(tx);
-    total += net;
+    const net      = calculateNetAmount(tx);
+    const returned = calculateTotalCashReturned(tx);
+    // What actually left the account: netAmount when a voucher covered part
+    // of it, otherwise the sticker price. Mirrors calculateNetAmount's base.
+    const paid     = tx.netAmount ?? tx.amount;
+
+    total         += net;
+    paidTotal     += paid;
+    returnedTotal += returned;
 
     if (tx.date < firstDate) firstDate = tx.date;
     if (tx.date > lastDate)  lastDate  = tx.date;
 
-    // "Biggest" reports the GROSS single purchase the user would recognise on
-    // a receipt, not a net figure adjusted by an unrelated later return.
-    if (!biggest || tx.amount > biggest.amount) {
-      biggest = { description: tx.description || "—", amount: tx.amount, date: tx.date };
+    if (!biggest || net > biggest.net) {
+      biggest = { description: tx.description || "—", date: tx.date, paid, returned, net };
     }
 
     bump(cats,  tx.categoryId    || "brak", tx.categoryName    || "Bez kategorii",    net);
@@ -177,6 +203,7 @@ export function buildTagBreakdown(
 
   return {
     total,
+    money: { paid: paidTotal, returned: returnedTotal, net: total },
     count: rows.length,
     firstDate,
     lastDate,
