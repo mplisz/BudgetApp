@@ -79,6 +79,9 @@ export interface Transaction {
   recurringId?: string | null;
   returns?: Return[];
   receiptBlobPath?: string | null;
+  // Receipt entity id — shared by every transaction the same scan produced.
+  // The grouping key of the "Paragony" view (see utils/receiptGroups.ts).
+  receiptId?: string | null;
   merchant?: string | null;
   originalAmount?: number;
   originalCurrency?: string;

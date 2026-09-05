@@ -13,9 +13,10 @@ import { useTransactions } from "../../hooks/useTransactions";
 import { useMonthStatus }  from "../../hooks/useMonthStatus";
 import { toYMD } from "../ui/AppDatePicker";
 import { ConfirmModal }    from "../ui/ConfirmModal";
-import { fmt }             from "../../utils/helpers";
+import { fmt, plural }     from "../../utils/helpers";
 import { calculateNetAmount } from "../../utils/returnUtils";
-import { TransactionRow, ReturnModal, s, PRIO_COLORS, TransactionCard  } from "./transactionComponents";
+import { ReturnModal, s, PRIO_COLORS, ReceiptGroupCard, TransactionList } from "./transactionComponents";
+import { groupByReceipt, receiptKeyOf } from "../../utils/receiptGroups";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
 import { usePagination }   from "../../hooks/usePagination";
@@ -34,6 +35,12 @@ import { detailedKindOf, type DetailedReturnBucket } from "../../utils/returnAna
 
 
 const PAGE_SIZE = 25;
+// Receipts paginate in a much smaller page: one receipt unfolds into a whole
+// table of its own, so 25 of them would be a scroll marathon.
+const RECEIPT_PAGE_SIZE = 8;
+
+// The three ways to look at the same filtered month.
+type ViewMode = "list" | "category" | "receipt";
 
 // Options for the return-kind sub-filter (shown only while filtering FOR
 // returns); the list rendered is scoped to kinds present in the month.
@@ -78,7 +85,9 @@ export default function PanelTransactions() {
   const [deleteModal,        setDeleteModal]        = useState<DeleteModal>({ isOpen: false, txId: null });
   const [confirmLinkedModal, setConfirmLinkedModal] = useState<LinkedModal>({ isOpen: false, txId: null });
   const [returnTarget,       setReturnTarget]       = useState<Transaction | null>(null);
-  const [grouped,            setGrouped]            = useState(false);
+  const [view,               setView]               = useState<ViewMode>("list");
+  // Receipt view only: the "Bez paragonu" tail, collapsed until asked for.
+  const [looseOpen,          setLooseOpen]          = useState(false);
   const isLoadingMonth                              = useMonthLoad(activeBudgetMonth, loadTransactions, () => {
                                                         set("dateFrom", null);
                                                         set("dateTo", null);
@@ -149,7 +158,10 @@ export default function PanelTransactions() {
       // passes when ANY of its returns is of a selected kind.
       if (filters.returnKinds.length > 0 &&
           !(tx.returns ?? []).some(r => filters.returnKinds.includes(detailedKindOf(r)))) return false;
-      if (!matchTri(filters.hasReceipt, !!tx.receiptBlobPath)) return false;
+      // "Ma paragon" means the same thing here as in the 🧾 Paragony view: a
+      // receipt entity OR an archived blob. A transaction can keep the link
+      // after retention drops the photo, and it still belongs to its receipt.
+      if (!matchTri(filters.hasReceipt, !!receiptKeyOf(tx))) return false;
       if (!matchTri(filters.warranty,   !!tx.isWarranty))      return false;
       if (!matchTri(filters.hasProduct, trackedProductNames(tx.lineItems).length > 0)) return false;
       if (filters.merchant && tx.merchant !== filters.merchant) return false;
@@ -235,6 +247,26 @@ export default function PanelTransactions() {
       }));
   }, [filtered]);
 
+  // ── Grouping by receipt ───────────────────────────────────
+  // The cart turns one scan into one transaction per subcategory, so a single
+  // receipt shows up as several unrelated-looking rows in the flat list. This
+  // view puts them back together — and paginates by receipt, so a purchase is
+  // never split across two pages.
+
+  const { groups: receiptGroups, loose: looseTxs } = useMemo(
+    () => groupByReceipt(filtered),
+    [filtered],
+  );
+  const looseSum = useMemo(
+    () => looseTxs.reduce((acc, t) => acc + (t.effectiveAmount ?? t.amount), 0),
+    [looseTxs],
+  );
+  // Collapsed by default — receipts are the point of this view. With no
+  // receipt to show it stops being a tail (and a collapsed one would leave an
+  // empty screen), so there it is simply always open and not a toggle.
+  const looseIsOnlyContent = receiptGroups.length === 0;
+  const showLoose          = looseIsOnlyContent || looseOpen;
+
   const totalSum         = filtered.reduce((acc, t) => acc + (t.effectiveAmount ?? t.amount), 0);
   const totalVoucherSum  = filtered.reduce((acc, t) => acc + (t.voucherAmount || 0), 0);
   const totalReturnedSum = filtered.reduce((acc, t) => acc + (t.sameMonthReturned || 0), 0);
@@ -246,6 +278,15 @@ export default function PanelTransactions() {
 
   const { page: groupPage, totalPages: groupTotalPages, paginated: paginatedGroups, setPage: setGroupPage }
     = usePagination(groups, PAGE_SIZE) as { page: number; totalPages: number; paginated: typeof groups; setPage: (p: number) => void };
+
+  const { page: receiptPage, totalPages: receiptTotalPages, paginated: paginatedReceipts, setPage: setReceiptPage }
+    = usePagination(receiptGroups, RECEIPT_PAGE_SIZE) as { page: number; totalPages: number; paginated: typeof receiptGroups; setPage: (p: number) => void };
+
+  // The no-receipt section of the 🧾 view pages on its own — it is a plain
+  // list of loose transactions, not a purchase, so the receipt page size
+  // (8) would be pointlessly small for it.
+  const { page: loosePage, totalPages: looseTotalPages, paginated: paginatedLoose, setPage: setLoosePage }
+    = usePagination(looseTxs, PAGE_SIZE) as { page: number; totalPages: number; paginated: Transaction[]; setPage: (p: number) => void };
 
   // ── Handlers ─────────────────────────────────────────────
 
@@ -275,6 +316,14 @@ export default function PanelTransactions() {
   function handleUpdated(updated: Transaction) {
     setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
   }
+
+  // The same three callbacks in every view — bundled so each list site spells
+  // them once (<TransactionList {...txListHandlers} />).
+  const txListHandlers = {
+    onDelete:  (tx: Transaction) => setDeleteModal({ isOpen: true, txId: tx.id }),
+    onReturn:  (tx: Transaction) => setReturnTarget(tx),
+    onUpdated: handleUpdated,
+  };
 
   function handleReturnSaved(updated: Transaction) {
     setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
@@ -323,11 +372,14 @@ export default function PanelTransactions() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
             <div style={{ display: "flex", gap: 6 }}>
-              <ToggleBtn {...VIEW_TOGGLE_STYLE} active={!grouped} onClick={() => setGrouped(false)}>
+              <ToggleBtn {...VIEW_TOGGLE_STYLE} active={view === "list"} onClick={() => setView("list")}>
                 📋 Lista
               </ToggleBtn>
-              <ToggleBtn {...VIEW_TOGGLE_STYLE} active={grouped} onClick={() => setGrouped(true)}>
+              <ToggleBtn {...VIEW_TOGGLE_STYLE} active={view === "category"} onClick={() => setView("category")}>
                 📁 Grupy
+              </ToggleBtn>
+              <ToggleBtn {...VIEW_TOGGLE_STYLE} active={view === "receipt"} onClick={() => setView("receipt")}>
+                🧾 Paragony
               </ToggleBtn>
             </div>
           </div>
@@ -509,58 +561,24 @@ export default function PanelTransactions() {
       )}
 
       {/* Flat list */}
-      {!showSkeleton && !grouped && filtered.length > 0 && (
+      {!showSkeleton && view === "list" && filtered.length > 0 && (
         <>
           <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {flatPage} z {flatTotalPages}
           </div>
           {isMobile ? (
-                      <div>
-                        {paginatedFlat.map(tx => (
-                          <TransactionCard
-                            key={tx.id}
-                            tx={tx}
-                            onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
-                            onReturn={() => setReturnTarget(tx)}
-                            onUpdated={handleUpdated}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                    <div style={s.card}>
-                      <table style={s.table}>
-                        <thead>
-                          <tr>
-                            <th style={s.th}>Data</th>
-                            <th style={s.th}>Kategoria</th>
-                            <th style={s.th}>Opis</th>
-                            <th style={s.th}>Tagi</th>
-                            <th style={s.th}>Prio</th>
-                            <th style={{ ...s.th, textAlign: "right" }}>Kwota</th>
-                            <th style={s.th}>Autor</th>
-                            <th style={s.th}>Akcje</th>
-                          </tr>
-                        </thead>
-                          <tbody>
-                            {paginatedFlat.map(tx => (
-                              <TransactionRow
-                                key={tx.id}
-                                tx={tx}
-                                onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
-                                onReturn={() => setReturnTarget(tx)}
-                                onUpdated={handleUpdated}
-                              />
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                      <Pagination page={flatPage} totalPages={flatTotalPages} onPageChange={setFlatPage} />
-                    </>
-        )}
+            <TransactionList items={paginatedFlat} isMobile {...txListHandlers} />
+          ) : (
+            <div style={s.card}>
+              <TransactionList items={paginatedFlat} isMobile={false} {...txListHandlers} />
+            </div>
+          )}
+          <Pagination page={flatPage} totalPages={flatTotalPages} onPageChange={setFlatPage} />
+        </>
+      )}
 
       {/* Grouped view */}
-      {!showSkeleton && grouped && groups.length > 0 && (
+      {!showSkeleton && view === "category" && groups.length > 0 && (
         <>
           <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {groups.length} grup · strona {groupPage} z {groupTotalPages}
@@ -585,48 +603,83 @@ export default function PanelTransactions() {
                   <span style={s.groupSum}>{fmt(group.sum)} PLN</span>
                 </div>
               </div>
-              {!collapsed[group.key] && (isMobile ? (
-                            <div style={{ padding: "0 8px 8px" }}>
-                              {group.items.map(tx => (
-                                <TransactionCard
-                                  key={tx.id}
-                                  tx={tx}
-                                  onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
-                                  onReturn={() => setReturnTarget(tx)}
-                                  onUpdated={handleUpdated}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <table style={s.table}>
-                              <thead>
-                                <tr>
-                                  <th style={s.th}>Data</th>
-                                  <th style={s.th}>Kategoria</th>
-                                  <th style={s.th}>Opis</th>
-                                  <th style={s.th}>Tagi</th>
-                                  <th style={s.th}>Prio</th>
-                                  <th style={{ ...s.th, textAlign: "right" }}>Kwota</th>
-                                  <th style={s.th}>Autor</th>
-                                  <th style={s.th}>Akcje</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {group.items.map(tx => (
-                                  <TransactionRow
-                                    key={tx.id}
-                                    tx={tx}
-                                    onDelete={() => setDeleteModal({ isOpen: true, txId: tx.id })}
-                                    onReturn={() => setReturnTarget(tx)}
-                                    onUpdated={handleUpdated}
-                                  />
-                                ))}
-                              </tbody>
-                            </table>
-                          ))}
-                </div>
+              {!collapsed[group.key] && (
+                <TransactionList
+                  items={group.items}
+                  isMobile={isMobile}
+                  mobileStyle={{ padding: "0 8px 8px" }}
+                  {...txListHandlers}
+                />
+              )}
+            </div>
           ))}
           <Pagination page={groupPage} totalPages={groupTotalPages} onPageChange={setGroupPage} />
+        </>
+      )}
+
+      {/* Receipt view — the pagination unit is the receipt, so every
+          transaction from one scan always lands on the same page */}
+      {!showSkeleton && view === "receipt" && filtered.length > 0 && (
+        <>
+          {receiptGroups.length > 0 ? (
+            <>
+              <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
+                {receiptGroups.length} {plural(receiptGroups.length, "paragon", "paragony", "paragonów")} ·{" "}
+                strona {receiptPage} z {receiptTotalPages}
+              </div>
+              {paginatedReceipts.map(group => (
+                <ReceiptGroupCard
+                  key={group.key}
+                  group={group}
+                  collapsed={!!collapsed[group.key]}
+                  onToggle={() => toggleGroup(group.key)}
+                  isMobile={isMobile}
+                  {...txListHandlers}
+                />
+              ))}
+              <Pagination page={receiptPage} totalPages={receiptTotalPages} onPageChange={setReceiptPage} />
+            </>
+          ) : (
+            <div style={{ textAlign: "center", padding: "24px 0", color: c.borderStrong }}>
+              Brak zeskanowanych paragonów w tym zestawieniu.
+            </div>
+          )}
+
+          {/* Transactions with no receipt still show — they just don't get a
+              receipt card. Shop + date would happily merge two separate visits
+              on the same day, so they are never grouped into an invented
+              purchase; they sit in one section below the receipts, collapsed
+              by default so the receipts stay the point of this view. */}
+          {looseTxs.length > 0 && (
+            <div style={{ ...s.card, marginTop: 12 }}>
+              <div
+                style={{ ...s.groupHeader, cursor: looseIsOnlyContent ? "default" : "pointer" }}
+                onClick={looseIsOnlyContent ? undefined : () => setLooseOpen(o => !o)}
+              >
+                <div style={s.groupTitle}>
+                  {!looseIsOnlyContent && (
+                    <span style={{ color: c.textSecondary }}>{showLoose ? "▼" : "▶"}</span>
+                  )}
+                  📋 Bez paragonu
+                  <span style={{ color: c.textMuted, fontSize: 12, fontWeight: 400 }}>
+                    ({looseTxs.length} {plural(looseTxs.length, "transakcja", "transakcje", "transakcji")})
+                  </span>
+                </div>
+                <span style={s.groupSum}>{fmt(looseSum)} PLN</span>
+              </div>
+              {showLoose && (
+                <>
+                  <TransactionList
+                    items={paginatedLoose}
+                    isMobile={isMobile}
+                    mobileStyle={{ padding: "0 8px 8px" }}
+                    {...txListHandlers}
+                  />
+                  <Pagination page={loosePage} totalPages={looseTotalPages} onPageChange={setLoosePage} />
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
 
