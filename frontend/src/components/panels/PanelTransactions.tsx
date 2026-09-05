@@ -267,6 +267,8 @@ export default function PanelTransactions() {
   const looseIsOnlyContent = receiptGroups.length === 0;
   const showLoose          = looseIsOnlyContent || looseOpen;
 
+  const allReceiptsCollapsed = receiptGroups.length > 0 && receiptGroups.every(g => collapsed[g.key]);
+
   const totalSum         = filtered.reduce((acc, t) => acc + (t.effectiveAmount ?? t.amount), 0);
   const totalVoucherSum  = filtered.reduce((acc, t) => acc + (t.voucherAmount || 0), 0);
   const totalReturnedSum = filtered.reduce((acc, t) => acc + (t.sameMonthReturned || 0), 0);
@@ -291,6 +293,22 @@ export default function PanelTransactions() {
   // ── Handlers ─────────────────────────────────────────────
 
   function toggleGroup(key: string) { setCollapsed(p => ({ ...p, [key]: !p[key] })); }
+
+  // Collapse/expand every receipt — all of them, not just the current page,
+  // so paging on doesn't undo what the button just did. Expanding deletes the
+  // keys instead of writing `false`: absent means open, which is the default
+  // a freshly loaded month starts from.
+  function toggleAllReceipts() {
+    const collapse = !allReceiptsCollapsed;
+    setCollapsed(prev => {
+      const next = { ...prev };
+      for (const g of receiptGroups) {
+        if (collapse) next[g.key] = true;
+        else          delete next[g.key];
+      }
+      return next;
+    });
+  }
 
   function togglePrio(p: number) {
     set("prio", filters.prio.includes(p)
@@ -623,9 +641,17 @@ export default function PanelTransactions() {
         <>
           {receiptGroups.length > 0 ? (
             <>
-              <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
-                {receiptGroups.length} {plural(receiptGroups.length, "paragon", "paragony", "paragonów")} ·{" "}
-                strona {receiptPage} z {receiptTotalPages}
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                gap: 12, flexWrap: "wrap", marginBottom: 8,
+              }}>
+                <button onClick={toggleAllReceipts} style={s.actionBtn(c.textTertiary)}>
+                  {allReceiptsCollapsed ? "▼ Rozwiń wszystkie" : "▶ Zwiń wszystkie"}
+                </button>
+                <span style={{ color: c.textMuted, fontSize: 12 }}>
+                  {receiptGroups.length} {plural(receiptGroups.length, "paragon", "paragony", "paragonów")} ·{" "}
+                  strona {receiptPage} z {receiptTotalPages}
+                </span>
               </div>
               {paginatedReceipts.map(group => (
                 <ReceiptGroupCard
