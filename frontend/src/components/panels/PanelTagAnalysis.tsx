@@ -30,6 +30,9 @@ import { TopCategoriesBar, type CategoryTotal } from "./analyticsComponents/TopC
 import { ChartEmpty } from "./analyticsComponents/chartKit";
 import { TagTimelineChart } from "./tagComponents/TagTimelineChart";
 import { theme as s } from "../../styles/theme";
+import { s as txStyles } from "./transactionComponents/txStyles";
+import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
+import { toYMD, fromYMD } from "../ui/AppDatePicker";
 import { fmt, plural } from "../../utils/helpers";
 import {
   buildTagBreakdown, DAILY_SERIES_MAX_DAYS,
@@ -105,8 +108,15 @@ export default function PanelTagAnalysis() {
   const { transactions, isLoading: txLoading, loadRange } = useTransactionsRange();
 
   const [selected, setSelected] = useState<TagBounds | null>(null);
+  // Narrowing WITHIN a tag — pointless for a trip (it is one span anyway),
+  // but a long-lived tag like "dzieci" is only interesting per season or year.
+  const [dateFrom, setDateFrom] = useState<Date | null>(null);
+  const [dateTo,   setDateTo]   = useState<Date | null>(null);
 
   useEffect(() => { loadBounds(); }, [loadBounds]);
+
+  // A range picked for one tag means nothing on the next one.
+  useEffect(() => { setDateFrom(null); setDateTo(null); }, [selected?.tagId]);
 
   // Exactly the months this tag spans — no window, no guessing. The LRU cache
   // in useTransactionsRange makes flipping back to a tag instant.
@@ -128,11 +138,31 @@ export default function PanelTagAnalysis() {
     return `${meta?.icon ?? "🏷️"} ${meta?.name ?? "(archiwalny tag)"}`;
   };
 
+  const isFiltered = !!dateFrom || !!dateTo;
+
+  // Narrowing happens BEFORE aggregation, so every figure below — totals,
+  // shares, timeline, biggest, days with spend — describes the filtered slice
+  // rather than the whole tag. No refetch: the months are already in hand.
+  const scoped = useMemo(() => {
+    const all = transactions as unknown as TagTransaction[];
+    if (!isFiltered) return all;
+    const from = dateFrom ? toYMD(dateFrom) : null;
+    const to   = dateTo   ? toYMD(dateTo)   : null;
+    return all.filter(tx => (!from || tx.date >= from) && (!to || tx.date <= to));
+  }, [transactions, dateFrom, dateTo, isFiltered]);
+
   const breakdown = useMemo(
+    () => (selected ? buildTagBreakdown(scoped, selected.tagId) : null),
+    [scoped, selected],
+  );
+
+  // The picker is bounded by the tag's true span, which /tag-bounds already
+  // knows — no need to re-derive it from the fetched rows.
+  const dateBounds = useMemo(
     () => (selected
-      ? buildTagBreakdown(transactions as unknown as TagTransaction[], selected.tagId)
-      : null),
-    [transactions, selected],
+      ? { minDate: fromYMD(selected.firstDate), maxDate: fromYMD(selected.lastDate) }
+      : { minDate: null, maxDate: null }),
+    [selected],
   );
 
   const grain = breakdown && breakdown.spanDays <= DAILY_SERIES_MAX_DAYS ? "day" : "month";
@@ -143,9 +173,11 @@ export default function PanelTagAnalysis() {
       : breakdown.monthly.map(m => ({ key: m.month, amount: m.amount }));
   }, [breakdown, grain]);
 
-  // The fetch covers the tag's own months, so a mismatch here means the range
-  // response has not landed yet rather than anything being missing.
-  const awaitingData = !!selected && !!breakdown && breakdown.count < selected.count;
+  // The fetch covers the tag's own months, so a shortfall means the range
+  // response has not landed yet rather than anything being missing. Skipped
+  // while a date filter is on, where a smaller count is the whole point.
+  const awaitingData = !!selected && !!breakdown && !isFiltered
+    && breakdown.count < selected.count;
 
   return (
     <div style={{ padding: "0 0 60px 0" }}>
@@ -216,10 +248,41 @@ export default function PanelTagAnalysis() {
             </span>
           </div>
 
+          {/* Date narrowing. Bounded by the tag's own span, so the picker can
+              only ever land on dates the tag actually covers. */}
+          <div style={{ background: c.bgDeepest, border: `1px solid ${c.border}`, borderRadius: 12, padding: "12px 16px", marginBottom: 14 }}>
+            <div style={txStyles.filterRow as React.CSSProperties}>
+              <DateRangeFilter
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onFrom={setDateFrom}
+                onTo={setDateTo}
+                bounds={dateBounds}
+                labels={{ from: "Od", to: "Do" }}
+                emptyMessage="Ten tag nie ma jeszcze wydatków — filtr dat niedostępny."
+                disabled={!dateBounds.minDate}
+              />
+              {isFiltered && (
+                <button
+                  onClick={() => { setDateFrom(null); setDateTo(null); }}
+                  style={{
+                    alignSelf: "flex-end", padding: "6px 12px", borderRadius: 8,
+                    border: `1px solid ${c.borderStrong}`, background: "transparent",
+                    color: c.textSecondary, fontSize: 12, cursor: "pointer",
+                  }}
+                >
+                  ✕ Cały tag
+                </button>
+              )}
+            </div>
+          </div>
+
           {(txLoading || awaitingData || !breakdown) ? (
             <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>
           ) : breakdown.count === 0 ? (
-            <ChartEmpty message="Ten tag nie ma wydatków do pokazania." />
+            <ChartEmpty message={isFiltered
+              ? "Brak wydatków w wybranym zakresie dat."
+              : "Ten tag nie ma wydatków do pokazania."} />
           ) : (
             <>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
