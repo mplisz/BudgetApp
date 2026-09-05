@@ -207,6 +207,13 @@ export default function PanelTagAnalysis() {
               ← Wszystkie tagi
             </button>
             <span style={{ fontSize: 16, fontWeight: 800, color: c.text }}>{labelFor(selected.tagId)}</span>
+            {/* When it happened is context, not a metric — it belongs beside
+                the name rather than taking a tile of its own. */}
+            <span style={{ fontSize: 12, color: c.textMuted }}>
+              {selected.firstDate === selected.lastDate
+                ? selected.firstDate
+                : `${selected.firstDate} → ${selected.lastDate}`}
+            </span>
           </div>
 
           {(txLoading || awaitingData || !breakdown) ? (
@@ -219,10 +226,14 @@ export default function PanelTagAnalysis() {
                 <MoneyTile label="Suma" money={breakdown.money} />
                 <Tile
                   label="Średnio dziennie"
-                  // The span is the denominator, so it belongs here as the
-                  // explanation rather than as a tile of its own.
-                  value={fmt(breakdown.spanDays > 0 ? breakdown.total / breakdown.spanDays : 0)}
-                  sub={`${breakdown.firstDate} → ${breakdown.lastDate}`}
+                  // Divided by days that actually carry a transaction, NOT by
+                  // the calendar span. A tag used sporadically across a year
+                  // would otherwise be divided by 365 and mean nothing; even
+                  // on a trip, days you bought nothing shouldn't dilute the
+                  // figure. The subtitle names the denominator so the number
+                  // is never ambiguous.
+                  value={fmt(breakdown.spendingDays > 0 ? breakdown.total / breakdown.spendingDays : 0)}
+                  sub={`na ${breakdown.spendingDays} ${plural(breakdown.spendingDays, "dzień", "dni", "dni")} z wydatkami`}
                 />
                 {breakdown.biggest && (
                   <MoneyTile
