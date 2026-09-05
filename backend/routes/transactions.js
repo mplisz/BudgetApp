@@ -216,6 +216,74 @@ router.get("/", async (req, res) => {
   }
 });
 
+// ── GET /tag-bounds ───────────────────────────────────────────
+//
+// Per tag: how many expenses carry it and the span they cover, over ALL
+// history — no 24-month ceiling, because this reads three fields, not whole
+// documents. It exists so the tag panel can stop guessing a window: it lists
+// every tag that ever had spend, and then fetches exactly the months the
+// chosen one covers.
+//
+// Deliberately NO money here. Totals must be net of returns, which means
+// summing a nested array per document — that rule lives in
+// utils/returnUtils on the client and must not be reimplemented in SQL where
+// the two would drift. Dates and counts cannot drift, so they can live here.
+//
+// Grouped in Node rather than with `JOIN t IN c.tags ... GROUP BY t`: Cosmos
+// supports that, but this codebase has no precedent for it and it cannot be
+// verified from a dev machine without the real container. The projection is
+// three fields over tagged expenses only — small enough that the aggregate
+// query would buy nothing but risk.
+
+router.get("/tag-bounds", async (req, res) => {
+  try {
+    const { resources } = await transactionsContainer.items
+      .query({
+        query: `SELECT c.date, c.budgetMonth, c.tags FROM c
+                WHERE c.userId = @userId
+                  AND c.type = 'EXPENSE'
+                  AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))
+                  AND IS_DEFINED(c.tags)
+                  AND ARRAY_LENGTH(c.tags) > 0`,
+        parameters: [{ name: "@userId", value: req.user.familyId }],
+      })
+      .fetchAll();
+
+    const byTag = new Map();
+    for (const row of resources) {
+      for (const tagId of row.tags || []) {
+        const cur = byTag.get(tagId);
+        if (!cur) {
+          byTag.set(tagId, {
+            tagId,
+            count:      1,
+            firstDate:  row.date,
+            lastDate:   row.date,
+            firstMonth: row.budgetMonth,
+            lastMonth:  row.budgetMonth,
+          });
+          continue;
+        }
+        cur.count += 1;
+        if (row.date        < cur.firstDate)  cur.firstDate  = row.date;
+        if (row.date        > cur.lastDate)   cur.lastDate   = row.date;
+        // Months are tracked separately from dates: a purchase dated the 30th
+        // can be booked into the next month, so the month span a fetch needs
+        // is not derivable from the date span.
+        if (row.budgetMonth < cur.firstMonth) cur.firstMonth = row.budgetMonth;
+        if (row.budgetMonth > cur.lastMonth)  cur.lastMonth  = row.budgetMonth;
+      }
+    }
+
+    const out = [...byTag.values()].sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+    console.log(`[TX TAG-BOUNDS] ${out.length} tags from ${resources.length} tagged expenses for ${req.user.familyId}`);
+    res.json(out);
+  } catch (err) {
+    console.error("[TX TAG-BOUNDS]", err);
+    res.status(500).json({ error: "Failed to fetch tag bounds." });
+  }
+});
+
 // ── GET /range ────────────────────────────────────────────────
 
 router.get("/range", async (req, res) => {

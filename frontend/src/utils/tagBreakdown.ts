@@ -38,15 +38,6 @@ export interface TagTransaction {
   returns?:         Array<{ moneyReturnedInMonth?: string; cashAmount?: number }> | null;
 }
 
-/** One row of the tag index — the "pick a trip" screen. */
-export interface TagSummary {
-  tagId:     string;
-  total:     number;
-  count:     number;
-  firstDate: string;
-  lastDate:  string;
-}
-
 /** A slice of the breakdown: category, subcategory or merchant. */
 export interface BreakdownSlice {
   id:     string;
@@ -115,36 +106,6 @@ function toSlices(
       share: total > 0 ? (v.total / total) * 100 : 0,
     }))
     .sort((a, b) => b.total - a.total);
-}
-
-/**
- * Totals per tag across the given transactions — the index list. Only tags
- * that actually carry expenses appear, so the picker never offers a tag with
- * nothing behind it.
- */
-export function summariseTags(transactions: TagTransaction[]): TagSummary[] {
-  const byTag = new Map<string, TagSummary>();
-
-  for (const tx of transactions) {
-    if (tx.type !== "EXPENSE") continue;
-    const net = calculateNetAmount(tx);
-    for (const tagId of tx.tags ?? []) {
-      const row = byTag.get(tagId);
-      if (!row) {
-        byTag.set(tagId, {
-          tagId, total: net, count: 1,
-          firstDate: tx.date, lastDate: tx.date,
-        });
-        continue;
-      }
-      row.total += net;
-      row.count += 1;
-      if (tx.date < row.firstDate) row.firstDate = tx.date;
-      if (tx.date > row.lastDate)  row.lastDate  = tx.date;
-    }
-  }
-
-  return [...byTag.values()].sort((a, b) => b.total - a.total);
 }
 
 /**

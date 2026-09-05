@@ -2,33 +2,37 @@
 // File: src/components/panels/PanelTagAnalysis.tsx
 // Panel "Analiza tagów" — what one tag actually cost, broken down.
 //
-// Built for trip summaries ("ile kosztowały wakacje, ile poszło na fast food"),
-// but any tag works. Two screens: an index of tags with totals, and the
-// breakdown for the one you pick.
+// Built for trip summaries ("ile kosztowały wakacje, ile poszło na fast
+// food"), but any tag works. Two screens: an index of every tag that ever
+// had spend, and the breakdown for the one you pick.
 //
-// No month navigator — a trip is a date range, not a budget month. The window
-// comes from the RangePicker, and everything inside is bucketed by the
-// transaction DATE, so a purchase booked into the next budget month still
-// lands on the day it happened.
+// No range picker. The index comes from /tag-bounds, which knows each tag's
+// real span over all history, so picking a tag fetches EXACTLY the budget
+// months that tag covers — usually one or two for a trip. Nothing is guessed,
+// so nothing can be silently cut off.
 //
-// Aggregation is client-side over /range, matching PanelAnalytics: the rules
-// (net of returns, expenses only, one tag at a time) live once, in
-// utils/tagBreakdown, rather than being restated on the server.
+// Dates vs budget months matter twice here. The fetch is by budgetMonth
+// because that is what /range supports; every figure shown is keyed off
+// tx.date, because a purchase on the 30th can be booked into the next month
+// and bucketing a trip by budget month would tear it in half.
+//
+// Aggregation stays client-side, matching the rest of the analytics layer:
+// the rules (net of returns, expenses only, one tag at a time) live once, in
+// utils/tagBreakdown, rather than being restated in SQL.
 // ============================================================
 
-import { c, alpha } from "../../styles/tokens";
+import { c } from "../../styles/tokens";
 import { useState, useEffect, useMemo } from "react";
 import { useAppContext } from "../../context/AppContext";
-import { useMonthStatus } from "../../hooks/useMonthStatus";
 import { useTransactionsRange } from "../../hooks/useTransactionsRange";
-import { RangePicker, resolveRange, type DateRange } from "../ui/RangePicker";
+import { useTagBounds, type TagBounds } from "../../hooks/useTagBounds";
 import { TopCategoriesBar, type CategoryTotal } from "./analyticsComponents/TopCategoriesBar";
 import { ChartEmpty } from "./analyticsComponents/chartKit";
 import { TagTimelineChart } from "./tagComponents/TagTimelineChart";
 import { theme as s } from "../../styles/theme";
-import { fmt, plural, monthLabel } from "../../utils/helpers";
+import { fmt, plural } from "../../utils/helpers";
 import {
-  summariseTags, buildTagBreakdown, DAILY_SERIES_MAX_DAYS,
+  buildTagBreakdown, DAILY_SERIES_MAX_DAYS,
   type TagTransaction, type BreakdownSlice,
 } from "../../utils/tagBreakdown";
 
@@ -62,32 +66,20 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 }
 
 export default function PanelTagAnalysis() {
-  const { tags, settings } = useAppContext();
-  const { activeBudgetMonth } = useMonthStatus();
-  const { transactions, isLoading, loadRange } = useTransactionsRange();
+  const { tags } = useAppContext();
+  const { bounds, isLoading: boundsLoading, load: loadBounds } = useTagBounds();
+  const { transactions, isLoading: txLoading, loadRange } = useTransactionsRange();
 
-  // 12 months by default, not the 6 Analiza uses — this panel is for looking
-  // back at last summer, not for spotting a trend.
-  const [range, setRange] = useState<DateRange>({ months: 12, from: null, to: null });
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selected, setSelected] = useState<TagBounds | null>(null);
 
-  // Same clamping as PanelAnalytics: never fetch below the budget's start.
-  const floor = settings?.appStartMonth as string | undefined;
-  const { fromMonth, toMonth } = useMemo(() => resolveRange(range), [range]);
-  const clampedFrom = useMemo(() => (floor && fromMonth < floor ? floor : fromMonth), [fromMonth, floor]);
-  const isPreset = !range.from && !range.to;
-  const effectiveTo = useMemo(
-    () => (isPreset && activeBudgetMonth > toMonth ? activeBudgetMonth : toMonth),
-    [toMonth, activeBudgetMonth, isPreset],
-  );
-  const noDataAvailable = !!floor && effectiveTo < floor;
+  useEffect(() => { loadBounds(); }, [loadBounds]);
 
+  // Exactly the months this tag spans — no window, no guessing. The LRU cache
+  // in useTransactionsRange makes flipping back to a tag instant.
   useEffect(() => {
-    if (noDataAvailable) return;
-    loadRange(clampedFrom, effectiveTo);
-  }, [clampedFrom, effectiveTo, loadRange, noDataAvailable]);
-
-  const txs = transactions as unknown as TagTransaction[];
+    if (!selected) return;
+    loadRange(selected.firstMonth, selected.lastMonth);
+  }, [selected, loadRange]);
 
   const tagMeta = useMemo(() => {
     const m = new Map<string, { name: string; icon?: string }>();
@@ -102,10 +94,11 @@ export default function PanelTagAnalysis() {
     return `${meta?.icon ?? "🏷️"} ${meta?.name ?? "(archiwalny tag)"}`;
   };
 
-  const index = useMemo(() => summariseTags(txs), [txs]);
   const breakdown = useMemo(
-    () => (selectedTag ? buildTagBreakdown(txs, selectedTag) : null),
-    [txs, selectedTag],
+    () => (selected
+      ? buildTagBreakdown(transactions as unknown as TagTransaction[], selected.tagId)
+      : null),
+    [transactions, selected],
   );
 
   const grain = breakdown && breakdown.spanDays <= DAILY_SERIES_MAX_DAYS ? "day" : "month";
@@ -116,9 +109,9 @@ export default function PanelTagAnalysis() {
       : breakdown.monthly.map(m => ({ key: m.month, amount: m.amount }));
   }, [breakdown, grain]);
 
-  // The window is a guess, so say when a tag touches its edge — the totals
-  // below would be silently cut off.
-  const touchesEdge = !!breakdown?.firstDate && breakdown.firstDate.slice(0, 7) <= clampedFrom;
+  // The fetch covers the tag's own months, so a mismatch here means the range
+  // response has not landed yet rather than anything being missing.
+  const awaitingData = !!selected && !!breakdown && breakdown.count < selected.count;
 
   return (
     <div style={{ padding: "0 0 60px 0" }}>
@@ -130,31 +123,22 @@ export default function PanelTagAnalysis() {
         </div>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <RangePicker value={range} onChange={setRange} allowAll={false} />
-      </div>
-
-      {noDataAvailable && (
-        <ChartEmpty message={`Wybrany zakres kończy się przed startem budżetu (${monthLabel(floor!)}).`} />
-      )}
-
-      {!noDataAvailable && isLoading && (
-        <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>
-      )}
-
       {/* ── Index: pick a tag ── */}
-      {!noDataAvailable && !isLoading && !selectedTag && (
-        index.length === 0 ? (
-          <ChartEmpty message="Brak otagowanych wydatków w tym zakresie." />
+      {!selected && (
+        boundsLoading || bounds === null ? (
+          <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>
+        ) : bounds.length === 0 ? (
+          <ChartEmpty message="Brak otagowanych wydatków. Otaguj zakupy, żeby zobaczyć tu podsumowanie." />
         ) : (
           <>
             <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 10 }}>
-              {index.length} {plural(index.length, "tag", "tagi", "tagów")} z wydatkami — kliknij, żeby zobaczyć rozbicie.
+              {bounds.length} {plural(bounds.length, "tag", "tagi", "tagów")} z wydatkami,
+              od najnowszych — kliknij, żeby zobaczyć rozbicie.
             </div>
-            {index.map(row => (
+            {bounds.map(row => (
               <button
                 key={row.tagId}
-                onClick={() => setSelectedTag(row.tagId)}
+                onClick={() => setSelected(row)}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
                   background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12,
@@ -165,10 +149,9 @@ export default function PanelTagAnalysis() {
                 <span style={{ fontSize: 14, fontWeight: 700, color: c.text }}>{labelFor(row.tagId)}</span>
                 <span style={{ fontSize: 11, color: c.textMuted }}>
                   {row.firstDate === row.lastDate ? row.firstDate : `${row.firstDate} → ${row.lastDate}`}
-                  {" · "}{row.count} {plural(row.count, "transakcja", "transakcje", "transakcji")}
                 </span>
-                <span style={{ marginLeft: "auto", fontSize: 16, fontWeight: 800, color: c.success, whiteSpace: "nowrap" }}>
-                  {fmt(row.total)}
+                <span style={{ marginLeft: "auto", fontSize: 12, color: c.textSecondary, whiteSpace: "nowrap" }}>
+                  {row.count} {plural(row.count, "transakcja", "transakcje", "transakcji")}
                 </span>
               </button>
             ))}
@@ -177,11 +160,11 @@ export default function PanelTagAnalysis() {
       )}
 
       {/* ── Breakdown for one tag ── */}
-      {!noDataAvailable && !isLoading && selectedTag && breakdown && (
+      {selected && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
             <button
-              onClick={() => setSelectedTag(null)}
+              onClick={() => setSelected(null)}
               style={{
                 padding: "6px 12px", borderRadius: 8, border: `1px solid ${c.borderStrong}`,
                 background: "transparent", color: c.textSecondary, cursor: "pointer", fontSize: 12, fontWeight: 700,
@@ -189,21 +172,13 @@ export default function PanelTagAnalysis() {
             >
               ← Wszystkie tagi
             </button>
-            <span style={{ fontSize: 16, fontWeight: 800, color: c.text }}>{labelFor(selectedTag)}</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: c.text }}>{labelFor(selected.tagId)}</span>
           </div>
 
-          {touchesEdge && (
-            <div style={{
-              marginBottom: 14, padding: "8px 12px", borderRadius: 8,
-              background: alpha(c.warning, "11"), border: `1px solid ${alpha(c.warning, "44")}`,
-              fontSize: 12, color: c.warning,
-            }}>
-              ⚠️ Najstarszy wydatek dotyka krawędzi zakresu — poszerz go, żeby mieć pewność, że nic nie zostało ucięte.
-            </div>
-          )}
-
-          {breakdown.count === 0 ? (
-            <ChartEmpty message="Ten tag nie ma wydatków w wybranym zakresie." />
+          {(txLoading || awaitingData || !breakdown) ? (
+            <div style={{ color: c.textMuted, textAlign: "center", padding: 40 }}>Ładowanie…</div>
+          ) : breakdown.count === 0 ? (
+            <ChartEmpty message="Ten tag nie ma wydatków do pokazania." />
           ) : (
             <>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
@@ -247,7 +222,7 @@ export default function PanelTagAnalysis() {
                 title="📈 Przebieg w czasie"
                 hint={grain === "day"
                   ? "Dzień po dniu — dni bez wydatków też są pokazane."
-                  : "Zakres dłuższy niż dwa miesiące, więc widok miesięczny."}
+                  : "Tag rozciąga się na ponad dwa miesiące, więc widok miesięczny."}
               >
                 <TagTimelineChart data={timeline} grain={grain} />
               </Section>

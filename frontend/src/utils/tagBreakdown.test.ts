@@ -4,7 +4,7 @@
 // ============================================================
 
 import { describe, it, expect } from "vitest";
-import { summariseTags, buildTagBreakdown, type TagTransaction } from "./tagBreakdown";
+import { buildTagBreakdown, type TagTransaction } from "./tagBreakdown";
 
 const tx = (over: Partial<TagTransaction> = {}): TagTransaction => ({
   type:            "EXPENSE",
@@ -19,46 +19,6 @@ const tx = (over: Partial<TagTransaction> = {}): TagTransaction => ({
   merchant:        "Bar",
   tags:            ["trip"],
   ...over,
-});
-
-// ── summariseTags ─────────────────────────────────────────────
-
-describe("summariseTags", () => {
-  it("totals per tag with the date span", () => {
-    const [row] = summariseTags([
-      tx({ amount: 100, date: "2026-07-15" }),
-      tx({ amount: 50,  date: "2026-07-12" }),
-      tx({ amount: 25,  date: "2026-07-20" }),
-    ]);
-    expect(row.tagId).toBe("trip");
-    expect(row.total).toBe(175);
-    expect(row.count).toBe(3);
-    expect(row.firstDate).toBe("2026-07-12");
-    expect(row.lastDate).toBe("2026-07-20");
-  });
-
-  it("counts a multi-tag transaction under each of its tags", () => {
-    const rows = summariseTags([tx({ amount: 80, tags: ["trip", "dziecko"] })]);
-    expect(rows.map(r => [r.tagId, r.total])).toEqual(
-      expect.arrayContaining([["trip", 80], ["dziecko", 80]]),
-    );
-  });
-
-  it("sorts by spend so trips surface first", () => {
-    const rows = summariseTags([
-      tx({ amount: 10,   tags: ["mały"] }),
-      tx({ amount: 5000, tags: ["wakacje"] }),
-    ]);
-    expect(rows[0].tagId).toBe("wakacje");
-  });
-
-  it("ignores income and untagged expenses", () => {
-    expect(summariseTags([
-      tx({ type: "INCOME", tags: ["trip"] }),
-      tx({ tags: [] }),
-      tx({ tags: undefined }),
-    ])).toEqual([]);
-  });
 });
 
 // ── buildTagBreakdown ─────────────────────────────────────────
@@ -168,8 +128,18 @@ describe("buildTagBreakdown", () => {
       tx({ amount: 999, tags: ["inny"] }),
       tx({ amount: 999, type: "INCOME" }),
       tx({ amount: 999, tags: [] }),
+      tx({ amount: 999, tags: undefined }),
     ], "trip");
     expect(out.total).toBe(100);
     expect(out.count).toBe(1);
+  });
+
+  it("counts a multi-tag transaction in full under each of its tags", () => {
+    const rows = [tx({ amount: 80, tags: ["trip", "dziecko"] })];
+    // No apportioning: the trip cost 80, and so did the child spend. Totals
+    // across DIFFERENT tags therefore overlap — which is why the panel only
+    // ever shows one tag at a time.
+    expect(buildTagBreakdown(rows, "trip").total).toBe(80);
+    expect(buildTagBreakdown(rows, "dziecko").total).toBe(80);
   });
 });
