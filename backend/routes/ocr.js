@@ -788,7 +788,7 @@ router.post("/receipt", async (req, res) => {
       ? await archiveReceipt(pdfBuffer, familyId, req.user.id, metadata, "application/pdf")
       : await archiveReceipt(fullJpeg,  familyId, req.user.id, metadata);
 
-    // 9. Create the pending Receipt entity (ttl=1day until committed)
+    // 9. Create the pending Receipt entity (ttl=2h until committed)
     const receiptId = await createPendingReceipt(
       familyId, req.user.id, metadata, fingerprint, receiptBlobPath,
     );
