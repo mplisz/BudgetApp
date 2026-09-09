@@ -489,10 +489,10 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
                 {monthLabel(group.month)}
               </span>
               {group.month === cur && (
-                <span style={{ ...s.chip(c.success), fontSize: 10 }}>bieżący</span>
+                <span style={s.badge(c.success)}>bieżący</span>
               )}
               {group.overdue && (
-                <span style={{ ...s.chip(c.danger), fontSize: 10 }}>zaległe</span>
+                <span style={s.badge(c.danger)}>zaległe</span>
               )}
               <span style={{ marginLeft: "auto", fontSize: 12, color: c.textSecondary, whiteSpace: "nowrap" }}>
                 {group.items.length} {plural(group.items.length, "pozycja", "pozycje", "pozycji")} ·{" "}

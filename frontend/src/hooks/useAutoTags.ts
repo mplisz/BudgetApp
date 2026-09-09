@@ -11,6 +11,7 @@
 import { useMemo } from "react";
 import { useAppContext } from "../context/AppContext";
 import { autoTagsExpired, todayYMD } from "../utils/helpers";
+import { resolveTags } from "../utils/tags";
 import type { Tag } from "../types/appContext";
 
 export interface UseAutoTags {
@@ -34,10 +35,8 @@ export function useAutoTags(): UseAutoTags {
     const until      = (settings?.autoTagUntil as string | null | undefined) ?? null;
     const isExpired  = autoTagsExpired(until, todayYMD());
 
-    // A tag archived mid-trip must stop attaching itself.
-    const live = configured
-      .map(id => tags.find(t => t.id === id))
-      .filter((t): t is Tag => !!t && !t.isArchived);
+    // A tag archived mid-trip must stop attaching itself — resolveTags drops it.
+    const live = resolveTags(configured, tags);
 
     return {
       ids:          isExpired ? [] : live.map(t => t.id),

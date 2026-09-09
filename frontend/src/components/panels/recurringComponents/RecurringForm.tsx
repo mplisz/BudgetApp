@@ -9,6 +9,7 @@ import { useState, useCallback, useRef, useMemo } from "react";
 import { SubcategorySelect }  from "../../ui/SubcategorySelect";
 import { PriorityPicker }     from "../../ui/PriorityPicker";
 import { TagMultiSelect }     from "../../ui/TagMultiSelect";
+import { MerchantInput }      from "../../ui/MerchantInput";
 import { CurrencyRateField }  from "../../ui/CurrencyRateField";
 import { useToast }           from "../../../hooks/useToast";
 import { useCurrencyManager } from "../../../hooks/useCurrencyManager";
@@ -30,6 +31,7 @@ interface RecurringFormState {
   categoryId:      string;
   categoryName:    string;
   categoryType:    string | null;
+  merchant:        string;
   frequency:       Frequency;
   activeMonths:    number[];
   plannedDay:      number;
@@ -59,6 +61,7 @@ export interface RecurringFormPayload {
   subcategoryName: string;
   categoryId:      string;
   categoryName:    string;
+  merchant:        string | null;
   frequency:       Frequency;
   activeMonths:    number[] | null;
   plannedDay:      number;
@@ -86,6 +89,7 @@ function emptyForm(validFrom?: string): RecurringFormState {
     categoryId:      "",
     categoryName:    "",
     categoryType:    null,
+    merchant:        "",
     frequency:       "monthly",
     activeMonths:    [],
     plannedDay:      1,
@@ -141,6 +145,7 @@ export function RecurringForm({ initialValues, validFrom, activeBudgetMonth, onS
         categoryId:      iv.categoryId || "",
         categoryName:    iv.categoryName || "",
         categoryType:    "EXPENSE",
+        merchant:        iv.merchant || "",
         frequency:       iv.frequency || "monthly",
         activeMonths:    iv.activeMonths || [],
         plannedDay:      iv.plannedDay || 1,
@@ -279,6 +284,8 @@ function handleSubmit() {
     subcategoryName: form.subcategoryName,
     categoryId:      form.categoryId,
     categoryName:    form.categoryName,
+    // Optional — `null` clears a previously set shop on edit.
+    merchant:        form.merchant.trim() || null,
     frequency:       form.frequency,
     activeMonths:    form.frequency === "custom" ? form.activeMonths : null,
     plannedDay:      form.plannedDay,
@@ -328,6 +335,17 @@ function handleSubmit() {
         {form.categoryName && (
           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 5 }}>{form.categoryName}</div>
         )}
+      </div>
+
+      {/* Merchant (optional) — copied onto every confirmed transaction */}
+      <div style={frow}>
+        <label style={s.label}>Sklep (opcjonalnie)</label>
+        <MerchantInput
+          value={form.merchant}
+          onChange={v => set("merchant", v)}
+          placeholder="np. Netflix, Orange, Biedronka"
+          style={s.input}
+        />
       </div>
 
       {/* Currency */}

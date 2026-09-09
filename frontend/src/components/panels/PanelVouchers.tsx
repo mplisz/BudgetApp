@@ -5,6 +5,7 @@
 // ============================================================
 
 import { c, alpha } from "../../styles/tokens";
+import { theme } from "../../styles/theme";
 import { useState, useEffect } from "react";
 import { useAppContext }      from "../../context/AppContext";
 import { useVoucherManager }  from "../../hooks/useVoucherManager";
@@ -23,7 +24,7 @@ const s = {
   title:      { fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 } as React.CSSProperties,
   sub:        { fontSize: 13, color: c.textSecondary, marginBottom: 20 } as React.CSSProperties,
   card:       { background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, padding: "16px 20px", marginBottom: 10 } as React.CSSProperties,
-  badge:      (color: string): React.CSSProperties => ({ display: "inline-block", padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: color + "22", color, border: `1px solid ${color}44`, marginRight: 4 }),
+  badge:      theme.badge,
   btn:        (v: string = "primary"): React.CSSProperties => ({ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: v === "primary" ? "none" : `1px solid ${c.border}`, background: v === "primary" ? c.success : "transparent", color: v === "primary" ? c.white : c.textTertiary }),
   inp:        { width: "100%", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 8, color: c.text, padding: "9px 12px", fontSize: 13, outline: "none", boxSizing: "border-box" } as React.CSSProperties,
   lbl:        { display: "block", fontSize: 11, color: c.textSecondary, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 5 } as React.CSSProperties,

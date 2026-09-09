@@ -85,6 +85,9 @@ export interface RecurringDoc {
   subcategoryName?:    string;
   subcategoryId?:      string;
   plannedDay?:         number;
+  merchant?:           string | null;  // shop; copied onto every confirmed transaction
+  tags?:               string[];
+  priority?:           number;
   isArchived?:         boolean;
   archivedFrom?:       string;
   validTo?:            string;

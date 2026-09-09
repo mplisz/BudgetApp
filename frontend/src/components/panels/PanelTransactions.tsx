@@ -15,6 +15,7 @@ import { toYMD } from "../ui/AppDatePicker";
 import { ConfirmModal }    from "../ui/ConfirmModal";
 import { fmt, plural }     from "../../utils/helpers";
 import { calculateNetAmount } from "../../utils/returnUtils";
+import { resolveTagNames } from "../../utils/tags";
 import { ReturnModal, s, PRIO_COLORS, ReceiptGroupCard, TransactionList } from "./transactionComponents";
 import { groupByReceipt, receiptKeyOf } from "../../utils/receiptGroups";
 import { useIsMobile } from "../../hooks/useIsMobile";
@@ -125,9 +126,7 @@ export default function PanelTransactions() {
           .reduce((sum, r) => sum + (r.cashAmount || 0), 0);
         return {
           ...tx,
-          tagNames: (tx.tags || [])
-            .map(id => tags.find(t => t.id === id)?.name)
-            .filter(Boolean) as string[],
+          tagNames: resolveTagNames(tx.tags, tags),
           effectiveAmount:   calculateNetAmount(tx),
           sameMonthReturned: totalCashReturned,
         };

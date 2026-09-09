@@ -13,6 +13,7 @@ import {
   isPartiallyReturned,
 } from "../../../utils/returnUtils";
 import { c, alpha } from "../../../styles/tokens";
+import { theme } from "../../../styles/theme";
 import type { Transaction } from "../../../types/summary";
 import { PRIO_META } from "../../../types/summaryConstants";
 
@@ -30,7 +31,7 @@ export const s = {
   table:       { width: "100%", borderCollapse: "collapse" } as CSSProperties,
   th:          { padding: "8px 12px", fontSize: 10, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700, textAlign: "left", borderBottom: `1px solid ${c.border}`, background: c.bgDeepest } as CSSProperties,
   td:          { padding: "10px 12px", fontSize: 13, color: c.textBody, borderBottom: `1px solid ${c.surfaceAlt}`, verticalAlign: "middle" } as CSSProperties,
-  badge:       (color: string): CSSProperties => ({ display: "inline-block", padding: "2px 7px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: alpha(color, "22"), color, border: `1px solid ${alpha(color, "44")}`, marginRight: 3, whiteSpace: "nowrap" }),
+  badge:       theme.badge,
   actionBtn:   (color: string = c.textMuted): CSSProperties => ({ background: "transparent", border: `1px solid ${alpha(color, "44")}`, color, borderRadius: 6, padding: "4px 9px", cursor: "pointer", fontSize: 11, fontWeight: 600 }),
   filterRow:   { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16, alignItems: "flex-end" } as CSSProperties,
   filterBox:   { display: "flex", flexDirection: "column", gap: 4 } as CSSProperties,

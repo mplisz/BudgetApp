@@ -6,6 +6,9 @@ import { c, alpha } from "../../../styles/tokens";
 import { MONTH_NAMES, isConfirmedInMonth, scheduleLabel } from "../../../hooks/useRecurring";
 import { FREQUENCY_OPTIONS }      from "../../../data/constants";
 import { useRecurringConfirm }    from "../../../hooks/useRecurringConfirm";
+import { useAppContext }          from "../../../context/AppContext";
+import { theme as s }             from "../../../styles/theme";
+import { resolveTags }            from "../../../utils/tags";
 import type { RecurringDoc }      from "../../../types/appContext";
 
 const FREQ_LABEL: Record<string, string> = Object.fromEntries(FREQUENCY_OPTIONS.map(o => [o.value, o.label]));
@@ -20,9 +23,12 @@ interface RecurringRowProps {
 
 export function RecurringRow({ doc, activeBudgetMonth, isLocked, onEdit, onArchive }: RecurringRowProps) {
   const { open, modal, amountStr } = useRecurringConfirm(doc, activeBudgetMonth);
+  const { tags: allTags } = useAppContext();
 
   const isConfirmedThisMonth = isConfirmedInMonth(doc, activeBudgetMonth);
   const firstValidFrom = doc.costs?.[0]?.validFrom;
+
+  const docTags = resolveTags(doc.tags, allTags);
 
   return (
     <div style={{
@@ -60,7 +66,16 @@ export function RecurringRow({ doc, activeBudgetMonth, isLocked, onEdit, onArchi
               📝 {doc.costs?.length} wersji kwoty
             </span>
           )}
+          {doc.merchant && <span title="Sklep">🏪 {doc.merchant}</span>}
         </div>
+
+        {docTags.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+            {docTags.map(t => (
+              <span key={t.id} style={s.badge(c.info)}>{t.icon} {t.name}</span>
+            ))}
+          </div>
+        )}
       </div>
 
       {!isLocked && (

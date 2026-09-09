@@ -10,7 +10,7 @@
 //   costs: [{ validFrom, amount, originalCurrency, fxRate, amountPLN }],
 //   validTo, isArchived, archivedFrom,
 //   lastConfirmedMonth, notifiedAt,
-//   tags, priority,
+//   tags, priority, merchant,
 //   createdAt, createdBy, createdById,
 //   updatedAt, updatedBy, updatedById,
 //   archivedAt, archivedBy, archivedById,
@@ -20,11 +20,12 @@
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const { recurringContainer, transactionsContainer } = require("../cosmos");
+const { recurringContainer, transactionsContainer, settingsContainer } = require("../cosmos");
 const { requireAuth }        = require("../middleware/auth");
 const {
   readItemWithEtag, IdParamSchema, BUDGET_MONTH_REGEX, currentServerMonth,round2
 } = require("../utils/helpers");
+const { cleanMerchant, rememberMerchant } = require("../utils/merchant");
 
 router.use(requireAuth);
 
@@ -40,6 +41,12 @@ const CostEntrySchema = z.object({
   amountPLN:        z.number().positive().optional(),
 });
 
+// Shop the recurring is paid to; copied onto every confirmed transaction, so
+// it also drives the voucher store-match rule there. Normalizing in the schema
+// (like description's trim) keeps both POST and PATCH on one definition:
+// a string is cleaned, an explicit null clears the shop, absent stays absent.
+const MerchantField = z.string().max(150).transform(v => cleanMerchant(v)).nullable().optional();
+
 const RecurringPostSchema = z.object({
   description:      z.string().min(1).max(500).transform(v => v.trim()),
   subcategoryId:    z.string().min(1),
@@ -51,6 +58,7 @@ const RecurringPostSchema = z.object({
   plannedDay:       z.number().int().min(1).max(31).default(1),
   tags:             z.array(z.string()).optional().default([]),
   priority:         z.number().int().min(1).max(4).optional().default(2),
+  merchant:         MerchantField,
   validTo:          z.string().regex(BUDGET_MONTH_REGEX).nullable().optional().default(null),
   costs:            z.array(CostEntrySchema).min(1),
 });
@@ -66,6 +74,7 @@ const RecurringPatchSchema = z.object({
   plannedDay:       z.number().int().min(1).max(31).optional(),
   tags:             z.array(z.string()).optional(),
   priority:         z.number().int().min(1).max(4).optional(),
+  merchant:         MerchantField,
   validTo:          z.string().regex(BUDGET_MONTH_REGEX).nullable().optional(),
   archivedFrom:     z.string().regex(BUDGET_MONTH_REGEX).nullable().optional(),
   isArchived:       z.boolean().optional(),
@@ -210,6 +219,7 @@ router.post("/", async (req, res) => {
       plannedDay:         d.plannedDay,
       tags:               d.tags,
       priority:           d.priority,
+      merchant:           d.merchant ?? null,
       costs,
       validTo:            d.validTo,
       isArchived:         false,
@@ -222,6 +232,9 @@ router.post("/", async (req, res) => {
     };
 
     const { resource } = await recurringContainer.items.create(doc);
+    // Feed the shop into the family's autocomplete list right away — the same
+    // best-effort call the transaction commit makes.
+    if (resource.merchant) rememberMerchant(settingsContainer, familyId, resource.merchant);
     console.log(`[RECURRING POST] Created: ${resource.id}`);
     res.status(201).json(resource);
   } catch (err) {
@@ -269,6 +282,7 @@ router.patch("/:id", async (req, res) => {
       accessCondition: { type: "IfMatch", condition: etag },
     });
 
+    if (resource.merchant) rememberMerchant(settingsContainer, familyId, resource.merchant);
     console.log(`[RECURRING PATCH] Updated: ${resource.id}`);
     res.json(resource);
   } catch (err) {
@@ -371,6 +385,9 @@ router.post("/:id/confirm", async (req, res) => {
       description:      rec.description || "",
       tags:             rec.tags || [],
       priority:         rec.priority,
+      // Carry the shop onto the transaction — without it the voucher
+      // store-match rule can never bind a shop voucher to a recurring.
+      merchant:         rec.merchant || null,
       isRecurring:      true,
       recurringId:      rec.id,
       useVoucher:       false,

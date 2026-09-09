@@ -27,7 +27,10 @@ export const theme = {
   sectionSub:  { fontSize: 13, color: c.textMuted, marginBottom: 16 } as CSSProperties,
   expenseRow:  { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: `1px solid ${c.border}` } as CSSProperties,
   amount:      (col?: string): CSSProperties => ({ fontWeight: 800, fontSize: 16, color: col || c.success }),
-  chip:        (color?: string): CSSProperties => ({ background: alpha(color || c.success, "22"), color: color || c.success, borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 600 }),
+  // The one small pill in the app — tag, status, priority. txStyles.badge and
+  // PanelVouchers' local badge both point here; the former `chip` token was
+  // folded in, since its only two call sites overrode its font size anyway.
+  badge:       (color: string): CSSProperties => ({ display: "inline-block", padding: "2px 7px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: alpha(color, "22"), color, border: `1px solid ${alpha(color, "44")}`, marginRight: 3, whiteSpace: "nowrap" }),
   toggle:      (on: boolean): CSSProperties => ({ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: on ? c.success : c.textMuted, fontSize: 13, fontWeight: 600 }),
   toggleBox:   (on: boolean): CSSProperties => ({ width: 36, height: 20, background: on ? c.success : c.raised, border: `2px solid ${on ? c.success : c.borderStrong}`, borderRadius: 99, position: "relative", transition: "all 0.2s", flexShrink: 0 }),
   toggleDot:   (on: boolean): CSSProperties => ({ position: "absolute", top: 2, left: on ? 16 : 2, width: 12, height: 12, background: c.white, borderRadius: "50%", transition: "left 0.2s" }),

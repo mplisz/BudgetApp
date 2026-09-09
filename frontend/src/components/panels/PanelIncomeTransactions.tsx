@@ -15,6 +15,7 @@ import { useMonthStatus }  from "../../hooks/useMonthStatus";
 import { toYMD } from "../ui/AppDatePicker";
 import { ConfirmModal }    from "../ui/ConfirmModal";
 import { fmt }             from "../../utils/helpers";
+import { resolveTagNames } from "../../utils/tags";
 import { typeColor, typeLabel, typeIcon } from "../../data/constants/categoryTypes";
 import { s }               from "./transactionComponents/txStyles";
 import { EditIncomeModal }  from "./transactionComponents/EditIncomeModal";
@@ -271,9 +272,7 @@ export default function PanelIncomeTransactions() {
       .filter(tx => tx.type === "INCOME" || tx.type === "TRANSFER")
       .map(tx => ({
         ...tx,
-        tagNames: (tx.tags || [])
-          .map(id => tags.find(t => t.id === id)?.name)
-          .filter((n): n is string => Boolean(n)),
+        tagNames: resolveTagNames(tx.tags, tags),
       })),
     [transactions, tags, activeBudgetMonth]
   );
