@@ -21,7 +21,10 @@ jobs:
       - name: Set up Node.js version
         uses: actions/setup-node@v3
         with:
-          node-version: '22.x'
+          # Must match the App Service runtime stack (Node 24 LTS). The build
+          # ships backend/node_modules to Azure, so a mismatch here means the
+          # dependencies are installed under one Node major and run under another.
+          node-version: '24.x'
 
       - name: npm install, build, and test
         run: |
