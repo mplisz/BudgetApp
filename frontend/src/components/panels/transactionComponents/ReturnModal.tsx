@@ -367,7 +367,7 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
                       {li.product?.name && (
                         <span
                           style={{ color: c.cyanLight, fontSize: 10, fontWeight: 600, marginLeft: 6 }}
-                          title={`Śledzony produkt: ${li.product.name}`}
+                          title={`Śledzona cena: ${li.product.name}`}
                         >
                           🏷️ {li.product.name}
                         </span>

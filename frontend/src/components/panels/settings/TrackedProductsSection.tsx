@@ -1,10 +1,15 @@
 // ============================================================
 // File: src/components/panels/settings/TrackedProductsSection.jsx
-// Tracked products — the personal "inflation basket". Registering a
+// "Ceny produktów" — the personal "inflation basket". Registering a
 // product here is what makes the OCR scan allowed to attach it to a
 // receipt line at all (see backend resolveTrackedProduct); nothing the
 // user hasn't explicitly added ever reaches the price history, regardless
 // of what the model could technically recognize.
+//
+// UI wording: the FEATURE is "Ceny produktów" (this section seeds the
+// Analiza card of the same name); a single matched receipt line is marked
+// "śledzona cena". Deliberately never "produkt śledzony/obserwowany" — that
+// used to collide with the Potencjalne zakupy panel.
 // ============================================================
 
 import { useState, useEffect } from "react";
@@ -59,9 +64,9 @@ export function TrackedProductsSection() {
   };
 
   return (
-    <CollapsibleSection title="🏷️ Produkty śledzone (koszyk inflacyjny)" defaultOpen={false}>
+    <CollapsibleSection title="🏷️ Ceny produktów (koszyk inflacyjny)" defaultOpen={false}>
       <div style={{ color: c.textMuted, fontSize: 12, lineHeight: 1.6, marginBottom: 14 }}>
-        Tylko produkty z tej listy trafiają do Analiza → Ceny produktów — nowy skan paragonu
+        Tylko produkty z tej listy trafiają na wykresy w Analiza → Ceny produktów — nowy skan paragonu
         dopasowuje pozycje do tych nazw i pomija resztę. Gdy paragon nie poda gramatury,
         użyty zostanie podany tu domyślny rozmiar.
       </div>
@@ -105,7 +110,7 @@ export function TrackedProductsSection() {
       {/* List */}
       {catalog.length === 0 ? (
         <div style={{ color: c.borderStrong, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
-          Brak śledzonych produktów.
+          Brak produktów ze śledzoną ceną.
         </div>
       ) : (
         <div style={{ maxHeight: 420, overflowY: "auto", border: `1px solid ${c.border}`, borderRadius: 8 }}>

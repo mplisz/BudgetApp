@@ -1,7 +1,7 @@
 // ============================================================
 // File: src/hooks/useProductCatalog.ts
 // Reads the family's PRODUCT CATALOG — the personal "inflation basket" of
-// products explicitly registered in Settings → Produkty śledzone — and
+// products explicitly registered in Ustawienia → Ceny produktów — and
 // exposes CRUD (create/rename/updateDefault/remove) plus an identity
 // resolver for the price-history section. mergedKeys[] is still honoured
 // by the resolver (a manual Cosmos edit can still fold identities), even
@@ -74,7 +74,7 @@ export function useProductCatalog() {
         { fallback: "Nie udało się dodać produktu." },
       );
       await load();
-      showSuccess("Produkt dodany do śledzonych. ✅");
+      showSuccess("Dodano — ceny tego produktu będą śledzone. ✅");
       return true;
     } catch (err) {
       showError((err as Error).message);
@@ -98,7 +98,7 @@ export function useProductCatalog() {
     try {
       await api.del(`/api/products/${id}`, undefined, { fallback: "Nie udało się usunąć produktu." });
       await load();
-      showSuccess("Produkt przestał być śledzony.");
+      showSuccess("Ceny tego produktu nie będą już śledzone.");
       return true;
     } catch (err) {
       showError((err as Error).message);

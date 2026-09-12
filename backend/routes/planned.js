@@ -350,7 +350,7 @@ router.post("/:id/promote", async (req, res) => {
 
     const { resource: existing, etag } = await readItemWithEtag(plannedContainer, id, familyId);
     if (!existing)           return res.status(404).json({ error: "Planned expense not found." });
-    if (!existing.isWish)    return res.status(409).json({ error: "To nie jest zachcianka — ten plan jest już zaplanowany." });
+    if (!existing.isWish)    return res.status(409).json({ error: "To nie jest potencjalny zakup — ten plan jest już zaplanowany." });
     if (existing.isArchived) return res.status(409).json({ error: "Planned expense is archived." });
 
     let virtualSavings = d.virtualSavings;

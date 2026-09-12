@@ -50,7 +50,7 @@ export function ProductPriceSection({ transactions, months }: Props) {
   // ever carries `product` when it matched one of the user's tracked
   // ("whitelisted") products at scan time (see resolveTrackedProduct).
   // `catalog` (loaded above) IS that whitelist — an empty one means
-  // nothing has been registered yet in Admin → Produkty śledzone.
+  // nothing has been registered yet in Ustawienia → Ceny produktów.
   const { products, stats } = useMemo(
     () => buildPriceHistory(transactions, monthsSet, resolve),
     [transactions, monthsSet, resolve],
@@ -113,8 +113,8 @@ export function ProductPriceSection({ transactions, months }: Props) {
   if (catalog.length === 0) {
     return (
       <ChartEmpty message={
-        "Nie masz jeszcze żadnych śledzonych produktów. " +
-        "Wejdź w Admin → Produkty śledzone i dodaj to, co chcesz porównywać " +
+        "Nie masz jeszcze żadnych produktów ze śledzoną ceną. " +
+        "Wejdź w Ustawienia → Ceny produktów i dodaj to, co chcesz porównywać " +
         "(np. mięso mielone, woda, Coca-Cola Zero) — nowe paragony zaczną je wyłapywać."
       } />
     );
@@ -123,7 +123,7 @@ export function ProductPriceSection({ transactions, months }: Props) {
     return (
       <ChartEmpty message={
         `Brak produktów kupionych min. ${MIN_OCCURRENCES}× w zakresie ` +
-        `(śledzonych produktów: ${catalog.length}).`
+        `(produktów ze śledzoną ceną: ${catalog.length}).`
       } />
     );
   }

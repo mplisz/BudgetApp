@@ -26,7 +26,7 @@ export const PANEL_META = {
   // Quick-add panels normally skip `mobile` because they sit in the bottom
   // bar — but that bar has four fixed slots, so this one would be
   // unreachable on a phone without the flag.
-  addwish:            { icon: "🛒", label: "Dodaj do listy zakupowej", section: "Główne",    mobile: true },
+  addwish:            { icon: "👀", label: "Dodaj potencjalny zakup", section: "Główne",   mobile: true },
 
   // Per-month analysis
   transactions:       { icon: "🧾", label: "Wydatki",           section: "Analiza miesiąca", mobile: true },
@@ -37,9 +37,9 @@ export const PANEL_META = {
   basebudget:         { icon: "🏦", label: "Baza budżetu",      section: "Analiza miesiąca", mobile: true },
 
   // Tools (month-independent)
-  // The shopping list has no month by design — that is what separates it from
-  // a planned expense — so it belongs here rather than under "Analiza miesiąca".
-  wishlist:           { icon: "🛒", label: "Lista zakupowa",     section: "Narzędzia",       mobile: true },
+  // A potential purchase has no month by design — that is what separates it
+  // from a planned expense — so it belongs here, not under "Analiza miesiąca".
+  wishlist:           { icon: "👀", label: "Potencjalne zakupy",  section: "Narzędzia",      mobile: true },
   // Range-based, not month-based: a trip is a span of dates, so this belongs
   // beside Analiza rather than under "Analiza miesiąca".
   tags:               { icon: "🏷️", label: "Analiza tagów",      section: "Narzędzia",       mobile: true },

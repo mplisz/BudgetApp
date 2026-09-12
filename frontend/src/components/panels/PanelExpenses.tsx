@@ -604,7 +604,7 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
                               </div>
                               {line.product?.name && (
                                 <div style={{ color: c.cyanLight, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
-                                  🏷️ Śledzony: {line.product.name}
+                                  🏷️ Śledzona cena: {line.product.name}
                                 </div>
                               )}
                               {line.discountAmount != null && line.discountAmount > 0 && (

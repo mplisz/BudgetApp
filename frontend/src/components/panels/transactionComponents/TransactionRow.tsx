@@ -84,7 +84,7 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
               style={{ color: c.cyanLight, fontSize: 10, marginTop: 2, fontWeight: 600 }}
               title={trackedProducts.join(", ")}
             >
-              🏷️ {trackedProducts.length === 1 ? trackedProducts[0] : `${trackedProducts.length} śledzone produkty`}
+              🏷️ {trackedProducts.length === 1 ? trackedProducts[0] : `${trackedProducts.length} śledzone ceny`}
             </div>
           )}
         </td>
@@ -318,7 +318,7 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
           style={{ color: c.cyanLight, fontSize: 11, marginTop: 4, fontWeight: 600 }}
           title={trackedProducts.join(", ")}
         >
-          🏷️ {trackedProducts.length === 1 ? trackedProducts[0] : `${trackedProducts.length} śledzone produkty`}
+          🏷️ {trackedProducts.length === 1 ? trackedProducts[0] : `${trackedProducts.length} śledzone ceny`}
         </div>
       )}
 

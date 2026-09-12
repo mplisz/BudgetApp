@@ -1,11 +1,11 @@
 // ============================================================
 // File: src/components/panels/PanelAddWish.tsx
-// Panel "Dodaj do listy zakupowej" — the quick-add counterpart of
+// Panel "Dodaj potencjalny zakup" — the quick-add counterpart of
 // PanelAddPlanned, for things you want before you have decided what they
 // cost or when you will buy them.
 //
-// No month selector on purpose: an item on the shopping list has no month,
-// which is exactly what separates it from a planned expense.
+// No month selector on purpose: a potential purchase has no month, which is
+// exactly what separates it from a planned expense.
 // ============================================================
 
 import { useState }   from "react";
@@ -27,7 +27,7 @@ export default function PanelAddWish() {
   return (
     <div style={{ padding: "0 0 80px 0" }}>
       <div style={{ marginBottom: 20, marginTop: 8 }}>
-        <div style={s.sectionTitle}>🛒 Dodaj do listy zakupowej</div>
+        <div style={s.sectionTitle}>👀 Dodaj potencjalny zakup</div>
         <div style={s.sectionSub}>
           Rzeczy, które chcesz kupić — bez ceny i bez terminu. Nie wliczają się
           do żadnego budżetu ani prognozy, dopóki ich nie zaplanujesz.

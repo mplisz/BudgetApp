@@ -194,7 +194,7 @@ export function ReturnsSection({ transactions, months }: Props) {
                       {p.name}
                       {p.tracked && (
                         <span style={{ color: c.cyanLight, fontSize: 10, fontWeight: 600, marginLeft: 6 }}>
-                          🏷️ śledzony
+                          🏷️ śledzona cena
                         </span>
                       )}
                     </td>

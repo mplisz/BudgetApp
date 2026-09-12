@@ -1,6 +1,6 @@
 // ============================================================
 // File: src/components/panels/plannedComponents/WishForm.tsx
-// Form for adding an item to the shopping list ("lista zakupowa").
+// Form for adding an item to the potential purchases ("Potencjalne zakupy").
 //
 // The whole point of the list is capturing an idea BEFORE it has a price or
 // a date, so `description` is the only required field. Everything else exists
@@ -106,7 +106,7 @@ export function WishForm({ onSubmit, isSaving = false }: WishFormProps) {
         disabled={!canSubmit}
         style={{ ...s.btn(c.info), opacity: canSubmit ? 1 : 0.4, cursor: canSubmit ? "pointer" : "not-allowed" }}
       >
-        {isSaving ? "Zapisuję…" : "🛒 Dodaj do listy"}
+        {isSaving ? "Zapisuję…" : "👀 Dodaj potencjalny zakup"}
       </button>
     </div>
   );

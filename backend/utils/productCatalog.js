@@ -4,7 +4,7 @@
 //
 // Unlike a general product cache, this catalog is a WHITELIST: entries
 // are seeded explicitly by the user (routes/products.js POST /, the
-// Admin "Produkty śledzone" section) with a canonical name, a unit and a
+// Ustawienia → "Ceny produktów" section) with a canonical name, a unit and a
 // default size (e.g. "Coca-Cola Zero", 1.5 l). The OCR scan (routes/ocr.js)
 // is only ALLOWED to attach a structured product to a receipt line when
 // it recognizes one of these tracked names (see resolveTrackedProduct) —

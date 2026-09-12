@@ -77,7 +77,7 @@ router.post("/", async (req, res) => {
   try {
     const existing = await readItem(productsContainer, id, familyId);
     if (existing) {
-      return res.status(409).json({ error: `„${canonicalName}” (${unit}) jest już śledzone.` });
+      return res.status(409).json({ error: `Ceny „${canonicalName}” (${unit}) są już śledzone.` });
     }
     const doc = newTrackedProduct(familyId, id, key, canonicalName.trim(), unit, defaultSize ?? null);
     const { resource } = await productsContainer.items.create(doc);
@@ -128,7 +128,7 @@ router.patch("/:id", async (req, res) => {
           const collision = await readItem(productsContainer, collisionId, familyId);
           if (collision) {
             return res.status(409).json({
-              error: `„${newName}” brzmi tak samo jak już śledzony „${collision.canonicalName}”.`,
+              error: `„${newName}” brzmi tak samo jak „${collision.canonicalName}”, którego ceny już śledzisz.`,
             });
           }
         }

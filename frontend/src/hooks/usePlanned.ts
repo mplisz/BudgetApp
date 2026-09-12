@@ -305,7 +305,7 @@ export function usePlanned(): UsePlannedResult {
     try {
       return await api.get<PlannedDoc[]>(
         "/api/planned?wishes=true",
-        { fallback: "Nie udało się pobrać zachcianek." },
+        { fallback: "Nie udało się pobrać potencjalnych zakupów." },
       );
     } catch (err) {
       showError((err as Error).message);
@@ -318,8 +318,8 @@ export function usePlanned(): UsePlannedResult {
     try {
       // Deliberately NOT added to `planned` — a wish has no amount and no
       // month, and every consumer of that list assumes both.
-      const data = await api.post<PlannedDoc>("/api/planned/wish", payload, { fallback: "Nie udało się dodać zachcianki." });
-      showSuccess("Dodano do zachcianek! ✨");
+      const data = await api.post<PlannedDoc>("/api/planned/wish", payload, { fallback: "Nie udało się dodać potencjalnego zakupu." });
+      showSuccess("Dodano do potencjalnych zakupów! 👀");
       return data;
     } catch (err) {
       showError((err as Error).message);
@@ -332,9 +332,9 @@ export function usePlanned(): UsePlannedResult {
   const promoteWish = useCallback(async (id: string, payload: PlannedPostPayload): Promise<PlannedDoc | null> => {
     setIsSaving(true);
     try {
-      const data = await api.post<PlannedDoc>(`/api/planned/${id}/promote`, payload, { fallback: "Nie udało się zaplanować zachcianki." });
+      const data = await api.post<PlannedDoc>(`/api/planned/${id}/promote`, payload, { fallback: "Nie udało się zaplanować potencjalnego zakupu." });
       setPlanned(prev => [...prev, data]);   // now a real plan → joins the shared list
-      showSuccess("Zachcianka zaplanowana! 📅");
+      showSuccess("Potencjalny zakup zaplanowany! 📅");
       return data;
     } catch (err) {
       showError((err as Error).message);

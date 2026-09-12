@@ -1,6 +1,6 @@
 // ============================================================
 // File: src/components/panels/PanelWishlist.tsx
-// Panel "Lista zakupowa" — things you want, with no price and no month yet.
+// Panel "Potencjalne zakupy" — things you want, with no price and no month yet.
 //
 // These live in the same Cosmos container as planned expenses but the backend
 // filters them out of the default listing, so they never reach the shared
@@ -63,12 +63,12 @@ export default function PanelWishlist() {
   return (
     <div style={{ padding: "0 0 60px 0" }}>
       <div style={{ marginBottom: 20, marginTop: 8 }}>
-        <div style={s.sectionTitle}>🛒 Lista zakupowa</div>
+        <div style={s.sectionTitle}>👀 Potencjalne zakupy</div>
         <div style={s.sectionSub}>
           {wishes === null
             ? "Ładowanie…"
             : sorted.length === 0
-              ? "Pusto — dodaj coś przez „Dodaj do listy zakupowej”."
+              ? "Pusto — dodaj coś przez „Dodaj potencjalny zakup”."
               : <>
                   {sorted.length} {plural(sorted.length, "pozycja", "pozycje", "pozycji")}
                   {withEstimate > 0 && <> · szacunkowo <strong style={{ color: c.textTertiary }}>{fmt(estimated)}</strong>

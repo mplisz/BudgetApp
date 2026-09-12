@@ -4,8 +4,8 @@
 //
 // SCOPE — the receipt line must carry the AI-structured `product`, and the
 // backend only ever attaches one when the item matched a product the user
-// explicitly registered in their "inflation basket" (Admin → Produkty
-// śledzone; see backend/utils/productCatalog.resolveTrackedProduct).
+// explicitly registered in their "inflation basket" (Ustawienia → Ceny
+// produktów; see backend/utils/productCatalog.resolveTrackedProduct).
 // Hand-typed transactions carry no `product` and are out of scope — that
 // uniformity is what makes unit prices computable and the catalog key
 // match the backend exactly.

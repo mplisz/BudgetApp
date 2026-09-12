@@ -1,6 +1,6 @@
 // ============================================================
 // File: src/components/panels/plannedComponents/WishCard.tsx
-// One row of the shopping list ("lista zakupowa").
+// One row of the potential-purchases list ("Potencjalne zakupy").
 //
 // Deliberately shows no totals or progress: an item here has no committed
 // price and no month, so there is nothing to sum. "Zaplanuj" is where it
@@ -66,7 +66,7 @@ export function WishCard({ wish, onPromote, onArchive }: WishCardProps) {
         </button>
         <button
           onClick={() => onArchive(wish)}
-          title="Usuń z listy zakupowej"
+          title="Usuń z potencjalnych zakupów"
           style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${alpha(c.borderStrong, "88")}`, background: "transparent", color: c.textMuted, cursor: "pointer", fontSize: 12 }}
         >
           🗑️

@@ -781,7 +781,7 @@ export function TransactionForm({
       {/* Tracked product — manual assign or correct what AI matched */}
       {!hasLineItems && resolvedCategoryType === "EXPENSE" && (
         <div style={frow}>
-          <label style={lbl}>🏷️ Śledzony produkt (opcjonalnie)</label>
+          <label style={lbl}>🏷️ Produkt ze śledzoną ceną (opcjonalnie)</label>
           <select
             value={selectedProductId}
             onChange={e => handleProductSelect(e.target.value)}
