@@ -46,6 +46,28 @@ describe("cleanItemName", () => {
     assert.equal(cleanItemName("x".repeat(200)).length, 120);
   });
 
+  test("stops one person SHOUTING at the rest of the list", () => {
+    assert.equal(cleanItemName("KAWA"), "Kawa");
+    assert.equal(cleanItemName("MLEKO 3,2%"), "Mleko 3,2%");
+    assert.equal(cleanItemName("ŻARÓWKA"), "Żarówka");
+  });
+
+  test("capitalizes an all-lowercase entry", () => {
+    assert.equal(cleanItemName("kawa"), "Kawa");
+    assert.equal(cleanItemName("płyn do naczyń"), "Płyn do naczyń");
+  });
+
+  test("leaves a mixed-case name exactly as typed", () => {
+    // This is where real spellings live — a blanket rule would wreck them.
+    assert.equal(cleanItemName("Coca-Cola"), "Coca-Cola");
+    assert.equal(cleanItemName("iPhone"), "iPhone");
+    assert.equal(cleanItemName("Ser Gouda BIO"), "Ser Gouda BIO");
+  });
+
+  test("casing never changes a product's identity", () => {
+    assert.equal(shoppingKey(cleanItemName("KAWA")), shoppingKey(cleanItemName("kawa")));
+  });
+
   test("nothing to store → null", () => {
     assert.equal(cleanItemName("   "), null);
     assert.equal(cleanItemName(undefined), null);

@@ -17,6 +17,12 @@
 //   open    — still to buy. `missedAt` marks "nie było" — the item stays
 //             open BECAUSE we still want it; it just gets flagged so it
 //             stands out next time.
+//
+// An item carries NO shop. Which shop something is cheapest in has to be
+// checked at the time anyway, and on the rare trip that covers two shops
+// the note field says so in the words that actually matter. Grouping the
+// list by shop would have been a field to maintain for a case that does
+// not arise.
 //   bought  — done. Kept briefly as history, then expires by itself.
 //   skipped — we gave up on it. Same retention as bought.
 //
@@ -33,11 +39,11 @@ const crypto  = require("crypto");
 const { shoppingContainer, settingsContainer } = require("../cosmos");
 const { requireAuth } = require("../middleware/auth");
 const { readItemWithEtag, IdParamSchema } = require("../utils/helpers");
-const { cleanMerchant } = require("../utils/merchant");
 const {
   shoppingKey, cleanItemName, fetchCatalog,
-  rememberShoppingItem, forgetShoppingItem,
+  rememberShoppingItem, rememberShoppingSection, lookupSection, forgetShoppingItem,
 } = require("../utils/shoppingCatalog");
+const { SECTION_IDS, DEFAULT_SECTION, guessSection } = require("../utils/shoppingSections");
 
 router.use(requireAuth);
 
@@ -59,7 +65,9 @@ const PostSchema = z.object({
   qty:          z.number().int().min(1).max(999).optional().default(1),
   unit:         z.string().max(20).nullable().optional(),
   note:         z.string().max(300).optional().default(""),
-  merchant:     z.string().max(150).nullable().optional(),
+  // Omitted means "work it out" — see resolveSection. An explicit value
+  // is the user overruling both the catalog and the dictionary.
+  section:      z.enum(SECTION_IDS).nullable().optional(),
   // Set when the item came from the Potencjalne zakupy panel — keeps the
   // trail back to the entry that was archived in exchange.
   sourceWishId: z.string().max(200).nullable().optional(),
@@ -70,7 +78,7 @@ const PatchSchema = z.object({
   qty:      z.number().int().min(1).max(999).optional(),
   unit:     z.string().max(20).nullable().optional(),
   note:     z.string().max(300).optional(),
-  merchant: z.string().max(150).nullable().optional(),
+  section:  z.enum(SECTION_IDS).optional(),
   status:   z.enum(["open", "bought", "skipped"]).optional(),
   // "Nie było" — only meaningful together with status "open" (explicitly
   // or by omission); clearing it is what un-flags an item.
@@ -81,6 +89,19 @@ const PatchSchema = z.object({
 
 function actor(req) {
   return req.user.name || req.user.email || req.user.id || null;
+}
+
+// Which aisle this product belongs to, in order of authority:
+//   1. what the request explicitly says — the user overruling everything,
+//   2. what this household filed the product under last time,
+//   3. the keyword dictionary,
+//   4. "Inne".
+// The catalog outranks the dictionary on purpose: one correction has to
+// be enough, and a household's own habit beats a generic word list.
+async function resolveSection(familyId, key, name, requested) {
+  if (requested) return requested;
+  const remembered = await lookupSection(settingsContainer, familyId, key);
+  return remembered || guessSection(name) || DEFAULT_SECTION;
 }
 
 // Everything the panel needs in one round-trip: the list itself and the
@@ -98,7 +119,15 @@ async function loadPanelState(familyId) {
       .fetchAll(),
     fetchCatalog(settingsContainer, familyId),
   ]);
-  return { items, catalog };
+
+  // Items written before sections existed have none. Fill one in on the
+  // way out rather than migrating the container: a GET has no business
+  // writing, the guess costs nothing, and the value persists by itself
+  // the first time anything about that item is edited.
+  return {
+    items: items.map(i => (i.section ? i : { ...i, section: guessSection(i.name) })),
+    catalog,
+  };
 }
 
 // ── GET / ────────────────────────────────────────────────────
@@ -128,10 +157,11 @@ router.post("/", async (req, res) => {
   if (!key) return res.status(400).json({ error: "Invalid product name." });
 
   const { qty, unit, note, sourceWishId } = parsed.data;
-  const merchant = parsed.data.merchant ? cleanMerchant(parsed.data.merchant) : null;
-  const now      = new Date().toISOString();
+  const now = new Date().toISOString();
 
   try {
+    const section = await resolveSection(familyId, key, name, parsed.data.section);
+
     const { resources: open } = await shoppingContainer.items
       .query({
         // Bracket notation for `key`/`status`: both are close enough to
@@ -162,8 +192,10 @@ router.post("/", async (req, res) => {
         ...existing,
         qty:       Math.min(999, (Number(existing.qty) || 1) + qty),
         unit:      unit ?? existing.unit ?? null,
+        // A note on the second add wins ("bez soli, to dla córki" is the
+        // point of adding it again); an empty one leaves the first alone.
         note:      note || existing.note || "",
-        merchant:  merchant ?? existing.merchant ?? null,
+        section:   existing.section || section,
         // Putting a product back on the list clears "nie było": you are
         // asking for it afresh, not re-reporting the empty shelf.
         status:     "open",
@@ -183,7 +215,7 @@ router.post("/", async (req, res) => {
         qty,
         unit:     unit ?? null,
         note,
-        merchant: merchant ?? null,
+        section,
         status:   "open",
         missedAt:    null,
         missedCount: 0,
@@ -201,10 +233,12 @@ router.post("/", async (req, res) => {
       }));
     }
 
-    // Learn the name for the pills/autocomplete. Best-effort by design:
-    // the item is already on the list, and a catalog failure must not
-    // turn a successful add into an error the user sees.
-    await rememberShoppingItem(settingsContainer, familyId, name, unit ?? null);
+    // Learn the name (and its aisle) for the pills/autocomplete.
+    // Best-effort by design: the item is already on the list, and a
+    // catalog failure must not turn a successful add into an error the
+    // user sees. Only an EXPLICIT section is taught here — a guess must
+    // not harden into a remembered fact nobody chose.
+    await rememberShoppingItem(settingsContainer, familyId, name, unit ?? null, parsed.data.section ?? null);
 
     res.status(existing ? 200 : 201).json(resource);
   } catch (err) {
@@ -244,7 +278,7 @@ router.patch("/:id", async (req, res) => {
       ...(d.qty      !== undefined ? { qty: d.qty } : {}),
       ...(d.unit     !== undefined ? { unit: d.unit } : {}),
       ...(d.note     !== undefined ? { note: d.note } : {}),
-      ...(d.merchant !== undefined ? { merchant: d.merchant ? cleanMerchant(d.merchant) : null } : {}),
+      ...(d.section  !== undefined ? { section: d.section } : {}),
       status:    nextStatus,
       updatedAt: now,
     };
@@ -279,6 +313,15 @@ router.patch("/:id", async (req, res) => {
       next,
       { accessCondition: { type: "IfMatch", condition: etag } },
     );
+
+    // Moving an item to a different aisle teaches the catalog, so the
+    // next "bułki" lands in Pieczywo without being told again. Same
+    // learn-from-corrections idea as the OCR category feedback, and just
+    // as best-effort: the move itself has already been saved above.
+    if (d.section !== undefined && d.section !== existing.section) {
+      await rememberShoppingSection(settingsContainer, familyId, next.key, d.section);
+    }
+
     res.json(resource);
   } catch (err) {
     // 412 = someone else changed this item first. On a shared list that

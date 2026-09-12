@@ -26,7 +26,9 @@ export interface ShoppingItem {
   qty:          number;
   unit:         string | null;
   note:         string;
-  merchant:     string | null;
+  /** Shop section id — see data/constants/shoppingSections. Assigned by
+   *  the server (remembered per product, else guessed from the name). */
+  section:      string;
   status:       ShoppingStatus;
   missedAt:     string | null;
   missedCount:  number;
@@ -41,6 +43,9 @@ export interface CatalogEntry {
   key:         string;
   name:        string;
   unit:        string | null;
+  /** Last section this product was filed under, once someone corrected
+   *  it by hand. null means the guesser still decides. */
+  section:     string | null;
   count:       number;
   firstUsedAt: string;
   lastUsedAt:  string;
@@ -56,7 +61,9 @@ export interface AddItemPayload {
   qty?:          number;
   unit?:         string | null;
   note?:         string;
-  merchant?:     string | null;
+  /** Omit to let the server work it out — an explicit value is the user
+   *  overruling both the remembered section and the guesser. */
+  section?:      string | null;
   sourceWishId?: string | null;
 }
 
@@ -121,23 +128,21 @@ export function useShoppingList() {
 
   const patchItem = useCallback(async (
     id: string,
-    patch: Partial<Pick<ShoppingItem, "name" | "qty" | "unit" | "note" | "merchant" | "status">> & { missed?: boolean },
+    patch: Partial<Pick<ShoppingItem, "name" | "qty" | "unit" | "note" | "section" | "status">> & { missed?: boolean },
   ): Promise<ShoppingItem | null> => {
     const before = items.find(i => i.id === id);
     if (!before) return null;
 
-    // Optimistic: apply what we can predict locally. Server-computed
-    // fields (resolvedAt/By, missedCount) are filled in by the response.
+    // Optimistic: every key of `patch` except `missed` IS an item field,
+    // so spreading it applies them all — one less list to keep in step
+    // with the PATCH schema. `missed` is the exception: it is a verb, and
+    // what it writes is a timestamp. Server-computed fields (resolvedAt,
+    // missedCount) arrive with the response.
+    const { missed, ...fields } = patch;
     setItems(prev => prev.map(i => i.id === id
-      ? { ...i,
-          ...(patch.name     !== undefined ? { name: patch.name }         : {}),
-          ...(patch.qty      !== undefined ? { qty: patch.qty }           : {}),
-          ...(patch.unit     !== undefined ? { unit: patch.unit }         : {}),
-          ...(patch.note     !== undefined ? { note: patch.note }         : {}),
-          ...(patch.merchant !== undefined ? { merchant: patch.merchant } : {}),
-          ...(patch.status   !== undefined ? { status: patch.status }     : {}),
-          ...(patch.missed === true  ? { missedAt: new Date().toISOString() } : {}),
-          ...(patch.missed === false ? { missedAt: null } : {}),
+      ? { ...i, ...fields,
+          ...(missed === true  ? { missedAt: new Date().toISOString() } : {}),
+          ...(missed === false ? { missedAt: null } : {}),
         }
       : i));
 

@@ -15,7 +15,8 @@ import { c } from "../../styles/tokens";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { theme as s } from "../../styles/theme";
 import { plural } from "../../utils/helpers";
-import { useShoppingList, type CatalogEntry } from "../../hooks/useShoppingList";
+import { useShoppingList, type CatalogEntry, type ShoppingItem } from "../../hooks/useShoppingList";
+import { sectionMeta, sectionOrder, DEFAULT_SECTION } from "../../data/constants/shoppingSections";
 import { FrequentPills } from "./shoppingComponents/FrequentPills";
 import { QuickAddBar }   from "./shoppingComponents/QuickAddBar";
 import { ShoppingRow }   from "./shoppingComponents/ShoppingRow";
@@ -25,6 +26,7 @@ export default function PanelShopping() {
   const {
     items, catalog, isLoading, hasLoaded,
     load, addItem, patchItem, markBought, markMissed, reopenItem, removeItem,
+    forgetSuggestion,
   } = useShoppingList();
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -47,6 +49,28 @@ export default function PanelShopping() {
       .sort((a, b) => (b.resolvedAt ?? "").localeCompare(a.resolvedAt ?? ""));
     return { open: openItems, missed: missedItems, history: resolved };
   }, [items]);
+
+  // Group the open items by shop section, in shop-route order — the point
+  // of the whole thing: one pass through the shop instead of a lap per
+  // item. Items missed last time keep their own block below; that flag is
+  // about attention, not about which aisle to walk to.
+  const sections = useMemo(() => {
+    const bySection = new Map<string, ShoppingItem[]>();
+    for (const item of open) {
+      const id = item.section || DEFAULT_SECTION;
+      const bucket = bySection.get(id);
+      if (bucket) bucket.push(item);
+      else bySection.set(id, [item]);
+    }
+    return [...bySection.entries()]
+      .sort((a, b) => sectionOrder(a[0]) - sectionOrder(b[0]))
+      .map(([id, list]) => ({ id, meta: sectionMeta(id), items: list }));
+  }, [open]);
+
+  // A single section is not a route, it is a list with a redundant
+  // heading — so the headings only appear once there is something to
+  // navigate between.
+  const showSectionHeadings = sections.length > 1;
 
   const openKeys = useMemo(
     () => new Set(items.filter(i => i.status === "open").map(i => i.key)),
@@ -73,6 +97,11 @@ export default function PanelShopping() {
     onReopen: reopenItem,
     onRemove: removeItem,
     onQty:    (id: string, qty: number) => { patchItem(id, { qty }); },
+    // One PATCH for both fields: they are edited together in one little
+    // form, and the server teaches the catalog when the section changed.
+    onDetails: (id: string, details: { note: string; section: string }) => {
+      patchItem(id, details);
+    },
   };
 
   const showSkeleton = isLoading && !hasLoaded;
@@ -101,7 +130,12 @@ export default function PanelShopping() {
 
       {!showSkeleton && (
         <>
-          <FrequentPills catalog={catalog} openKeys={openKeys} onAdd={handlePillAdd} />
+          <FrequentPills
+            catalog={catalog}
+            openKeys={openKeys}
+            onAdd={handlePillAdd}
+            onForget={forgetSuggestion}
+          />
 
           {toBuy === 0 && (
             <div style={{ textAlign: "center", padding: "32px 0", color: c.borderStrong }}>
@@ -109,7 +143,20 @@ export default function PanelShopping() {
             </div>
           )}
 
-          {open.map(item => <ShoppingRow key={item.id} item={item} {...rowHandlers} />)}
+          {sections.map(section => (
+            <div key={section.id} style={{ marginBottom: showSectionHeadings ? 14 : 0 }}>
+              {showSectionHeadings && (
+                <div style={{
+                  fontSize: 11, color: c.textSecondary, textTransform: "uppercase",
+                  letterSpacing: "0.7px", fontWeight: 700, margin: "0 0 6px 2px",
+                }}>
+                  {section.meta.icon} {section.meta.label}
+                  <span style={{ color: c.textMuted, fontWeight: 400 }}> · {section.items.length}</span>
+                </div>
+              )}
+              {section.items.map(item => <ShoppingRow key={item.id} item={item} {...rowHandlers} />)}
+            </div>
+          ))}
 
           {missed.length > 0 && (
             <>
@@ -147,7 +194,7 @@ export default function PanelShopping() {
 
           <QuickAddBar
             catalog={catalog}
-            onAdd={(name, unit) => { addItem({ name, unit }); }}
+            onAdd={(name, unit, note) => { addItem({ name, unit, note }); }}
           />
         </>
       )}

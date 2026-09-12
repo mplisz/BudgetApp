@@ -41,11 +41,33 @@ function shoppingKey(name) {
   return folded || null;
 }
 
-/** Trimmed display name, or null when there is nothing to store. */
+/**
+ * Display name: trimmed, whitespace collapsed, and case normalized so a
+ * list typed by two people on two phones still reads as one list.
+ *
+ * Only the two unambiguous cases are touched. ALL CAPS is shouting, and
+ * all-lowercase just wants its first letter — but anything MIXED is left
+ * exactly as typed, because that is where real product spellings live:
+ * "Coca-Cola", "iPhone", "pH Balance" would all be damaged by a blanket
+ * rule. Identity is unaffected either way (shoppingKey folds case), so
+ * this is purely about how the list looks.
+ */
 function cleanItemName(raw) {
   const t = (raw == null ? "" : String(raw)).trim().replace(/\s+/g, " ");
   if (!t) return null;
-  return t.length > 120 ? t.slice(0, 120) : t;
+  const capped = t.length > 120 ? t.slice(0, 120) : t;
+
+  const hasLower = /\p{Ll}/u.test(capped);
+  const hasUpper = /\p{Lu}/u.test(capped);
+
+  if (hasUpper && !hasLower) return sentenceCase(capped.toLowerCase());  // "KAWA" → "Kawa"
+  if (hasLower && !hasUpper) return sentenceCase(capped);                // "kawa" → "Kawa"
+  return capped;                                                        // mixed: as typed
+}
+
+/** Upper-cases the first letter, leaving the rest of the string alone. */
+function sentenceCase(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /**
@@ -100,7 +122,7 @@ async function fetchCatalog(settingsContainer, familyId) {
  * the last one used wins (a product's unit rarely changes, and when it
  * does the new one is the interesting one).
  */
-async function rememberShoppingItem(settingsContainer, familyId, name, unit = null) {
+async function rememberShoppingItem(settingsContainer, familyId, name, unit = null, section = null) {
   const clean = cleanItemName(name);
   const key   = shoppingKey(clean);
   if (!key) return;
@@ -116,7 +138,7 @@ async function rememberShoppingItem(settingsContainer, familyId, name, unit = nu
       const idx   = items.findIndex(e => e.key === key);
 
       const next = idx === -1
-        ? [...items, { key, name: clean, unit, count: 1, firstUsedAt: now, lastUsedAt: now }]
+        ? [...items, { key, name: clean, unit, section, count: 1, firstUsedAt: now, lastUsedAt: now }]
         : items.map((e, i) => i !== idx ? e : {
             ...e,
             // The name is refreshed from the latest spelling: both fold
@@ -124,6 +146,10 @@ async function rememberShoppingItem(settingsContainer, familyId, name, unit = nu
             // what they expect to see back on the pill.
             name:       clean,
             unit:       unit || e.unit || null,
+            // Last section wins, so correcting one item's section is what
+            // teaches every future add of that product. A null here means
+            // "no opinion" and leaves the remembered one alone.
+            section:    section || e.section || null,
             count:      (Number(e.count) || 0) + 1,
             lastUsedAt: now,
           });
@@ -131,6 +157,39 @@ async function rememberShoppingItem(settingsContainer, familyId, name, unit = nu
       return { ...doc, items: pruneEntries(next) };
     },
   });
+}
+
+/**
+ * Record a corrected section for a product WITHOUT touching its count or
+ * recency — moving an item to the right aisle is not the same event as
+ * putting it on the list, and counting it as one would distort the
+ * ranking the pills are built from.
+ *
+ * Only updates an entry that already exists: a section correction on a
+ * product the catalog has never seen has nothing to attach to.
+ */
+async function rememberShoppingSection(settingsContainer, familyId, key, section) {
+  if (!key || !section) return;
+  await upsertSettingsDoc(settingsContainer, {
+    id:     CATALOG_DOC(familyId),
+    familyId,
+    type:   "SHOPPING_CATALOG",
+    logTag: "SHOPPING_CATALOG",
+    mutate: (doc) => {
+      const items = Array.isArray(doc.items) ? doc.items : [];
+      const idx   = items.findIndex(e => e.key === key);
+      if (idx === -1 || items[idx].section === section) return null;   // nothing to do
+      return { ...doc, items: items.map((e, i) => i === idx ? { ...e, section } : e) };
+    },
+  });
+}
+
+/** The section this product was last filed under, or null when the
+ *  catalog has no opinion yet. */
+async function lookupSection(settingsContainer, familyId, key) {
+  if (!key) return null;
+  const entries = await fetchCatalog(settingsContainer, familyId);
+  return entries.find(e => e.key === key)?.section ?? null;
 }
 
 /** Remove one entry from the suggestions (the user pruning junk).
@@ -159,5 +218,7 @@ module.exports = {
   pruneEntries,
   fetchCatalog,
   rememberShoppingItem,
+  rememberShoppingSection,
+  lookupSection,
   forgetShoppingItem,
 };
