@@ -21,6 +21,7 @@ import { FrequentPills } from "./shoppingComponents/FrequentPills";
 import { QuickAddBar }   from "./shoppingComponents/QuickAddBar";
 import { ShoppingRow }   from "./shoppingComponents/ShoppingRow";
 import { SkeletonListRow } from "../ui/Skeleton";
+import { CollapsibleSection } from "../ui";
 
 export default function PanelShopping() {
   const {
@@ -135,6 +136,7 @@ export default function PanelShopping() {
             openKeys={openKeys}
             onAdd={handlePillAdd}
             onForget={forgetSuggestion}
+            openCount={toBuy}
           />
 
           {toBuy === 0 && (
@@ -143,19 +145,35 @@ export default function PanelShopping() {
             </div>
           )}
 
+          {/* Each aisle folds away once it is done with — the same shared
+              CollapsibleSection as the pills above and the Settings
+              cards, stripped of its card chrome so the rows stay the only
+              boxes on screen. Open by default: a collapsed aisle you did
+              not collapse yourself is a shopping list that hides things.
+              Keyed by section id so the open/closed state follows the
+              aisle rather than its position in the list. */}
           {sections.map(section => (
-            <div key={section.id} style={{ marginBottom: showSectionHeadings ? 14 : 0 }}>
-              {showSectionHeadings && (
-                <div style={{
-                  fontSize: 11, color: c.textSecondary, textTransform: "uppercase",
-                  letterSpacing: "0.7px", fontWeight: 700, margin: "0 0 6px 2px",
-                }}>
-                  {section.meta.icon} {section.meta.label}
-                  <span style={{ color: c.textMuted, fontWeight: 400 }}> · {section.items.length}</span>
-                </div>
-              )}
-              {section.items.map(item => <ShoppingRow key={item.id} item={item} {...rowHandlers} />)}
-            </div>
+            showSectionHeadings ? (
+              <CollapsibleSection
+                key={section.id}
+                title={
+                  <span style={{ fontSize: 11, letterSpacing: "0.7px" }}>
+                    {section.meta.icon} {section.meta.label}
+                    <span style={{ color: c.textMuted, fontWeight: 400 }}> · {section.items.length}</span>
+                  </span>
+                }
+                style={{
+                  background: "transparent", border: "none", borderRadius: 0,
+                  padding: 0, marginTop: 0, marginBottom: 14,
+                }}
+              >
+                {section.items.map(item => <ShoppingRow key={item.id} item={item} {...rowHandlers} />)}
+              </CollapsibleSection>
+            ) : (
+              <div key={section.id}>
+                {section.items.map(item => <ShoppingRow key={item.id} item={item} {...rowHandlers} />)}
+              </div>
+            )
           ))}
 
           {missed.length > 0 && (
