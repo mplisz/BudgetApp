@@ -146,11 +146,29 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
                   {sizeText ?? "gramatura nieznana"}
                 </span>
               </span>
-              <span style={{
-                color: o.s ? c.textBody : c.textFaint, fontWeight: 600,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>
-                {o.s ? `🏪 ${o.s}` : "sklep nieznany"}
+              {/* Shop over the receipt line itself. The line is the part that
+                  answers "what is this median actually made of" — Warka in
+                  one shop, Harnaś in another — so it gets the full width of
+                  the column rather than a tooltip. The transaction id sits in
+                  the tooltip: it is for tracing in the database, not reading. */}
+              <span
+                title={o.x ? `Transakcja: ${o.x}` : undefined}
+                style={{ minWidth: 0 }}
+              >
+                <span style={{
+                  display: "block",
+                  color: o.s ? c.textBody : c.textFaint, fontWeight: 600,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                  {o.s ? `🏪 ${o.s}` : "sklep nieznany"}
+                </span>
+                <span style={{
+                  display: "block", marginTop: 1,
+                  color: o.t ? c.infoLight : c.textFaint, fontSize: 11,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                  {o.t ? `„${o.t}”` : "opis z paragonu nieznany"}
+                </span>
               </span>
               <span style={{ color: c.textMuted, whiteSpace: "nowrap" }}>{shortDate(o.d)}</span>
               <button

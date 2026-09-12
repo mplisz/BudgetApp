@@ -45,7 +45,7 @@ async function syncShoppingPrices(settingsContainer, familyId, tx) {
 
     const date = (tx.date || new Date().toISOString()).slice(0, 10);
     const priced = matches
-      .map(m => ({ key: m.itemId, observation: observationFrom(lines[m.lineIndex], date, tx.merchant) }))
+      .map(m => ({ key: m.itemId, observation: observationFrom(lines[m.lineIndex], date, tx.merchant, tx.id) }))
       .filter(p => p.observation);
 
     await rememberPrices(settingsContainer, familyId, priced);

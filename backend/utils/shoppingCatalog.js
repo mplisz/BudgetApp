@@ -290,6 +290,7 @@ module.exports = {
   rememberShoppingSection,
   rememberPrices,
   forgetPrice,
+  withId,
   lookupSection,
   forgetShoppingItem,
 };

@@ -53,6 +53,11 @@ export interface PriceObservation {
    *  with `zu` its unit. Absent when the receipt did not print one. */
   z?:  number;
   zu?: string;
+  /** The receipt line as it was written — what the price is actually OF.
+   *  Absent on observations recorded before it was stored. */
+  t?:  string;
+  /** Id of the transaction this came from, for tracing it in the DB. */
+  x?:  string;
 }
 
 /** Computed server-side (one implementation, the tested one). */

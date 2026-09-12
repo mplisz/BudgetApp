@@ -145,14 +145,26 @@ function parseWeightKg(description) {
  * the list items dropped theirs for that reason — but provenance for a
  * number: "5,20 zł" is hard to judge, "5,20 zł w Żabce" explains itself,
  * and it is what tells a real price from a mis-matched receipt line.
+ *
+ * `txId` and the line's own description go along for the same reason,
+ * one step further: the shop says WHERE, the description says WHAT. It
+ * is the only way to see that a "Piwo" median is Warka in one shop and
+ * Harnaś in another. The id makes any observation traceable back to its
+ * transaction with a single query.
  */
-function observationFrom(line, date, shop = null) {
+function observationFrom(line, date, shop = null, txId = null) {
   const amount = Number(line?.amount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
-  // Only set when known, so an observation without a shop stays as small
-  // as it was — these sit in a document read on every panel open.
-  const where = shop ? { s: String(shop).slice(0, 40) } : {};
+  // Each set only when known, so an observation without them stays as
+  // small as it was — these sit in a document read on every panel open.
+  // 60 characters covers all but 7 of 1031 sampled descriptions.
+  const desc  = String(line.description || "").trim();
+  const where = {
+    ...(shop ? { s: String(shop).slice(0, 40) } : {}),
+    ...(desc ? { t: desc.slice(0, 60) }        : {}),
+    ...(txId ? { x: String(txId) }             : {}),
+  };
 
   const kg = parseWeightKg(line.description);
   if (kg) return { d: date, a: round2(amount / kg), u: "kg", ...where };

@@ -105,7 +105,28 @@ describe("observationFrom", () => {
     // 20,97 for three bottles is 6,99 a bottle, not 20,97 — and the size
     // recorded is ONE bottle's, matching the price it sits next to.
     const o = observationFrom({ description: "Coca-Cola Zero 1,75 l x3", amount: 20.97 }, "2026-09-01");
-    assert.deepEqual(o, { d: "2026-09-01", a: 6.99, u: "szt", z: 1750, zu: "ml" });
+    assert.deepEqual(o, { d: "2026-09-01", a: 6.99, u: "szt", z: 1750, zu: "ml", t: "Coca-Cola Zero 1,75 l x3" });
+  });
+
+  test("keeps the receipt line's own words, so a median shows what it is made of", () => {
+    // The point: seeing that "Piwo" is Warka in one shop and Harnaś in
+    // another, instead of trusting a number built from both.
+    const o = observationFrom({ description: "Piwo Warka Jasne", amount: 20.94, packCount: 4 }, "2026-09-01", "Lidl", "tx_fam_202609_1_0");
+    assert.equal(o.t, "Piwo Warka Jasne");
+    assert.equal(o.s, "Lidl");
+    assert.equal(o.x, "tx_fam_202609_1_0");
+  });
+
+  test("a long description is trimmed, not dropped", () => {
+    const long = "Pampers Premium Care Pants Pieluchomajtki, rozmiar 3, 6kg-11kg, 3x70 szt";
+    const o = observationFrom({ description: long, amount: 189.99 }, "2026-09-01");
+    assert.equal(o.t.length, 60);
+    assert.ok(long.startsWith(o.t));
+  });
+
+  test("no transaction id → no id field", () => {
+    const o = observationFrom({ description: "Kefir 400g", amount: 2.29 }, "2026-09-01");
+    assert.equal("x" in o, false);
   });
 
   test("records the package size, so a price says what it buys", () => {
