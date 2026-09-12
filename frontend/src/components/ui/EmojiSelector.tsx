@@ -58,8 +58,10 @@ export function EmojiSelector({ currentEmoji, onSelect, disabled = false }: Emoj
           border:    `1px solid ${c.borderStrong}`,
           borderRadius: 8,
           padding:   8,
-          width:     220,
-          maxHeight: 200,
+          // Wider/taller than the original 220×200: the emoji pool grew to
+          // ~300, and at the old size the grid showed six rows out of thirty.
+          width:     264,
+          maxHeight: 280,
           overflow:  "auto",
           display:   "flex",
           flexWrap:  "wrap",

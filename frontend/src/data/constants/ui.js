@@ -4,6 +4,11 @@
 // No business logic, no panel routing — those live in panels.js.
 // ============================================================
 
+// Ten rows of ten, grouped by theme — the grid is scrolled, never searched,
+// so keeping related icons adjacent is what makes a pick fast. Append new
+// rows at the END of their theme block rather than reshuffling: users
+// remember positions, and an existing category keeps its emoji anyway
+// (it is stored on the document, not by index).
 export const POPULAR_EMOJIS = [
   "🛒", "🏠", "🏡", "🛋️", "🪴", "🧹", "🪣", "🧴", "🧻", "🪟",
   "🚗", "🚕", "🚌", "🚇", "🚲", "🛵", "✈️", "⛽", "🅿️", "🛞",
@@ -19,6 +24,36 @@ export const POPULAR_EMOJIS = [
   "🎁", "🎉", "🎂", "🥂", "🎊", "💐", "🎈", "🪅", "🎀", "🃏",
   "📦", "📰", "📧", "🗞️", "📨", "📬", "🗃️", "📋", "🔔", "📲",
   "💡", "🌍", "🌱", "☀️", "🌙", "⚡", "🔑", "🏷️", "🪐", "❓",
+  // ── Spożywcze ──
+  "🥖", "🥛", "🧀", "🥚", "🍎", "🍌", "🥕", "🥔", "🍇", "🥩",
+  "🐟", "🍗", "🧊", "🍫", "🍬", "🍪", "🥜", "🌶️", "🧂", "🍯",
+  "🍾", "🥤", "🫖", "🧋", "🍸", "🥃", "🧉", "🧁", "🍦", "🥐",
+  // ── Zwierzęta ──
+  "🐕", "🐈", "🐹", "🐰", "🐦", "🐠", "🐢", "🐾", "🦴", "🦜",
+  // ── Sport i rekreacja ──
+  "⚽", "🏀", "🎾", "🏐", "🏈", "⛳", "🎿", "🛹", "🥊", "🚴",
+  // ── Podróże ──
+  "🏖️", "🏝️", "⛺", "🏕️", "🗺️", "🧳", "🛳️", "🚢", "🏨", "🎫",
+  // ── Natura i pogoda ──
+  "🌳", "🌷", "🌻", "🍄", "🌊", "🔥", "❄️", "🌧️", "🌈", "⛄",
+  // ── Święta i okazje ──
+  "🎄", "🎃", "🐣", "🕯️", "🎆", "🧨", "💝", "🦃", "🕊️", "🪄",
+  // ── Praca i biuro ──
+  "💼", "🏢", "🗓️", "📅", "📊", "📌", "📎", "✂️", "🖊️", "🔍",
+  // ── Dom i łazienka ──
+  "🚿", "🛁", "🚽", "🧺", "🛏️", "🪑", "🪞", "🧽", "🗑️", "🧯",
+  // ── Media i łączność ──
+  "💧", "📶", "🛜", "📞", "☎️", "📻", "🖲️", "💾", "💿", "🎙️",
+  // ── Finanse i formalności ──
+  "🧮", "🏧", "🪪", "📑", "⚖️", "🤝", "🎰", "🔐", "🗝️", "💎",
+  // ── Transport ──
+  "🚙", "🚐", "🚚", "🛻", "🏍️", "🛴", "🚆", "🚊", "🛺", "🚁",
+  // ── Hobby i kultura ──
+  "🎨", "🖌️", "🧩", "🪡", "🧶", "♟️", "🎤", "🎹", "🥁", "🪕",
+  // ── Zdrowie i ciało ──
+  "🦷", "🧠", "🫀", "👁️", "🩸", "🧬", "🩻", "🧑‍⚕️", "💤", "🧘",
+  // ── Symbole ──
+  "⭐", "✨", "❤️", "👍", "✅", "⚠️", "♻️", "🔁", "🆕", "🔝",
 ];
 
 // ── Priorities ───────────────────────────────────────────────
