@@ -82,11 +82,18 @@ export default function PanelTransactions() {
     hasProduct: "off" as Tri,
   });
 
+  // Category groups: absent key = OPEN (a group is its own heading + rows).
   const [collapsed,          setCollapsed]          = useState<Record<string, boolean>>({});
+  // Receipts: the opposite default — absent key = COLLAPSED. A receipt unfolds
+  // into a full table, so a month of them open at once is a scroll marathon;
+  // the point of this view is scanning the purchases, then opening one.
+  const [openReceipts,       setOpenReceipts]       = useState<Record<string, boolean>>({});
   const [deleteModal,        setDeleteModal]        = useState<DeleteModal>({ isOpen: false, txId: null });
   const [confirmLinkedModal, setConfirmLinkedModal] = useState<LinkedModal>({ isOpen: false, txId: null });
   const [returnTarget,       setReturnTarget]       = useState<Transaction | null>(null);
-  const [view,               setView]               = useState<ViewMode>("list");
+  // Receipts are the default lens on a month: that is how the expenses were
+  // actually made, and the flat list is one click away.
+  const [view,               setView]               = useState<ViewMode>("receipt");
   // Receipt view only: the "Bez paragonu" tail, collapsed until asked for.
   const [looseOpen,          setLooseOpen]          = useState(false);
   const isLoadingMonth                              = useMonthLoad(activeBudgetMonth, loadTransactions, () => {
@@ -266,7 +273,7 @@ export default function PanelTransactions() {
   const looseIsOnlyContent = receiptGroups.length === 0;
   const showLoose          = looseIsOnlyContent || looseOpen;
 
-  const allReceiptsCollapsed = receiptGroups.length > 0 && receiptGroups.every(g => collapsed[g.key]);
+  const allReceiptsCollapsed = receiptGroups.length > 0 && receiptGroups.every(g => !openReceipts[g.key]);
 
   const totalSum         = filtered.reduce((acc, t) => acc + (t.effectiveAmount ?? t.amount), 0);
   const totalVoucherSum  = filtered.reduce((acc, t) => acc + (t.voucherAmount || 0), 0);
@@ -293,17 +300,19 @@ export default function PanelTransactions() {
 
   function toggleGroup(key: string) { setCollapsed(p => ({ ...p, [key]: !p[key] })); }
 
+  function toggleReceipt(key: string) { setOpenReceipts(p => ({ ...p, [key]: !p[key] })); }
+
   // Collapse/expand every receipt — all of them, not just the current page,
-  // so paging on doesn't undo what the button just did. Expanding deletes the
-  // keys instead of writing `false`: absent means open, which is the default
-  // a freshly loaded month starts from.
+  // so paging on doesn't undo what the button just did. Collapsing deletes the
+  // keys instead of writing `false`: absent means collapsed, which is the
+  // default a freshly loaded month starts from.
   function toggleAllReceipts() {
-    const collapse = !allReceiptsCollapsed;
-    setCollapsed(prev => {
+    const expand = allReceiptsCollapsed;
+    setOpenReceipts(prev => {
       const next = { ...prev };
       for (const g of receiptGroups) {
-        if (collapse) next[g.key] = true;
-        else          delete next[g.key];
+        if (expand) next[g.key] = true;
+        else        delete next[g.key];
       }
       return next;
     });
@@ -389,14 +398,15 @@ export default function PanelTransactions() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
             <div style={{ display: "flex", gap: 6 }}>
+              {/* Order matches priority of use: the default view sits first. */}
+              <ToggleBtn {...VIEW_TOGGLE_STYLE} active={view === "receipt"} onClick={() => setView("receipt")}>
+                🧾 Paragony
+              </ToggleBtn>
               <ToggleBtn {...VIEW_TOGGLE_STYLE} active={view === "list"} onClick={() => setView("list")}>
                 📋 Lista
               </ToggleBtn>
               <ToggleBtn {...VIEW_TOGGLE_STYLE} active={view === "category"} onClick={() => setView("category")}>
                 📁 Grupy
-              </ToggleBtn>
-              <ToggleBtn {...VIEW_TOGGLE_STYLE} active={view === "receipt"} onClick={() => setView("receipt")}>
-                🧾 Paragony
               </ToggleBtn>
             </div>
           </div>
@@ -534,7 +544,7 @@ export default function PanelTransactions() {
             {/* Tracked products */}
             <div style={s.filterBox}>
               <div style={s.filterLabel}>Produkty</div>
-              <TriFilterButton state={filters.hasProduct} onChange={v => set("hasProduct", v)} label="🏷️ Śledzone" color={c.cyanLight} />
+              <TriFilterButton state={filters.hasProduct} onChange={v => set("hasProduct", v)} label="🏷️ Śledzone ceny" color={c.cyanLight} />
             </div>
             {/* Merchant */}
             {uniqueMerchants.length > 0 && (
@@ -656,8 +666,8 @@ export default function PanelTransactions() {
                 <ReceiptGroupCard
                   key={group.key}
                   group={group}
-                  collapsed={!!collapsed[group.key]}
-                  onToggle={() => toggleGroup(group.key)}
+                  collapsed={!openReceipts[group.key]}
+                  onToggle={() => toggleReceipt(group.key)}
                   isMobile={isMobile}
                   {...txListHandlers}
                 />
