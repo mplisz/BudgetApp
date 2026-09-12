@@ -21,10 +21,14 @@ const containers = [
   { id: "RefreshTokens",         partitionKey: "/email"   },
   { id: "Settings",              partitionKey: "/userId"  },
   { id: "Months",                partitionKey: "/userId"  },
-  { id: "Tags",              partitionKey: "/userId"  },
+ // { id: "Tags",              partitionKey: "/userId"  },
   {id:  "Receipts",               partitionKey: "/userId" },
   { id: "RecurringTransactions",              partitionKey: "/userId"  },
   { id: "Products",              partitionKey: "/userId"  },
+  // defaultTtl -1 = TTL enabled, nothing expires unless the document
+  // asks for it. Shopping items ticked off set their own ttl (30 days),
+  // open ones never expire — see backend/routes/shopping.js.
+  { id: "ShoppingList",          partitionKey: "/userId", defaultTtl: -1 },
 ];
 
 async function setup() {
@@ -37,6 +41,7 @@ async function setup() {
       await database.containers.createIfNotExists({
         id: containerDef.id,
         partitionKey: { paths: [containerDef.partitionKey] },
+        ...(containerDef.defaultTtl !== undefined ? { defaultTtl: containerDef.defaultTtl } : {}),
       });
       console.log(`✅ Container '${containerDef.id}' (PK: ${containerDef.partitionKey}) is ready.`);
     }

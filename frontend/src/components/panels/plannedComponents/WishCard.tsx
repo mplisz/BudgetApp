@@ -13,12 +13,14 @@ import { safeHttpUrl } from "../../../utils/safeUrl";
 import type { PlannedDoc } from "../../../hooks/usePlanned";
 
 interface WishCardProps {
-  wish:      PlannedDoc;
-  onPromote: (wish: PlannedDoc) => void;
-  onArchive: (wish: PlannedDoc) => void;
+  wish:       PlannedDoc;
+  onPromote:  (wish: PlannedDoc) => void;
+  onArchive:  (wish: PlannedDoc) => void;
+  onToBuy:    (wish: PlannedDoc) => void;
+  isBusy?:    boolean;
 }
 
-export function WishCard({ wish, onPromote, onArchive }: WishCardProps) {
+export function WishCard({ wish, onPromote, onArchive, onToBuy, isBusy = false }: WishCardProps) {
   const safeUrl = wish.url ? safeHttpUrl(wish.url) : null;
 
   return (
@@ -58,6 +60,17 @@ export function WishCard({ wish, onPromote, onArchive }: WishCardProps) {
       </div>
 
       <div style={{ display: "flex", gap: 6, marginTop: 12, justifyContent: "flex-end" }}>
+        {/* The third way out, for things that need no financial decision:
+            a light bulb doesn't deserve a plan with a month and an amount,
+            and deleting it just loses the fact that we need one. */}
+        <button
+          onClick={() => onToBuy(wish)}
+          disabled={isBusy}
+          title="Przenieś na listę zakupów"
+          style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${alpha(c.cyanLight, "55")}`, background: "transparent", color: c.cyanLight, cursor: isBusy ? "not-allowed" : "pointer", fontWeight: 700, fontSize: 12, opacity: isBusy ? 0.5 : 1 }}
+        >
+          🧺 Na listę
+        </button>
         <button
           onClick={() => onPromote(wish)}
           style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.success, color: c.white, cursor: "pointer", fontWeight: 700, fontSize: 12 }}

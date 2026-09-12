@@ -55,6 +55,9 @@ const recurringContainer     = database.container("RecurringTransactions");
 const plannedContainer       = database.container("PlannedExpenses");
 const receiptsContainer       = database.container("Receipts");
 const productsContainer      = database.container("Products");
+// TTL is enabled on this one (defaultTtl -1): open items live forever,
+// resolved ones carry their own `ttl` — see routes/shopping.js.
+const shoppingContainer      = database.container("ShoppingList");
 
 module.exports = {
   categoriesContainer,
@@ -68,5 +71,6 @@ module.exports = {
   recurringContainer,
   plannedContainer,
   receiptsContainer,
-  productsContainer
+  productsContainer,
+  shoppingContainer
 };

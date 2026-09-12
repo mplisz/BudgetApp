@@ -7,14 +7,18 @@
 // `planned` state that the forecast, the Baza budżetu column, the safety net
 // and the bell all sum over. Consequence: this panel owns its own slice.
 //
-// "Zaplanuj" is the one-way door — it promotes an item into a real plan via
-// the same form used to create one from scratch.
+// Two one-way doors out of here, and the choice between them is the whole
+// point: "Zaplanuj" promotes an item into a real plan (through the same form
+// used to create one from scratch) when it needs a financial decision, and
+// "Na listę" hands it to the shopping list when it just needs buying.
 // ============================================================
 
 import { c }              from "../../styles/tokens";
 import { useState, useEffect, useMemo } from "react";
 import { createPortal }   from "react-dom";
 import { usePlanned }     from "../../hooks/usePlanned";
+import { useApi }         from "../../hooks/useApi";
+import { useToast }       from "../../hooks/useToast";
 import { useMonthStatus } from "../../hooks/useMonthStatus";
 import { WishCard }       from "./plannedComponents/WishCard";
 import { PlannedForm }    from "./plannedComponents/PlannedForm";
@@ -25,9 +29,12 @@ import type { PlannedDoc, PlannedPostPayload, PlannedPatchPayload } from "../../
 export default function PanelWishlist() {
   const { loadWishes, promoteWish, archivePlanned, isSaving } = usePlanned();
   const { activeBudgetMonth } = useMonthStatus();
+  const api = useApi();
+  const { showSuccess, showError } = useToast();
 
   const [wishes, setWishes] = useState<PlannedDoc[] | null>(null);
   const [promoteTarget, setPromoteTarget] = useState<PlannedDoc | null>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
 
   useEffect(() => { loadWishes().then(setWishes); }, [loadWishes]);
 
@@ -60,6 +67,26 @@ export default function PanelWishlist() {
     if (ok) setWishes(prev => (prev ?? []).filter(w => w.id !== wish.id));
   }
 
+  // Move to the shopping list. The item is created FIRST and archived only
+  // once that succeeded — the other order would lose the item entirely if
+  // the second call failed. A leftover duplicate is recoverable; a silently
+  // dropped entry is not.
+  async function handleToBuy(wish: PlannedDoc) {
+    setMovingId(wish.id);
+    try {
+      await api.post("/api/shopping",
+        { name: wish.description, sourceWishId: wish.id },
+        { fallback: "Nie udało się przenieść na listę zakupów." });
+      const ok = await archivePlanned(wish.id, "przeniesione na listę zakupów");
+      if (ok) setWishes(prev => (prev ?? []).filter(w => w.id !== wish.id));
+      showSuccess("Przeniesione na listę zakupów 🧺");
+    } catch (err) {
+      showError((err as Error).message);
+    } finally {
+      setMovingId(null);
+    }
+  }
+
   return (
     <div style={{ padding: "0 0 60px 0" }}>
       <div style={{ marginBottom: 20, marginTop: 8 }}>
@@ -89,6 +116,8 @@ export default function PanelWishlist() {
           wish={wish}
           onPromote={setPromoteTarget}
           onArchive={handleArchive}
+          onToBuy={handleToBuy}
+          isBusy={movingId === wish.id}
         />
       ))}
 
