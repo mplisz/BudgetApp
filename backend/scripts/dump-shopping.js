@@ -77,7 +77,12 @@ async function main() {
       const { resource } = await database.container("Settings").item(id, familyId).read();
       const items = resource?.items ?? [];
       console.log(`\nKatalog podpowiedzi (${id}): ${items.length} pozycji`);
-      for (const e of items) console.log(`    ${e.name} — count ${e.count}, last ${e.lastUsedAt}`);
+      // `section: —` means nobody corrected this product, so the keyword
+      // dictionary in utils/shoppingSections.js still decides its aisle.
+      // Anything else is a remembered choice that outranks the dictionary.
+      for (const e of items) {
+        console.log(`    ${(e.name ?? "?").padEnd(24)} sekcja: ${(e.section ?? "— (ze słownika)").padEnd(18)} count ${e.count}, last ${e.lastUsedAt}`);
+      }
     } catch {
       console.log(`\nKatalog podpowiedzi (${id}): BRAK DOKUMENTU ⚠️  (zapis katalogu nie przechodzi)`);
     }

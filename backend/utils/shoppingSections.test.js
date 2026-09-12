@@ -23,7 +23,7 @@ describe("guessSection — everyday items land in the right aisle", () => {
     warzywa:  ["Ziemniaki", "Banany", "marchewka", "Pomidory malinowe", "sałata"],
     chemia:   ["Płyn do mycia naczyń", "Proszek do prania", "Tabletki do zmywarki", "Worki na śmieci"],
     higiena:  ["Papier toaletowy", "Pasta do zębów", "Szampon", "Ręczniki papierowe"],
-    napoje:   ["Woda gazowana", "Piwo", "Coca-Cola", "sok pomarańczowy"],
+    napoje:   ["Woda gazowana", "Coca-Cola", "sok pomarańczowy", "Tonik"],
     slodycze: ["Czekolada mleczna", "Ciastka", "chipsy paprykowe"],
     suche:    ["Makaron spaghetti", "Kawa mielona", "Ryż basmati", "Mąka pszenna"],
     mrozone:  ["Lody", "Pierogi ruskie", "Mrożona pizza"],
@@ -32,6 +32,9 @@ describe("guessSection — everyday items land in the right aisle", () => {
     ubrania:  ["Skarpetki", "Majtki", "Piżama dla córki", "Czapka zimowa", "Buty sportowe"],
     gotowe:   ["Sałatka grecka", "Zapiekanka", "Sushi", "Kanapka", "Pizza"],
     apteka:   ["Paracetamol", "Witamina D", "Magnez", "Octenisept", "Leki dla mamy"],
+    przyprawy:["Sól morska", "Pieprz czarny", "Oregano", "Kurkuma", "Cynamon", "Vegeta"],
+    alkohol:  ["Piwo", "Wino czerwone", "Wódka", "Whisky", "Prosecco"],
+    kuchnie:  ["Sos sojowy", "Hummus", "Nachos", "Mleczko kokosowe", "Tortilla"],
   };
 
   for (const [section, names] of Object.entries(CASES)) {
@@ -64,6 +67,9 @@ describe("guessSection — diacritics and spelling", () => {
     assert.equal(guessSection("Sałata lodowa"), "warzywa");         // not gotowe
     assert.equal(guessSection("Mleko"), "nabial");                  // "lek" is inside it
     assert.equal(guessSection("Mrożona pizza"), "mrozone");         // not gotowe
+    assert.equal(guessSection("Winogrona"), "warzywa");             // "wino" is inside it
+    assert.equal(guessSection("Rosół"), "gotowe");                  // "sol" is inside it
+    assert.equal(guessSection("Rumianek"), "inne");                 // "rum" is inside it
   });
 
   test("a longer keyword beats a shorter one starting in the same place", () => {

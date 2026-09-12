@@ -23,8 +23,8 @@ const { foldProductName } = require("./productCatalog");
  *  its groups in exactly this order, so this array IS the route. */
 const SECTION_IDS = [
   "warzywa", "pieczywo", "nabial", "mieso", "gotowe", "mrozone",
-  "suche", "slodycze", "napoje", "chemia", "higiena", "apteka",
-  "dzieci", "ubrania", "dom", "inne",
+  "suche", "przyprawy", "kuchnie", "slodycze", "napoje", "alkohol",
+  "chemia", "higiena", "apteka", "dzieci", "ubrania", "dom", "inne",
 ];
 
 /** Fallback for anything the dictionary does not recognize. */
@@ -43,8 +43,10 @@ const SECTION_KEYWORDS = {
     "awokado", "szpinak", "burak", "seler", "cukini", "baklazan", "gruszk",
     "sliwk", "arbuz", "malin", "borowk", "brzoskwin", "kiwi", "warzyw", "owoc",
   ],
+  // Tortillas live in `kuchnie`, where the shop actually puts them —
+  // next to the salsa, not next to the bread.
   pieczywo: [
-    "chleb", "bulk", "buleczk", "bagietk", "rogal", "tortill", "pita",
+    "chleb", "bulk", "buleczk", "bagietk", "rogal", "pita",
     "croissant", "drozdzowk", "pieczywo", "chalk", "bulka",
   ],
   nabial: [
@@ -62,14 +64,29 @@ const SECTION_KEYWORDS = {
     // "salatk" (sałatka, a ready meal) has to outrank warzywa's "salat"
     // (sałata, a vegetable) — the longer-keyword tie-break does that.
     "salatk", "kanapk", "hot dog", "burger", "zupka", "instant",
-    "pizza", "kotlet", "nalesnik", "placki", "obiad",
+    "pizza", "kotlet", "nalesnik", "placki", "obiad", "rosol",
   ],
   mrozone: ["mrozon", "lody", "pierogi", "frytk", "mrozonk"],
   suche: [
-    "makaron", "ryz", "kasz", "maka", "cukier", "sol", "pieprz", "przypraw",
-    "olej", "ocet", "ketchup", "majonez", "musztard", "konserw", "platk",
-    "musli", "fasol", "soczewic", "herbat", "kawa", "kakao", "dzem", "miod",
-    "sos ", "bulion", "puszk", "oliw", "drozdz", "bulk proszek",
+    "makaron", "ryz", "kasz", "maka", "cukier", "olej", "ocet", "ketchup",
+    "majonez", "musztard", "konserw", "platk", "musli", "fasol", "soczewic",
+    "herbat", "kawa", "kakao", "dzem", "miod", "puszk", "oliw", "drozdz",
+  ],
+  // " sol " is padded on BOTH sides deliberately: as a bare stem it would
+  // also fire inside "rosół" and "sola".
+  przyprawy: [
+    "przypraw", " sol ", "soli morsk", "pieprz", "bazyli", "oregano", "curry",
+    "kurkum", "cynamon", "wanili", "majeranek", "tymianek", "rozmaryn",
+    "kminek", "gorczyc", "lisc laurow", "ziele angielskie", "chili", "papryka mielona",
+    "vegeta", "kostk rosolow", "bulion", "ziola", "susz", "sezam", "gałka",
+    "galka muszkat", "koperek suszon",
+  ],
+  kuchnie: [
+    "sos sojow", "sojowy", "teriyaki", "hummus", "falafel", "kuskus",
+    "tortill", "salsa", "guacamole", "taco", "nachos", "ramen", "pad thai",
+    "kimchi", "wasabi", "nori", "tahini", "harissa", "sriracha", "miso",
+    "mleczko kokosow", "mleko kokosow", "pasta curry", "makaron ryzow",
+    "sos slodko kwasny", "chinski", "tajski", "meksykan",
   ],
   slodycze: [
     "czekolad", "cukierk", "ciastk", "batonik", "chips", "paluszk", "zelk",
@@ -77,8 +94,18 @@ const SECTION_KEYWORDS = {
     "sniadaniow", "delicj", "ptasie",
   ],
   napoje: [
-    "woda", "sok ", "soku", "cola", "pepsi", "napoj", "piwo", "wino",
-    "energetyk", "lemoniad", "syrop", "tonic", "mineraln", "gazowan",
+    "woda", "sok ", "soku", "cola", "pepsi", "napoj",
+    "energetyk", "lemoniad", "syrop", "tonik", "tonic", "mineraln", "gazowan",
+  ],
+  // "wino" would also fire on "winogrona" — the longer-keyword tie-break
+  // in guessSection is what keeps grapes in the produce aisle.
+  // " rum " and " gin " are padded so they miss "rumianek" and anything
+  // that merely contains those three letters.
+  alkohol: [
+    "piwo", "wino", "wodk", "whisky", "whiskey", " rum ", " gin ", "likier",
+    "nalewk", "cydr", "prosecco", "szampan", "martini", "tequil", "brandy",
+    "koniak", "bourbon", "jagermeister", "zubrowk", "alkohol", "aperol",
+    "porter", "lager", "ipa ", "sidr",
   ],
   // Stems, not whole phrases: "Płyn do MYCIA naczyń" must hit the same
   // entry as "płyn do naczyń", so the keyword is the distinctive noun.
