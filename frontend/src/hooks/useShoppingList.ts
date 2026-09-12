@@ -46,6 +46,9 @@ export interface PriceObservation {
   d: string;
   a: number;
   u: string;
+  /** Shop the purchase was made in. Absent on observations recorded
+   *  before the shop was stored, and whenever the receipt had none. */
+  s?: string;
 }
 
 /** Computed server-side (one implementation, the tested one). */

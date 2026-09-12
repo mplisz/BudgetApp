@@ -115,6 +115,18 @@ describe("observationFrom", () => {
     assert.equal(o.a, 54.92);
   });
 
+  test("records where the purchase happened, when known", () => {
+    const o = observationFrom({ description: "Kefir 400g", amount: 2.29 }, "2026-09-01", "Biedronka");
+    assert.equal(o.s, "Biedronka");
+  });
+
+  test("an unknown shop adds no field at all", () => {
+    // These live in a document read on every panel open; an empty "s"
+    // on every observation would be bytes spent on saying nothing.
+    const o = observationFrom({ description: "Kefir 400g", amount: 2.29 }, "2026-09-01", null);
+    assert.equal("s" in o, false);
+  });
+
   test("a line with no usable amount yields nothing", () => {
     assert.equal(observationFrom({ description: "Kaucja za opakowania", amount: 0 }, "2026-09-01"), null);
     assert.equal(observationFrom({ description: "x", amount: null }, "2026-09-01"), null);

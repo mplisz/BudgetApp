@@ -22,6 +22,7 @@ import { QuickAddBar }   from "./shoppingComponents/QuickAddBar";
 import { ShoppingRow }   from "./shoppingComponents/ShoppingRow";
 import { SkeletonListRow } from "../ui/Skeleton";
 import { CollapsibleSection } from "../ui";
+import { StatTile } from "../ui/StatTile";
 
 export default function PanelShopping() {
   const {
@@ -139,25 +140,39 @@ export default function PanelShopping() {
     <div style={{ padding: "0 0 40px 0" }}>
       <div style={{ marginBottom: 20, marginTop: 8 }}>
         <div style={s.sectionTitle}>🧺 Lista zakupów</div>
-        <div style={s.sectionSub}>
-          {showSkeleton
-            ? "Ładowanie…"
-            : toBuy === 0
-              ? "Nic do kupienia — dopisz coś poniżej albo tapnij w częsty produkt."
-              : <>
-                  {toBuy} {plural(toBuy, "pozycja", "pozycje", "pozycji")} do kupienia
-                  {estimate.priced > 0 && (
-                    <span title={`Z median z ostatnich 90 dni. Wycenione ${estimate.priced} z ${toBuy} — reszta nie była jeszcze na żadnym zeskanowanym paragonie.`}>
-                      {" · "}ok. <strong style={{ color: c.textBody }}>{fmt(estimate.total)}</strong>
-                      {estimate.priced < toBuy && (
-                        <span style={{ color: c.textFaint }}> (z {estimate.priced})</span>
-                      )}
-                    </span>
-                  )}
-                  {missed.length > 0 && <> · {missed.length} niedostępne ostatnio</>}
-                </>}
-        </div>
+        {(showSkeleton || toBuy === 0) && (
+          <div style={s.sectionSub}>
+            {showSkeleton ? "Ładowanie…" : "Nic do kupienia — dopisz coś poniżej albo tapnij w częsty produkt."}
+          </div>
+        )}
       </div>
+
+      {/* The two headline numbers as tiles, not a grey sentence. What the
+          trip will cost is the most useful figure on this screen and was
+          reading like a footnote. Both tiles always render once there is
+          anything to buy, so the layout does not jump the moment the first
+          price arrives. */}
+      {!showSkeleton && toBuy > 0 && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <StatTile
+            label="Do kupienia"
+            value={`${toBuy} ${plural(toBuy, "pozycja", "pozycje", "pozycji")}`}
+            sub={missed.length > 0 ? `${missed.length} niedostępne ostatnio` : undefined}
+          />
+          <StatTile
+            label="Szacunkowo"
+            value={estimate.priced > 0 ? `≈ ${fmt(estimate.total)}` : "—"}
+            color={estimate.priced > 0 ? c.successLight : c.textMuted}
+            sub={
+              estimate.priced === 0
+                ? "brak cen z paragonów"
+                : estimate.priced < toBuy
+                  ? `wycenione ${estimate.priced} z ${toBuy}`
+                  : "wszystkie pozycje wycenione"
+            }
+          />
+        </div>
+      )}
 
       {showSkeleton && (
         <div style={s.card}>

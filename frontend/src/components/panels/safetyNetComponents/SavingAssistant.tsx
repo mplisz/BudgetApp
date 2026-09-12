@@ -14,7 +14,8 @@ import { LEVEL_META } from "./types";
 import type { LevelDeficit, PriorityLevel, SavingCapability, WhatIfDelta } from "./types";
 import { computeEta, formatEtaDate, formatMonthsPretty } from "./computations";
 import type { EtaResult } from "./computations";
-import { NumberStepper, StatTile } from "./uiBits";
+import { NumberStepper } from "./uiBits";
+import { StatTile } from "../../ui/StatTile";
 
 interface SavingAssistantProps {
   deficits:        LevelDeficit[];

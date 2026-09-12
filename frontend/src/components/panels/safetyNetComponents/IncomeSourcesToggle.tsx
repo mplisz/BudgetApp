@@ -8,7 +8,8 @@
 import { c } from "../../../styles/tokens";
 import { fmt } from "../../../utils/helpers";
 import { EmptyState } from "../../ui/summaryUi";
-import { ToggleRow, StatTile } from "./uiBits";
+import { ToggleRow } from "./uiBits";
+import { StatTile } from "../../ui/StatTile";
 import type { IncomeSource } from "./types";
 
 interface IncomeSourcesToggleProps {

@@ -95,13 +95,22 @@ function parseWeightKg(description) {
  *
  * line: { description, amount, product? } — product.packCount is trusted
  * over anything parsed out of the text, since the AI had the receipt.
+ *
+ * `shop` is where the purchase happened. Not a field anyone maintains —
+ * the list items dropped theirs for that reason — but provenance for a
+ * number: "5,20 zł" is hard to judge, "5,20 zł w Żabce" explains itself,
+ * and it is what tells a real price from a mis-matched receipt line.
  */
-function observationFrom(line, date) {
+function observationFrom(line, date, shop = null) {
   const amount = Number(line?.amount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
+  // Only set when known, so an observation without a shop stays as small
+  // as it was — these sit in a document read on every panel open.
+  const where = shop ? { s: String(shop).slice(0, 40) } : {};
+
   const kg = parseWeightKg(line.description);
-  if (kg) return { d: date, a: round2(amount / kg), u: "kg" };
+  if (kg) return { d: date, a: round2(amount / kg), u: "kg", ...where };
 
   // In order of how much the source knows:
   //   1. the line's own packCount — OCR rule 27, filled for EVERY line
@@ -113,7 +122,7 @@ function observationFrom(line, date) {
   //      either of those.
   const pack = line.packCount ?? line.product?.packCount ?? parsePackCount(line.description);
   const count = pack && pack > 1 ? pack : 1;
-  return { d: date, a: round2(amount / count), u: "szt" };
+  return { d: date, a: round2(amount / count), u: "szt", ...where };
 }
 
 function round2(n) {
