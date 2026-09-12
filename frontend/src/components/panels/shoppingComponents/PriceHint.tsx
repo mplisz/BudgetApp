@@ -16,7 +16,8 @@
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { formatSize, computeUnitPrice, unitPriceLabel, type SizeUnit } from "../../../utils/productPricing";
 import type { PriceSummary, PriceObservation } from "../../../hooks/useShoppingList";
 
 interface PriceHintProps {
@@ -34,11 +35,44 @@ function shortDate(iso: string): string {
   return m && d ? `${d}.${m}` : iso;
 }
 
+/**
+ * "280 g · 13,89 zł/kg" — what the price bought, and that price made
+ * comparable across package sizes. Reuses the formatting the "Ceny
+ * produktów" analytics already has, so a kilo is written the same way
+ * everywhere in the app. null when the receipt printed no size.
+ */
+function describeSize(o: PriceObservation): string | null {
+  if (!o.z || !o.zu) return null;
+  const unit = o.zu as SizeUnit;
+  const size = formatSize(o.z, unit);
+  // One piece at a price already IS the unit price — repeating it adds
+  // nothing. Anything measured, or a pack of several, gets the per-unit.
+  if (unit === "szt" && o.z <= 1) return size;
+  const perUnit = computeUnitPrice(o.a, o.z, unit);
+  return perUnit != null ? `${size} · ${money(perUnit)} ${unitPriceLabel(unit)}` : size;
+}
+
 export function PriceHint({ price, observations, onForget }: PriceHintProps) {
   const [open, setOpen] = useState(false);
-  if (!price) return null;
 
-  const kept = observations.filter(o => o.u === price.unit);
+  const kept = useMemo(
+    () => (price ? observations.filter(o => o.u === price.unit) : []),
+    [price, observations],
+  );
+
+  // When every sized purchase was the SAME package, say so on the
+  // collapsed chip too — "zwykle 5,20 zł / 280 g" answers "za ile?"
+  // without a tap. Mixed sizes get nothing here: naming one of them
+  // would misdescribe a median built from several.
+  const commonSize = useMemo(() => {
+    const sized = kept.filter(o => o.z && o.zu);
+    if (sized.length === 0) return null;
+    const first = sized[0];
+    const same = sized.every(o => o.z === first.z && o.zu === first.zu);
+    return same ? formatSize(first.z!, first.zu as SizeUnit) : null;
+  }, [kept]);
+
+  if (!price) return null;
 
   return (
     <>
@@ -57,6 +91,7 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
         {price.median != null
           ? <>zwykle <strong style={{ color: c.successLight }}>{money(price.median)}{suffix(price.unit)}</strong></>
           : <>ost. <strong style={{ color: c.successLight }}>{money(price.last)}{suffix(price.unit)}</strong></>}
+        {commonSize && <span style={{ color: c.textSecondary }}> / {commonSize}</span>}
         {/* The last price only earns its own slot when it differs from the
             typical one — otherwise it is the same number twice. */}
         {price.median != null && price.last !== price.median && (
@@ -88,7 +123,9 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
             </span>
           </div>
 
-          {kept.map((o, idx) => (
+          {kept.map((o, idx) => {
+            const sizeText = describeSize(o);
+            return (
             <div
               key={o.i}
               style={{
@@ -99,8 +136,15 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
                 borderTop: idx === 0 ? "none" : `1px solid ${alpha(c.border, "88")}`,
               }}
             >
-              <span style={{ color: c.text, fontWeight: 800, fontSize: 15, whiteSpace: "nowrap" }}>
-                {money(o.a)}{suffix(o.u)}
+              {/* Price and what it bought stacked in one cell: on a phone
+                  a fifth column would squeeze the shop name to nothing. */}
+              <span style={{ whiteSpace: "nowrap" }}>
+                <span style={{ display: "block", color: c.text, fontWeight: 800, fontSize: 15 }}>
+                  {money(o.a)}{suffix(o.u)}
+                </span>
+                <span style={{ display: "block", color: sizeText ? c.textTertiary : c.textFaint, fontSize: 11, marginTop: 1 }}>
+                  {sizeText ?? "gramatura nieznana"}
+                </span>
               </span>
               <span style={{
                 color: o.s ? c.textBody : c.textFaint, fontWeight: 600,
@@ -125,7 +169,8 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
                 ✕
               </button>
             </div>
-          ))}
+            );
+          })}
 
           {price.median == null && (
             <div style={{ padding: "8px 12px", borderTop: `1px solid ${c.border}`, color: c.textMuted, fontSize: 11 }}>

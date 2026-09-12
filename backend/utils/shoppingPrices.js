@@ -79,6 +79,51 @@ function parsePackCount(description) {
 const WEIGHT_AFTER  = /(\d+[.,]\d+)\s?kg\b/i;
 const WEIGHT_BEFORE = /\bkg\s?(\d+[.,]\d+)/i;
 
+// "280 g", "0,5 l", "1,75 L", "500ml", "10 szt.", "0,25L". Converted to
+// the same base units the product catalog uses everywhere (g, ml, szt),
+// so the panel can reuse formatSize / computeUnitPrice unchanged.
+const SIZE_TOKEN = /(\d+(?:[.,]\d+)?)\s?(kg|dag|g|ml|l|szt)\b/gi;
+const TO_BASE = {
+  kg:  { factor: 1000, unit: "g"   },
+  dag: { factor: 10,   unit: "g"   },
+  g:   { factor: 1,    unit: "g"   },
+  l:   { factor: 1000, unit: "ml"  },
+  ml:  { factor: 1,    unit: "ml"  },
+  szt: { factor: 1,    unit: "szt" },
+};
+
+/**
+ * Size of ONE package, from the description. null when the text says
+ * nothing usable.
+ *
+ * Takes the LAST size in the text, not the first. From the real export:
+ * "Pieluszki Pampers 3 Active Baby 6-10 kg 90 szt" — the first size is
+ * the baby's weight, the last is the pack. Product names put the package
+ * size at the end far more reliably than anywhere else.
+ */
+function parsePackageSize(description) {
+  const text = String(description || "");
+  const all = [...text.matchAll(SIZE_TOKEN)];
+  if (all.length === 0) return null;
+
+  const [, num, rawUnit] = all[all.length - 1];
+  const base = TO_BASE[rawUnit.toLowerCase()];
+  const size = Math.round(Number(num.replace(",", ".")) * base.factor);
+
+  // Out-of-range values are misreads, not products: nobody buys a
+  // 400-tonne jar, and a zero-gram one would divide by nothing.
+  const max = base.unit === "szt" ? 1000 : 100_000;
+  return size > 0 && size <= max ? { size, unit: base.unit } : null;
+}
+
+/** Package size, trusting the AI's structured product over the text —
+ *  it had the receipt, the regex only has what got written down. */
+function packageSizeFrom(line) {
+  const p = line?.product;
+  if (p?.size && p?.unit && TO_BASE[p.unit]) return { size: p.size, unit: p.unit };
+  return parsePackageSize(line?.description);
+}
+
 /** Weight in kilograms when the line was sold by weight, else null. */
 function parseWeightKg(description) {
   const text = String(description || "");
@@ -122,7 +167,15 @@ function observationFrom(line, date, shop = null) {
   //      either of those.
   const pack = line.packCount ?? line.product?.packCount ?? parsePackCount(line.description);
   const count = pack && pack > 1 ? pack : 1;
-  return { d: date, a: round2(amount / count), u: "szt", ...where };
+
+  // What the per-item price actually buys. Without it "5,20 zł" cannot
+  // be told apart from a bargain or a rip-off — is that 100 g or 400 g?
+  // `z` in base units (g / ml / szt), `zu` the unit; both absent when
+  // the receipt did not say.
+  const pkg  = packageSizeFrom(line);
+  const size = pkg ? { z: pkg.size, zu: pkg.unit } : {};
+
+  return { d: date, a: round2(amount / count), u: "szt", ...where, ...size };
 }
 
 function round2(n) {
@@ -189,6 +242,7 @@ module.exports = {
   WINDOW_DAYS,
   MIN_FOR_MEDIAN,
   parsePackCount,
+  parsePackageSize,
   parseWeightKg,
   observationFrom,
   median,

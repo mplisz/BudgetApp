@@ -14,7 +14,7 @@ const assert             = require("node:assert/strict");
 
 const {
   MAX_OBSERVATIONS, MIN_FOR_MEDIAN,
-  parsePackCount, parseWeightKg, observationFrom,
+  parsePackCount, parsePackageSize, parseWeightKg, observationFrom,
   median, pruneObservations, addObservation, summarize,
 } = require("./shoppingPrices");
 
@@ -50,6 +50,38 @@ describe("parsePackCount", () => {
   });
 });
 
+// ── Package sizes ─────────────────────────────────────────────
+
+describe("parsePackageSize", () => {
+  test("reads the notations on these receipts, into base units", () => {
+    assert.deepEqual(parsePackageSize("Majo Go Vege 280 g x2"), { size: 280, unit: "g" });
+    assert.deepEqual(parsePackageSize("Napój energetyczny En... 0,5 l"), { size: 500, unit: "ml" });
+    assert.deepEqual(parsePackageSize("Polaris Mama 1,5L x6"), { size: 1500, unit: "ml" });
+    assert.deepEqual(parsePackageSize("Krewetki surowe 500g"), { size: 500, unit: "g" });
+    assert.deepEqual(parsePackageSize("Red Bull Lilac puszka 0,25L"), { size: 250, unit: "ml" });
+    assert.deepEqual(parsePackageSize("BIO jaja 10 szt."), { size: 10, unit: "szt" });
+  });
+
+  test("takes the last size — the first one is sometimes not the package", () => {
+    // Real line: "6-10 kg" is the baby, "90 szt" is the box.
+    assert.deepEqual(
+      parsePackageSize("Pieluszki Pampers 3 Active Baby 6-10 kg 90 szt"),
+      { size: 90, unit: "szt" },
+    );
+  });
+
+  test("a percentage is not a size", () => {
+    assert.deepEqual(parsePackageSize("Mleko UHT 3,2% 1L"), { size: 1000, unit: "ml" });
+    assert.equal(parsePackageSize("Somersby Pear 0%"), null);
+  });
+
+  test("nothing to read → null", () => {
+    assert.equal(parsePackageSize("Kiełbasa kasztelańska"), null);
+    assert.equal(parsePackageSize(""), null);
+    assert.equal(parsePackageSize(undefined), null);
+  });
+});
+
 // ── Weights ───────────────────────────────────────────────────
 
 describe("parseWeightKg", () => {
@@ -70,9 +102,29 @@ describe("parseWeightKg", () => {
 
 describe("observationFrom", () => {
   test("a multipack is divided down to one item", () => {
-    // 20,97 for three bottles is 6,99 a bottle, not 20,97.
+    // 20,97 for three bottles is 6,99 a bottle, not 20,97 — and the size
+    // recorded is ONE bottle's, matching the price it sits next to.
     const o = observationFrom({ description: "Coca-Cola Zero 1,75 l x3", amount: 20.97 }, "2026-09-01");
-    assert.deepEqual(o, { d: "2026-09-01", a: 6.99, u: "szt" });
+    assert.deepEqual(o, { d: "2026-09-01", a: 6.99, u: "szt", z: 1750, zu: "ml" });
+  });
+
+  test("records the package size, so a price says what it buys", () => {
+    const o = observationFrom({ description: "Kefir Activia 280 g", amount: 5.6 }, "2026-09-01");
+    assert.equal(o.z, 280);
+    assert.equal(o.zu, "g");
+  });
+
+  test("the AI's structured size outranks the text", () => {
+    const o = observationFrom(
+      { description: "Chleb pasterski 700 g", amount: 6.25, product: { size: 350, unit: "g" } },
+      "2026-09-01",
+    );
+    assert.equal(o.z, 350);
+  });
+
+  test("no size in the text means no size field, not a guess", () => {
+    const o = observationFrom({ description: "Kiełbasa kasztelańska", amount: 12.57 }, "2026-09-01");
+    assert.equal("z" in o, false);
   });
 
   test("a weighed line becomes a price per kilo", () => {

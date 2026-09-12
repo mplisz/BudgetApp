@@ -49,6 +49,10 @@ export interface PriceObservation {
   /** Shop the purchase was made in. Absent on observations recorded
    *  before the shop was stored, and whenever the receipt had none. */
   s?: string;
+  /** Size of the package the price bought, in base units (g / ml / szt),
+   *  with `zu` its unit. Absent when the receipt did not print one. */
+  z?:  number;
+  zu?: string;
 }
 
 /** Computed server-side (one implementation, the tested one). */
