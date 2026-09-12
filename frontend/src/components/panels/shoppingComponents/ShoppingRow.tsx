@@ -24,7 +24,8 @@ import { c, alpha } from "../../../styles/tokens";
 import { useState } from "react";
 import { theme as s } from "../../../styles/theme";
 import { SHOPPING_SECTIONS, SECTION_IDS, sectionMeta } from "../../../data/constants/shoppingSections";
-import type { ShoppingItem } from "../../../hooks/useShoppingList";
+import { PriceHint } from "./PriceHint";
+import type { ShoppingItem, CatalogEntry } from "../../../hooks/useShoppingList";
 
 interface ShoppingRowProps {
   item:      ShoppingItem;
@@ -34,6 +35,10 @@ interface ShoppingRowProps {
   onRemove:  (id: string) => void;
   onQty:     (id: string, qty: number) => void;
   onDetails: (id: string, details: { note: string; section: string }) => void;
+  /** What this product usually costs — absent until a scanned receipt
+   *  has been matched to it. */
+  catalogEntry?: CatalogEntry;
+  onForgetPrice: (key: string, observationId: string) => void;
 }
 
 const iconBtn = (color: string): React.CSSProperties => ({
@@ -47,7 +52,10 @@ const iconBtn = (color: string): React.CSSProperties => ({
   fontSize: 15, cursor: "pointer", flexShrink: 0,
 });
 
-export function ShoppingRow({ item, onBought, onMissed, onReopen, onRemove, onQty, onDetails }: ShoppingRowProps) {
+export function ShoppingRow({
+  item, onBought, onMissed, onReopen, onRemove, onQty, onDetails,
+  catalogEntry, onForgetPrice,
+}: ShoppingRowProps) {
   const resolved = item.status !== "open";
   const missed   = !resolved && !!item.missedAt;
   // Ticked means BOUGHT specifically. A skipped item is settled too, but
@@ -131,6 +139,11 @@ export function ShoppingRow({ item, onBought, onMissed, onReopen, onRemove, onQt
                 to dla córki" is the whole reason the item was written
                 down that way, and it has to survive a glance in a shop. */}
             {item.note && <span style={{ color: c.infoLight, fontWeight: 600 }}>📝 {item.note}</span>}
+            <PriceHint
+              price={catalogEntry?.price}
+              observations={catalogEntry?.prices ?? []}
+              onForget={id => catalogEntry && onForgetPrice(catalogEntry.key, id)}
+            />
             {missed && (
               <span style={{ color: c.warningLight }}>
                 🚫 nie było{item.missedCount > 1 ? ` (${item.missedCount}×)` : ""}

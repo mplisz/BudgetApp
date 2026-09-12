@@ -14,7 +14,7 @@
 import { c } from "../../styles/tokens";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { theme as s } from "../../styles/theme";
-import { plural } from "../../utils/helpers";
+import { fmt, plural } from "../../utils/helpers";
 import { useShoppingList, type CatalogEntry, type ShoppingItem } from "../../hooks/useShoppingList";
 import { sectionMeta, sectionOrder, DEFAULT_SECTION } from "../../data/constants/shoppingSections";
 import { FrequentPills } from "./shoppingComponents/FrequentPills";
@@ -27,7 +27,7 @@ export default function PanelShopping() {
   const {
     items, catalog, isLoading, hasLoaded,
     load, addItem, patchItem, markBought, markMissed, reopenItem, removeItem,
-    forgetSuggestion,
+    forgetSuggestion, forgetPrice,
   } = useShoppingList();
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -103,7 +103,35 @@ export default function PanelShopping() {
     onDetails: (id: string, details: { note: string; section: string }) => {
       patchItem(id, details);
     },
+    onForgetPrice: forgetPrice,
   };
+
+  // Prices live on the catalog, not on the item — the catalog is what
+  // survives an item being ticked off and expiring a week later.
+  const catalogByKey = useMemo(
+    () => new Map(catalog.map(e => [e.key, e])),
+    [catalog],
+  );
+
+  // What this trip will cost, answered BEFORE leaving the house — which
+  // is the one thing the rest of this app, all of it built around what
+  // already happened, cannot do.
+  //
+  // Only per-item prices are summed. A product bought by weight has a
+  // price per kilo, and multiplying that by "2" (two onions) would be
+  // arithmetic with no meaning, so those are left out and counted as
+  // unpriced. `median ?? last` because one recorded purchase is still a
+  // better guess than pretending we know nothing.
+  const estimate = useMemo(() => {
+    let total = 0, priced = 0;
+    for (const item of [...open, ...missed]) {
+      const price = catalogByKey.get(item.key)?.price;
+      if (!price || price.unit !== "szt") continue;
+      total += (price.median ?? price.last) * item.qty;
+      priced++;
+    }
+    return { total, priced };
+  }, [open, missed, catalogByKey]);
 
   const showSkeleton = isLoading && !hasLoaded;
 
@@ -118,6 +146,14 @@ export default function PanelShopping() {
               ? "Nic do kupienia — dopisz coś poniżej albo tapnij w częsty produkt."
               : <>
                   {toBuy} {plural(toBuy, "pozycja", "pozycje", "pozycji")} do kupienia
+                  {estimate.priced > 0 && (
+                    <span title={`Z median z ostatnich 90 dni. Wycenione ${estimate.priced} z ${toBuy} — reszta nie była jeszcze na żadnym zeskanowanym paragonie.`}>
+                      {" · "}ok. <strong style={{ color: c.textBody }}>{fmt(estimate.total)}</strong>
+                      {estimate.priced < toBuy && (
+                        <span style={{ color: c.textFaint }}> (z {estimate.priced})</span>
+                      )}
+                    </span>
+                  )}
                   {missed.length > 0 && <> · {missed.length} niedostępne ostatnio</>}
                 </>}
         </div>
@@ -167,11 +203,11 @@ export default function PanelShopping() {
                   padding: 0, marginTop: 0, marginBottom: 14,
                 }}
               >
-                {section.items.map(item => <ShoppingRow key={item.id} item={item} {...rowHandlers} />)}
+                {section.items.map(item => <ShoppingRow key={item.id} item={item} catalogEntry={catalogByKey.get(item.key)} {...rowHandlers} />)}
               </CollapsibleSection>
             ) : (
               <div key={section.id}>
-                {section.items.map(item => <ShoppingRow key={item.id} item={item} {...rowHandlers} />)}
+                {section.items.map(item => <ShoppingRow key={item.id} item={item} catalogEntry={catalogByKey.get(item.key)} {...rowHandlers} />)}
               </div>
             )
           ))}
@@ -184,7 +220,7 @@ export default function PanelShopping() {
               }}>
                 Nie było ostatnio ({missed.length})
               </div>
-              {missed.map(item => <ShoppingRow key={item.id} item={item} {...rowHandlers} />)}
+              {missed.map(item => <ShoppingRow key={item.id} item={item} catalogEntry={catalogByKey.get(item.key)} {...rowHandlers} />)}
             </>
           )}
 
@@ -205,7 +241,7 @@ export default function PanelShopping() {
                 </span>
               </div>
               {historyOpen && history.map(item => (
-                <ShoppingRow key={item.id} item={item} {...rowHandlers} />
+                <ShoppingRow key={item.id} item={item} catalogEntry={catalogByKey.get(item.key)} {...rowHandlers} />
               ))}
             </div>
           )}

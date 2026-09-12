@@ -39,6 +39,25 @@ export interface ShoppingItem {
   resolvedAt:   string | null;
 }
 
+/** One recorded price: what a unit of this product cost on that day.
+ *  `u` is "szt" or "kg" — never mixed within a summary. */
+export interface PriceObservation {
+  i: string;
+  d: string;
+  a: number;
+  u: string;
+}
+
+/** Computed server-side (one implementation, the tested one). */
+export interface PriceSummary {
+  unit:   string;
+  count:  number;
+  last:   number;
+  lastAt: string;
+  /** null until there are enough purchases for "usually" to mean anything. */
+  median: number | null;
+}
+
 export interface CatalogEntry {
   key:         string;
   name:        string;
@@ -49,6 +68,8 @@ export interface CatalogEntry {
   count:       number;
   firstUsedAt: string;
   lastUsedAt:  string;
+  prices?:     PriceObservation[];
+  price?:      PriceSummary | null;
 }
 
 interface PanelState {
@@ -200,9 +221,37 @@ export function useShoppingList() {
     }
   }, [api, catalog, showError, showSuccess]);
 
+  // ── Rejecting a mis-matched price ─────────────────────────
+  // Receipt matching is right about nine times in ten, and the tenth is
+  // visible as an absurd number ("22 zł/kg za ziemniaki"). Removing it
+  // by hand is cheaper than making the matcher perfect, and keeps the
+  // figure trustworthy — two silly prices and nobody reads any of them.
+
+  const forgetPrice = useCallback(async (key: string, observationId: string): Promise<boolean> => {
+    const before = catalog;
+    setCatalog(prev => prev.map(e => e.key === key
+      ? { ...e, prices: (e.prices ?? []).filter(p => p.i !== observationId) }
+      : e));
+    try {
+      // The response carries medians recomputed server-side, so the row
+      // settles on the real number rather than a locally guessed one.
+      const next = await api.del<CatalogEntry[]>(
+        `/api/shopping/catalog/${encodeURIComponent(key)}/prices/${encodeURIComponent(observationId)}`,
+        undefined,
+        { fallback: "Nie udało się usunąć ceny." },
+      );
+      setCatalog(next);
+      return true;
+    } catch (err) {
+      setCatalog(before);
+      showError((err as Error).message);
+      return false;
+    }
+  }, [api, catalog, showError]);
+
   return {
     items, catalog, isLoading, hasLoaded: loadedRef.current,
     load, addItem, patchItem, markBought, markMissed, reopenItem,
-    removeItem, forgetSuggestion,
+    removeItem, forgetSuggestion, forgetPrice,
   };
 }

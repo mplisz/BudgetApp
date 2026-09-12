@@ -22,6 +22,7 @@
 
 const { upsertSettingsDoc, readSettingsDoc } = require("./settingsDoc");
 const { foldProductName } = require("./productCatalog");
+const { addObservation } = require("./shoppingPrices");
 
 const CATALOG_DOC = (familyId) => `shopping_catalog_${familyId}`;
 
@@ -184,6 +185,74 @@ async function rememberShoppingSection(settingsContainer, familyId, key, section
   });
 }
 
+/**
+ * Record what products cost, from the lines of one saved receipt.
+ *
+ * `priced` is [{ key, observation }] — the caller has already matched
+ * lines to catalog entries and converted each into a comparable number
+ * (see shoppingMatch + shoppingPrices). Only entries the catalog ALREADY
+ * knows are touched: this is the vocabulary of things this family puts
+ * on its list, not a product database, so a receipt line for something
+ * never listed records nothing.
+ *
+ * Best-effort, like every other learning write here: the transaction it
+ * hangs off has already been saved.
+ */
+async function rememberPrices(settingsContainer, familyId, priced) {
+  const byKey = new Map();
+  for (const { key, observation } of priced || []) {
+    if (key && observation) byKey.set(key, observation);   // one per product per receipt
+  }
+  if (byKey.size === 0) return;
+
+  await upsertSettingsDoc(settingsContainer, {
+    id:     CATALOG_DOC(familyId),
+    familyId,
+    type:   "SHOPPING_CATALOG",
+    logTag: "SHOPPING_CATALOG",
+    mutate: (doc) => {
+      const items = Array.isArray(doc.items) ? doc.items : [];
+      let touched = false;
+
+      const next = items.map(entry => {
+        const observation = byKey.get(entry.key);
+        if (!observation) return entry;
+        touched = true;
+        return { ...entry, prices: addObservation(entry.prices, withId(observation)) };
+      });
+
+      return touched ? { ...doc, items: next } : null;
+    },
+  });
+}
+
+/** Short id so a single observation can be pointed at later — the date
+ *  alone is not enough, two purchases of the same thing on one day being
+ *  perfectly ordinary. */
+function withId(observation) {
+  return { i: Math.random().toString(36).slice(2, 8), ...observation };
+}
+
+/** Drop one recorded price the user rejected as not being this product.
+ *  Returns the catalog as it now stands. */
+async function forgetPrice(settingsContainer, familyId, key, observationId) {
+  await upsertSettingsDoc(settingsContainer, {
+    id:     CATALOG_DOC(familyId),
+    familyId,
+    type:   "SHOPPING_CATALOG",
+    logTag: "SHOPPING_CATALOG",
+    mutate: (doc) => {
+      const items = Array.isArray(doc.items) ? doc.items : [];
+      const idx   = items.findIndex(e => e.key === key);
+      if (idx === -1) return null;
+      const prices = (items[idx].prices || []).filter(p => p.i !== observationId);
+      if (prices.length === (items[idx].prices || []).length) return null;   // nothing removed
+      return { ...doc, items: items.map((e, i) => i === idx ? { ...e, prices } : e) };
+    },
+  });
+  return fetchCatalog(settingsContainer, familyId);
+}
+
 /** The section this product was last filed under, or null when the
  *  catalog has no opinion yet. */
 async function lookupSection(settingsContainer, familyId, key) {
@@ -219,6 +288,8 @@ module.exports = {
   fetchCatalog,
   rememberShoppingItem,
   rememberShoppingSection,
+  rememberPrices,
+  forgetPrice,
   lookupSection,
   forgetShoppingItem,
 };

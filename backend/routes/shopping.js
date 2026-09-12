@@ -41,8 +41,10 @@ const { requireAuth } = require("../middleware/auth");
 const { readItemWithEtag, IdParamSchema } = require("../utils/helpers");
 const {
   shoppingKey, cleanItemName, fetchCatalog,
-  rememberShoppingItem, rememberShoppingSection, lookupSection, forgetShoppingItem,
+  rememberShoppingItem, rememberShoppingSection, lookupSection,
+  forgetShoppingItem, forgetPrice,
 } = require("../utils/shoppingCatalog");
+const { summarize } = require("../utils/shoppingPrices");
 const { SECTION_IDS, DEFAULT_SECTION, guessSection } = require("../utils/shoppingSections");
 
 router.use(requireAuth);
@@ -126,7 +128,11 @@ async function loadPanelState(familyId) {
   // the first time anything about that item is edited.
   return {
     items: items.map(i => (i.section ? i : { ...i, section: guessSection(i.name) })),
-    catalog,
+    // The median is computed HERE rather than in the panel so the
+    // statistic has one implementation, the one with tests. The raw
+    // observations ride along because the panel lets you look at what a
+    // price was built from — and throw out the one that is wrong.
+    catalog: catalog.map(e => ({ ...e, price: summarize(e.prices) })),
   };
 }
 
@@ -333,6 +339,28 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
+// ── DELETE /catalog/:key/prices/:observationId ───────────────
+// One recorded price the user says is not this product — a mis-matched
+// receipt line. Cheaper and more honest than trying to make the matcher
+// perfect: the wrong number is visible in the panel, and one tap removes
+// it. Returns the catalog so the median comes back recomputed.
+
+router.delete("/catalog/:key/prices/:observationId", async (req, res) => {
+  const key = (req.params.key || "").trim();
+  const id  = (req.params.observationId || "").trim();
+  if (!key || key.length > 200 || !/^[a-z0-9]{1,12}$/i.test(id)) {
+    return res.status(400).json({ error: "Invalid observation." });
+  }
+
+  try {
+    const catalog = await forgetPrice(settingsContainer, req.user.familyId, key, id);
+    res.json(catalog.map(e => ({ ...e, price: summarize(e.prices) })));
+  } catch (err) {
+    console.error("[SHOPPING PRICE DELETE]", err);
+    res.status(500).json({ error: "Failed to remove the price." });
+  }
+});
+
 // ── DELETE /catalog/:key ─────────────────────────────────────
 // Declared BEFORE /:id — otherwise "catalog" would be read as an item id.
 
@@ -342,7 +370,7 @@ router.delete("/catalog/:key", async (req, res) => {
 
   try {
     const catalog = await forgetShoppingItem(settingsContainer, req.user.familyId, key);
-    res.json(catalog);
+    res.json(catalog.map(e => ({ ...e, price: summarize(e.prices) })));
   } catch (err) {
     console.error("[SHOPPING CATALOG DELETE]", err);
     res.status(500).json({ error: "Failed to remove the suggestion." });
