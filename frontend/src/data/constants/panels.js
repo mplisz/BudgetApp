@@ -21,7 +21,9 @@ export const PANEL_META = {
   // Main quick-add panels
   expenses:           { icon: "➕", label: "Dodaj wydatek",     section: "Główne"            },
   addincome:          { icon: "💵", label: "Dodaj wpływ",       section: "Główne"            },
-  addrecurring:       { icon: "🔄", label: "Dodaj cykliczny",   section: "Główne"            },
+  // Not in the mobile bottom bar: its four slots went to what a phone is
+  // actually pulled out for, and a recurring expense is configured once.
+  addrecurring:       { icon: "🔄", label: "Dodaj cykliczny",   section: "Główne",            mobile: true },
   addplanned:         { icon: "📅", label: "Dodaj planowany",   section: "Główne"            },
   // Quick-add panels normally skip `mobile` because they sit in the bottom
   // bar — but that bar has four fixed slots, so this one would be
@@ -43,7 +45,11 @@ export const PANEL_META = {
   // The shopping list has no month either — and unlike a potential
   // purchase it has no price, no category and no plan. It is the "buy it
   // on the way home" list, ticked off in the shop.
-  shopping:           { icon: "🧺", label: "Lista zakupów",       section: "Narzędzia",      mobile: true },
+  //
+  // No `mobile` flag on purpose: this one lives in the MobileNav bottom
+  // bar, and listing it in the "Więcej" sheet as well would light up two
+  // slots at once whenever the panel is open.
+  shopping:           { icon: "🧺", label: "Lista zakupów",       section: "Narzędzia"       },
   // Range-based, not month-based: a trip is a span of dates, so this belongs
   // beside Analiza rather than under "Analiza miesiąca".
   tags:               { icon: "🏷️", label: "Analiza tagów",      section: "Narzędzia",       mobile: true },

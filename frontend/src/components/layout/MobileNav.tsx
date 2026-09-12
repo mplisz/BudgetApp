@@ -30,10 +30,16 @@ interface MobileItem {
   label:   string;
 }
 
+// Four fixed slots, so every one of them has to earn its place by how
+// often a phone is pulled out for it. The shopping list is the most
+// phone-bound panel in the app — it is used standing in a shop, several
+// times a week — so it takes the slot from "Dodaj cykliczny", which is
+// set up once and then edited a few times a year. Recurring moved into
+// the "Więcej" sheet (mobile: true in PANEL_META).
 const MOBILE_ITEMS: MobileItem[] = [
   { panelId: "expenses",     icon: "➕", label: "Wydatki"    },
   { panelId: "addincome",    icon: "💵", label: "Wpływy"     },
-  { panelId: "addrecurring", icon: "🔄", label: "Cykliczne"  },
+  { panelId: "shopping",     icon: "🧺", label: "Zakupy"     },
   { panelId: "addplanned",   icon: "📅", label: "Planowane"  },
 ];
 
