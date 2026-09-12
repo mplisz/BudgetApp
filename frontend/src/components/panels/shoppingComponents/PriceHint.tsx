@@ -60,16 +60,23 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
     [price, observations],
   );
 
-  // When every sized purchase was the SAME package, say so on the
-  // collapsed chip too — "zwykle 5,20 zł / 280 g" answers "za ile?"
-  // without a tap. Mixed sizes get nothing here: naming one of them
-  // would misdescribe a median built from several.
-  const commonSize = useMemo(() => {
+  // What the sized purchases say about the package:
+  //   one size  → name it on the chip, "zwykle 5,20 zł / 280 g"
+  //   several   → warn, because a median over 200 g and 300 g butter
+  //               describes neither
+  //
+  // Warning rather than recomputing per kilogram was a measured choice:
+  // over the family's receipts 9 of 27 medians mix sizes, but only 3 of
+  // those have enough sized purchases for a per-kg median (sizes are
+  // known for a third of lines, and nothing raises that). Detecting the
+  // mix needs just two, so the warning reaches all nine.
+  const sizeInfo = useMemo(() => {
     const sized = kept.filter(o => o.z && o.zu);
-    if (sized.length === 0) return null;
-    const first = sized[0];
-    const same = sized.every(o => o.z === first.z && o.zu === first.zu);
-    return same ? formatSize(first.z!, first.zu as SizeUnit) : null;
+    const distinct = new Set(sized.map(o => `${o.z}|${o.zu}`));
+    if (distinct.size === 1) {
+      return { common: formatSize(sized[0].z!, sized[0].zu as SizeUnit), mixed: false };
+    }
+    return { common: null, mixed: distinct.size >= 2 };
   }, [kept]);
 
   if (!price) return null;
@@ -91,11 +98,21 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
         {price.median != null
           ? <>zwykle <strong style={{ color: c.successLight }}>{money(price.median)}{suffix(price.unit)}</strong></>
           : <>ost. <strong style={{ color: c.successLight }}>{money(price.last)}{suffix(price.unit)}</strong></>}
-        {commonSize && <span style={{ color: c.textSecondary }}> / {commonSize}</span>}
+        {sizeInfo.common && <span style={{ color: c.textSecondary }}> / {sizeInfo.common}</span>}
         {/* The last price only earns its own slot when it differs from the
             typical one — otherwise it is the same number twice. */}
         {price.median != null && price.last !== price.median && (
           <> · ost. {money(price.last)}</>
+        )}
+        {/* Only next to a MEDIAN: a single last price is one purchase of one
+            package, so there is nothing mixed about it. */}
+        {sizeInfo.mixed && price.median != null && (
+          <span
+            title="Mediana liczona z opakowań różnej wielkości — rozwiń, żeby zobaczyć gramatury"
+            style={{ color: c.warningLight, fontWeight: 600 }}
+          >
+            {" · ⚠️ różne gramatury"}
+          </span>
         )}
         <span style={{ color: c.textMuted }}>{open ? "▴" : "▾"}</span>
       </span>
