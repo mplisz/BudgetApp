@@ -86,11 +86,23 @@ export function ReceiptModal({ txId, onClose }: ReceiptModalProps) {
           {error ? (
             <div style={{ color: c.dangerLight, fontSize: 13, alignSelf: "center" }}>⚠️ {error}</div>
           ) : imageUrl && isPdf ? (
-            <iframe
-              src={imageUrl}
-              title="Paragon (PDF)"
-              style={{ width: "80vw", maxWidth: 800, height: "75vh", border: "none", borderRadius: 8, background: "#fff" }}
-            />
+            // Mobile browsers refuse to render a PDF inside an iframe, so the
+            // escape hatch below is the only viewer there.
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+              <iframe
+                src={imageUrl}
+                title="Paragon (PDF)"
+                style={{ width: "80vw", maxWidth: 800, height: "75vh", border: "none", borderRadius: 8, background: "#fff" }}
+              />
+              <a
+                href={imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: c.textSecondary, fontSize: 12, textDecoration: "none" }}
+              >
+                ↗ Otwórz PDF w nowej karcie
+              </a>
+            </div>
           ) : imageUrl ? (
             <img
               src={imageUrl}
