@@ -9,15 +9,20 @@
 // filtered list, and disappears on an exact match — so typing a
 // brand-new name never fights with the suggestions.
 //
+// The interaction itself lives in useSuggestions (shared with the
+// shopping list's quick-add bar); what stays here is the merchant
+// wiring and this field's own dropdown, which opens downwards.
+//
 // Free text is always allowed; the typed value is POSTed/remembered
 // on save. Junk values are filtered by cleanMerchant on the consumer
 // side, so this component stays purely about input + suggestions.
 // ============================================================
 
 import { c } from "../../styles/tokens";
-import { useState, useMemo, useRef } from "react";
-import type { CSSProperties, KeyboardEvent } from "react";
+import { useCallback } from "react";
+import type { CSSProperties } from "react";
 import { useAppContext } from "../../context/AppContext";
+import { useSuggestions } from "../../hooks/useSuggestions";
 
 interface MerchantInputProps {
   value:        string;
@@ -31,7 +36,7 @@ interface MerchantInputProps {
   onEnter?:     () => void;
 }
 
-const MAX_SUGGESTIONS = 6;
+const identity = (s: string) => s;
 
 export function MerchantInput({
   value,
@@ -46,53 +51,13 @@ export function MerchantInput({
   const { merchants } = useAppContext();
   const options = Array.isArray(merchants) ? merchants : [];
 
-  const [open, setOpen]           = useState(false);
-  const [highlight, setHighlight] = useState(-1);
-  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Show suggestions only while the user is typing, match by substring,
-  // and hide the list once the value is an exact (case-insensitive) match —
-  // that's the signal they've finished typing or picked one.
-  const suggestions = useMemo(() => {
-    const q = value.trim().toLowerCase();
-    if (!q) return [];
-    if (options.some(m => m.toLowerCase() === q)) return [];
-    return options
-      .filter(m => m.toLowerCase().includes(q))
-      .slice(0, MAX_SUGGESTIONS);
-  }, [value, options]);
-
-  const showList = open && suggestions.length > 0;
-
-  function pick(name: string) {
-    onChange(name);
-    setOpen(false);
-    setHighlight(-1);
-  }
-
-  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (showList && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-      e.preventDefault();
-      setHighlight(h => {
-        const next = e.key === "ArrowDown" ? h + 1 : h - 1;
-        return ((next % suggestions.length) + suggestions.length) % suggestions.length;
-      });
-      return;
-    }
-    if (e.key === "Enter") {
-      if (showList && highlight >= 0) {
-        e.preventDefault();
-        pick(suggestions[highlight]);
-        return;
-      }
-      onEnter?.();
-      return;
-    }
-    if (e.key === "Escape") {
-      setOpen(false);
-      setHighlight(-1);
-    }
-  }
+  const sug = useSuggestions<string>({
+    options,
+    query: value,
+    getLabel: identity,
+    onPick: onChange,
+    onEnterRaw: useCallback(() => { onEnter?.(); }, [onEnter]),
+  });
 
   return (
     <div style={{ position: "relative", width: "100%", ...wrapperStyle }}>
@@ -102,21 +67,14 @@ export function MerchantInput({
         autoFocus={autoFocus}
         placeholder={placeholder}
         autoComplete="off"
-        onChange={e => { onChange(e.target.value); setOpen(true); setHighlight(-1); }}
-        onFocus={() => {
-          if (blurTimer.current) clearTimeout(blurTimer.current);
-          setOpen(true);
-        }}
-        onKeyDown={handleKeyDown}
-        onBlur={() => {
-          // Delay close so a tap on a suggestion registers first.
-          blurTimer.current = setTimeout(() => { setOpen(false); setHighlight(-1); }, 120);
-          onBlur?.();
-        }}
+        onChange={e => { onChange(e.target.value); sug.handleInput(); }}
+        onFocus={sug.handleFocus}
+        onKeyDown={sug.handleKeyDown}
+        onBlur={() => { sug.handleBlur(); onBlur?.(); }}
         style={style}
       />
 
-      {showList && (
+      {sug.showList && (
         <ul
           role="listbox"
           style={{
@@ -127,19 +85,19 @@ export function MerchantInput({
             boxShadow: "0 8px 24px rgba(0,0,0,.4)",
           }}
         >
-          {suggestions.map((m, i) => (
+          {sug.suggestions.map((m, i) => (
             <li
               key={m}
               role="option"
-              aria-selected={i === highlight}
+              aria-selected={i === sug.highlight}
               // onMouseDown + preventDefault so the input's onBlur doesn't
               // fire first and close the list before the tap selects.
-              onMouseDown={e => { e.preventDefault(); pick(m); }}
-              onMouseEnter={() => setHighlight(i)}
+              onMouseDown={e => { e.preventDefault(); sug.pick(m); }}
+              onMouseEnter={() => sug.setHighlight(i)}
               style={{
                 padding: "9px 12px", borderRadius: 6, cursor: "pointer",
                 fontSize: 14, color: c.text,
-                background: i === highlight ? c.border : "transparent",
+                background: i === sug.highlight ? c.border : "transparent",
               }}
             >
               🏪 {m}
