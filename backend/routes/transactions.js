@@ -45,6 +45,7 @@ const { getReceiptBlobContainer, setReceiptRetention } = require("../utils/recei
 router.use(requireAuth);
 const { cleanMerchant, merchantExists, rememberMerchant, rememberMerchantNip } = require("../utils/merchant");
 const { rememberProducts } = require("../utils/productCatalog");
+const { syncShoppingPrices } = require("../utils/shoppingPriceSync");
 const { resolveTransferTarget, buildReturnTransferDoc } = require("../utils/transferCategory");
 const { resolveTxType, applyTxType } = require("../utils/categoryType");
 const { PRODUCT_UNIT_CODES } = require("../utils/productUnits");
@@ -88,6 +89,11 @@ const TransactionBaseSchema = z.object({
                         unit:      z.enum(PRODUCT_UNIT_CODES).nullable().optional(),
                         packCount: z.number().int().positive().max(99).nullable().optional(),
                       }).nullable().optional().catch(undefined),
+                      // Units this line's amount covers, filled for EVERY
+                      // line (OCR rule 27) — unlike product, which only
+                      // exists for whitelisted items. Without it a
+                      // multipack's price is a multiple of the real one.
+                      packCount:        z.number().int().positive().max(99).nullable().optional().catch(undefined),
                     })).max(60).optional(),
   voucherAllocations: z.array(z.object({
                       voucherId: z.string().min(1),
@@ -497,6 +503,9 @@ router.post("/", async (req, res) => {
     // Fire-and-forget — a catalog failure must never fail the tx save.
     if (Array.isArray(createdTx.lineItems) && createdTx.lineItems.length > 0) {
       rememberProducts(productsContainer, familyId, createdTx);
+      // ...and record what those lines cost, for the shopping list's
+      // "zwykle X" — same fire-and-forget contract.
+      syncShoppingPrices(settingsContainer, familyId, createdTx);
     }
 
     console.log(`[TX POST] Created: ${createdTx.id}${createdTx.useVoucher ? ` (${createdTx.voucherAllocations.length} voucher[s])` : ""}`);
@@ -595,6 +604,7 @@ router.post("/batch", async (req, res) => {
       if (tx.merchant)  rememberMerchant(settingsContainer, familyId, tx.merchant);
       if (Array.isArray(tx.lineItems) && tx.lineItems.length > 0) {
         rememberProducts(productsContainer, familyId, tx);
+        syncShoppingPrices(settingsContainer, familyId, tx);
       }
     }
 

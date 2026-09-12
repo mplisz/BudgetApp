@@ -97,6 +97,11 @@ const LlmItemSchema = z.object({
   category:           z.string().max(100).optional().nullable(),
   subcategory:        z.string().max(100).optional().nullable(),
   categoryConfidence: z.number().min(0).max(1).optional().default(0.5),
+  // How many units the amount covers — see prompt rule 27. Independent of
+  // `product`: it is filled for every line, tracked or not, because it is
+  // what turns "20,97 for a three-pack" into a comparable unit price.
+  // `.catch(null)` keeps a malformed value from failing the whole scan.
+  packCount:          z.number().int().positive().max(99).nullable().optional().catch(null),
   // Structured product identity for price-history analytics (shared
   // schema — see utils/productAi.js). `.catch(undefined)` makes a
   // malformed product degrade to "no structured data" instead of failing
@@ -309,6 +314,16 @@ PRODUKTY (nie przepisuj tekstu z paragonu). Rozmiar/jednostkę/wielopak ustal z 
 automatycznie, Ty nie musisz jej znać):
 ${PRODUCT_RULES}
 
+27. LICZBA SZTUK (pole "packCount" przy KAŻDEJ pozycji — niezależnie od reguły 26):
+podaj ile sztuk obejmuje kwota w "amount", gdy da się to ustalić:
+   · wielopak w nazwie ("0,5L x4" → 4),
+   · KOLUMNA ILOŚCI paragonu ("2 * 4,99 9,98" → 2; "3 x2,39 7,17" → 3),
+   · scalenie identycznych pozycji w jedną (dwie linie "Coca-Cola 6,99" → 2).
+Gdy sztuka jest jedna albo nie da się ustalić — null. TYLKO ilości CAŁKOWITE:
+dla towaru ważonego ("0,442 * 19,99") to jest WAGA, nie liczba sztuk → null.
+To pole jest NIEZALEŻNE od "product": wypełniasz je także dla pozycji spoza
+listy ŚLEDZONE PRODUKTY. Służy wyłącznie do policzenia ceny jednej sztuki.
+
 ═══ DANE UŻYTKOWNIKA ═══
 
 KATEGORIE UŻYTKOWNIKA:
@@ -327,6 +342,7 @@ Wyłącznie poprawny JSON, bez markdown, bez komentarzy:
       "category": "Zakupy codzienne",
       "subcategory": "Napoje",
       "categoryConfidence": 0.95,
+      "packCount": 2,
       "product": { "name": "Coca-Cola", "size": 1500, "unit": "ml", "packCount": 2 }
     }
   ],
@@ -526,6 +542,11 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
       subcategoryName,
       categoryConfidence: confidence,
       learned,
+      // Unit count for the whole line. Deliberately OUTSIDE the whitelist
+      // gate below: a three-pack of something untracked still has to be
+      // divided by three before its price means anything. Falls back to
+      // the tracked product's own count when the model only filled that.
+      packCount:          item.packCount ?? item.product?.packCount ?? null,
       // Enforcement point for the whitelist: only a match against the
       // user's tracked products survives (name forced to canonical
       // spelling, size/unit defaulted when unreadable, missing purchase

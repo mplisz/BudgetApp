@@ -38,7 +38,8 @@ export interface CartItem extends TransactionPayload {
   _ocrMerchant?:    string;  // shop name (for per-merchant filtering)
   _ocrWarranty?:    boolean; // receipt flagged as warranty → longer retention
   _ocrNeedsReview?: boolean; // AI was unsure — keep flagged in cart until edited
-  _lineItems?:      Array<{ description: string; amount: number; originalAmount?: number; originalCurrency?: string; product?: LineItemProduct | null }>;
+  _lineItems?:      Array<{ description: string; amount: number; originalAmount?: number; originalCurrency?: string; product?: LineItemProduct | null; packCount?: number | null }>;
+  _packCount?:      number | null;   // units covered by this line (OCR rule 27)
   _ocrSummary?: string;
   // ── Category-learning provenance (stripped before save) ──
   _ocrOrigSubcatId?: string; // AI's originally suggested subcategory id
@@ -114,6 +115,10 @@ export function aggregateCart(items: CartItem[]): CartItem[] {
       originalAmount:  item.originalAmount ?? item.amount,
       originalCurrency: item.originalCurrency || "PLN",
       product:          item._product ?? null,
+      // How many units this amount covers. Kept for every line, tracked
+      // or not: without it a three-pack looks like a very expensive
+      // bottle to the shopping list's price history.
+      packCount:        item._packCount ?? null,
     };
     if (groups.has(key)) {
       const existing = groups.get(key)!;
@@ -159,7 +164,7 @@ function toPayload(item: CartItem): TransactionPayload {
     _cartId, _ocrSummary ,_allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote,
     _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _ocrNeedsReview,
     _ocrOrigSubcatId, _ocrOrigDesc, _ocrNoLearn, _ocrLearned,
-    _lineItems, ...payload
+    _lineItems, _packCount, ...payload
   } = item;
   if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
   if (_ocrReceiptId)   payload.receiptId       = _ocrReceiptId;
@@ -167,8 +172,9 @@ function toPayload(item: CartItem): TransactionPayload {
   if (_ocrWarranty)    payload.isWarranty       = true;
   // Merged carts always keep the breakdown; a SINGLE line is kept too when
   // it carries structured product data — otherwise single-product receipts
-  // would be invisible to the price-history analytics.
-  if (_lineItems && (_lineItems.length > 1 || _lineItems[0]?.product)) {
+  // would be invisible to the price-history analytics — or a unit count,
+  // which is the only place that says the amount covers more than one.
+  if (_lineItems && (_lineItems.length > 1 || _lineItems[0]?.product || _lineItems[0]?.packCount)) {
     payload.lineItems = _lineItems;
   }
   return payload as TransactionPayload;
