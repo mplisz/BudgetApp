@@ -69,6 +69,8 @@ function SubcategoryList({ subcategories, categoryName, budgetMonth }: Subcatego
             <span style={{ color: c.textTertiary }}>
               {fmt(sub.spent)}
               <span style={{ color: c.textMuted, marginLeft: 5 }}>({sub.percentOfCategory.toFixed(1)}%)</span>
+              {/* Same blue arrow as the chips, so the row reads as a link too. */}
+              <span style={{ color: c.infoLight, marginLeft: 8, fontWeight: 700 }}>↗</span>
             </span>
           </PanelLink>
         </DividerRow>

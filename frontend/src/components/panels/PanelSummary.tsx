@@ -104,7 +104,7 @@ function KpiPill({ icon, label, value, color = c.text, sub, link }: KpiPillProps
       minWidth: 130,
     }}>
       {link && (
-        <PanelLink to={link.to} title={link.title} style={{ position: "absolute", top: 8, right: 10, fontSize: 13 }} />
+        <PanelLink to={link.to} title={link.title} size="md" style={{ position: "absolute", top: 8, right: 8 }} />
       )}
       <div style={{ fontSize: 11, color: c.textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
         {icon} {label}

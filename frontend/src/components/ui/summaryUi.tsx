@@ -5,26 +5,43 @@
 // other panels need them.
 // ============================================================
 
-import { c } from "../../styles/tokens";
+import { c, alpha } from "../../styles/tokens";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 
 // ── PanelLink ─────────────────────────────────────────────────
 // Jump from a summary number to the panel listing what it is made of.
-// Defaults to the small "↗" glyph; pass children to make a whole row the
-// link. Clicks never bubble, so it can sit inside a clickable header (the
-// category row toggles its subcategories) without also toggling it.
+// Without children it is a small blue "↗" chip — tinted, not a bare grey
+// glyph, because on the dark cards a muted arrow simply wasn't seen. Pass
+// children to make a whole row the link instead. Clicks never bubble, so it
+// can sit inside a clickable header (the category row toggles its
+// subcategories) without also toggling it.
 
 interface PanelLinkProps {
   to:          string;
   title:       string;
   children?:   React.ReactNode;
+  /** Chip size: "md" for KPI tiles, "sm" inline next to a name. */
+  size?:       "sm" | "md";
   style?:      React.CSSProperties;
   hoverStyle?: React.CSSProperties;
 }
 
-export function PanelLink({ to, title, children = "↗", style, hoverStyle }: PanelLinkProps) {
+const CHIP_PX = { sm: 18, md: 22 } as const;
+
+export function PanelLink({ to, title, children, size = "sm", style, hoverStyle }: PanelLinkProps) {
   const [hover, setHover] = useState(false);
+  const isChip = children === undefined;
+  const chip: React.CSSProperties = isChip ? {
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    width: CHIP_PX[size], height: CHIP_PX[size], flexShrink: 0,
+    borderRadius: 6,
+    fontSize: size === "md" ? 13 : 11, fontWeight: 700,
+    color:      hover ? c.white : c.infoLight,
+    background: alpha(c.info, hover ? "66" : "22"),
+    border:     `1px solid ${alpha(c.info, hover ? "aa" : "55")}`,
+    transition: "background 0.15s, color 0.15s, border-color 0.15s",
+  } : {};
   return (
     <Link
       to={to}
@@ -34,16 +51,15 @@ export function PanelLink({ to, title, children = "↗", style, hoverStyle }: Pa
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        color: hover ? c.text : c.textMuted,
         textDecoration: "none",
-        fontSize: 12,
         lineHeight: 1,
         cursor: "pointer",
+        ...chip,
         ...style,
         ...(hover ? hoverStyle : null),
       }}
     >
-      {children}
+      {isChip ? "↗" : children}
     </Link>
   );
 }
