@@ -26,7 +26,8 @@ import { CategoryMultiSelect } from "../ui/CategoryMultiSelect";
 import { useFilters }      from "../../hooks/useFilters";
 import { useMonthLoad } from "../../hooks/useMonthLoad";
 import { useTxLinkFilters } from "../../hooks/useTxLinkFilters";
-import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
+import { DateRangeFilter, dateRangeSummary } from "./transactionComponents/DateRangeFilter";
+import { FilterGroup, FilterGroupGrid, useFilterGroups, listSummary, joinSummary } from "../ui/FilterGroup";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useTxSort } from "../../hooks/useTxSort";
@@ -329,6 +330,37 @@ export default function PanelIncomeTransactions() {
     setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
   }, [setTransactions]);
 
+  // ── Filter groups ─────────────────────────────────────────
+  // Same collapsible groups as Wydatki (components/ui/FilterGroup).
+
+  const filterGroups = {
+    category: {
+      active:  (filters.type ? 1 : 0) + (filters.categories.length ? 1 : 0),
+      summary: joinSummary(filters.type && typeLabel(filters.type), listSummary(filters.categories)),
+      clear:   () => { set("type", ""); set("categories", []); },
+    },
+    date: {
+      active:  filters.dateFrom || filters.dateTo ? 1 : 0,
+      summary: dateRangeSummary(filters.dateFrom, filters.dateTo),
+      clear:   () => { set("dateFrom", null); set("dateTo", null); },
+    },
+  };
+  type FilterGroupId = keyof typeof filterGroups;
+
+  const filterGroupsUi = useFilterGroups(
+    "income-transactions",
+    (Object.keys(filterGroups) as FilterGroupId[]).map(id => ({ id, active: filterGroups[id].active })),
+    isMobile,
+  );
+  const groupProps = (id: FilterGroupId) => ({
+    active:   filterGroups[id].active,
+    summary:  filterGroups[id].summary,
+    onClear:  filterGroups[id].clear,
+    open:     filterGroupsUi.isOpen(id),
+    onToggle: () => filterGroupsUi.toggle(id),
+    isMobile,
+  });
+
   // ── Render ────────────────────────────────────────────────
 
   return (
@@ -352,46 +384,50 @@ export default function PanelIncomeTransactions() {
 
       {/* Filters — hidden while the month's data is still loading */}
       {!showSkeleton && (
-        <div style={{ background: c.bgDeepest, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
-          <div style={s.filterRow}>
-
-            {/* Type */}
-            <div style={s.filterBox}>
-              <label style={s.filterLabel}>Typ</label>
-              <select value={filters.type} onChange={e => set("type", e.target.value)} style={s.select}>
-                <option value="">Wszystkie</option>
-                <option value="INCOME">{typeIcon("INCOME")} {typeLabel("INCOME")}</option>
-                <option value="TRANSFER">{typeIcon("TRANSFER")} {typeLabel("TRANSFER")}</option>
-              </select>
-            </div>
-
-            {/* Category */}
-            <div style={s.filterBox}>
-              <label style={s.filterLabel}>Kategoria</label>
-              <CategoryMultiSelect
-                value={filters.categories}
-                onChange={v => set("categories", v)}
-                categories={uniqueCats.map(([, name]) => ({ name }))}
-                placeholder="Wszystkie kategorie"
-              />
-            </div>
-
-            <DateRangeFilter
-              dateFrom={filters.dateFrom}
-              dateTo={filters.dateTo}
-              onFrom={d => set("dateFrom", d)}
-              onTo={d => set("dateTo", d)}
-              bounds={dateBounds}
-              disabled={noDateRange}
-              emptyMessage="Brak wpływów w tym miesiącu — filtr dat niedostępny."
-            />
-
+        <div style={{ background: c.bgDeepest, border: `1px solid ${c.border}`, borderRadius: 12, padding: isMobile ? "10px 12px 0" : "12px 14px 14px", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: isMobile ? 8 : 10 }}>
+            <span style={{ fontSize: 11, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</span>
             {hasActiveFilters && (
-              <button onClick={clearFilters} style={{ ...s.actionBtn(c.textSecondary), fontSize: 11, alignSelf: "flex-end" }}>
-                ✕ Wyczyść
+              <button onClick={clearFilters} style={{ ...s.actionBtn(c.danger), fontSize: 11 }}>
+                ✕ Wyczyść wszystko
               </button>
             )}
           </div>
+
+          <FilterGroupGrid isMobile={isMobile}>
+            <FilterGroup icon="📁" title="Kategoria" {...groupProps("category")}>
+              <div style={s.filterBox}>
+                <label style={s.filterLabel}>Typ</label>
+                <select value={filters.type} onChange={e => set("type", e.target.value)} style={s.select}>
+                  <option value="">Wszystkie</option>
+                  <option value="INCOME">{typeIcon("INCOME")} {typeLabel("INCOME")}</option>
+                  <option value="TRANSFER">{typeIcon("TRANSFER")} {typeLabel("TRANSFER")}</option>
+                </select>
+              </div>
+
+              <div style={s.filterBox}>
+                <label style={s.filterLabel}>Kategoria</label>
+                <CategoryMultiSelect
+                  value={filters.categories}
+                  onChange={v => set("categories", v)}
+                  categories={uniqueCats.map(([, name]) => ({ name }))}
+                  placeholder="Wszystkie kategorie"
+                />
+              </div>
+            </FilterGroup>
+
+            <FilterGroup icon="📅" title="Data" {...groupProps("date")}>
+              <DateRangeFilter
+                dateFrom={filters.dateFrom}
+                dateTo={filters.dateTo}
+                onFrom={d => set("dateFrom", d)}
+                onTo={d => set("dateTo", d)}
+                bounds={dateBounds}
+                disabled={noDateRange}
+                emptyMessage="Brak wpływów w tym miesiącu — filtr dat niedostępny."
+              />
+            </FilterGroup>
+          </FilterGroupGrid>
         </div>
       )}
       {/* Table — withheld until THIS month's data has arrived. `transactions`

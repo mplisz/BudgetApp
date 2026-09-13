@@ -20,6 +20,18 @@ interface DateRangeFilterProps {
 
 }
 
+/** One-line description of a date range for a collapsed filter group:
+ *  "Dzisiaj", "03.09 – 15.09", "od 03.09", "do 15.09" or "" when unset. */
+export function dateRangeSummary(from: Date | null, to: Date | null): string {
+  const dm = (d: Date) => `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const today = toYMD(todayLocal());
+  if (from && to && toYMD(from) === today && toYMD(to) === today) return "Dzisiaj";
+  if (from && to) return toYMD(from) === toYMD(to) ? dm(from) : `${dm(from)} – ${dm(to)}`;
+  if (from) return `od ${dm(from)}`;
+  if (to)   return `do ${dm(to)}`;
+  return "";
+}
+
 export function DateRangeFilter({
   dateFrom, dateTo, onFrom, onTo, bounds,
   disabled = false,

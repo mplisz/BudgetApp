@@ -31,9 +31,10 @@ import { useMonthLoad } from "../../hooks/useMonthLoad";
 import { useTxLinkFilters } from "../../hooks/useTxLinkFilters";
 import { useTxSort } from "../../hooks/useTxSort";
 import { SortBar } from "../ui/SortControls";
+import { FilterGroup, FilterGroupGrid, useFilterGroups, listSummary, joinSummary } from "../ui/FilterGroup";
 import type { TxSortKey } from "../../utils/txSort";
 import { typeIcon, typeLabel } from "../../data/constants/categoryTypes";
-import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
+import { DateRangeFilter, dateRangeSummary } from "./transactionComponents/DateRangeFilter";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
 import { TriFilterButton, matchTri, type Tri } from "../ui/TriFilterButton";
 import { trackedProductNames } from "../../utils/productPricing";
@@ -44,6 +45,9 @@ const PAGE_SIZE = 25;
 // Receipts paginate in a much smaller page: one receipt unfolds into a whole
 // table of its own, so 25 of them would be a scroll marathon.
 const RECEIPT_PAGE_SIZE = 8;
+
+// The compact dropdowns of the filter bar (Typ, Sklep).
+const FILTER_SELECT_STYLE = { height: 28, background: c.border, color: c.textTertiary, border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" };
 
 // Sortable columns of the expenses table (TransactionList's headers).
 const TX_SORT_KEYS: TxSortKey[] = ["date", "amount", "priority", "author"];
@@ -396,6 +400,60 @@ export default function PanelTransactions() {
     }
   }
 
+  // ── Filter groups ─────────────────────────────────────────
+  // What each group of the filter bar has set, in words — shown on its
+  // header while it is collapsed — and how to clear just that group.
+
+  const triText = (state: Tri, yes: string, no: string) => state === "yes" ? yes : state === "no" ? no : "";
+  const filterGroups = {
+    category: {
+      active:  (filters.type ? 1 : 0) + (filters.categories.length ? 1 : 0) + (filters.subs.length ? 1 : 0),
+      summary: joinSummary(filters.type && typeLabel(filters.type), listSummary(filters.categories), listSummary(filters.subs)),
+      clear:   () => { set("type", ""); set("categories", []); set("subs", []); },
+    },
+    date: {
+      active:  filters.dateFrom || filters.dateTo ? 1 : 0,
+      summary: dateRangeSummary(filters.dateFrom, filters.dateTo),
+      clear:   () => { set("dateFrom", null); set("dateTo", null); },
+    },
+    priority: {
+      active:  filters.prio.length ? 1 : 0,
+      summary: [...filters.prio].sort().map(p => `P${p}`).join(", "),
+      clear:   () => set("prio", []),
+    },
+    shop: {
+      active:  (filters.merchant ? 1 : 0) + (filters.tags.length ? 1 : 0),
+      summary: joinSummary(filters.merchant, listSummary(filters.tags.map(id => tags.find(t => t.id === id)?.name ?? id))),
+      clear:   () => { set("merchant", ""); set("tags", []); },
+    },
+    docs: {
+      active:  [filters.hasReturn, filters.hasReceipt, filters.warranty, filters.hasProduct].filter(t => t !== "off").length,
+      summary: joinSummary(
+        triText(filters.hasReturn, "zwroty", "bez zwrotów"),
+        listSummary(RETURN_KIND_OPTIONS.filter(o => filters.returnKinds.includes(o.id)).map(o => o.label)),
+        triText(filters.hasReceipt, "z paragonem", "bez paragonu"),
+        triText(filters.warranty,   "gwarancyjne", "bez gwarancji"),
+        triText(filters.hasProduct, "śledzone ceny", "bez śledzonych cen"),
+      ),
+      clear:   () => { set("hasReturn", "off"); set("returnKinds", []); set("hasReceipt", "off"); set("warranty", "off"); set("hasProduct", "off"); },
+    },
+  };
+  type FilterGroupId = keyof typeof filterGroups;
+
+  const filterGroupsUi = useFilterGroups(
+    "transactions",
+    (Object.keys(filterGroups) as FilterGroupId[]).map(id => ({ id, active: filterGroups[id].active })),
+    isMobile,
+  );
+  const groupProps = (id: FilterGroupId) => ({
+    active:   filterGroups[id].active,
+    summary:  filterGroups[id].summary,
+    onClear:  filterGroups[id].clear,
+    open:     filterGroupsUi.isOpen(id),
+    onToggle: () => filterGroupsUi.toggle(id),
+    isMobile,
+  });
+
   // ── Render ────────────────────────────────────────────────
 
   return (
@@ -428,9 +486,16 @@ export default function PanelTransactions() {
 
       {/* Filters */}
       {!showSkeleton && (
-        <div style={{ background: c.bgDeepest, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</div>
+        <div style={{ background: c.bgDeepest, border: `1px solid ${c.border}`, borderRadius: 12, padding: isMobile ? "10px 12px 0" : "12px 14px 14px", marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: isMobile ? 8 : 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 700 }}>Filtry</span>
+              {hasActiveFilters && (
+                <button onClick={clearFilters} style={{ ...s.actionBtn(c.danger), fontSize: 11 }}>
+                  ✕ Wyczyść wszystko
+                </button>
+              )}
+            </div>
             <div style={{ display: "flex", gap: 6 }}>
               {/* Order matches priority of use: the default view sits first. */}
               <ToggleBtn {...VIEW_TOGGLE_STYLE} active={view === "receipt"} onClick={() => setView("receipt")}>
@@ -444,184 +509,185 @@ export default function PanelTransactions() {
               </ToggleBtn>
             </div>
           </div>
-          <div style={s.filterRow}>
 
-            {/* Type — this panel holds both EXPENSE and SAVING */}
-            <div style={s.filterBox}>
-              <div style={s.filterLabel}>Typ</div>
-              <select
-                value={filters.type}
-                // Category options are scoped to the type (otherFiltered), so a
-                // category picked under the old type would silently empty the list.
-                onChange={e => { set("type", e.target.value as typeof filters.type); set("categories", []); set("subs", []); }}
-                style={{ height: 28, background: c.border, color: c.textTertiary, border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" }}
-              >
-                <option value="">Wszystkie</option>
-                <option value="EXPENSE">{typeIcon("EXPENSE")} {typeLabel("EXPENSE")}</option>
-                <option value="SAVING">{typeIcon("SAVING")} {typeLabel("SAVING")}</option>
-              </select>
-            </div>
-
-            {/* Category */}
-            <div style={s.filterBox}>
-              <div style={s.filterLabel}>Kategoria</div>
-              <CategoryMultiSelect
-                value={filters.categories}
-                onChange={v => { set("categories", v); set("subs", []); }}
-                categories={uniqueCats.map(([, name]) => ({ name }))}
-                placeholder="Wszystkie kategorie"
-              />
-            </div>
-
-            {/* Subcategory — visible only when ≥1 category selected */}
-            {filters.categories.length > 0 && uniqueSubs.length > 0 && (
+          <FilterGroupGrid isMobile={isMobile}>
+            <FilterGroup icon="📁" title="Kategoria" {...groupProps("category")}>
+              {/* Type — this panel holds both EXPENSE and SAVING */}
               <div style={s.filterBox}>
-                <div style={s.filterLabel}>Subkategoria</div>
-                <CategoryMultiSelect
-                  value={filters.subs}
-                  onChange={v => set("subs", v)}
-                  categories={uniqueSubs.map(([, name]) => ({ name }))}
-                  placeholder="Wszystkie subkategorie"
-                />
-              </div>
-            )}
-            {/* Custom date Filters (in the chosen month) */}
-            <DateRangeFilter
-              showToday
-              dateFrom={filters.dateFrom}
-              dateTo={filters.dateTo}
-              // Merchant/tag OPTIONS are scoped to this range (see dateScoped
-              // above) — clear both selections too, so a shop/tag that falls
-              // out of the new range doesn't keep silently filtering.
-              onFrom={d => { set("dateFrom", d); set("merchant", ""); set("tags", []); }}
-              onTo={d => { set("dateTo", d); set("merchant", ""); set("tags", []); }}
-              bounds={dateBounds}
-              disabled={noDateRange}
-              emptyMessage="Brak wydatków w tym miesiącu — filtr dat niedostępny."
-              labels={{ from: "Data od", to: "Data do" }}
-              
-            />
-
-            {/* Priority */}
-            <div style={s.filterBox}>
-              <div style={s.filterLabel}>Priorytet</div>
-              <div style={{ display: "flex", gap: 4 }}>
-                {[1, 2, 3, 4].map(p => (
-                  <button
-                    key={p}
-                    onClick={() => togglePrio(p)}
-                    style={{
-                      width: 28, height: 28, borderRadius: 6, border: "none",
-                      cursor: "pointer", fontWeight: 700, fontSize: 11,
-                      background: filters.prio.includes(p) ? (PRIO_COLORS as Record<number, string>)[p] : c.border,
-                      color:      filters.prio.includes(p) ? c.white : c.textSecondary,
-                    }}
-                  >
-                    P{p}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Tags */}
-            {monthTagIds.length > 0 && (
-              <div style={s.filterBox}>
-                <div style={s.filterLabel}>Tagi</div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {monthTagIds.map(tag => (
-                    <button
-                      key={tag.id}
-                      onClick={() => set("tags", filters.tags.includes(tag.id)
-                        ? filters.tags.filter(x => x !== tag.id)
-                        : [...filters.tags, tag.id]
-                      )}
-                      style={{
-                        padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
-                        background: filters.tags.includes(tag.id) ? c.info : c.border,
-                        color:      filters.tags.includes(tag.id) ? c.white    : c.textSecondary,
-                      }}
-                    >
-                      {tag.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* Returns */}
-            <div style={s.filterBox}>
-              <div style={s.filterLabel}>Zwroty</div>
-              <TriFilterButton
-                state={filters.hasReturn}
-                // The kind sub-filter only makes sense while filtering FOR
-                // returns — clear it when leaving that state, so it doesn't
-                // keep silently filtering.
-                onChange={v => { set("hasReturn", v); if (v !== "yes") set("returnKinds", []); }}
-                label="🔙 Zwroty"
-                color={c.successLight}
-              />
-            </div>
-
-            {/* Return kind — visible only when filtering FOR returns (like
-                the subcategory filter under categories) */}
-            {filters.hasReturn === "yes" && monthReturnKinds.length > 0 && (
-              <div style={s.filterBox}>
-                <div style={s.filterLabel}>Rodzaj zwrotu</div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {monthReturnKinds.map(o => (
-                    <button
-                      key={o.id}
-                      onClick={() => set("returnKinds", filters.returnKinds.includes(o.id)
-                        ? filters.returnKinds.filter(x => x !== o.id)
-                        : [...filters.returnKinds, o.id]
-                      )}
-                      style={{
-                        padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
-                        background: filters.returnKinds.includes(o.id) ? c.successLight : c.border,
-                        color:      filters.returnKinds.includes(o.id) ? "#000" : c.textSecondary,
-                      }}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-              {/* Receipts */}
-            <div style={s.filterBox}>
-              <div style={s.filterLabel}>Paragony</div>
-              <TriFilterButton state={filters.hasReceipt} onChange={v => set("hasReceipt", v)} label="📎 Z paragonem" color={c.warning} />
-            </div>
-            {/* Tracked products */}
-            <div style={s.filterBox}>
-              <div style={s.filterLabel}>Produkty</div>
-              <TriFilterButton state={filters.hasProduct} onChange={v => set("hasProduct", v)} label="🏷️ Śledzone ceny" color={c.cyanLight} />
-            </div>
-            {/* Merchant */}
-            {uniqueMerchants.length > 0 && (
-              <div style={s.filterBox}>
-                <div style={s.filterLabel}>Sklep</div>
+                <div style={s.filterLabel}>Typ</div>
                 <select
-                  value={filters.merchant}
-                  onChange={e => set("merchant", e.target.value)}
-                  style={{ height: 28, background: c.border, color: c.textTertiary, border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" }}
+                  value={filters.type}
+                  // Category options are scoped to the type (otherFiltered), so a
+                  // category picked under the old type would silently empty the list.
+                  onChange={e => { set("type", e.target.value as typeof filters.type); set("categories", []); set("subs", []); }}
+                  style={FILTER_SELECT_STYLE}
                 >
-                  <option value="">Wszystkie sklepy</option>
-                  {uniqueMerchants.map(m => <option key={m} value={m}>{m}</option>)}
+                  <option value="">Wszystkie</option>
+                  <option value="EXPENSE">{typeIcon("EXPENSE")} {typeLabel("EXPENSE")}</option>
+                  <option value="SAVING">{typeIcon("SAVING")} {typeLabel("SAVING")}</option>
                 </select>
               </div>
+
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Kategoria</div>
+                <CategoryMultiSelect
+                  value={filters.categories}
+                  onChange={v => { set("categories", v); set("subs", []); }}
+                  categories={uniqueCats.map(([, name]) => ({ name }))}
+                  placeholder="Wszystkie kategorie"
+                />
+              </div>
+
+              {/* Subcategory — visible only when ≥1 category selected */}
+              {filters.categories.length > 0 && uniqueSubs.length > 0 && (
+                <div style={s.filterBox}>
+                  <div style={s.filterLabel}>Subkategoria</div>
+                  <CategoryMultiSelect
+                    value={filters.subs}
+                    onChange={v => set("subs", v)}
+                    categories={uniqueSubs.map(([, name]) => ({ name }))}
+                    placeholder="Wszystkie subkategorie"
+                  />
+                </div>
+              )}
+            </FilterGroup>
+
+            <FilterGroup icon="📅" title="Data" {...groupProps("date")}>
+              <DateRangeFilter
+                showToday
+                dateFrom={filters.dateFrom}
+                dateTo={filters.dateTo}
+                // Merchant/tag OPTIONS are scoped to this range (see dateScoped
+                // above) — clear both selections too, so a shop/tag that falls
+                // out of the new range doesn't keep silently filtering.
+                onFrom={d => { set("dateFrom", d); set("merchant", ""); set("tags", []); }}
+                onTo={d => { set("dateTo", d); set("merchant", ""); set("tags", []); }}
+                bounds={dateBounds}
+                disabled={noDateRange}
+                emptyMessage="Brak wydatków w tym miesiącu — filtr dat niedostępny."
+                labels={{ from: "Data od", to: "Data do" }}
+              />
+            </FilterGroup>
+
+            <FilterGroup icon="🎖️" title="Priorytet" {...groupProps("priority")}>
+              <div style={s.filterBox}>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[1, 2, 3, 4].map(p => (
+                    <button
+                      key={p}
+                      onClick={() => togglePrio(p)}
+                      style={{
+                        width: 28, height: 28, borderRadius: 6, border: "none",
+                        cursor: "pointer", fontWeight: 700, fontSize: 11,
+                        background: filters.prio.includes(p) ? (PRIO_COLORS as Record<number, string>)[p] : c.border,
+                        color:      filters.prio.includes(p) ? c.white : c.textSecondary,
+                      }}
+                    >
+                      P{p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </FilterGroup>
+
+            {/* Both option lists come from the date range — nothing to offer
+                in a range without shops or tags (unless one is still set). */}
+            {(uniqueMerchants.length > 0 || monthTagIds.length > 0 || filterGroups.shop.active > 0) && (
+              <FilterGroup icon="🏪" title="Sklep i tagi" {...groupProps("shop")}>
+                {uniqueMerchants.length > 0 && (
+                  <div style={s.filterBox}>
+                    <div style={s.filterLabel}>Sklep</div>
+                    <select
+                      value={filters.merchant}
+                      onChange={e => set("merchant", e.target.value)}
+                      style={FILTER_SELECT_STYLE}
+                    >
+                      <option value="">Wszystkie sklepy</option>
+                      {uniqueMerchants.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {monthTagIds.length > 0 && (
+                  <div style={s.filterBox}>
+                    <div style={s.filterLabel}>Tagi</div>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {monthTagIds.map(tag => (
+                        <button
+                          key={tag.id}
+                          onClick={() => set("tags", filters.tags.includes(tag.id)
+                            ? filters.tags.filter(x => x !== tag.id)
+                            : [...filters.tags, tag.id]
+                          )}
+                          style={{
+                            padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
+                            background: filters.tags.includes(tag.id) ? c.info : c.border,
+                            color:      filters.tags.includes(tag.id) ? c.white    : c.textSecondary,
+                          }}
+                        >
+                          {tag.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </FilterGroup>
             )}
-            {/* Warranty */}
-            <div style={s.filterBox}>
-              <div style={s.filterLabel}>Gwarancja</div>
-              <TriFilterButton state={filters.warranty}   onChange={v => set("warranty", v)}   label="🛡️ Gwarancyjne" color={c.warning} />
-            </div>
-            {/* Clear */}
-            {hasActiveFilters && (
-              <button onClick={clearFilters} style={{ ...s.actionBtn(c.danger), alignSelf: "flex-end", marginBottom: 4 }}>
-                ✕ Wyczyść
-              </button>
-            )}
-          </div>
+
+            <FilterGroup icon="🧾" title="Zwroty i dokumenty" {...groupProps("docs")}>
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Zwroty</div>
+                <TriFilterButton
+                  state={filters.hasReturn}
+                  // The kind sub-filter only makes sense while filtering FOR
+                  // returns — clear it when leaving that state, so it doesn't
+                  // keep silently filtering.
+                  onChange={v => { set("hasReturn", v); if (v !== "yes") set("returnKinds", []); }}
+                  label="🔙 Zwroty"
+                  color={c.successLight}
+                />
+              </div>
+
+              {/* Return kind — visible only when filtering FOR returns (like
+                  the subcategory filter under categories) */}
+              {filters.hasReturn === "yes" && monthReturnKinds.length > 0 && (
+                <div style={s.filterBox}>
+                  <div style={s.filterLabel}>Rodzaj zwrotu</div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {monthReturnKinds.map(o => (
+                      <button
+                        key={o.id}
+                        onClick={() => set("returnKinds", filters.returnKinds.includes(o.id)
+                          ? filters.returnKinds.filter(x => x !== o.id)
+                          : [...filters.returnKinds, o.id]
+                        )}
+                        style={{
+                          padding: "3px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11,
+                          background: filters.returnKinds.includes(o.id) ? c.successLight : c.border,
+                          color:      filters.returnKinds.includes(o.id) ? "#000" : c.textSecondary,
+                        }}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Paragony</div>
+                <TriFilterButton state={filters.hasReceipt} onChange={v => set("hasReceipt", v)} label="📎 Z paragonem" color={c.warning} />
+              </div>
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Gwarancja</div>
+                <TriFilterButton state={filters.warranty} onChange={v => set("warranty", v)} label="🛡️ Gwarancyjne" color={c.warning} />
+              </div>
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Produkty</div>
+                <TriFilterButton state={filters.hasProduct} onChange={v => set("hasProduct", v)} label="🏷️ Śledzone ceny" color={c.cyanLight} />
+              </div>
+            </FilterGroup>
+          </FilterGroupGrid>
         </div>
       )}
 
