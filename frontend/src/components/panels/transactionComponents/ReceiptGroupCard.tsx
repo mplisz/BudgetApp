@@ -16,6 +16,7 @@ import { s } from "./txStyles";
 import { TransactionList } from "./TransactionList";
 import { ReceiptModal } from "./ReceiptModal";
 import type { ReceiptGroup } from "../../../utils/receiptGroups";
+import type { TxSort, TxSortKey } from "../../../utils/txSort";
 import type { Transaction } from "../../../types/appContext";
 
 interface ReceiptGroupCardProps {
@@ -26,10 +27,13 @@ interface ReceiptGroupCardProps {
   onDelete:   (tx: Transaction) => void;
   onReturn:   (tx: Transaction) => void;
   onUpdated:  (tx: Transaction) => void;
+  /** Passed straight to the card's TransactionList headers. */
+  sort?:      TxSort;
+  onSort?:    (key: TxSortKey) => void;
 }
 
 export function ReceiptGroupCard({
-  group, collapsed, onToggle, isMobile, onDelete, onReturn, onUpdated,
+  group, collapsed, onToggle, isMobile, onDelete, onReturn, onUpdated, sort, onSort,
 }: ReceiptGroupCardProps) {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const count = group.items.length;
@@ -85,6 +89,8 @@ export function ReceiptGroupCard({
           onDelete={onDelete}
           onReturn={onReturn}
           onUpdated={onUpdated}
+          sort={sort}
+          onSort={onSort}
         />
       )}
 

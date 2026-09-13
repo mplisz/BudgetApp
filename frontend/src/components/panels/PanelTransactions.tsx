@@ -29,6 +29,9 @@ import { ToggleBtn, VIEW_TOGGLE_STYLE } from "../ui/ToggleBtn";
 
 import { useMonthLoad } from "../../hooks/useMonthLoad";
 import { useTxLinkFilters } from "../../hooks/useTxLinkFilters";
+import { useTxSort } from "../../hooks/useTxSort";
+import { SortBar } from "../ui/SortControls";
+import type { TxSortKey } from "../../utils/txSort";
 import { typeIcon, typeLabel } from "../../data/constants/categoryTypes";
 import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
@@ -41,6 +44,9 @@ const PAGE_SIZE = 25;
 // Receipts paginate in a much smaller page: one receipt unfolds into a whole
 // table of its own, so 25 of them would be a scroll marathon.
 const RECEIPT_PAGE_SIZE = 8;
+
+// Sortable columns of the expenses table (TransactionList's headers).
+const TX_SORT_KEYS: TxSortKey[] = ["date", "amount", "priority", "author"];
 
 // The three ways to look at the same filtered month.
 type ViewMode = "list" | "category" | "receipt";
@@ -249,11 +255,22 @@ export default function PanelTransactions() {
     [otherFiltered, filters.categories, filters.subs]
   );
 
+  // ── Column sort ───────────────────────────────────────────
+  // Sorted ONCE, here, and every view derives from it: the flat list, the rows
+  // inside each category group, inside each receipt and in the no-receipt
+  // tail. The groups and receipts themselves keep their own order (name /
+  // purchase date) — a column header sorts the rows of the table it heads.
+  // Every click starts again from page 1 (the setters are only called on
+  // click, long after the pagination hooks below have been declared).
+  const { sort, onSort, sorted } = useTxSort(filtered, () => {
+    setFlatPage(1); setGroupPage(1); setReceiptPage(1); setLoosePage(1);
+  });
+
   // ── Grouping by category ──────────────────────────────────
 
   const groups = useMemo(() => {
     const map: Record<string, { name: string; items: Transaction[] }> = {};
-    filtered.forEach(tx => {
+    sorted.forEach(tx => {
       const key = tx.categoryId || "uncategorised";
       if (!map[key]) map[key] = { name: tx.categoryName || "Bez kategorii", items: [] };
       map[key].items.push(tx);
@@ -266,7 +283,7 @@ export default function PanelTransactions() {
         voucherSum:  val.items.reduce((acc, t) => acc + (t.voucherAmount || 0), 0),
         returnedSum: val.items.reduce((acc, t) => acc + (t.sameMonthReturned || 0), 0),
       }));
-  }, [filtered]);
+  }, [sorted]);
 
   // ── Grouping by receipt ───────────────────────────────────
   // The cart turns one scan into one transaction per subcategory, so a single
@@ -275,8 +292,8 @@ export default function PanelTransactions() {
   // never split across two pages.
 
   const { groups: receiptGroups, loose: looseTxs } = useMemo(
-    () => groupByReceipt(filtered),
-    [filtered],
+    () => groupByReceipt(sorted),
+    [sorted],
   );
   const looseSum = useMemo(
     () => looseTxs.reduce((acc, t) => acc + (t.effectiveAmount ?? t.amount), 0),
@@ -297,7 +314,7 @@ export default function PanelTransactions() {
   // ── Pagination ────────────────────────────────────────────
 
   const { page: flatPage, totalPages: flatTotalPages, paginated: paginatedFlat, setPage: setFlatPage }
-    = usePagination(filtered, PAGE_SIZE) as { page: number; totalPages: number; paginated: Transaction[]; setPage: (p: number) => void };
+    = usePagination(sorted, PAGE_SIZE) as { page: number; totalPages: number; paginated: Transaction[]; setPage: (p: number) => void };
 
   const { page: groupPage, totalPages: groupTotalPages, paginated: paginatedGroups, setPage: setGroupPage }
     = usePagination(groups, PAGE_SIZE) as { page: number; totalPages: number; paginated: typeof groups; setPage: (p: number) => void };
@@ -358,12 +375,14 @@ export default function PanelTransactions() {
     setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
   }
 
-  // The same three callbacks in every view — bundled so each list site spells
+  // The same callbacks + sort in every view — bundled so each list site spells
   // them once (<TransactionList {...txListHandlers} />).
   const txListHandlers = {
     onDelete:  (tx: Transaction) => setDeleteModal({ isOpen: true, txId: tx.id }),
     onReturn:  (tx: Transaction) => setReturnTarget(tx),
     onUpdated: handleUpdated,
+    sort,
+    onSort,
   };
 
   function handleReturnSaved(updated: Transaction) {
@@ -616,6 +635,11 @@ export default function PanelTransactions() {
         <div style={{ textAlign: "center", padding: "40px 0", color: c.borderStrong }}>
           Brak transakcji{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
         </div>
+      )}
+
+      {/* Mobile cards have no column headers — one sort bar serves every view */}
+      {!showSkeleton && isMobile && filtered.length > 0 && (
+        <SortBar keys={TX_SORT_KEYS} sort={sort} onSort={onSort} />
       )}
 
       {/* Flat list */}

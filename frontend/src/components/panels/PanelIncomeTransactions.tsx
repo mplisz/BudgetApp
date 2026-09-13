@@ -29,9 +29,15 @@ import { useTxLinkFilters } from "../../hooks/useTxLinkFilters";
 import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { useTxSort } from "../../hooks/useTxSort";
+import { SortableTh, SortBar } from "../ui/SortControls";
+import type { TxSortKey } from "../../utils/txSort";
 import type { Transaction } from "../../types/appContext";
 
 const PAGE_SIZE = 25;
+
+// Income has no priority — those are expense-only.
+const INCOME_SORT_KEYS: TxSortKey[] = ["date", "amount", "author"];
 
 interface IncomeRowProps {
   tx:            Transaction;
@@ -304,7 +310,11 @@ export default function PanelIncomeTransactions() {
 
   const totalSum = filtered.reduce((acc, tx) => acc + tx.amount, 0);
 
-  const { page, totalPages, paginated, setPage } = usePagination(filtered, PAGE_SIZE);
+  // Column sort — same rules and controls as Wydatki; a click starts again
+  // from page 1 (setPage is only called on click, after it is declared below).
+  const { sort, onSort, sorted } = useTxSort(filtered, () => { setPage(1); });
+
+  const { page, totalPages, paginated, setPage } = usePagination(sorted, PAGE_SIZE);
 
   const dateBounds  = useMemo(() => dateBoundsOf(enriched), [enriched]);
   const noDateRange = enriched.length === 0;
@@ -401,6 +411,8 @@ export default function PanelIncomeTransactions() {
           <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {page} z {totalPages}
           </div>
+          {/* Mobile cards have no column headers */}
+          {isMobile && <SortBar keys={INCOME_SORT_KEYS} sort={sort} onSort={onSort} />}
         {isMobile ? (
                     <div>
                       {paginated.map(tx => (
@@ -418,13 +430,13 @@ export default function PanelIncomeTransactions() {
             <table style={s.table}>
               <thead>
                 <tr>
-                  <th style={s.th}>Data</th>
+                  <SortableTh sortKey="date" sort={sort} onSort={onSort} style={s.th} />
                   <th style={s.th}>Typ</th>
                   <th style={s.th}>Kategoria</th>
                   <th style={s.th}>Opis</th>
                   <th style={s.th}>Tagi</th>
-                  <th style={{ ...s.th, textAlign: "right" }}>Kwota</th>
-                  <th style={s.th}>Autor</th>
+                  <SortableTh sortKey="amount" sort={sort} onSort={onSort} style={s.th} align="right" />
+                  <SortableTh sortKey="author" sort={sort} onSort={onSort} style={s.th} />
                   <th style={s.th}>Akcje</th>
                 </tr>
               </thead>
