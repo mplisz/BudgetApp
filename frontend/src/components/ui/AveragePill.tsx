@@ -66,13 +66,11 @@ export function AveragePill({ current, stat, good, inProgress, size = "md", with
   const lowest   = series.reduce<typeof previous>((m, p) => (!m || p.value < m.value ? p : m), undefined);
   const highest  = series.reduce<typeof previous>((m, p) => (!m || p.value > m.value ? p : m), undefined);
 
-  const title = [
-    `Z ${stat.months} poprzednich mies.: średnia ${zl.format(stat.mean)}, mediana ${zl.format(stat.median)}`,
-    lowest && highest && series.length > 1
-      ? `Najmniej ${zl.format(lowest.value)} (${monthShort(lowest.month)}) · najwięcej ${zl.format(highest.value)} (${monthShort(highest.month)})`
-      : null,
-    inProgress ? "Miesiąc w toku — procent średniej zamiast różnicy" : "Strzałka porównuje ze średnią",
-  ].filter(Boolean).join("\n");
+  // The pill already shows the mean and median — the tooltip only adds the
+  // range, which isn't on screen anywhere else.
+  const title = lowest && highest && series.length > 1
+    ? `Najwięcej: ${zl.format(highest.value)} (${monthShort(highest.month)})\nNajmniej: ${zl.format(lowest.value)} (${monthShort(lowest.month)})`
+    : undefined;
 
   const sm = size === "sm";
   const prevChange = previous && !inProgress ? change(current, previous.value, good) : null;
@@ -92,7 +90,7 @@ export function AveragePill({ current, stat, good, inProgress, size = "md", with
         <span style={{ color: delta.color, fontWeight: 700 }}>{delta.text}</span>
       </span>
       {withPrevious && previous && (
-        <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap" }} title={`${monthShort(previous.month)}: ${zl.format(previous.value)}`}>
+        <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap" }} title={prevChange ? `${monthShort(previous.month)}: ${zl.format(previous.value)}` : undefined}>
           {inProgress || !prevChange
             ? <>{monthShort(previous.month)}: {zl.format(previous.value)}</>
             : <>vs {monthShort(previous.month)} <span style={{ color: prevChange.color, fontWeight: 700 }}>{prevChange.text}</span></>}

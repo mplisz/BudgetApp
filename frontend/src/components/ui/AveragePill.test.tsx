@@ -57,9 +57,16 @@ describe("AveragePill", () => {
     expect(pill(270, "down", true).delta.textContent).toBe("27% średniej");
   });
 
-  it("the tooltip names the lowest and highest month", () => {
+  it("the tooltip holds only the range — mean and median are already on the pill", () => {
     const title = pill(1200, "down").bubble.getAttribute("title")!;
-    expect(title.split("\n")[1].replace(/[\u00a0\u202f]/g, " ")).toBe("Najmniej 800 zł (Lip) · najwięcej 1300 zł (Cze)");
+    expect(title.split("\n").map(line => line.replace(/\s/g, " "))).toEqual(["Najwięcej: 1300 zł (Cze)", "Najmniej: 800 zł (Lip)"]);
+  });
+
+  it("no tooltip with a single month — there is no range", () => {
+    const { container } = render(
+      <AveragePill current={5} stat={{ mean: 5, median: 5, months: 1, series: [{ month: "2026-08", value: 5 }] }} good="down" inProgress={false} />,
+    );
+    expect(container.querySelector("[title]")).toBeNull();
   });
 
   it("withPrevious compares with the last month — or just names it while this one runs", () => {
