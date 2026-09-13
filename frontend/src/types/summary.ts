@@ -4,6 +4,7 @@
 // ============================================================
 
 import type { LineItemProduct } from "../utils/productPricing";
+import type { UnusualInfo } from "../utils/unusualExpenses";
 
 export type BudgetMonth = string; // "YYYY-MM"
 
@@ -72,6 +73,7 @@ export interface Transaction {
   description?: string;
   tags?: string[];          // array of tagIds (e.g. "tag_raty_MMs")
   tagNames?: string[];      // resolved names — enriched client-side
+  unusual?: UnusualInfo;    // "nietypowo duże" — enriched client-side (utils/unusualExpenses)
   priority?: 1 | 2 | 3 | 4;
   netAmount?: number;
   voucherAmount?: number;

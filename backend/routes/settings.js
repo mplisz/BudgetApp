@@ -96,6 +96,10 @@ const SettingsSchema = z.object({
   depositSubcategoryId:          z.string().min(1).max(200).nullable().optional(),
   returnTransferSubcategoryId:   z.string().min(1).max(200).nullable().optional(),
   envelopeTransferSubcategoryId: z.string().min(1).max(200).nullable().optional(),
+  // "Nietypowo duże" threshold: a one-off expense counts as unusual when it is
+  // at least this many times its subcategory's typical amount. Shared by the
+  // Wydatki filter and the Podsumowanie section, for the whole family.
+  unusualExpenseMultiplier: z.number().min(1.5).max(4).optional(),
 }).refine(
   data => data.thresholds
        || data.targets
@@ -109,7 +113,8 @@ const SettingsSchema = z.object({
        || data.luxmed !== undefined
        || data.depositSubcategoryId !== undefined
        || data.returnTransferSubcategoryId !== undefined
-       || data.envelopeTransferSubcategoryId !== undefined,
+       || data.envelopeTransferSubcategoryId !== undefined
+       || data.unusualExpenseMultiplier !== undefined,
   { message: "No valid fields provided for update." }
 );
 
@@ -145,6 +150,7 @@ const DEFAULT_SETTINGS = {
   depositSubcategoryId: null,          // null = Bottle Deposits panel not configured
   returnTransferSubcategoryId: null,   // null = transfers on returns not configured
   envelopeTransferSubcategoryId: null, // null = envelope-release transfer not configured
+  unusualExpenseMultiplier: 2,         // "Nietypowo duże" = at least 2× the usual
 };
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -187,6 +193,7 @@ router.get('/', async (req, res) => {
     if (!("depositSubcategoryId"          in doc)) doc.depositSubcategoryId = null;
     if (!("returnTransferSubcategoryId"   in doc)) doc.returnTransferSubcategoryId = null;
     if (!("envelopeTransferSubcategoryId" in doc)) doc.envelopeTransferSubcategoryId = null;
+    if (!("unusualExpenseMultiplier"      in doc)) doc.unusualExpenseMultiplier = 2;
 
     res.json(doc);
   } catch (error) {
@@ -268,6 +275,7 @@ router.patch('/', async (req, res) => {
       envelopeTransferSubcategoryId: parsed.data.envelopeTransferSubcategoryId !== undefined
         ? parsed.data.envelopeTransferSubcategoryId
         : (existing.envelopeTransferSubcategoryId ?? null),
+      unusualExpenseMultiplier: parsed.data.unusualExpenseMultiplier ?? existing.unusualExpenseMultiplier ?? 2,
       updatedAt:     new Date().toISOString(),
       updatedBy:     req.user.id,
       updatedByName: req.user.name,

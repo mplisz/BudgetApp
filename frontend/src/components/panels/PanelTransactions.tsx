@@ -32,6 +32,9 @@ import { useTxLinkFilters } from "../../hooks/useTxLinkFilters";
 import { useTxSort } from "../../hooks/useTxSort";
 import { SortBar } from "../ui/SortControls";
 import { FilterGroup, FilterGroupGrid, useFilterGroups, listSummary, joinSummary } from "../ui/FilterGroup";
+import { UnusualThresholdSlider } from "../ui/UnusualThresholdSlider";
+import { useUnusualExpenses, useUnusualMultiplier } from "../../hooks/useUnusualExpenses";
+import { formatMultiplier } from "../../utils/unusualExpenses";
 import type { TxSortKey } from "../../utils/txSort";
 import { typeIcon, typeLabel } from "../../data/constants/categoryTypes";
 import { DateRangeFilter, dateRangeSummary } from "./transactionComponents/DateRangeFilter";
@@ -93,6 +96,7 @@ export default function PanelTransactions() {
     hasReceipt: "off" as Tri,
     warranty:   "off" as Tri,
     hasProduct: "off" as Tri,
+    unusual:    "off" as Tri,
   });
 
   // Category groups: absent key = OPEN (a group is its own heading + rows).
@@ -142,12 +146,22 @@ export default function PanelTransactions() {
   // - Compute effectiveAmount (deducts same-month cash returns)
   // - Filter out INCOME and TRANSFER
 
-  const enriched = useMemo<Transaction[]>(() =>
+  const monthTx = useMemo<Transaction[]>(() =>
     transactions
       // Scoped to the active month by VALUE, not by trusting that the shared
       // array holds the right one — same guard as the Wpływy panel.
       .filter(tx => tx.budgetMonth === activeBudgetMonth)
-      .filter(tx => tx.type !== "INCOME" && tx.type !== "TRANSFER")
+      .filter(tx => tx.type !== "INCOME" && tx.type !== "TRANSFER"),
+    [transactions, activeBudgetMonth]
+  );
+
+  // "Nietypowo duże": one-off expenses far above their subcategory's norm.
+  // The threshold is family-wide (settings), shared with Podsumowanie.
+  const { multiplier, setMultiplier } = useUnusualMultiplier();
+  const { unusual } = useUnusualExpenses(monthTx, activeBudgetMonth, multiplier);
+
+  const enriched = useMemo<Transaction[]>(() =>
+    monthTx
       .map(tx => {
         // Net of ALL cash returns (incl. cross-month) so the header total
         // matches the category sums in PanelSummary. `sameMonthReturned` now
@@ -160,9 +174,10 @@ export default function PanelTransactions() {
           tagNames: resolveTagNames(tx.tags, tags),
           effectiveAmount:   calculateNetAmount(tx),
           sameMonthReturned: totalCashReturned,
+          unusual:           unusual?.get(tx.id),
         };
       }),
-    [transactions, tags, activeBudgetMonth]
+    [monthTx, tags, unusual]
   );
 
   const dateBounds  = useMemo(() => dateBoundsOf(enriched), [enriched]);
@@ -196,6 +211,7 @@ export default function PanelTransactions() {
       if (!matchTri(filters.warranty,   !!tx.isWarranty))      return false;
       if (!matchTri(filters.hasProduct, trackedProductNames(tx.lineItems).length > 0)) return false;
       if (filters.merchant && tx.merchant !== filters.merchant) return false;
+      if (!matchTri(filters.unusual, !!tx.unusual))          return false;
       return true;
     }),
     [enriched, filters]
@@ -417,9 +433,12 @@ export default function PanelTransactions() {
       clear:   () => { set("dateFrom", null); set("dateTo", null); },
     },
     priority: {
-      active:  filters.prio.length ? 1 : 0,
-      summary: [...filters.prio].sort().map(p => `P${p}`).join(", "),
-      clear:   () => set("prio", []),
+      active:  (filters.prio.length ? 1 : 0) + (filters.unusual !== "off" ? 1 : 0),
+      summary: joinSummary(
+        triText(filters.unusual, `tylko nietypowo duże (${formatMultiplier(multiplier)})`, `bez nietypowo dużych (${formatMultiplier(multiplier)})`),
+        [...filters.prio].sort().map(p => `P${p}`).join(", "),
+      ),
+      clear:   () => { set("prio", []); set("unusual", "off"); },
     },
     shop: {
       active:  (filters.merchant ? 1 : 0) + (filters.tags.length ? 1 : 0),
@@ -569,8 +588,19 @@ export default function PanelTransactions() {
               />
             </FilterGroup>
 
-            <FilterGroup icon="🎖️" title="Priorytet" {...groupProps("priority")}>
+            <FilterGroup icon="🔥" title="Kwota i priorytet" {...groupProps("priority")}>
               <div style={s.filterBox}>
+                <div style={s.filterLabel}>Nietypowo duże</div>
+                <TriFilterButton
+                  state={filters.unusual}
+                  onChange={v => set("unusual", v)}
+                  label={unusual ? `🔥 Nietypowo duże (${unusual.size})` : "🔥 Nietypowo duże (…)"}
+                  color={c.warning}
+                />
+              </div>
+              <UnusualThresholdSlider value={multiplier} onChange={setMultiplier} />
+              <div style={s.filterBox}>
+                <div style={s.filterLabel}>Priorytet</div>
                 <div style={{ display: "flex", gap: 4 }}>
                   {[1, 2, 3, 4].map(p => (
                     <button

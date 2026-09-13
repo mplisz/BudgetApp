@@ -71,6 +71,8 @@ export interface AppSettings {
   depositSubcategoryId?:         string | null;
   returnTransferSubcategoryId?:  string | null;
   envelopeTransferSubcategoryId?: string | null;
+  /** "Nietypowo duże" threshold (× the subcategory's median); see utils/unusualExpenses. */
+  unusualExpenseMultiplier?:  number;
   safetyNet?:                unknown;
   [key: string]:             unknown;
 }

@@ -17,7 +17,21 @@ import { EditTransactionModal }      from "./EditTransactionModal";
 import { ReceiptModal } from "./ReceiptModal";
 import { ReturnEntriesModal } from "./ReturnEntriesModal";
 import { trackedProductNames } from "../../../utils/productPricing";
+import { formatMultiplier, unusualTitle } from "../../../utils/unusualExpenses";
 import type { Transaction } from "../../../types/appContext";
+
+// "Nietypowo duże" marker under the amount — the ratio and the norm it was
+// measured against, so the reason is on the row, not behind a filter.
+function UnusualBadge({ tx }: { tx: Transaction }) {
+  if (!tx.unusual) return null;
+  return (
+    <div style={{ marginTop: 3 }}>
+      <span style={{ ...s.badge(c.warning), whiteSpace: "nowrap" }} title={unusualTitle(tx.unusual)}>
+        🔥 {formatMultiplier(tx.unusual.ratio)} zwykle ({fmt(tx.unusual.typical)})
+      </span>
+    </div>
+  );
+}
 
 interface TransactionRowProps {
   tx:        Transaction;
@@ -114,6 +128,7 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
               voucher: {fmt(tx.voucherAmount ?? 0)} | cash: {fmt(tx.netAmount ?? tx.amount - (tx.voucherAmount ?? 0))}
             </div>
           )}
+          <UnusualBadge tx={tx} />
           {(isFullyReturned || isPartiallyReturned) && (
             <span
               onClick={() => setReturnsOpen(true)}
@@ -279,6 +294,7 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
               voucher: {fmt(tx.voucherAmount ?? 0)} | cash: {fmt(tx.netAmount ?? tx.amount - (tx.voucherAmount ?? 0))}
             </div>
           )}
+          <UnusualBadge tx={tx} />
         </div>
       </div>
 
