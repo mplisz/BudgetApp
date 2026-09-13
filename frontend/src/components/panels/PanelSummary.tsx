@@ -4,7 +4,7 @@
 // ============================================================
 
 import { c } from "../../styles/tokens";
-import { useMemo, useEffect, useCallback, useState  } from "react";
+import { useMemo, useEffect, useCallback, useState, type ReactNode } from "react";
 import { useAppContext }    from "../../context/AppContext";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useTransactions }  from "../../hooks/useTransactions";
@@ -22,7 +22,8 @@ import { PriorityBreakdown } from "./summaryComponents/PriorityBreakdown";
 import { TopTransactions }  from "./summaryComponents/TopTransactions";
 import { SavingsSummary }   from "./summaryComponents/SavingsSummary";
 import { UnusualExpensesSection } from "./summaryComponents/UnusualExpensesSection";
-import { WithMonthlyAverages, AveragesRow } from "./summaryComponents/MonthlyAverages";
+import { AveragePill } from "../ui/AveragePill";
+import { useMonthlyAverages } from "../../hooks/useMonthlyAverages";
 import { DEFAULT_TARGETS }  from "../../types/summaryConstants";
 import { SkeletonKpiCard, SkeletonCard, SkeletonChart, Skeleton } from "../ui/Skeleton";
 
@@ -48,6 +49,8 @@ interface KpiPillProps {
   /** Deep link to the panel listing this number's transactions. Only tiles
    *  that HAVE such a panel get one — Saldo, Koperty and the % tile don't. */
   link?: { to: string; title: string };
+  /** Average / median of the previous months (AveragePill). */
+  average?: ReactNode;
 }
 // ── Pure helpers ──────────────────────────────────────────────
 
@@ -77,7 +80,7 @@ function sumByCategoryId(
 
 // ── KPI Pill ──────────────────────────────────────────────────
 
-function KpiPill({ icon, label, value, color = c.text, sub, link }: KpiPillProps) {
+function KpiPill({ icon, label, value, color = c.text, sub, link, average }: KpiPillProps) {
   return (
     <div style={{
       position: "relative",
@@ -97,6 +100,7 @@ function KpiPill({ icon, label, value, color = c.text, sub, link }: KpiPillProps
       </div>
       <div style={{ fontSize: 20, fontWeight: 800, color }}>{value}</div>
       {sub && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{sub}</div>}
+      {average && <div style={{ marginTop: 8 }}>{average}</div>}
     </div>
   );
 }
@@ -149,6 +153,9 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const totalTransfers = totals.types.TRANSFER;
   const totalExpenses  = totals.types.EXPENSE;
   const totalSavings   = totals.types.SAVING;
+  // The previous months, for the KPI tiles' and the category rows' average /
+  // median pills: one load shared by both.
+  const averages = useMonthlyAverages(activeBudgetMonth);
   const virtualEnvelopePaid = useMemo(() => {
     // Include purchased envelopes: their paid rates locked money in the month
     // they were set aside, so past-month balance stays stable after purchase
@@ -370,11 +377,13 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
             <KpiPill
               icon="💰" label="Wpływy" value={fmt(totalIncome)} color={c.success}
               link={{ to: txLink(activeBudgetMonth, { type: "INCOME" }), title: "Pokaż wpływy w panelu Wpływy" }}
+              average={<AveragePill current={totalIncome} stat={averages?.types.INCOME} good="up" inProgress={isCurrentMonth} withPrevious />}
             />
             {totalTransfers > 0 && (
               <KpiPill
                 icon="🔄" label="Transfery" value={fmt(totalTransfers)} color={c.success}
                 link={{ to: txLink(activeBudgetMonth, { type: "TRANSFER" }), title: "Pokaż transfery w panelu Wpływy" }}
+                average={<AveragePill current={totalTransfers} stat={averages?.types.TRANSFER} good={null} inProgress={isCurrentMonth} withPrevious />}
               />
             )}
             <KpiPill
@@ -382,12 +391,14 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
               value={fmt(totalExpenses)} color={c.danger}
               sub={budgetPct !== null ? `${budgetPct.toFixed(1)}% wpływów` : undefined}
               link={{ to: txLink(activeBudgetMonth, { type: "EXPENSE" }), title: "Pokaż wydatki w panelu Wydatki" }}
+              average={<AveragePill current={totalExpenses} stat={averages?.types.EXPENSE} good="down" inProgress={isCurrentMonth} withPrevious />}
             />
             <KpiPill
               icon="🏦" label="Oszczędności"
               value={fmt(totalSavings)} color={c.info}
               sub={totalIncome > 0 ? `${((totalSavings / totalIncome) * 100).toFixed(1)}% wpływów` : undefined}
               link={{ to: txLink(activeBudgetMonth, { type: "SAVING" }), title: "Pokaż oszczędności w panelu Wydatki" }}
+              average={<AveragePill current={totalSavings} stat={averages?.types.SAVING} good="up" inProgress={isCurrentMonth} withPrevious />}
             />
              {virtualEnvelopePaid > 0 && (
             <KpiPill
@@ -435,8 +446,6 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
             <>
               {/* 2) Struktura wydatków: limity kategorii + gauge */}
               <CollapsibleSection title="🧭 Struktura wydatków" defaultOpen={false}>
-                <WithMonthlyAverages month={activeBudgetMonth}>{averages => (<>
-                <AveragesRow current={totals.types} averages={averages} inProgress={isCurrentMonth} />
                 <div style={{
                     display: "flex",
                     gap: 16,
@@ -490,7 +499,6 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     />
                   </Card>
                 </div>
-                </>)}</WithMonthlyAverages>
               </CollapsibleSection>
 
               {/* 2b) Nietypowe wydatki — big for what they are (utils/unusualExpenses) */}

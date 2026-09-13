@@ -79,16 +79,20 @@ export interface AverageStat {
   median: number;
   /** Months averaged over. */
   months: number;
+  /** The monthly values, oldest first — for the previous month and the range. */
+  series?: Array<{ month: string; value: number }>;
 }
 
-export function averageOf(values: number[]): AverageStat {
-  if (values.length === 0) return { mean: 0, median: 0, months: 0 };
+export function averageOf(values: number[], months?: string[]): AverageStat {
+  const series = months ? values.map((value, i) => ({ month: months[i], value })) : undefined;
+  if (values.length === 0) return { mean: 0, median: 0, months: 0, series };
   const s = [...values].sort((a, b) => a - b);
   const mid = s.length >> 1;
   return {
     mean:   s.reduce((sum, v) => sum + v, 0) / s.length,
     median: s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2,
     months: s.length,
+    series,
   };
 }
 
@@ -111,12 +115,12 @@ export function monthlyAverages(txs: TotalsTx[], months: string[]): MonthlyAvera
 
   const typeKeys: TotalsType[] = ["INCOME", "TRANSFER", "EXPENSE", "SAVING"];
   const types = Object.fromEntries(
-    typeKeys.map(k => [k, averageOf(totals.map(t => t.types[k]))]),
+    typeKeys.map(k => [k, averageOf(totals.map(t => t.types[k]), withData)]),
   ) as Record<TotalsType, AverageStat>;
 
   const perKey = (pick: (t: MonthTotals) => Map<string, number>) => {
     const keys = new Set(totals.flatMap(t => [...pick(t).keys()]));
-    return new Map([...keys].map(k => [k, averageOf(totals.map(t => pick(t).get(k) ?? 0))]));
+    return new Map([...keys].map(k => [k, averageOf(totals.map(t => pick(t).get(k) ?? 0), withData)]));
   };
 
   return {

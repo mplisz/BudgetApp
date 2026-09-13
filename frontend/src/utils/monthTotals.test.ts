@@ -40,10 +40,11 @@ describe("averageOf", () => {
 describe("monthlyAverages", () => {
   const months = ["2026-06", "2026-07", "2026-08"];
 
-  it("leaves out months with no data at all", () => {
-    const avg = monthlyAverages([tx("2026-07", "INCOME", 8000), tx("2026-08", "INCOME", 10000)], months);
+  it("leaves out months with no data at all, and keeps the series in month order", () => {
+    const avg = monthlyAverages([tx("2026-08", "INCOME", 10000), tx("2026-07", "INCOME", 8000)], months);
     expect(avg.months).toEqual(["2026-07", "2026-08"]);
     expect(avg.types.INCOME).toMatchObject({ mean: 9000, months: 2 });
+    expect(avg.types.INCOME.series).toEqual([{ month: "2026-07", value: 8000 }, { month: "2026-08", value: 10000 }]);
   });
 
   it("counts a quiet month in a category as zero", () => {
@@ -52,6 +53,7 @@ describe("monthlyAverages", () => {
       tx("2026-07", "INCOME", 8000),
       tx("2026-08", "INCOME", 8000),
     ], months);
-    expect(avg.categories.get("kino")).toEqual({ mean: 100, median: 0, months: 3 });
+    expect(avg.categories.get("kino")).toMatchObject({ mean: 100, median: 0, months: 3 });
+    expect(avg.categories.get("kino")?.series?.map(p => p.value)).toEqual([300, 0, 0]);
   });
 });
