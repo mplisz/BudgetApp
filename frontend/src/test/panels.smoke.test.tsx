@@ -14,7 +14,7 @@
 // ============================================================
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import { render } from "@testing-library/react";
+import { render, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactElement } from "react";
 
@@ -118,4 +118,31 @@ describe("panels mount without throwing", () => {
       expect(() => render(<Providers>{make()}</Providers>)).not.toThrow();
     });
   }
+});
+
+// Deep links from Podsumowanie (txLink) must land as the panel's own filters.
+describe("transaction panels honour deep links", () => {
+  // Scoped to this render's container — the mount tests above leave their
+  // panels in the document. The filters appear only after the month "loads",
+  // which in jsdom can take longer than findBy's default second.
+  function renderAt(url: string, panel: ReactElement) {
+    const { container } = render(
+      <MemoryRouter initialEntries={[url]}>
+        <ToastProvider><AuthProvider><AppProvider>{panel}</AppProvider></AuthProvider></ToastProvider>
+      </MemoryRouter>,
+    );
+    return within(container);
+  }
+  const WAIT = { timeout: 5000 };
+
+  it("Wydatki opens on the linked type, as a clearable filter", async () => {
+    const q = renderAt("/transactions?m=2026-06&type=SAVING&cat=Emerytura", <PanelTransactions />);
+    expect(await q.findByDisplayValue(/Oszczędności/, {}, WAIT)).toBeTruthy();
+    expect(await q.findByText(/Wyczyść/, {}, WAIT)).toBeTruthy();
+  });
+
+  it("Wpływy opens on the linked type", async () => {
+    const q = renderAt("/income-transactions?m=2026-06&type=TRANSFER", <PanelIncomeTransactions />);
+    expect(await q.findByDisplayValue(/Transfer/, {}, WAIT)).toBeTruthy();
+  });
 });

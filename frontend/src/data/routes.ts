@@ -60,6 +60,52 @@ export function getDefaultPath(): string {
   return PANEL_PATHS.expenses;   // /expenses/add
 }
 
+// ── Deep links into the transaction panels ──────────────────
+//
+// One builder + one reader, so every "show me these transactions" link
+// (PanelSummary KPI tiles, category / subcategory rows) and both panels
+// that honour it speak exactly the same query string:
+//
+//   /transactions?m=2026-09&type=EXPENSE&cat=Zakupy+codzienne&sub=Alkohol
+//
+// The type picks the panel: EXPENSE/SAVING live in Wydatki, INCOME/TRANSFER
+// in Wpływy. Category and subcategory go by NAME, because that is what the
+// panels' filters match on (tx.categoryName / tx.subcategoryName).
+
+export type TxLinkType = "EXPENSE" | "SAVING" | "INCOME" | "TRANSFER";
+
+export interface TxLinkFilters {
+  type:      TxLinkType;
+  category?: string;
+  /** Only meaningful together with `category` — the panels show the
+   *  subcategory filter only once a category is picked. */
+  sub?:      string;
+}
+
+/** Query params a transaction deep link owns (`m` is shared, not owned). */
+export const TX_LINK_PARAMS = ["type", "cat", "sub"] as const;
+
+const TX_LINK_TYPES: readonly TxLinkType[] = ["EXPENSE", "SAVING", "INCOME", "TRANSFER"];
+
+export function txLink(month: string, { type, category, sub }: TxLinkFilters): string {
+  const panel = type === "INCOME" || type === "TRANSFER" ? "incometransactions" : "transactions";
+  const q = new URLSearchParams({ m: month, type });
+  if (category) {
+    q.set("cat", category);
+    if (sub) q.set("sub", sub);
+  }
+  return `${PANEL_PATHS[panel]}?${q}`;
+}
+
+/** Reads a deep link back; null when the URL carries none (or a bogus type). */
+export function readTxLink(params: URLSearchParams): TxLinkFilters | null {
+  const type = params.get("type") as TxLinkType | null;
+  if (!type || !TX_LINK_TYPES.includes(type)) return null;
+  const category = params.get("cat") || undefined;
+  const sub      = category ? params.get("sub") || undefined : undefined;
+  return { type, category, sub };
+}
+
 /** Resolves the current panel id from a pathname (best-effort). */
 export function panelIdFromPath(pathname: string): string | null {
   // Direct match first

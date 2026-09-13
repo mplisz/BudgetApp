@@ -6,7 +6,47 @@
 // ============================================================
 
 import { c } from "../../styles/tokens";
-import React from "react";
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+
+// ── PanelLink ─────────────────────────────────────────────────
+// Jump from a summary number to the panel listing what it is made of.
+// Defaults to the small "↗" glyph; pass children to make a whole row the
+// link. Clicks never bubble, so it can sit inside a clickable header (the
+// category row toggles its subcategories) without also toggling it.
+
+interface PanelLinkProps {
+  to:          string;
+  title:       string;
+  children?:   React.ReactNode;
+  style?:      React.CSSProperties;
+  hoverStyle?: React.CSSProperties;
+}
+
+export function PanelLink({ to, title, children = "↗", style, hoverStyle }: PanelLinkProps) {
+  const [hover, setHover] = useState(false);
+  return (
+    <Link
+      to={to}
+      title={title}
+      aria-label={title}
+      onClick={e => e.stopPropagation()}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        color: hover ? c.text : c.textMuted,
+        textDecoration: "none",
+        fontSize: 12,
+        lineHeight: 1,
+        cursor: "pointer",
+        ...style,
+        ...(hover ? hoverStyle : null),
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
 
 // ── ProgressBar ───────────────────────────────────────────────
 

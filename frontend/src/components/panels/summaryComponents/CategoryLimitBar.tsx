@@ -6,16 +6,32 @@
 import { c, alpha } from "../../../styles/tokens";
 import { useState } from "react";
 import { fmt } from "../../../utils/helpers";
-import { ProgressBar, EmptyState, DividerRow } from "../../ui/summaryUi";
+import { ProgressBar, EmptyState, DividerRow, PanelLink } from "../../ui/summaryUi";
+import { txLink } from "../../../data/routes";
 import type { CategorySummary, SubcategorySummary } from "../../../types/summary";
 
 interface CategoryLimitBarProps {
   category: CategorySummary;
   subcategories: SubcategorySummary[];
+  /** "YYYY-MM" the summary shows — the links open the same month. */
+  budgetMonth: string;
 }
 
 interface SubcategoryListProps {
   subcategories: SubcategorySummary[];
+  categoryName:  string;
+  budgetMonth:   string;
+}
+
+// The header row itself toggles the subcategory list, so the category's
+// jump to Wydatki is a separate ↗ next to its name.
+function CategoryLink({ category, budgetMonth }: { category: CategorySummary; budgetMonth: string }) {
+  return (
+    <PanelLink
+      to={txLink(budgetMonth, { type: "EXPENSE", category: category.categoryName })}
+      title={`Pokaż wydatki „${category.categoryName}" w panelu Wydatki`}
+    />
+  );
 }
 
 function getBarColor(percent: number): string {
@@ -25,7 +41,7 @@ function getBarColor(percent: number): string {
   return c.success;
 }
 
-function SubcategoryList({ subcategories }: SubcategoryListProps) {
+function SubcategoryList({ subcategories, categoryName, budgetMonth }: SubcategoryListProps) {
   if (subcategories.length === 0) {
     return <EmptyState message="Brak subkategorii" padding={8} />;
   }
@@ -38,23 +54,30 @@ function SubcategoryList({ subcategories }: SubcategoryListProps) {
       border: `1px solid ${c.border}`,
     }}>
       {subcategories.map((sub, i) => (
-        <DividerRow
-          key={sub.subcategoryId}
-          isLast={i === subcategories.length - 1}
-          style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}
-        >
-          <span style={{ color: c.textSecondary }}>› {sub.subcategoryName}</span>
-          <span style={{ color: c.textTertiary }}>
-            {fmt(sub.spent)}
-            <span style={{ color: c.textMuted, marginLeft: 5 }}>({sub.percentOfCategory.toFixed(1)}%)</span>
-          </span>
+        <DividerRow key={sub.subcategoryId} isLast={i === subcategories.length - 1}>
+          {/* The whole row is the link — nothing else on it is clickable. */}
+          <PanelLink
+            to={txLink(budgetMonth, { type: "EXPENSE", category: categoryName, sub: sub.subcategoryName })}
+            title={`Pokaż wydatki „${sub.subcategoryName}" w panelu Wydatki`}
+            style={{
+              display: "flex", justifyContent: "space-between", padding: "4px 6px", margin: "0 -6px",
+              borderRadius: 4, fontSize: 12, lineHeight: "normal", color: c.textSecondary,
+            }}
+            hoverStyle={{ background: c.border, color: c.text }}
+          >
+            <span>› {sub.subcategoryName}</span>
+            <span style={{ color: c.textTertiary }}>
+              {fmt(sub.spent)}
+              <span style={{ color: c.textMuted, marginLeft: 5 }}>({sub.percentOfCategory.toFixed(1)}%)</span>
+            </span>
+          </PanelLink>
         </DividerRow>
       ))}
     </div>
   );
 }
 
-export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarProps) {
+export function CategoryLimitBar({ category, subcategories, budgetMonth }: CategoryLimitBarProps) {
   const [expanded, setExpanded] = useState(false);
 
   // A limit of 0 is a real limit, not a missing one — it takes the with-limit
@@ -81,12 +104,13 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
         >
           <span style={{ color: c.textSecondary, fontSize: 13, display: "flex", alignItems: "center", gap: 5 }}>
             {category.categoryIcon} {category.categoryName}
+            <CategoryLink category={category} budgetMonth={budgetMonth} />
             {canExpand && <span style={{ fontSize: 10, color: c.borderStrong }}>{expanded ? "▲" : "▼"}</span>}
           </span>
           <span style={{ color: c.textTertiary, fontSize: 13, fontWeight: 600 }}>{fmt(category.spent)}</span>
         </div>
         <div style={{ height: 3, background: c.border, borderRadius: 99 }} />
-        {expanded && <SubcategoryList subcategories={subcategories} />}
+        {expanded && <SubcategoryList subcategories={subcategories} categoryName={category.categoryName} budgetMonth={budgetMonth} />}
       </div>
     );
   }
@@ -103,6 +127,7 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
         {/* Icon + name */}
         <span style={{ fontSize: 13, color: c.text, fontWeight: 600, flex: 1, display: "flex", alignItems: "center", gap: 5 }}>
           {category.categoryIcon} {category.categoryName}
+          <CategoryLink category={category} budgetMonth={budgetMonth} />
           {canExpand && <span style={{ fontSize: 10, color: c.textMuted }}>{expanded ? "▲" : "▼"}</span>}
         </span>
 
@@ -146,7 +171,7 @@ export function CategoryLimitBar({ category, subcategories }: CategoryLimitBarPr
       />
 
       {/* Subcategory drill-down */}
-      {expanded && <SubcategoryList subcategories={subcategories} />}
+      {expanded && <SubcategoryList subcategories={subcategories} categoryName={category.categoryName} budgetMonth={budgetMonth} />}
     </div>
   );
 }

@@ -25,6 +25,7 @@ import { SkeletonListRow } from "../ui/Skeleton";
 import { CategoryMultiSelect } from "../ui/CategoryMultiSelect";
 import { useFilters }      from "../../hooks/useFilters";
 import { useMonthLoad } from "../../hooks/useMonthLoad";
+import { useTxLinkFilters } from "../../hooks/useTxLinkFilters";
 import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
 import { useIsMobile } from "../../hooks/useIsMobile";
@@ -242,6 +243,13 @@ export default function PanelIncomeTransactions() {
   });
 
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; txId: string | null }>({ isOpen: false, txId: null });
+
+  // Arriving from a deep link (e.g. the Wpływy / Transfery tile in Podsumowanie).
+  useTxLinkFilters(link => {
+    if (link.type !== "INCOME" && link.type !== "TRANSFER") return;
+    set("type",       link.type);
+    set("categories", link.category ? [link.category] : []);
+  });
 
   // Per-month load; reset month-specific date filters on change.
   const isLoadingMonth = useMonthLoad(activeBudgetMonth, loadTransactions, () => {

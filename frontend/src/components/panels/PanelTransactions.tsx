@@ -28,6 +28,8 @@ import { useFilters }               from "../../hooks/useFilters";
 import { ToggleBtn, VIEW_TOGGLE_STYLE } from "../ui/ToggleBtn";
 
 import { useMonthLoad } from "../../hooks/useMonthLoad";
+import { useTxLinkFilters } from "../../hooks/useTxLinkFilters";
+import { typeIcon, typeLabel } from "../../data/constants/categoryTypes";
 import { DateRangeFilter } from "./transactionComponents/DateRangeFilter";
 import { dateBoundsOf } from "./transactionComponents/dateBounds";
 import { TriFilterButton, matchTri, type Tri } from "../ui/TriFilterButton";
@@ -68,6 +70,7 @@ export default function PanelTransactions() {
   // ── Filter state ──────────────────────────────────────────
 
   const { filters, set, clear: clearFilters, hasActive: hasActiveFilters } = useFilters({
+    type:       "" as "" | "EXPENSE" | "SAVING",
     categories: [] as string[],
     subs:       [] as string[],
     dateFrom:   null as Date | null,
@@ -96,6 +99,17 @@ export default function PanelTransactions() {
   const [view,               setView]               = useState<ViewMode>("receipt");
   // Receipt view only: the "Bez paragonu" tail, collapsed until asked for.
   const [looseOpen,          setLooseOpen]          = useState(false);
+
+  // Arriving from a deep link (e.g. a category row in Podsumowanie): take its
+  // filters and open the flat list — a single subcategory spread over whole
+  // receipt cards would bury exactly the rows the link pointed at.
+  useTxLinkFilters(link => {
+    if (link.type !== "EXPENSE" && link.type !== "SAVING") return;
+    set("type",       link.type);
+    set("categories", link.category ? [link.category] : []);
+    set("subs",       link.sub ? [link.sub] : []);
+    setView("list");
+  });
   const isLoadingMonth                              = useMonthLoad(activeBudgetMonth, loadTransactions, () => {
                                                         set("dateFrom", null);
                                                         set("dateTo", null);
@@ -150,6 +164,7 @@ export default function PanelTransactions() {
   // active filters (dates, priority, tags, merchant, returns, …).
   const otherFiltered = useMemo<Transaction[]>(() =>
     enriched.filter(tx => {
+      if (filters.type     && tx.type !== filters.type)                                    return false;
       if (filters.dateFrom && tx.date < toYMD(filters.dateFrom))                           return false;
       if (filters.dateTo   && tx.date > toYMD(filters.dateTo))                             return false;
       if (filters.prio.length && !filters.prio.includes(tx.priority || 2))                 return false;
@@ -411,6 +426,22 @@ export default function PanelTransactions() {
             </div>
           </div>
           <div style={s.filterRow}>
+
+            {/* Type — this panel holds both EXPENSE and SAVING */}
+            <div style={s.filterBox}>
+              <div style={s.filterLabel}>Typ</div>
+              <select
+                value={filters.type}
+                // Category options are scoped to the type (otherFiltered), so a
+                // category picked under the old type would silently empty the list.
+                onChange={e => { set("type", e.target.value as typeof filters.type); set("categories", []); set("subs", []); }}
+                style={{ height: 28, background: c.border, color: c.textTertiary, border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" }}
+              >
+                <option value="">Wszystkie</option>
+                <option value="EXPENSE">{typeIcon("EXPENSE")} {typeLabel("EXPENSE")}</option>
+                <option value="SAVING">{typeIcon("SAVING")} {typeLabel("SAVING")}</option>
+              </select>
+            </div>
 
             {/* Category */}
             <div style={s.filterBox}>

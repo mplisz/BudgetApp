@@ -12,7 +12,8 @@ import { useLimits, buildLimitMap } from "../../hooks/useLimits";
 import { calculateEffectiveAmount, calculateNetAmount } from "../../utils/returnUtils";
 import { fmt, monthLabel }  from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
-import { Card }             from "../ui/summaryUi";
+import { Card, PanelLink }  from "../ui/summaryUi";
+import { txLink }           from "../../data/routes";
 import { CollapsibleSection } from "../ui";
 import { CategoryLimitBar } from "./summaryComponents/CategoryLimitBar";
 import { SpendingPieChart } from "./summaryComponents/SpendingPieChart";
@@ -42,6 +43,9 @@ interface KpiPillProps {
   value: string;
   color?: string;
   sub?: string;
+  /** Deep link to the panel listing this number's transactions. Only tiles
+   *  that HAVE such a panel get one — Saldo, Koperty and the % tile don't. */
+  link?: { to: string; title: string };
 }
 // ── Pure helpers ──────────────────────────────────────────────
 
@@ -87,9 +91,10 @@ function sumByCategoryId(
 
 // ── KPI Pill ──────────────────────────────────────────────────
 
-function KpiPill({ icon, label, value, color = c.text, sub }: KpiPillProps) {
+function KpiPill({ icon, label, value, color = c.text, sub, link }: KpiPillProps) {
   return (
     <div style={{
+      position: "relative",
       background: c.border,
       border: `1px solid ${c.borderStrong}`,
       borderRadius: 12,
@@ -98,6 +103,9 @@ function KpiPill({ icon, label, value, color = c.text, sub }: KpiPillProps) {
       flex: 1,
       minWidth: 130,
     }}>
+      {link && (
+        <PanelLink to={link.to} title={link.title} style={{ position: "absolute", top: 8, right: 10, fontSize: 13 }} />
+      )}
       <div style={{ fontSize: 11, color: c.textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
         {icon} {label}
       </div>
@@ -369,19 +377,27 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
         <>
           {/* KPI row */}
           <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-            <KpiPill icon="💰" label="Wpływy"    value={fmt(totalIncome)}   color={c.success} />
+            <KpiPill
+              icon="💰" label="Wpływy" value={fmt(totalIncome)} color={c.success}
+              link={{ to: txLink(activeBudgetMonth, { type: "INCOME" }), title: "Pokaż wpływy w panelu Wpływy" }}
+            />
             {totalTransfers > 0 && (
-              <KpiPill icon="🔄" label="Transfery" value={fmt(totalTransfers)} color={c.success} />
+              <KpiPill
+                icon="🔄" label="Transfery" value={fmt(totalTransfers)} color={c.success}
+                link={{ to: txLink(activeBudgetMonth, { type: "TRANSFER" }), title: "Pokaż transfery w panelu Wpływy" }}
+              />
             )}
             <KpiPill
               icon="💸" label="Wydatki"
               value={fmt(totalExpenses)} color={c.danger}
               sub={budgetPct !== null ? `${budgetPct.toFixed(1)}% wpływów` : undefined}
+              link={{ to: txLink(activeBudgetMonth, { type: "EXPENSE" }), title: "Pokaż wydatki w panelu Wydatki" }}
             />
             <KpiPill
               icon="🏦" label="Oszczędności"
               value={fmt(totalSavings)} color={c.info}
               sub={totalIncome > 0 ? `${((totalSavings / totalIncome) * 100).toFixed(1)}% wpływów` : undefined}
+              link={{ to: txLink(activeBudgetMonth, { type: "SAVING" }), title: "Pokaż oszczędności w panelu Wydatki" }}
             />
              {virtualEnvelopePaid > 0 && (
             <KpiPill
@@ -447,6 +463,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                         key={cat.categoryId}
                         category={cat}
                         subcategories={getSubcategories(cat.categoryId)}
+                        budgetMonth={activeBudgetMonth}
                       />
                     ))}
                     {categoriesWithoutLimit.length > 0 && (
@@ -459,6 +476,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                             key={cat.categoryId}
                             category={cat}
                             subcategories={getSubcategories(cat.categoryId)}
+                        budgetMonth={activeBudgetMonth}
                           />
                         ))}
                       </>
