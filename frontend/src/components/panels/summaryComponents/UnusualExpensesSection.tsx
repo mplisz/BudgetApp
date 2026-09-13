@@ -130,7 +130,7 @@ function Bars({ rows, month }: { rows: BarRow[]; month: string }) {
           <PanelLink
             key={tx.id}
             to={txLink(month, { type: "EXPENSE", category: tx.categoryName, sub: tx.subcategoryName, unusual: true })}
-            title={`${unusualTitle(info)} Kliknij, aby otworzyć w panelu Wydatki.`}
+            title={`${unusualTitle(info)}\nKliknij, aby otworzyć w panelu Wydatki`}
             style={{
               display: "grid", gridTemplateColumns: "minmax(0, 190px) minmax(0, 1fr) auto", gap: 12, alignItems: "center",
               padding: "7px 6px", margin: "0 -6px", borderRadius: 6, borderBottom: `1px solid ${c.border}`, color: c.text,

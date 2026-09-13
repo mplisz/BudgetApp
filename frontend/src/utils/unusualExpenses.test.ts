@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  findUnusualExpenses, formatMultiplier, unusualTitle, unusualMonthStats, unusualTrend,
+  findUnusualExpenses, formatMultiplier, percentile, unusualTitle, unusualMonthStats, unusualTrend,
   type UnusualSourceTx,
 } from "./unusualExpenses";
 
@@ -8,31 +8,51 @@ let seq = 0;
 const tx = (amount: number, sub: string, cat: string, extra: Partial<UnusualSourceTx> = {}): UnusualSourceTx =>
   ({ id: `t${++seq}`, type: "EXPENSE", amount, subcategoryId: sub, categoryId: cat, ...extra });
 
-// Past months: cinema ~60 zł, groceries ~120 zł.
+// Past months: cinema ~60 zł (norm 65), groceries ~120 zł (norm 125).
 const history = [
   tx(55, "kino", "rozrywka"), tx(60, "kino", "rozrywka"), tx(70, "kino", "rozrywka"),
   tx(110, "spozywcze", "zakupy"), tx(120, "spozywcze", "zakupy"), tx(130, "spozywcze", "zakupy"),
   tx(40, "slodycze", "zakupy"), tx(5, "slodycze", "zakupy"), tx(6, "slodycze", "zakupy"),
 ];
 
+describe("percentile", () => {
+  it("interpolates like PERCENTILE.INC", () => {
+    expect(percentile([55, 60, 70], 0.75)).toBe(65);
+    expect(percentile([20, 30, 40, 260], 0.75)).toBe(95);
+    expect(percentile([7], 0.75)).toBe(7);
+    expect(percentile([30, 10, 20], 0.5)).toBe(20);   // unsorted input
+  });
+});
+
 describe("findUnusualExpenses", () => {
-  it("compares with the subcategory's median, not a flat threshold", () => {
+  it("compares with the subcategory's norm (75th percentile), not a flat threshold", () => {
     const imax    = tx(180, "kino", "rozrywka");
     const grocery = tx(180, "spozywcze", "zakupy");
     const found = findUnusualExpenses([imax, grocery], history, 2);
-    expect(found.get(imax.id)).toMatchObject({ typical: 60, ratio: 3, source: "subcategory", basis: 3 });
-    expect(found.has(grocery.id)).toBe(false);   // 1,5× groceries is a normal big shop
+    expect(found.get(imax.id)).toMatchObject({ typical: 65, source: "subcategory", basis: 3 });
+    expect(found.get(imax.id)?.ratio).toBeCloseTo(2.77, 2);
+    expect(found.has(grocery.id)).toBe(false);   // 1,4× groceries is a normal big shop
+  });
+
+  it("small top-ups don't drag the grocery norm down (the 17 zł median case)", () => {
+    const topUps = [12, 13, 14, 15, 16, 17, 17, 17, 18, 19, 20, 21].map(a => tx(a, "spoz", "zakupy"));
+    const shops  = [110, 130, 150, 180, 210, 240].map(a => tx(a, "spoz", "zakupy"));
+    const normalShop = tx(110.33, "spoz", "zakupy");
+    const bigShop    = tx(500, "spoz", "zakupy");
+    const found = findUnusualExpenses([normalShop, bigShop], [...topUps, ...shops], 2);
+    expect(found.has(normalShop.id)).toBe(false);          // was "6,5× zwykle (17,10 zł)"
+    expect(found.get(bigShop.id)).toMatchObject({ typical: 125, ratio: 4 });
   });
 
   it("respects the multiplier", () => {
     const imax = tx(180, "kino", "rozrywka");
-    expect(findUnusualExpenses([imax], history, 3).has(imax.id)).toBe(true);
-    expect(findUnusualExpenses([imax], history, 3.5).has(imax.id)).toBe(false);
+    expect(findUnusualExpenses([imax], history, 2.5).has(imax.id)).toBe(true);
+    expect(findUnusualExpenses([imax], history, 3).has(imax.id)).toBe(false);
   });
 
   it("ignores anything under 100 zł, however far above its norm", () => {
-    const sweets = tx(38, "slodycze", "zakupy");   // 6,3× the usual 6 zł
-    expect(findUnusualExpenses([sweets], history, 2).size).toBe(0);
+    const sweets = tx(38, "slodycze", "zakupy");
+    expect(findUnusualExpenses([sweets], history, 1.5).size).toBe(0);
   });
 
   it("never flags recurring, savings or archived transactions", () => {
@@ -46,21 +66,21 @@ describe("findUnusualExpenses", () => {
   it("keeps recurring expenses out of the norm too", () => {
     const hist = [...history, tx(900, "kino", "rozrywka", { isRecurring: true }), tx(900, "kino", "rozrywka", { recurringId: "x" })];
     const imax = tx(180, "kino", "rozrywka");
-    expect(findUnusualExpenses([imax], hist, 2).get(imax.id)?.typical).toBe(60);
+    expect(findUnusualExpenses([imax], hist, 2).get(imax.id)?.typical).toBe(65);
   });
 
   it("falls back to the category when the subcategory has too little history", () => {
-    const shoes = tx(300, "buty-zimowe", "zakupy");   // no own history; zakupy median = 40..130 → 75
+    const shoes = tx(300, "buty-zimowe", "zakupy");   // zakupy: 5,6,40,110,120,130 → p75 117,5
     const info = findUnusualExpenses([shoes], history, 2).get(shoes.id);
     expect(info?.source).toBe("category");
-    expect(info?.typical).toBe(75);
+    expect(info?.typical).toBe(117.5);
   });
 
-  it("falls back to the month's median when the category is new too", () => {
+  it("falls back to the month's own expenses when the category is new too", () => {
     const month = [tx(20, "a", "nowa"), tx(30, "b", "nowa"), tx(40, "c", "nowa"), tx(260, "rower", "nowa")];
     const bike = month[3];
     const info = findUnusualExpenses(month, [], 2).get(bike.id);
-    expect(info).toMatchObject({ source: "month", typical: 35, basis: 4 });
+    expect(info).toMatchObject({ source: "month", typical: 95, basis: 4 });
   });
 
   it("has no norm at all with no history and a near-empty month", () => {
@@ -77,16 +97,16 @@ describe("unusualMonthStats / unusualTrend", () => {
     const imax = at("2026-09", 180);
     const month = [imax, at("2026-09", 20, "x"), { ...at("2026-09", 500), type: "SAVING" }];
     const stats = unusualMonthStats("2026-09", month, findUnusualExpenses(month, history, 2));
-    expect(stats).toMatchObject({ count: 1, total: 180, excess: 120, expenses: 200 });
+    expect(stats).toMatchObject({ count: 1, total: 180, excess: 115, expenses: 200 });
     expect(stats.share).toBeCloseTo(0.9);
   });
 
   it("judges every trend month against its own previous months", () => {
     const all = [
-      at("2026-01", 50), at("2026-02", 60), at("2026-03", 70),   // norm for April: 60
-      at("2026-04", 200),                                         // 3,3× → unusual in April
-      at("2026-05", 200), at("2026-06", 200),                     // July's norm: median of Jan–Jun = 135
-      at("2026-07", 210),                                         // 1,6× → not unusual any more
+      at("2026-01", 50), at("2026-02", 60), at("2026-03", 70),   // norm for April: 65
+      at("2026-04", 200),                                         // 3,1× → unusual in April
+      at("2026-05", 200), at("2026-06", 200),                     // July's norm: p75 of Jan–Jun = 200
+      at("2026-07", 210),                                         // 1,05× → not unusual any more
     ];
     const trend = unusualTrend(["2026-04", "2026-07"], all, 2);
     expect(trend.map(t => [t.month, t.count])).toEqual([["2026-04", 1], ["2026-07", 0]]);
@@ -104,9 +124,13 @@ describe("formatting", () => {
     expect(formatMultiplier(3.14159)).toBe("3,1×");
   });
 
-  it("unusualTitle names the norm's source", () => {
-    expect(unusualTitle({ typical: 60, basis: 12, source: "subcategory", ratio: 3 }))
-      .toBe("Mediana subkategorii z 6 mies.: 60,00 zł (12 wydatków). Cykliczne się nie liczą.");
-    expect(unusualTitle({ typical: 35, basis: 4, source: "month", ratio: 7 })).toContain("tego miesiąca");
+  it("unusualTitle explains the norm on separate lines", () => {
+    expect(unusualTitle({ typical: 65, basis: 12, source: "subcategory", ratio: 2.77 }).split("\n")).toEqual([
+      "Norma subkategorii: 65,00 zł",
+      "75. percentyl z 12 wydatków (6 mies.)",
+      "3 na 4 wcześniejsze nie były droższe",
+      "Ten wydatek: 2,8× normy · cykliczne się nie liczą",
+    ]);
+    expect(unusualTitle({ typical: 95, basis: 4, source: "month", ratio: 2.7 })).toContain("tego miesiąca");
   });
 });
