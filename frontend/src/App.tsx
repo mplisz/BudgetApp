@@ -35,6 +35,7 @@ import { NotificationBell } from "./components/layout/NotificationBell";
 import { MobileNav } from "./components/layout/MobileNav";
 import { LogoutButton } from "./components/ui/LogoutButton";
 import { ToastContainer } from "./components/ui/ToastContainer";
+import { TooltipLayer } from "./components/ui/TooltipLayer";
 import { MonthStatusButton } from "./components/layout/MonthStatusButton";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { PANEL_META, MONTH_SELECTOR_PANELS, MONTH_TITLE_PANELS } from "./data/constants";
@@ -291,6 +292,8 @@ export default function App() {
   return (
     <ErrorBoundary name="Root">
       <AppContent />
+      {/* Every `title` in the app renders through this one styled bubble. */}
+      <TooltipLayer />
     </ErrorBoundary>
   );
 }
