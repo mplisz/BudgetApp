@@ -9,7 +9,7 @@ import { useAppContext }    from "../../context/AppContext";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useLimits, buildLimitMap } from "../../hooks/useLimits";
-import { calculateEffectiveAmount, calculateNetAmount } from "../../utils/returnUtils";
+import { monthTotals } from "../../utils/monthTotals";
 import { fmt, monthLabel }  from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
 import { Card, PanelLink }  from "../ui/summaryUi";
@@ -22,6 +22,7 @@ import { PriorityBreakdown } from "./summaryComponents/PriorityBreakdown";
 import { TopTransactions }  from "./summaryComponents/TopTransactions";
 import { SavingsSummary }   from "./summaryComponents/SavingsSummary";
 import { UnusualExpensesSection } from "./summaryComponents/UnusualExpensesSection";
+import { WithMonthlyAverages, AveragesRow } from "./summaryComponents/MonthlyAverages";
 import { DEFAULT_TARGETS }  from "../../types/summaryConstants";
 import { SkeletonKpiCard, SkeletonCard, SkeletonChart, Skeleton } from "../ui/Skeleton";
 
@@ -49,22 +50,6 @@ interface KpiPillProps {
   link?: { to: string; title: string };
 }
 // ── Pure helpers ──────────────────────────────────────────────
-
-function sumTx(
-  txList:      Transaction[],
-  type:        Transaction["type"],
-  budgetMonth?: string,
-): number {
-  return txList
-    .filter(tx => tx.type === type)
-    .reduce((acc, tx) => {
-      // Deduct same-month cash returns from EXPENSE/SAVING totals
-      if ((type === "EXPENSE" || type === "SAVING") && budgetMonth) {
-        return acc + calculateEffectiveAmount(tx, budgetMonth);
-      }
-      return acc + tx.amount;
-    }, 0);
-}
 
 // Tags are stored as tagId strings in tx.tags[].
 // Matches if the transaction has ANY of the given tagIds.
@@ -157,10 +142,13 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   );
 
   // ── KPIs ──────────────────────────────────────────────────
-  const totalIncome    = useMemo(() => sumTx(monthTx, "INCOME"),   [monthTx]);
-  const totalTransfers = useMemo(() => sumTx(monthTx, "TRANSFER"), [monthTx]);
-  const totalExpenses  = useMemo(() => sumTx(monthTx, "EXPENSE",  activeBudgetMonth), [monthTx, activeBudgetMonth]);
-  const totalSavings   = useMemo(() => sumTx(monthTx, "SAVING",   activeBudgetMonth), [monthTx, activeBudgetMonth]);
+  // Same arithmetic as the averages they are compared with (utils/monthTotals):
+  // types are cash-flow (same-month returns), categories are cost (all returns).
+  const totals = useMemo(() => monthTotals(monthTx, activeBudgetMonth), [monthTx, activeBudgetMonth]);
+  const totalIncome    = totals.types.INCOME;
+  const totalTransfers = totals.types.TRANSFER;
+  const totalExpenses  = totals.types.EXPENSE;
+  const totalSavings   = totals.types.SAVING;
   const virtualEnvelopePaid = useMemo(() => {
     // Include purchased envelopes: their paid rates locked money in the month
     // they were set aside, so past-month balance stays stable after purchase
@@ -195,14 +183,13 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
           categoryId:   tx.categoryId,
           categoryName: tx.categoryName,
           categoryIcon: catDef?.icon ?? "📦",
-          spent:        0,
+          // Category cost is NET of every cash return (incl. cross-month), so the
+          // bars reflect what the category actually cost — not the gross outflow.
+          spent:        totals.categories.get(tx.categoryId) ?? 0,
           limit:        limitMap[tx.categoryId]?.amount ?? null,
           percent:      null,
         });
       }
-      // Category cost is NET of every cash return (incl. cross-month), so the
-      // bars reflect what the category actually cost — not the gross outflow.
-      catMap.get(tx.categoryId)!.spent += calculateNetAmount(tx);
     }
     for (const cat of catMap.values()) {
       if (cat.limit === null) continue;              // genuinely no limit set
@@ -215,7 +202,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
         : (cat.spent > 0 ? Infinity : 0);
     }
     return Array.from(catMap.values());
-  }, [monthTx, categories, limitMap]);
+  }, [monthTx, categories, limitMap, totals]);
 
   const categoriesWithLimit    = useMemo(() => expenseCategories.filter(c => c.limit !== null), [expenseCategories]);
   const categoriesWithoutLimit = useMemo(() => expenseCategories.filter(c => c.limit === null),  [expenseCategories]);
@@ -237,19 +224,18 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
         subMap.set(tx.subcategoryId, {
           subcategoryId:     tx.subcategoryId,
           subcategoryName:   tx.subcategoryName,
-          spent:             0,
+          spent:             totals.subcategories.get(tx.subcategoryId) ?? 0,
           percentOfCategory: 0,
           percentOfTotal:    0,
         });
       }
-      subMap.get(tx.subcategoryId)!.spent += calculateNetAmount(tx);
     }
     for (const sub of subMap.values()) {
       sub.percentOfCategory = catTotal          > 0 ? (sub.spent / catTotal)          * 100 : 0;
       sub.percentOfTotal    = totalExpensesNet  > 0 ? (sub.spent / totalExpensesNet)  * 100 : 0;
     }
     return Array.from(subMap.values()).sort((a, b) => b.spent - a.spent);
-  }, [monthTx, expenseCategories, totalExpensesNet]);
+  }, [monthTx, expenseCategories, totalExpensesNet, totals]);
 
   // ── Target indicators ─────────────────────────────────────
   const targets: SettingsTargets = rawSettings?.targets ?? DEFAULT_TARGETS;
@@ -259,6 +245,9 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const retirementSpent  = useMemo(() => sumByCategoryId(monthTx, "SAVING", ["cat_emerytura"]), [monthTx]);
 
   const hasData = monthTx.length > 0;
+  // The running calendar month: no forecast for others, and averages compare
+  // it by progress ("27% średniej") rather than as a finished month.
+  const isCurrentMonth = activeBudgetMonth === new Date().toISOString().slice(0, 7);
  
   //Envelope breakdown
   const envelopeBreakdown = useMemo<EnvelopeBreakdownItem[]>(() => {
@@ -424,7 +413,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
           {/* 1) Run-rate forecast — only for the RUNNING calendar month; past
               months have nothing to forecast, future ones have no pace. */}
-          {activeBudgetMonth === new Date().toISOString().slice(0, 7) && (
+          {isCurrentMonth && (
             <CollapsibleSection title="🔮 Prognoza końca miesiąca" defaultOpen={false}>
               <MonthForecastSection
                 transactions={monthTx as unknown as ForecastTransaction[]}
@@ -446,6 +435,8 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
             <>
               {/* 2) Struktura wydatków: limity kategorii + gauge */}
               <CollapsibleSection title="🧭 Struktura wydatków" defaultOpen={false}>
+                <WithMonthlyAverages month={activeBudgetMonth}>{averages => (<>
+                <AveragesRow current={totals.types} averages={averages} inProgress={isCurrentMonth} />
                 <div style={{
                     display: "flex",
                     gap: 16,
@@ -465,6 +456,8 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                         category={cat}
                         subcategories={getSubcategories(cat.categoryId)}
                         budgetMonth={activeBudgetMonth}
+                        averages={averages}
+                        inProgress={isCurrentMonth}
                       />
                     ))}
                     {categoriesWithoutLimit.length > 0 && (
@@ -477,7 +470,9 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                             key={cat.categoryId}
                             category={cat}
                             subcategories={getSubcategories(cat.categoryId)}
-                        budgetMonth={activeBudgetMonth}
+                            budgetMonth={activeBudgetMonth}
+                            averages={averages}
+                            inProgress={isCurrentMonth}
                           />
                         ))}
                       </>
@@ -495,6 +490,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     />
                   </Card>
                 </div>
+                </>)}</WithMonthlyAverages>
               </CollapsibleSection>
 
               {/* 2b) Nietypowe wydatki — big for what they are (utils/unusualExpenses) */}

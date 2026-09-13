@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppContext } from "../context/AppContext";
 import { useApi } from "./useApi";
 import { useToast } from "./useToast";
-import { useTransactionsRange } from "./useTransactionsRange";
+import { usePreviousMonths } from "./usePreviousMonths";
 import { addMonthsToYM } from "./useMonthFromUrl";
 import {
   findUnusualExpenses, unusualTrend, UNUSUAL_LOOKBACK_MONTHS, UNUSUAL_MULTIPLIER,
@@ -71,34 +71,11 @@ type MonthTx = UnusualSourceTx & { budgetMonth?: string };
  *                     look-back, so the history loaded grows to match.
  */
 export function useUnusualExpenses(monthTx: MonthTx[], month: string, multiplier: number, trendMonths = 0) {
-  const { settings } = useAppContext();
-  const { transactions: loaded, loadRange, currentRange } = useTransactionsRange();
-
-  const floor   = settings?.appStartMonth ?? null;
-  const clamp   = (m: string) => (floor && m < floor ? floor : m);
-  const to      = addMonthsToYM(month, -1);
-  const from    = clamp(addMonthsToYM(month, -(UNUSUAL_LOOKBACK_MONTHS + Math.max(trendMonths - 1, 0))));
-  const hasHistory = from <= to;
-
-  // loadRange reports its own errors (toast) and never throws, so "the attempt
-  // finished" is tracked separately: a failed load must not leave the filter
-  // and the section waiting forever — they fall back to the month's own norm.
-  const rangeKey = `${from}|${to}`;
-  const [attempted, setAttempted] = useState<string | null>(null);
-  useEffect(() => {
-    if (!hasHistory) return;
-    let live = true;
-    loadRange(from, to).finally(() => { if (live) setAttempted(rangeKey); });
-    return () => { live = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHistory, rangeKey, loadRange]);
-
-  const loadedThis = currentRange?.from === from && currentRange?.to === to;
-  const ready      = !hasHistory || loadedThis || attempted === rangeKey;
-  const history    = useMemo(
-    () => (hasHistory && loadedThis ? loaded : []) as unknown as MonthTx[],
-    [hasHistory, loadedThis, loaded],
-  );
+  // A failed history load leaves `history` empty: everything falls back to
+  // the month's own norm instead of waiting forever.
+  const { transactions, ready, floor } =
+    usePreviousMonths(month, UNUSUAL_LOOKBACK_MONTHS + Math.max(trendMonths - 1, 0));
+  const history = transactions as unknown as MonthTx[];
 
   const unusual = useMemo<Map<string, UnusualInfo> | null>(() => {
     if (!ready) return null;
