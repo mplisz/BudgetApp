@@ -75,19 +75,28 @@ export function AveragePill({ current, stat, good, inProgress, size = "md", with
   const sm = size === "sm";
   const prevChange = previous && !inProgress ? change(current, previous.value, good) : null;
 
+  // Three pieces that may wrap BETWEEN each other but never inside: in a
+  // narrow tile (two-column KPIs on a phone) the pill stacks mean / median /
+  // change instead of running out of its box. No "/" separator — on a wrap
+  // it would start a line; the gap and the muted labels separate them.
+  const piece = { whiteSpace: "nowrap" } as const;
+  const unit  = { color: c.textMuted } as const;
+
   return (
-    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 3, maxWidth: "100%" }}>
       <span
         title={title}
         style={{
-          display: "inline-flex", alignItems: "center", gap: sm ? 5 : 6, flexWrap: "wrap", justifyContent: "center",
-          fontSize: sm ? 10 : 11, lineHeight: 1.3, color: c.textSecondary,
-          background: alpha(c.bg, "aa"), border: `1px solid ${c.borderStrong}`, borderRadius: 12,
-          padding: sm ? "1px 7px" : "2px 9px", whiteSpace: "nowrap",
+          display: "inline-flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap",
+          columnGap: sm ? 7 : 9, rowGap: 1, maxWidth: "100%", boxSizing: "border-box",
+          fontSize: sm ? 10 : 11, lineHeight: 1.35, color: c.textSecondary,
+          background: alpha(c.bg, "aa"), border: `1px solid ${c.borderStrong}`, borderRadius: 10,
+          padding: sm ? "1px 7px" : "3px 9px",
         }}
       >
-        <span>{zl.format(stat.mean)} śr. <span style={{ color: c.textMuted }}>/</span> {zl.format(stat.median)} med.</span>
-        <span style={{ color: delta.color, fontWeight: 700 }}>{delta.text}</span>
+        <span style={piece}>{zl.format(stat.mean)} <span style={unit}>śr.</span></span>
+        <span style={piece}>{zl.format(stat.median)} <span style={unit}>med.</span></span>
+        <span style={{ ...piece, color: delta.color, fontWeight: 700 }}>{delta.text}</span>
       </span>
       {withPrevious && previous && (
         <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap" }} title={prevChange ? `${monthShort(previous.month)}: ${zl.format(previous.value)}` : undefined}>

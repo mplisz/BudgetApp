@@ -24,6 +24,7 @@ import { SavingsSummary }   from "./summaryComponents/SavingsSummary";
 import { UnusualExpensesSection } from "./summaryComponents/UnusualExpensesSection";
 import { AveragePill } from "../ui/AveragePill";
 import { useMonthlyAverages } from "../../hooks/useMonthlyAverages";
+import { useIsMobile } from "../../hooks/useIsMobile";
 import { DEFAULT_TARGETS }  from "../../types/summaryConstants";
 import { SkeletonKpiCard, SkeletonCard, SkeletonChart, Skeleton } from "../ui/Skeleton";
 
@@ -81,24 +82,32 @@ function sumByCategoryId(
 // ── KPI Pill ──────────────────────────────────────────────────
 
 function KpiPill({ icon, label, value, color = c.text, sub, link, average }: KpiPillProps) {
+  // Phones lay the tiles out two to a row, ~150 px each: tighter padding, and
+  // the label keeps clear of the corner ↗ so "OSZCZĘDNOŚCI" doesn't run under it.
+  const isMobile = useIsMobile();
   return (
     <div style={{
       position: "relative",
       background: c.border,
       border: `1px solid ${c.borderStrong}`,
       borderRadius: 12,
-      padding: "12px 18px",
+      padding: isMobile ? "10px 8px" : "12px 18px",
       textAlign: "center",
       flex: 1,
       minWidth: 130,
     }}>
       {link && (
-        <PanelLink to={link.to} title={link.title} size="md" style={{ position: "absolute", top: 8, right: 8 }} />
+        <PanelLink to={link.to} title={link.title} size={isMobile ? "sm" : "md"}
+          style={{ position: "absolute", top: isMobile ? 6 : 8, right: isMobile ? 6 : 8 }} />
       )}
-      <div style={{ fontSize: 11, color: c.textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
+      <div style={{
+        fontSize: isMobile ? 10 : 11, color: c.textSecondary, fontWeight: 600, textTransform: "uppercase",
+        letterSpacing: isMobile ? "0.2px" : "0.5px", marginBottom: 4,
+        padding: link ? (isMobile ? "0 20px" : "0 26px") : undefined, overflowWrap: "anywhere",
+      }}>
         {icon} {label}
       </div>
-      <div style={{ fontSize: 20, fontWeight: 800, color }}>{value}</div>
+      <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color, whiteSpace: "nowrap" }}>{value}</div>
       {sub && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{sub}</div>}
       {average && <div style={{ marginTop: 8 }}>{average}</div>}
     </div>
