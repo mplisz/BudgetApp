@@ -31,11 +31,11 @@ export const TX_SORT_LABELS: Record<TxSortKey, string> = {
 };
 
 // The order you most likely want on the first click: newest, biggest,
-// most critical (P1) first, authors A→Z.
+// most important (P1) first, authors A→Z.
 const FIRST_DIR: Record<TxSortKey, SortDir> = {
   date:     "desc",
   amount:   "desc",
-  priority: "asc",
+  priority: "desc",
   author:   "asc",
 };
 
@@ -64,8 +64,10 @@ export function sortTransactions<T extends SortableTx>(items: T[], { key, dir }:
     switch (key) {
       case "date":     diff = a.date.localeCompare(b.date); break;
       case "amount":   diff = a.amount - b.amount; break;
-      // Same fallback the table's PrioBadge renders: no priority shows as P2.
-      case "priority": diff = (a.priority || 2) - (b.priority || 2); break;
+      // Sorted by IMPORTANCE, not by the digit: P1 is the most important, so
+      // descending (↓) runs P1→P4 and ascending (↑) P4→P1. Same fallback the
+      // table's PrioBadge renders: no priority shows as P2.
+      case "priority": diff = (b.priority || 2) - (a.priority || 2); break;
       case "author": {
         // Rows with no author sit at the bottom in BOTH directions — a block
         // of "—" at the top of a descending sort is noise, not an answer.

@@ -22,8 +22,10 @@ describe("sortTransactions", () => {
     expect(ids(sortTransactions(rows, { key: "amount", dir: "asc" }))).toEqual(["a", "c", "b", "d"]);
   });
 
-  it("priority: a missing priority counts as P2, like the badge shows", () => {
-    expect(ids(sortTransactions(rows, { key: "priority", dir: "asc" }))).toEqual(["b", "c", "a", "d"]);
+  it("priority sorts by importance: descending P1→P4, ascending P4→P1", () => {
+    // c has no priority — counts as P2, like the badge shows
+    expect(ids(sortTransactions(rows, { key: "priority", dir: "desc" }))).toEqual(["b", "c", "a", "d"]);
+    expect(ids(sortTransactions(rows, { key: "priority", dir: "asc" }))).toEqual(["d", "a", "c", "b"]);
   });
 
   it("author: Polish collation, case-insensitive, no author always last", () => {
@@ -45,7 +47,7 @@ describe("nextTxSort", () => {
 
   it("starts a new column in its natural direction", () => {
     expect(nextTxSort(DEFAULT_TX_SORT, "amount")).toEqual({ key: "amount", dir: "desc" });
-    expect(nextTxSort(DEFAULT_TX_SORT, "priority")).toEqual({ key: "priority", dir: "asc" });
+    expect(nextTxSort(DEFAULT_TX_SORT, "priority")).toEqual({ key: "priority", dir: "desc" });
     expect(nextTxSort(DEFAULT_TX_SORT, "author")).toEqual({ key: "author", dir: "asc" });
   });
 
