@@ -25,6 +25,7 @@
 // ============================================================
 
 import { isFixedExpense } from "./monthForecast";
+import { addMonthsToYM } from "../hooks/useMonthFromUrl";
 
 export const UNUSUAL_MIN_AMOUNT     = 100;
 export const UNUSUAL_LOOKBACK_MONTHS = 6;
@@ -115,6 +116,68 @@ export function findUnusualExpenses(
     if (ratio >= multiplier) out.set(tx.id, { ...norm, ratio });
   }
   return out;
+}
+
+// ── Month summaries (Podsumowanie) ────────────────────────────
+
+export interface UnusualMonthStats {
+  month:  string;
+  count:  number;
+  /** Sum of the unusual expenses. */
+  total:  number;
+  /** How much of `total` sits above the norms (Σ amount − typical). */
+  excess: number;
+  /** Sum of all the month's expenses (tx.amount) — the share's denominator. */
+  expenses: number;
+  /** total ÷ expenses, 0–1 */
+  share:  number;
+}
+
+/** The `n` months before `month`, oldest first. */
+function monthsBefore(month: string, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => addMonthsToYM(month, i - n));
+}
+
+export function unusualMonthStats(
+  month: string,
+  monthTx: Array<UnusualSourceTx & { budgetMonth?: string }>,
+  unusual: Map<string, UnusualInfo>,
+): UnusualMonthStats {
+  let expenses = 0, total = 0, excess = 0, count = 0;
+  for (const tx of monthTx) {
+    if (tx.type !== "EXPENSE" || tx.isArchived) continue;
+    expenses += tx.amount;
+    const info = unusual.get(tx.id);
+    if (!info) continue;
+    count++;
+    total  += tx.amount;
+    excess += tx.amount - info.typical;
+  }
+  return { month, count, total, excess, expenses, share: expenses > 0 ? total / expenses : 0 };
+}
+
+/**
+ * Stats for each of `months` (oldest first), every month judged against ITS
+ * OWN previous UNUSUAL_LOOKBACK_MONTHS — so a trend point means the same as
+ * the current month's figure. `allTx` must cover those months plus their
+ * look-back; `budgetMonth` routes each transaction to its month.
+ */
+export function unusualTrend(
+  months: string[],
+  allTx: Array<UnusualSourceTx & { budgetMonth?: string }>,
+  multiplier: number,
+): UnusualMonthStats[] {
+  const byMonth = new Map<string, typeof allTx>();
+  for (const tx of allTx) {
+    if (!tx.budgetMonth) continue;
+    const list = byMonth.get(tx.budgetMonth);
+    if (list) list.push(tx); else byMonth.set(tx.budgetMonth, [tx]);
+  }
+  return months.map(month => {
+    const own     = byMonth.get(month) ?? [];
+    const history = monthsBefore(month, UNUSUAL_LOOKBACK_MONTHS).flatMap(m => byMonth.get(m) ?? []);
+    return unusualMonthStats(month, own, findUnusualExpenses(own, history, multiplier));
+  });
 }
 
 const NORM_SOURCE_TEXT: Record<NormSource, string> = {

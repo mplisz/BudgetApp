@@ -8,11 +8,11 @@
 //     live value for the slider and a debounced save (dragging 1,5× → 4×
 //     must not fire a PATCH per step).
 //
-//   useUnusualExpenses(monthTx, month, multiplier) — loads the norm's history
-//     (the previous UNUSUAL_LOOKBACK_MONTHS months, never before
-//     appStartMonth) and returns the month's unusual expenses. `unusual` is
-//     null until that history is in: judging against a half-loaded norm
-//     would flash wrong badges.
+//   useUnusualExpenses(monthTx, month, multiplier, trendMonths?) — loads the
+//     norm's history (the previous UNUSUAL_LOOKBACK_MONTHS months, never
+//     before appStartMonth) and returns the month's unusual expenses, plus
+//     optionally a trend. Both are null until that history is in: judging
+//     against a half-loaded norm would flash wrong badges.
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,8 +22,8 @@ import { useToast } from "./useToast";
 import { useTransactionsRange } from "./useTransactionsRange";
 import { addMonthsToYM } from "./useMonthFromUrl";
 import {
-  findUnusualExpenses, UNUSUAL_LOOKBACK_MONTHS, UNUSUAL_MULTIPLIER,
-  type UnusualInfo, type UnusualSourceTx,
+  findUnusualExpenses, unusualTrend, UNUSUAL_LOOKBACK_MONTHS, UNUSUAL_MULTIPLIER,
+  type UnusualInfo, type UnusualMonthStats, type UnusualSourceTx,
 } from "../utils/unusualExpenses";
 import type { AppSettings } from "../types/appContext";
 
@@ -63,26 +63,55 @@ export function useUnusualMultiplier() {
   return { multiplier: draft ?? saved, setMultiplier };
 }
 
-export function useUnusualExpenses(monthTx: UnusualSourceTx[], month: string, multiplier: number) {
-  const { settings } = useAppContext();
-  const { transactions: history, loadRange, currentRange } = useTransactionsRange();
+type MonthTx = UnusualSourceTx & { budgetMonth?: string };
 
-  const floor = settings?.appStartMonth ?? null;
-  const to    = addMonthsToYM(month, -1);
-  const back  = addMonthsToYM(month, -UNUSUAL_LOOKBACK_MONTHS);
-  const from  = floor && back < floor ? floor : back;
+/**
+ * @param trendMonths  also return a trend over this many months ending with
+ *                     `month` (0 = none). Each trend month needs its own
+ *                     look-back, so the history loaded grows to match.
+ */
+export function useUnusualExpenses(monthTx: MonthTx[], month: string, multiplier: number, trendMonths = 0) {
+  const { settings } = useAppContext();
+  const { transactions: loaded, loadRange, currentRange } = useTransactionsRange();
+
+  const floor   = settings?.appStartMonth ?? null;
+  const clamp   = (m: string) => (floor && m < floor ? floor : m);
+  const to      = addMonthsToYM(month, -1);
+  const from    = clamp(addMonthsToYM(month, -(UNUSUAL_LOOKBACK_MONTHS + Math.max(trendMonths - 1, 0))));
   const hasHistory = from <= to;
 
+  // loadRange reports its own errors (toast) and never throws, so "the attempt
+  // finished" is tracked separately: a failed load must not leave the filter
+  // and the section waiting forever — they fall back to the month's own norm.
+  const rangeKey = `${from}|${to}`;
+  const [attempted, setAttempted] = useState<string | null>(null);
   useEffect(() => {
-    if (hasHistory) loadRange(from, to);
-  }, [hasHistory, from, to, loadRange]);
+    if (!hasHistory) return;
+    let live = true;
+    loadRange(from, to).finally(() => { if (live) setAttempted(rangeKey); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHistory, rangeKey, loadRange]);
 
-  const historyReady = !hasHistory || (currentRange?.from === from && currentRange?.to === to);
+  const loadedThis = currentRange?.from === from && currentRange?.to === to;
+  const ready      = !hasHistory || loadedThis || attempted === rangeKey;
+  const history    = useMemo(
+    () => (hasHistory && loadedThis ? loaded : []) as unknown as MonthTx[],
+    [hasHistory, loadedThis, loaded],
+  );
 
   const unusual = useMemo<Map<string, UnusualInfo> | null>(() => {
-    if (!historyReady) return null;
-    return findUnusualExpenses(monthTx, hasHistory ? (history as unknown as UnusualSourceTx[]) : [], multiplier);
-  }, [historyReady, hasHistory, monthTx, history, multiplier]);
+    if (!ready) return null;
+    const lookbackFrom = addMonthsToYM(month, -UNUSUAL_LOOKBACK_MONTHS);
+    return findUnusualExpenses(monthTx, history.filter(tx => (tx.budgetMonth ?? "") >= lookbackFrom), multiplier);
+  }, [ready, month, monthTx, history, multiplier]);
 
-  return { unusual };
+  const trend = useMemo<UnusualMonthStats[] | null>(() => {
+    if (!ready || trendMonths <= 0) return null;
+    const months = Array.from({ length: trendMonths }, (_, i) => addMonthsToYM(month, i - trendMonths + 1))
+      .filter(m => !floor || m >= floor);
+    return unusualTrend(months, [...history, ...monthTx], multiplier);
+  }, [ready, trendMonths, month, floor, history, monthTx, multiplier]);
+
+  return { unusual, trend };
 }

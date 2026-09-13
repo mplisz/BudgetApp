@@ -122,6 +122,7 @@ export default function PanelTransactions() {
     set("type",       link.type);
     set("categories", link.category ? [link.category] : []);
     set("subs",       link.sub ? [link.sub] : []);
+    set("unusual",    link.unusual ? "yes" : "off");
     setView("list");
   });
   const isLoadingMonth                              = useMonthLoad(activeBudgetMonth, loadTransactions, () => {

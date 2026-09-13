@@ -24,6 +24,13 @@ describe("txLink", () => {
     });
   });
 
+  it("carries the Nietypowo duże filter, for expenses only", () => {
+    const link = txLink("2026-09", { type: "EXPENSE", category: "Rozrywka", sub: "Kino", unusual: true });
+    expect(paramsOf(link).get("big")).toBe("1");
+    expect(readTxLink(paramsOf(link))).toEqual({ type: "EXPENSE", category: "Rozrywka", sub: "Kino", unusual: true });
+    expect(paramsOf(txLink("2026-09", { type: "SAVING", unusual: true })).has("big")).toBe(false);
+  });
+
   it("drops a subcategory given without its category", () => {
     const link = txLink("2026-09", { type: "EXPENSE", sub: "Alkohol" });
     expect(paramsOf(link).has("sub")).toBe(false);

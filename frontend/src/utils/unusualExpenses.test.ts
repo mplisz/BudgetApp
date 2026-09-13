@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { findUnusualExpenses, formatMultiplier, unusualTitle, type UnusualSourceTx } from "./unusualExpenses";
+import {
+  findUnusualExpenses, formatMultiplier, unusualTitle, unusualMonthStats, unusualTrend,
+  type UnusualSourceTx,
+} from "./unusualExpenses";
 
 let seq = 0;
 const tx = (amount: number, sub: string, cat: string, extra: Partial<UnusualSourceTx> = {}): UnusualSourceTx =>
@@ -63,6 +66,34 @@ describe("findUnusualExpenses", () => {
   it("has no norm at all with no history and a near-empty month", () => {
     const lone = tx(500, "x", "y");
     expect(findUnusualExpenses([lone], [], 2).size).toBe(0);
+  });
+});
+
+describe("unusualMonthStats / unusualTrend", () => {
+  const at = (month: string, amount: number, sub = "kino", extra: Partial<UnusualSourceTx> = {}) =>
+    ({ ...tx(amount, sub, "rozrywka", extra), budgetMonth: month });
+
+  it("sums count, total, excess and share of the month's expenses", () => {
+    const imax = at("2026-09", 180);
+    const month = [imax, at("2026-09", 20, "x"), { ...at("2026-09", 500), type: "SAVING" }];
+    const stats = unusualMonthStats("2026-09", month, findUnusualExpenses(month, history, 2));
+    expect(stats).toMatchObject({ count: 1, total: 180, excess: 120, expenses: 200 });
+    expect(stats.share).toBeCloseTo(0.9);
+  });
+
+  it("judges every trend month against its own previous months", () => {
+    const all = [
+      at("2026-01", 50), at("2026-02", 60), at("2026-03", 70),   // norm for April: 60
+      at("2026-04", 200),                                         // 3,3× → unusual in April
+      at("2026-05", 200), at("2026-06", 200),                     // July's norm: median of Jan–Jun = 135
+      at("2026-07", 210),                                         // 1,6× → not unusual any more
+    ];
+    const trend = unusualTrend(["2026-04", "2026-07"], all, 2);
+    expect(trend.map(t => [t.month, t.count])).toEqual([["2026-04", 1], ["2026-07", 0]]);
+  });
+
+  it("a month with no expenses has a zero share, not NaN", () => {
+    expect(unusualTrend(["2030-01"], [], 2)[0]).toMatchObject({ count: 0, share: 0 });
   });
 });
 

@@ -21,6 +21,7 @@ import { TargetIndicator }  from "./summaryComponents/TargetIndicator";
 import { PriorityBreakdown } from "./summaryComponents/PriorityBreakdown";
 import { TopTransactions }  from "./summaryComponents/TopTransactions";
 import { SavingsSummary }   from "./summaryComponents/SavingsSummary";
+import { UnusualExpensesSection } from "./summaryComponents/UnusualExpensesSection";
 import { DEFAULT_TARGETS }  from "../../types/summaryConstants";
 import { SkeletonKpiCard, SkeletonCard, SkeletonChart, Skeleton } from "../ui/Skeleton";
 
@@ -494,6 +495,11 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     />
                   </Card>
                 </div>
+              </CollapsibleSection>
+
+              {/* 2b) Nietypowe wydatki — big for what they are (utils/unusualExpenses) */}
+              <CollapsibleSection title="🔥 Nietypowe wydatki" defaultOpen={false}>
+                <UnusualExpensesSection monthTx={monthTx} month={activeBudgetMonth} />
               </CollapsibleSection>
 
               {/* 3) Wskaźniki budżetowe */}

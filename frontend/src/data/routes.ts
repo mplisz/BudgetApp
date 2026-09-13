@@ -66,7 +66,7 @@ export function getDefaultPath(): string {
 // (PanelSummary KPI tiles, category / subcategory rows) and both panels
 // that honour it speak exactly the same query string:
 //
-//   /transactions?m=2026-09&type=EXPENSE&cat=Zakupy+codzienne&sub=Alkohol
+//   /transactions?m=2026-09&type=EXPENSE&cat=Zakupy+codzienne&sub=Alkohol&big=1
 //
 // The type picks the panel: EXPENSE/SAVING live in Wydatki, INCOME/TRANSFER
 // in Wpływy. Category and subcategory go by NAME, because that is what the
@@ -80,20 +80,23 @@ export interface TxLinkFilters {
   /** Only meaningful together with `category` — the panels show the
    *  subcategory filter only once a category is picked. */
   sub?:      string;
+  /** Wydatki only: open with "Nietypowo duże" set to "tylko". */
+  unusual?:  boolean;
 }
 
 /** Query params a transaction deep link owns (`m` is shared, not owned). */
-export const TX_LINK_PARAMS = ["type", "cat", "sub"] as const;
+export const TX_LINK_PARAMS = ["type", "cat", "sub", "big"] as const;
 
 const TX_LINK_TYPES: readonly TxLinkType[] = ["EXPENSE", "SAVING", "INCOME", "TRANSFER"];
 
-export function txLink(month: string, { type, category, sub }: TxLinkFilters): string {
+export function txLink(month: string, { type, category, sub, unusual }: TxLinkFilters): string {
   const panel = type === "INCOME" || type === "TRANSFER" ? "incometransactions" : "transactions";
   const q = new URLSearchParams({ m: month, type });
   if (category) {
     q.set("cat", category);
     if (sub) q.set("sub", sub);
   }
+  if (unusual && type === "EXPENSE") q.set("big", "1");
   return `${PANEL_PATHS[panel]}?${q}`;
 }
 
@@ -103,7 +106,8 @@ export function readTxLink(params: URLSearchParams): TxLinkFilters | null {
   if (!type || !TX_LINK_TYPES.includes(type)) return null;
   const category = params.get("cat") || undefined;
   const sub      = category ? params.get("sub") || undefined : undefined;
-  return { type, category, sub };
+  const unusual  = type === "EXPENSE" && params.get("big") === "1" ? true : undefined;
+  return { type, category, sub, unusual };
 }
 
 /** Resolves the current panel id from a pathname (best-effort). */

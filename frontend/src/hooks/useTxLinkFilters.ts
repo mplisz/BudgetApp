@@ -21,7 +21,7 @@ import { readTxLink, TX_LINK_PARAMS, type TxLinkFilters } from "../data/routes";
 export function useTxLinkFilters(apply: (link: TxLinkFilters) => void): void {
   const [searchParams, setSearchParams] = useSearchParams();
   const link = readTxLink(searchParams);
-  const key  = link ? `${link.type}|${link.category ?? ""}|${link.sub ?? ""}` : null;
+  const key  = link ? `${link.type}|${link.category ?? ""}|${link.sub ?? ""}|${link.unusual ? 1 : 0}` : null;
 
   // Latest callback without re-running the effect on every render.
   const applyRef = useRef(apply);
