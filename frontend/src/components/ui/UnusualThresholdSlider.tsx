@@ -33,7 +33,7 @@ export function UnusualThresholdSlider({ value, onChange, compact = false }: Pro
           value={value}
           onChange={e => onChange(Number(e.target.value))}
           aria-label="Próg nietypowo dużych wydatków"
-          title={`Nietypowo duży = co najmniej ${formatMultiplier(value)} normy subkategorii i min. ${UNUSUAL_MIN_AMOUNT} zł\nNorma: kwota, której nie przekroczyły 3 na 4 wcześniejsze wydatki`}
+          title={`Nietypowo duży = co najmniej ${formatMultiplier(value)} normy subkategorii i min. ${UNUSUAL_MIN_AMOUNT} zł\nParagony: liczy się każda pozycja osobno, nie suma\nNorma: kwota, której nie przekroczyły 3 na 4 wcześniejsze`}
           style={{ flex: 1, accentColor: c.warning, cursor: "pointer" }}
         />
         <span style={{ fontSize: 13, fontWeight: 700, color: c.warningLight, minWidth: 34, textAlign: "right" }}>

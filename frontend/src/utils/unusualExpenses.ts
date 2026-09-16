@@ -1,31 +1,36 @@
 // ============================================================
 // File: src/utils/unusualExpenses.ts
 //
-// "Nietypowo duże" — which one-off expenses of a month are big FOR WHAT
-// THEY ARE. A flat "above the month's average" threshold doesn't work here:
-// the cart splits every receipt into one small transaction per subcategory,
-// so the average sits low and a normal weekly shop clears it, while 250 zł
-// is routine for groceries but a real outlier for the cinema.
+// "Nietypowo duże" — which one-off expenses of a month hold something that is
+// expensive FOR WHAT IT IS. A flat "above the month's average" threshold
+// doesn't work: the cart splits every receipt into one small transaction per
+// subcategory, so the average sits low, while 250 zł is routine for
+// groceries but a real outlier for the cinema.
 //
-// So every expense is compared with the NORM of its own subcategory over the
-// previous months:
+// What gets judged
+//   A receipt transaction with a breakdown (2+ lineItems) is judged LINE BY
+//   LINE: a 20-item weekly shop is naturally bigger than a 3-item one, and
+//   that size is not a surprise — one 149 zł bottle among them is. A line is
+//   taken as printed, so a multipack counts as the whole pack.
+//   Anything else (typed in by hand, or one amount) is judged by its total.
 //
-//   unusual  ⇔  one-off EXPENSE  ∧  amount ≥ multiplier × norm  ∧  amount ≥ 100 zł
+//   The two are never mixed: lines are compared with past LINES of the same
+//   subcategory, totals with past TOTALS — a hand-typed 200 zł "zakupy" would
+//   otherwise look like a 25× outlier next to 8 zł receipt lines.
 //
-// The norm is the 75th percentile, not the median. Everyday subcategories mix
-// small top-ups with the big weekly shop — groceries were a median of 17 zł
-// on real data, which made every normal Auchan run "6× zwykle". The 75th
-// percentile is the amount 3 in 4 past purchases stayed under: top-ups stop
-// dragging it down, while a genuinely big purchase still clears it.
+// The rule
+//   unusual  ⇔  one-off EXPENSE  ∧  some measured amount ≥ 100 zł
+//                                ∧  that amount ≥ multiplier × its norm
 //
-// The 100 zł floor keeps 12 zł of sweets (vs the usual 5 zł) from being an
-// alarm. A subcategory with too little history borrows the norm of its
-// category, and failing that the month's own expenses.
+// The norm is the 75th percentile of past amounts of the same kind in the
+// subcategory — the amount 3 in 4 past ones stayed under. (The median let
+// small top-ups drag it down: groceries came out at 17 zł.) Too little
+// history borrows the category's norm, then the month's own amounts.
 //
-// Recurring expenses never count (same rule as the forecast and the
-// fixed-vs-variable charts: isFixedExpense) — the rent is big, not a surprise.
+// The 100 zł floor keeps a 12 zł chocolate (vs the usual 5 zł) from being an
+// alarm. Recurring expenses never count, and never shape a norm (isFixedExpense,
+// the rule the forecast uses) — the rent is big, not a surprise.
 //
-// Amounts are tx.amount — what the Kwota column shows and what sorts it.
 // Single source for the Wydatki filter, its row badge and the Podsumowanie
 // section; everything here is pure (see unusualExpenses.test.ts).
 // ============================================================
@@ -35,9 +40,9 @@ import { addMonthsToYM } from "../hooks/useMonthFromUrl";
 
 export const UNUSUAL_MIN_AMOUNT     = 100;
 export const UNUSUAL_LOOKBACK_MONTHS = 6;
-/** The norm: the amount this share of past expenses stayed at or under. */
+/** The norm: the amount this share of past amounts stayed at or under. */
 export const UNUSUAL_NORM_PERCENTILE = 0.75;
-/** Fewer past expenses than this and a percentile is anecdote, not a norm. */
+/** Fewer past amounts than this and a percentile is anecdote, not a norm. */
 export const UNUSUAL_MIN_HISTORY    = 3;
 export const UNUSUAL_MULTIPLIER = { default: 2, min: 1.5, max: 4, step: 0.5 } as const;
 
@@ -50,17 +55,26 @@ export interface UnusualSourceTx {
   isRecurring?:   boolean;
   recurringId?:   string | null;
   isArchived?:    boolean;
+  lineItems?:     Array<{ description?: string; amount: number }> | null;
 }
 
 /** Where an expense's norm came from — shown in the badge's tooltip. */
 export type NormSource = "subcategory" | "category" | "month";
 
+/** "line" = one receipt line; "total" = a transaction without a breakdown. */
+export type MeasureKind = "line" | "total";
+
 export interface UnusualInfo {
-  /** The norm the expense is compared with (UNUSUAL_NORM_PERCENTILE of past amounts). */
+  /** The norm the amount is compared with (UNUSUAL_NORM_PERCENTILE of past amounts). */
   typical: number;
-  /** How many expenses that norm was taken over. */
+  /** How many past amounts that norm was taken over. */
   basis:   number;
   source:  NormSource;
+  kind:    MeasureKind;
+  /** The amount judged: the flagged receipt line, or the whole transaction. */
+  amount:  number;
+  /** Name of the flagged receipt line (kind "line" only). */
+  item?:   string;
   /** amount ÷ typical */
   ratio:   number;
 }
@@ -78,15 +92,17 @@ const normAmount = (values: number[]) => percentile(values, UNUSUAL_NORM_PERCENT
 const isVariableExpense = (tx: UnusualSourceTx) =>
   tx.type === "EXPENSE" && !tx.isArchived && !isFixedExpense(tx) && tx.amount > 0;
 
-function groupAmounts(txs: UnusualSourceTx[], keyOf: (tx: UnusualSourceTx) => string | undefined) {
-  const map = new Map<string, number[]>();
-  for (const tx of txs) {
-    const key = keyOf(tx);
-    if (!key) continue;
-    const list = map.get(key);
-    if (list) list.push(tx.amount); else map.set(key, [tx.amount]);
-  }
-  return map;
+interface Measure { kind: MeasureKind; amount: number; item?: string }
+
+/** What of a transaction is judged: its receipt lines, or its total. */
+export function measuresOf(tx: UnusualSourceTx): Measure[] {
+  const lines = tx.lineItems ?? [];
+  // A single line is not a breakdown: it is the "one product" identity a
+  // hand-typed or single-item transaction carries, i.e. its total.
+  if (lines.length < 2) return [{ kind: "total", amount: tx.amount }];
+  return lines
+    .filter(l => l && l.amount > 0)            // discounts, deposit refunds
+    .map(l => ({ kind: "line" as const, amount: l.amount, item: l.description?.trim() || undefined }));
 }
 
 /**
@@ -105,27 +121,44 @@ export function findUnusualExpenses(
   const history = historyTx.filter(isVariableExpense);
   const month   = monthTx.filter(isVariableExpense);
 
-  const bySub = groupAmounts(history, tx => tx.subcategoryId);
-  const byCat = groupAmounts(history, tx => tx.categoryId);
-  const monthNorm = month.length >= UNUSUAL_MIN_HISTORY
-    ? { typical: normAmount(month.map(tx => tx.amount)), basis: month.length, source: "month" as const }
-    : null;
+  // Past amounts by kind + subcategory / category.
+  const pools = new Map<string, number[]>();
+  const add = (key: string, value: number) => {
+    const list = pools.get(key);
+    if (list) list.push(value); else pools.set(key, [value]);
+  };
+  for (const tx of history) {
+    for (const m of measuresOf(tx)) {
+      if (tx.subcategoryId) add(`${m.kind}|sub|${tx.subcategoryId}`, m.amount);
+      if (tx.categoryId)    add(`${m.kind}|cat|${tx.categoryId}`, m.amount);
+    }
+  }
+  const monthPool: Record<MeasureKind, number[]> = { line: [], total: [] };
+  for (const tx of month) for (const m of measuresOf(tx)) monthPool[m.kind].push(m.amount);
 
-  const normOf = (tx: UnusualSourceTx) => {
-    const sub = tx.subcategoryId ? bySub.get(tx.subcategoryId) : undefined;
+  const normOf = (kind: MeasureKind, tx: UnusualSourceTx) => {
+    const sub = tx.subcategoryId ? pools.get(`${kind}|sub|${tx.subcategoryId}`) : undefined;
     if (sub && sub.length >= UNUSUAL_MIN_HISTORY) return { typical: normAmount(sub), basis: sub.length, source: "subcategory" as const };
-    const cat = tx.categoryId ? byCat.get(tx.categoryId) : undefined;
+    const cat = tx.categoryId ? pools.get(`${kind}|cat|${tx.categoryId}`) : undefined;
     if (cat && cat.length >= UNUSUAL_MIN_HISTORY) return { typical: normAmount(cat), basis: cat.length, source: "category" as const };
-    return monthNorm;
+    const own = monthPool[kind];
+    if (own.length >= UNUSUAL_MIN_HISTORY) return { typical: normAmount(own), basis: own.length, source: "month" as const };
+    return null;
   };
 
   const out = new Map<string, UnusualInfo>();
   for (const tx of month) {
-    if (tx.amount < UNUSUAL_MIN_AMOUNT) continue;
-    const norm = normOf(tx);
-    if (!norm || norm.typical <= 0) continue;
-    const ratio = tx.amount / norm.typical;
-    if (ratio >= multiplier) out.set(tx.id, { ...norm, ratio });
+    let best: UnusualInfo | null = null;
+    for (const m of measuresOf(tx)) {
+      if (m.amount < UNUSUAL_MIN_AMOUNT) continue;
+      const norm = normOf(m.kind, tx);
+      if (!norm || norm.typical <= 0) continue;
+      const ratio = m.amount / norm.typical;
+      if (ratio >= multiplier && (!best || ratio > best.ratio)) {
+        best = { ...norm, kind: m.kind, amount: m.amount, item: m.item, ratio };
+      }
+    }
+    if (best) out.set(tx.id, best);
   }
   return out;
 }
@@ -134,8 +167,9 @@ export function findUnusualExpenses(
 
 export interface UnusualMonthStats {
   month:  string;
+  /** Transactions with something unusual in them. */
   count:  number;
-  /** Sum of the unusual expenses. */
+  /** Sum of the unusual amounts (the flagged line, or the whole transaction). */
   total:  number;
   /** How much of `total` sits above the norms (Σ amount − typical). */
   excess: number;
@@ -162,8 +196,8 @@ export function unusualMonthStats(
     const info = unusual.get(tx.id);
     if (!info) continue;
     count++;
-    total  += tx.amount;
-    excess += tx.amount - info.typical;
+    total  += info.amount;
+    excess += info.amount - info.typical;
   }
   return { month, count, total, excess, expenses, share: expenses > 0 ? total / expenses : 0 };
 }
@@ -195,18 +229,23 @@ export function unusualTrend(
 const NORM_SOURCE_TEXT: Record<NormSource, string> = {
   subcategory: "Norma subkategorii",
   category:    "Norma kategorii (subkategoria ma za mało historii)",
-  month:       "Norma z wydatków tego miesiąca (za mało historii)",
+  month:       "Norma z tego miesiąca (za mało historii)",
 };
 
-/** Tooltip (multi-line): what the expense was compared with, and why. */
+const zl2 = (v: number) => `${v.toFixed(2).replace(".", ",")} zł`;
+
+/** Tooltip (multi-line): what was judged, against what, and why. */
 export function unusualTitle(info: UnusualInfo): string {
   const pct    = Math.round(UNUSUAL_NORM_PERCENTILE * 100);
   const period = info.source === "month" ? "" : ` (${UNUSUAL_LOOKBACK_MONTHS} mies.)`;
+  const what   = info.kind === "line" ? "pozycji z paragonów" : "wydatków bez rozbicia na pozycje";
   return [
-    `${NORM_SOURCE_TEXT[info.source]}: ${info.typical.toFixed(2).replace(".", ",")} zł`,
-    `${pct}. percentyl z ${info.basis} wydatków${period}`,
-    "3 na 4 wcześniejsze nie były droższe",
-    `Ten wydatek: ${formatMultiplier(info.ratio)} normy · cykliczne się nie liczą`,
+    info.kind === "line"
+      ? `Pozycja: ${info.item ?? "bez nazwy"} — ${zl2(info.amount)}`
+      : `Wydatek: ${zl2(info.amount)}`,
+    `${NORM_SOURCE_TEXT[info.source]}: ${zl2(info.typical)}`,
+    `${pct}. percentyl z ${info.basis} ${what}${period}`,
+    `${formatMultiplier(info.ratio)} normy · cykliczne się nie liczą`,
   ].join("\n");
 }
 

@@ -23,11 +23,22 @@ import type { Transaction } from "../../../types/appContext";
 // "Nietypowo duże" marker under the amount — the ratio and the norm it was
 // measured against, so the reason is on the row, not behind a filter.
 function UnusualBadge({ tx }: { tx: Transaction }) {
-  if (!tx.unusual) return null;
+  const u = tx.unusual;
+  if (!u) return null;
   return (
     <div style={{ marginTop: 3 }}>
-      <span style={{ ...s.badge(c.warning), whiteSpace: "nowrap" }} title={unusualTitle(tx.unusual)}>
-        🔥 {formatMultiplier(tx.unusual.ratio)} zwykle ({fmt(tx.unusual.typical)})
+      <span
+        style={{ ...s.badge(c.warning), display: "inline-flex", alignItems: "center", gap: 4, maxWidth: 260, whiteSpace: "nowrap" }}
+        title={unusualTitle(u)}
+      >
+        {/* Ratio first so it never gets cut; a receipt line then names the
+            product that stood out (truncated if long — the tooltip has it whole). */}
+        <span>🔥 {formatMultiplier(u.ratio)} zwykle ({fmt(u.typical)})</span>
+        {u.item && (
+          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", fontWeight: 600 }}>
+            · {u.item}
+          </span>
+        )}
       </span>
     </div>
   );

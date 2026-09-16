@@ -89,6 +89,63 @@ describe("findUnusualExpenses", () => {
   });
 });
 
+describe("receipt lines", () => {
+  const receipt = (sub: string, ...lines: Array<[string, number]>) =>
+    tx(lines.reduce((s, [, a]) => s + a, 0), sub, "zakupy", { lineItems: lines.map(([description, amount]) => ({ description, amount })) });
+
+  // Past receipts: grocery lines 3,4,6,8,9,12,25 zł → norm (p75) 10,5 zł.
+  const pastReceipts = [
+    receipt("spoz", ["Mleko", 4], ["Chleb", 6], ["Masło", 8], ["Ser", 12]),
+    receipt("spoz", ["Jogurt", 3], ["Kawa", 25], ["Jabłka", 9]),
+  ];
+
+  it("a big shop of ordinary items is not unusual, however many lines it has", () => {
+    const bigShop = receipt("spoz", ...Array.from({ length: 30 }, (_, i) => [`Produkt ${i}`, 10] as [string, number]));
+    expect(bigShop.amount).toBe(300);
+    expect(findUnusualExpenses([bigShop], pastReceipts, 2).size).toBe(0);
+  });
+
+  it("one expensive line among cheap ones is flagged, and named", () => {
+    const shop = receipt("spoz", ...Array.from({ length: 19 }, (_, i) => [`Drobiazg ${i}`, 5] as [string, number]), ["Wino Château", 149]);
+    const info = findUnusualExpenses([shop], pastReceipts, 2).get(shop.id);
+    expect(info).toMatchObject({ kind: "line", item: "Wino Château", amount: 149, typical: 10.5, source: "subcategory" });
+    expect(info?.ratio).toBeCloseTo(14.19, 2);
+  });
+
+  it("reports the most unusual line when several qualify", () => {
+    const shop = receipt("spoz", ["Ekspres", 900], ["Szynka", 120], ["Chleb", 6]);
+    expect(findUnusualExpenses([shop], pastReceipts, 2).get(shop.id)?.item).toBe("Ekspres");
+  });
+
+  it("lines are never compared with hand-typed totals, and vice versa", () => {
+    const typedTotals = [tx(180, "spoz", "zakupy"), tx(200, "spoz", "zakupy"), tx(220, "spoz", "zakupy")];
+    const typed = tx(230, "spoz", "zakupy");          // an ordinary typed-in shop
+    const found = findUnusualExpenses([typed], [...pastReceipts, ...typedTotals], 2);
+    expect(found.has(typed.id)).toBe(false);          // 230 vs totals' norm 210, not vs 10,5 zł lines
+
+    const scanned = receipt("spoz", ["Wołowina", 150], ["Chleb", 6]);
+    expect(findUnusualExpenses([scanned], [...pastReceipts, ...typedTotals], 2).get(scanned.id))
+      .toMatchObject({ kind: "line", typical: 10.5 });  // vs lines, not the 200 zł totals
+  });
+
+  it("a single line is the transaction's total, not a breakdown", () => {
+    const single = tx(400, "kino", "rozrywka", { lineItems: [{ description: "Bilety", amount: 400 }] });
+    expect(findUnusualExpenses([single], history, 2).get(single.id)).toMatchObject({ kind: "total", typical: 65 });
+  });
+
+  it("negative lines (discounts, deposit refunds) are ignored", () => {
+    const shop = receipt("spoz", ["Zgrzewka wody", 130], ["Rabat", -20], ["Kaucja zwrot", -5]);
+    const info = findUnusualExpenses([shop], pastReceipts, 2).get(shop.id);
+    expect(info).toMatchObject({ item: "Zgrzewka wody", amount: 130 });
+  });
+
+  it("stats count the flagged line, not the whole receipt", () => {
+    const shop = receipt("spoz", ...Array.from({ length: 10 }, (_, i) => [`P${i}`, 10] as [string, number]), ["Wino", 150]);
+    const stats = unusualMonthStats("2026-09", [shop], findUnusualExpenses([shop], pastReceipts, 2));
+    expect(stats).toMatchObject({ count: 1, total: 150, excess: 139.5, expenses: 250 });
+  });
+});
+
 describe("unusualMonthStats / unusualTrend", () => {
   const at = (month: string, amount: number, sub = "kino", extra: Partial<UnusualSourceTx> = {}) =>
     ({ ...tx(amount, sub, "rozrywka", extra), budgetMonth: month });
@@ -124,13 +181,16 @@ describe("formatting", () => {
     expect(formatMultiplier(3.14159)).toBe("3,1×");
   });
 
-  it("unusualTitle explains the norm on separate lines", () => {
-    expect(unusualTitle({ typical: 65, basis: 12, source: "subcategory", ratio: 2.77 }).split("\n")).toEqual([
-      "Norma subkategorii: 65,00 zł",
-      "75. percentyl z 12 wydatków (6 mies.)",
-      "3 na 4 wcześniejsze nie były droższe",
-      "Ten wydatek: 2,8× normy · cykliczne się nie liczą",
+  it("unusualTitle explains what was judged and against what", () => {
+    expect(unusualTitle({ typical: 10, basis: 40, source: "subcategory", kind: "line", amount: 149, item: "Wino", ratio: 14.9 }).split("\n")).toEqual([
+      "Pozycja: Wino — 149,00 zł",
+      "Norma subkategorii: 10,00 zł",
+      "75. percentyl z 40 pozycji z paragonów (6 mies.)",
+      "14,9× normy · cykliczne się nie liczą",
     ]);
-    expect(unusualTitle({ typical: 95, basis: 4, source: "month", ratio: 2.7 })).toContain("tego miesiąca");
+    const total = unusualTitle({ typical: 95, basis: 4, source: "month", kind: "total", amount: 260, ratio: 2.7 });
+    expect(total).toContain("Wydatek: 260,00 zł");
+    expect(total).toContain("tego miesiąca");
+    expect(total).toContain("bez rozbicia");
   });
 });

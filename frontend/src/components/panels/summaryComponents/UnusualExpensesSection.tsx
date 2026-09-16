@@ -50,7 +50,7 @@ export function UnusualExpensesSection({ monthTx, month }: Props) {
     return monthTx
       .filter(tx => unusual.has(tx.id))
       .map(tx => ({ tx, info: unusual.get(tx.id)! }))
-      .sort((a, b) => (b.tx.amount - b.info.typical) - (a.tx.amount - a.info.typical));
+      .sort((a, b) => (b.info.amount - b.info.typical) - (a.info.amount - a.info.typical));
   }, [unusual, monthTx]);
 
   return (
@@ -120,12 +120,12 @@ function Swatch({ color }: { color: string }) {
 interface BarRow { tx: Transaction; info: UnusualInfo }
 
 function Bars({ rows, month }: { rows: BarRow[]; month: string }) {
-  const max = Math.max(...rows.map(r => r.tx.amount));
+  const max = Math.max(...rows.map(r => r.info.amount));
   return (
     <div>
       {rows.map(({ tx, info }) => {
         const normPct = (info.typical / max) * 100;
-        const fullPct = (tx.amount / max) * 100;
+        const fullPct = (info.amount / max) * 100;
         return (
           <PanelLink
             key={tx.id}
@@ -139,10 +139,10 @@ function Bars({ rows, month }: { rows: BarRow[]; month: string }) {
           >
             <span style={{ minWidth: 0 }}>
               <span style={{ display: "block", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {tx.description || tx.subcategoryName}
+                {info.item ?? (tx.description || tx.subcategoryName)}
               </span>
               <span style={{ display: "block", fontSize: 11, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {tx.subcategoryName} · {formatMultiplier(info.ratio)} normy
+                {info.item ? `${tx.merchant || tx.description || "paragon"} · ` : ""}{tx.subcategoryName} · {formatMultiplier(info.ratio)} normy
               </span>
             </span>
             <span style={{ position: "relative", height: 12, background: c.bg, borderRadius: 3 }}>
@@ -150,7 +150,7 @@ function Bars({ rows, month }: { rows: BarRow[]; month: string }) {
               <span style={{ position: "absolute", left: `${normPct}%`, top: 0, bottom: 0, width: `${fullPct - normPct}%`, background: c.warning, borderRadius: "0 3px 3px 0" }} />
             </span>
             <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-              <span style={{ display: "block", fontSize: 13, fontWeight: 700 }}>{fmt(tx.amount)}</span>
+              <span style={{ display: "block", fontSize: 13, fontWeight: 700 }}>{fmt(info.amount)}</span>
               <span style={{ display: "block", fontSize: 11, color: c.textMuted }}>norma {fmt(info.typical)}</span>
             </span>
           </PanelLink>
