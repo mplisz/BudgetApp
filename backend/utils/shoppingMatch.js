@@ -38,8 +38,7 @@ const STOP_WORDS = new Set([
   "puszka", "puszce", "butelka", "butelce", "luz", "wazona", "wazone", "ok",
 ]);
 
-// Below this length a token must match exactly — see the header.
-const STEM_MIN_LENGTH = 5;
+const { STEM_MIN_LENGTH } = require("./shoppingConfig");
 
 /**
  * Folded, tokenized, stripped of packaging noise.

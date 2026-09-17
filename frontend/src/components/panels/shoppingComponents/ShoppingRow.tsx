@@ -82,8 +82,11 @@ export function ShoppingRow({
   // sixty pixels between the checkbox and the buttons.
   const [pricesOpen, setPricesOpen] = useState(false);
 
-  function openEditor() {
+  // Tapping the name toggles: the same gesture that opened the editor
+  // closes it, so getting out does not mean hunting for "Anuluj".
+  function toggleEditor() {
     if (resolved) return;            // nothing to adjust on a settled item
+    if (editing) { setEditing(false); return; }
     setDraftNote(item.note ?? "");
     setDraftSection(item.section ?? "inne");
     setEditing(true);
@@ -103,6 +106,9 @@ export function ShoppingRow({
     setDraftPrice("");
     setDraftShop("");
     setDraftPriceNote("");
+    // Noting a price finishes the job you opened this for — standing in
+    // front of a shelf, one price, done. The toast confirms it landed.
+    setEditing(false);
   }
 
   return (
@@ -133,7 +139,7 @@ export function ShoppingRow({
 
         <div
           style={{ flex: 1, minWidth: 0, cursor: resolved ? "default" : "pointer" }}
-          onClick={openEditor}
+          onClick={toggleEditor}
           title={resolved ? undefined : "Komentarz i sekcja"}
         >
           <div style={{

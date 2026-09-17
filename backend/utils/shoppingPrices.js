@@ -24,19 +24,9 @@
 // Everything here is pure — see shoppingPrices.test.js.
 // ============================================================
 
-/** Max observations kept per product. Enough that one promotion cannot
- *  decide the median, few enough that the catalog stays small — it is
- *  read on every panel open, on a phone, in a shop. */
-const MAX_OBSERVATIONS = 6;
-
-/** Prices older than this are dropped: at current food inflation a
- *  median reaching further back describes a different year. */
-const WINDOW_DAYS = 90;
-
-/** Below this many observations there is no "usually" to report, only
- *  the last price. A median of two numbers is their average wearing a
- *  disguise. */
-const MIN_FOR_MEDIAN = 3;
+const {
+  MAX_OBSERVATIONS, WINDOW_DAYS, MIN_FOR_MEDIAN, MAX_SEEN, SEEN_WINDOW_DAYS,
+} = require("./shoppingConfig");
 
 // ── Parsing what the amount actually covers ──────────────────
 
@@ -214,17 +204,6 @@ function round2(n) {
 // once: "mleko modyfikowane 64,99 przy zakupie dwóch, a tak 89,89".
 // Those are two answers, and the condition is what tells them apart, so
 // it is part of the key rather than a decoration.
-
-/** Max entries remembered per item — a price board, not a history. */
-const MAX_SEEN = 8;
-
-/**
- * How long a noted shelf price stays believable. Much shorter than the
- * 90 days behind a median: that one describes a habit, this one
- * describes a shelf, and a leaflet runs a week. A stale bargain is worse
- * than no bargain — it sends someone to a shop for a price that ended.
- */
-const SEEN_WINDOW_DAYS = 7;
 
 /** Normalized shop + condition, used only to decide "same offer". */
 function seenKey(observation) {

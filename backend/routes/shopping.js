@@ -45,19 +45,14 @@ const {
   forgetShoppingItem, forgetPrice, withId,
 } = require("../utils/shoppingCatalog");
 const { summarize, seenObservation, addSeenObservation } = require("../utils/shoppingPrices");
+const { RESOLVED_TTL_DAYS } = require("../utils/shoppingConfig");
 const { cleanMerchant } = require("../utils/merchant");
 const { SECTION_IDS, DEFAULT_SECTION, guessSection } = require("../utils/shoppingSections");
 
 router.use(requireAuth);
 
-// A week of history — the two questions it has to answer are "did I just
-// mis-tap that?" (minutes) and "did we already buy this?" (days). What is
-// worth keeping long-term — that this is a product we buy — lives in the
-// catalog instead. Longer retention would only grow the payload every
-// panel open has to carry, in a shop, on whatever signal is going.
-//
 // Kept in sync by hand with the "znika po 7 dniach" note in PanelShopping.
-const RESOLVED_TTL_SECONDS = 7 * 24 * 60 * 60;
+const RESOLVED_TTL_SECONDS = RESOLVED_TTL_DAYS * 24 * 60 * 60;
 
 const STATUSES = ["open", "bought", "skipped"];
 

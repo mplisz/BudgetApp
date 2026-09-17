@@ -26,13 +26,7 @@ const { addObservation } = require("./shoppingPrices");
 
 const CATALOG_DOC = (familyId) => `shopping_catalog_${familyId}`;
 
-// Cap on catalog size. Well above a family's real vocabulary (a few
-// hundred products at most), so the prune below is a safety net against
-// unbounded growth, not something a normal user ever hits.
-const MAX_ENTRIES = 400;
-
-// Half-life of the recency weight, in days — see scoreEntry.
-const RECENCY_DAYS = 30;
+const { MAX_ENTRIES, RECENCY_DAYS } = require("./shoppingConfig");
 
 /** Identity key for a catalog entry: the folded name (diacritics,
  *  punctuation and case removed), so "Masło", "maslo " and "MASŁO"
