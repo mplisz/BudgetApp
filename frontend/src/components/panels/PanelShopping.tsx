@@ -41,21 +41,21 @@ export default function PanelShopping() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Open items first — the ones the shop was out of sink to the bottom of
-  // the open block rather than out of sight, because we still want them.
+  // "Nie było" is a note about one shop visit, not a change of aisle, so
+  // a missed item stays exactly where it was — its own section, in place.
+  // It is still counted separately for the header, and the row marks
+  // itself with the flag and the amber border.
   const { open, missed, history } = useMemo(() => {
-    const openItems = items.filter(i => i.status === "open" && !i.missedAt);
-    const missedItems = items.filter(i => i.status === "open" && !!i.missedAt);
+    const openItems = items.filter(i => i.status === "open");
     const resolved = items
       .filter(i => i.status !== "open")
       .sort((a, b) => (b.resolvedAt ?? "").localeCompare(a.resolvedAt ?? ""));
-    return { open: openItems, missed: missedItems, history: resolved };
+    return { open: openItems, missed: openItems.filter(i => !!i.missedAt), history: resolved };
   }, [items]);
 
   // Group the open items by shop section, in shop-route order — the point
   // of the whole thing: one pass through the shop instead of a lap per
-  // item. Items missed last time keep their own block below; that flag is
-  // about attention, not about which aisle to walk to.
+  // item.
   const sections = useMemo(() => {
     const bySection = new Map<string, ShoppingItem[]>();
     for (const item of open) {
@@ -79,7 +79,7 @@ export default function PanelShopping() {
     [items],
   );
 
-  const toBuy = open.length + missed.length;
+  const toBuy = open.length;
 
   function handlePillAdd(entry: CatalogEntry) {
     addItem({ name: entry.name, unit: entry.unit });
@@ -228,18 +228,6 @@ export default function PanelShopping() {
               </div>
             )
           ))}
-
-          {missed.length > 0 && (
-            <>
-              <div style={{
-                fontSize: 11, color: c.warningLight, textTransform: "uppercase",
-                letterSpacing: "0.7px", fontWeight: 700, margin: "18px 0 8px",
-              }}>
-                Nie było ostatnio ({missed.length})
-              </div>
-              {missed.map(item => <ShoppingRow key={item.id} item={item} catalogEntry={catalogByKey.get(item.key)} {...rowHandlers} />)}
-            </>
-          )}
 
           {history.length > 0 && (
             <div style={{ marginTop: 20 }}>
