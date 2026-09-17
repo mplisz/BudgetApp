@@ -42,9 +42,9 @@ const { readItemWithEtag, IdParamSchema } = require("../utils/helpers");
 const {
   shoppingKey, cleanItemName, fetchCatalog,
   rememberShoppingItem, rememberShoppingSection, lookupSection,
-  forgetShoppingItem, forgetPrice, rememberSeenPrice,
+  forgetShoppingItem, forgetPrice, withId,
 } = require("../utils/shoppingCatalog");
-const { summarize, seenObservation } = require("../utils/shoppingPrices");
+const { summarize, seenObservation, addSeenObservation } = require("../utils/shoppingPrices");
 const { cleanMerchant } = require("../utils/merchant");
 const { SECTION_IDS, DEFAULT_SECTION, guessSection } = require("../utils/shoppingSections");
 
@@ -340,14 +340,15 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-// ── POST /catalog/:key/seen ──────────────────────────────────
+// ── POST /:id/seen ───────────────────────────────────────────
 // A price spotted on a shelf and not paid: "kawa, 22,99 w Biedronce".
 // The shop is required — without it the number answers nothing, and the
 // whole point is comparing one shop against another.
 //
-// Stored apart from purchase prices and excluded from the median by
-// construction: this is hand-typed, has no receipt behind it, and the
-// median has to keep meaning what the family actually pays.
+// Stored on the ITEM, not on the catalog: the note exists to decide this
+// purchase, so it should die with it, and an item already expires a week
+// after being ticked off. Never near `prices` either — hand-typed
+// numbers with no receipt behind them must not reach the median.
 
 const SeenSchema = z.object({
   amount: z.number().positive().max(100_000),
@@ -358,9 +359,9 @@ const SeenSchema = z.object({
   note:   z.string().max(60).optional(),
 });
 
-router.post("/catalog/:key/seen", async (req, res) => {
-  const key = (req.params.key || "").trim();
-  if (!key || key.length > 200) return res.status(400).json({ error: "Invalid catalog key." });
+router.post("/:id/seen", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
 
   const parsed = SeenSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -378,29 +379,53 @@ router.post("/catalog/:key/seen", async (req, res) => {
 
   try {
     const familyId = req.user.familyId;
-    const saved = await rememberSeenPrice(settingsContainer, familyId, key, observation);
-    if (!saved) return res.status(404).json({ error: "Tego produktu nie ma jeszcze w katalogu." });
-    const catalog = await fetchCatalog(settingsContainer, familyId);
-    res.json(catalog.map(e => ({ ...e, price: summarize(e.prices) })));
+    const { resource: existing, etag } = await readItemWithEtag(shoppingContainer, idParsed.data, familyId);
+    if (!existing || existing.type !== "SHOPPING_ITEM") {
+      return res.status(404).json({ error: "Item not found." });
+    }
+
+    const { resource } = await shoppingContainer.item(idParsed.data, familyId).replace(
+      {
+        ...existing,
+        seen: addSeenObservation(existing.seen, withId(observation)),
+        updatedAt: new Date().toISOString(),
+      },
+      { accessCondition: { type: "IfMatch", condition: etag } },
+    );
+    res.json(resource);
   } catch (err) {
+    if (err.code === 412) return res.status(409).json({ error: "Pozycja zmieniona na innym urządzeniu — odśwież listę." });
     console.error("[SHOPPING SEEN POST]", err);
     res.status(500).json({ error: "Failed to record the price." });
   }
 });
 
-// ── DELETE /catalog/:key/seen/:observationId ─────────────────
+// ── DELETE /:id/seen/:observationId ──────────────────────────
 
-router.delete("/catalog/:key/seen/:observationId", async (req, res) => {
-  const key = (req.params.key || "").trim();
-  const id  = (req.params.observationId || "").trim();
-  if (!key || key.length > 200 || !/^[a-z0-9]{1,12}$/i.test(id)) {
-    return res.status(400).json({ error: "Invalid observation." });
-  }
+router.delete("/:id/seen/:observationId", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+  const obsId = (req.params.observationId || "").trim();
+  if (!/^[a-z0-9]{1,12}$/i.test(obsId)) return res.status(400).json({ error: "Invalid observation." });
 
   try {
-    const catalog = await forgetPrice(settingsContainer, req.user.familyId, key, id, "seen");
-    res.json(catalog.map(e => ({ ...e, price: summarize(e.prices) })));
+    const familyId = req.user.familyId;
+    const { resource: existing, etag } = await readItemWithEtag(shoppingContainer, idParsed.data, familyId);
+    if (!existing || existing.type !== "SHOPPING_ITEM") {
+      return res.status(404).json({ error: "Item not found." });
+    }
+
+    const { resource } = await shoppingContainer.item(idParsed.data, familyId).replace(
+      {
+        ...existing,
+        seen: (existing.seen || []).filter(p => p.i !== obsId),
+        updatedAt: new Date().toISOString(),
+      },
+      { accessCondition: { type: "IfMatch", condition: etag } },
+    );
+    res.json(resource);
   } catch (err) {
+    if (err.code === 412) return res.status(409).json({ error: "Pozycja zmieniona na innym urządzeniu — odśwież listę." });
     console.error("[SHOPPING SEEN DELETE]", err);
     res.status(500).json({ error: "Failed to remove the price." });
   }

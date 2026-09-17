@@ -197,10 +197,16 @@ function round2(n) {
 // ── Prices seen on a shelf but not paid ──────────────────────
 //
 // A different kind of number from everything above: typed by hand while
-// comparing shops, with no receipt behind it. Kept in its OWN list on
-// the catalog entry rather than alongside purchases, so there is no path
-// by which one could reach the median — that figure has to keep meaning
-// "what we pay", and it is the only number here anyone trusts.
+// comparing shops, with no receipt behind it. Never mixed into the
+// purchase list, so there is no path by which one could reach the median
+// — that figure has to keep meaning "what we pay", and it is the only
+// number here anyone trusts.
+//
+// Stored on the LIST ITEM, not on the catalog entry: the note exists to
+// decide one purchase, so it should die with that purchase, and the item
+// already expires a week after being ticked off. The catalog keeps what
+// outlives a shopping trip — receipts, sections, how often a product is
+// bought. These are only ever displayed on an item's row anyway.
 //
 // Keyed by shop AND condition, newest wins. "Where is it cheapest right
 // now" has one answer per shop, so a second look at the same Biedronka
@@ -209,8 +215,16 @@ function round2(n) {
 // Those are two answers, and the condition is what tells them apart, so
 // it is part of the key rather than a decoration.
 
-/** Max entries remembered per product — a price board, not a history. */
+/** Max entries remembered per item — a price board, not a history. */
 const MAX_SEEN = 8;
+
+/**
+ * How long a noted shelf price stays believable. Much shorter than the
+ * 90 days behind a median: that one describes a habit, this one
+ * describes a shelf, and a leaflet runs a week. A stale bargain is worse
+ * than no bargain — it sends someone to a shop for a price that ended.
+ */
+const SEEN_WINDOW_DAYS = 7;
 
 /** Normalized shop + condition, used only to decide "same offer". */
 function seenKey(observation) {
@@ -240,7 +254,7 @@ function seenObservation({ amount, shop, date, note }) {
  * outside the window. Pure — see shoppingPrices.test.js.
  */
 function addSeenObservation(list, observation, today = new Date()) {
-  const cutoff = new Date(today.getTime() - WINDOW_DAYS * 86_400_000)
+  const cutoff = new Date(today.getTime() - SEEN_WINDOW_DAYS * 86_400_000)
     .toISOString().slice(0, 10);
 
   const kept = [...(list || [])]
@@ -319,6 +333,7 @@ module.exports = {
   MAX_OBSERVATIONS,
   MAX_SEEN,
   WINDOW_DAYS,
+  SEEN_WINDOW_DAYS,
   MIN_FOR_MEDIAN,
   seenObservation,
   addSeenObservation,

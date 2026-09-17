@@ -32,6 +32,10 @@ export interface ShoppingItem {
   status:       ShoppingStatus;
   missedAt:     string | null;
   missedCount:  number;
+  /** Prices spotted on a shelf while deciding this purchase. On the ITEM
+   *  rather than the catalog so they expire with it — see the note in
+   *  backend/utils/shoppingPrices.js. */
+  seen?:        SeenPrice[];
   sourceWishId: string | null;
   addedBy:      string | null;
   addedAt:      string;
@@ -94,7 +98,6 @@ export interface CatalogEntry {
   lastUsedAt:  string;
   prices?:     PriceObservation[];
   price?:      PriceSummary | null;
-  seen?:       SeenPrice[];
 }
 
 interface PanelState {
@@ -275,18 +278,18 @@ export function useShoppingList() {
   }, [api, catalog, showError]);
 
   // ── Prices seen on a shelf ────────────────────────────────
-  // Not optimistic: the server keys these by shop and drops whatever that
-  // shop said before, so guessing the resulting list locally would mean
-  // reimplementing that rule in a second place.
+  // Adding is not optimistic: the server keys these by shop AND
+  // condition and drops whatever that offer said before, so guessing the
+  // resulting list locally would mean reimplementing the rule twice.
 
-  const addSeenPrice = useCallback(async (key: string, amount: number, shop: string, note?: string): Promise<boolean> => {
+  const addSeenPrice = useCallback(async (id: string, amount: number, shop: string, note?: string): Promise<boolean> => {
     try {
-      const next = await api.post<CatalogEntry[]>(
-        `/api/shopping/catalog/${encodeURIComponent(key)}/seen`,
+      const saved = await api.post<ShoppingItem>(
+        `/api/shopping/${id}/seen`,
         { amount, shop, ...(note ? { note } : {}) },
         { fallback: "Nie udało się zapisać ceny." },
       );
-      setCatalog(next);
+      setItems(prev => prev.map(i => i.id === id ? saved : i));
       showSuccess("Zanotowane 👀");
       return true;
     } catch (err) {
@@ -295,25 +298,26 @@ export function useShoppingList() {
     }
   }, [api, showError, showSuccess]);
 
-  const forgetSeenPrice = useCallback(async (key: string, observationId: string): Promise<boolean> => {
-    const before = catalog;
-    setCatalog(prev => prev.map(e => e.key === key
-      ? { ...e, seen: (e.seen ?? []).filter(p => p.i !== observationId) }
-      : e));
+  const forgetSeenPrice = useCallback(async (id: string, observationId: string): Promise<boolean> => {
+    const before = items.find(i => i.id === id);
+    if (!before) return false;
+    setItems(prev => prev.map(i => i.id === id
+      ? { ...i, seen: (i.seen ?? []).filter(p => p.i !== observationId) }
+      : i));
     try {
-      const next = await api.del<CatalogEntry[]>(
-        `/api/shopping/catalog/${encodeURIComponent(key)}/seen/${encodeURIComponent(observationId)}`,
+      const saved = await api.del<ShoppingItem>(
+        `/api/shopping/${id}/seen/${encodeURIComponent(observationId)}`,
         undefined,
         { fallback: "Nie udało się usunąć ceny." },
       );
-      setCatalog(next);
+      setItems(prev => prev.map(i => i.id === id ? saved : i));
       return true;
     } catch (err) {
-      setCatalog(before);
+      setItems(prev => prev.map(i => i.id === id ? before : i));
       showError((err as Error).message);
       return false;
     }
-  }, [api, catalog, showError]);
+  }, [api, items, showError]);
 
   return {
     items, catalog, isLoading, hasLoaded: loadedRef.current,

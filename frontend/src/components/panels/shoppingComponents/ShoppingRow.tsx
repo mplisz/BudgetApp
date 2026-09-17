@@ -40,9 +40,10 @@ interface ShoppingRowProps {
    *  has been matched to it. */
   catalogEntry?: CatalogEntry;
   onForgetPrice: (key: string, observationId: string) => void;
-  /** Note a price seen on a shelf without buying it. */
-  onSeenPrice:     (key: string, amount: number, shop: string, note?: string) => void;
-  onForgetSeenPrice: (key: string, observationId: string) => void;
+  /** Note a price seen on a shelf without buying it — kept on the item,
+   *  so it expires along with it. */
+  onSeenPrice:       (id: string, amount: number, shop: string, note?: string) => void;
+  onForgetSeenPrice: (id: string, observationId: string) => void;
 }
 
 const iconBtn = (color: string): React.CSSProperties => ({
@@ -94,11 +95,11 @@ export function ShoppingRow({
   }
 
   const priceValue = Number(draftPrice.replace(",", "."));
-  const canNotePrice = !!catalogEntry && Number.isFinite(priceValue) && priceValue > 0 && draftShop.trim().length > 0;
+  const canNotePrice = Number.isFinite(priceValue) && priceValue > 0 && draftShop.trim().length > 0;
 
   function noteSeenPrice() {
-    if (!canNotePrice || !catalogEntry) return;
-    onSeenPrice(catalogEntry.key, priceValue, draftShop.trim(), draftPriceNote.trim() || undefined);
+    if (!canNotePrice) return;
+    onSeenPrice(item.id, priceValue, draftShop.trim(), draftPriceNote.trim() || undefined);
     setDraftPrice("");
     setDraftShop("");
     setDraftPriceNote("");
@@ -168,7 +169,7 @@ export function ShoppingRow({
             <PriceChip
               price={catalogEntry?.price}
               observations={catalogEntry?.prices ?? []}
-              seen={catalogEntry?.seen ?? []}
+              seen={item.seen ?? []}
               open={pricesOpen}
               onToggle={() => setPricesOpen(o => !o)}
             />
@@ -223,8 +224,8 @@ export function ShoppingRow({
           price={catalogEntry?.price}
           observations={catalogEntry?.prices ?? []}
           onForget={id => catalogEntry && onForgetPrice(catalogEntry.key, id)}
-          seen={catalogEntry?.seen ?? []}
-          onForgetSeen={id => catalogEntry && onForgetSeenPrice(catalogEntry.key, id)}
+          seen={item.seen ?? []}
+          onForgetSeen={id => onForgetSeenPrice(item.id, id)}
         />
       )}
 
@@ -258,10 +259,10 @@ export function ShoppingRow({
             Anuluj
           </button>
 
-          {/* Shelf price. Only once the product is in the catalog — before
-              that there is nothing to hang a price on, and the catalog
-              entry appears the moment the item is added. */}
-          {catalogEntry && (
+          {/* Shelf price — hangs off the item itself, so it is offered for
+              anything on the list, including a product bought for the
+              first time. */}
+          {!resolved && (
             <div style={{ flexBasis: "100%", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
               <span style={{ fontSize: 11, color: c.textMuted, whiteSpace: "nowrap" }}>👀 Widziana cena:</span>
               <input
