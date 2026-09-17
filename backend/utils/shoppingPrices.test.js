@@ -306,6 +306,18 @@ describe("seenObservation", () => {
     const o = seenObservation({ amount: 22.999, shop: "  Biedronka  ", date: "2026-09-17" });
     assert.deepEqual(o, { d: "2026-09-17", a: 23, s: "Biedronka" });
   });
+
+  test("keeps the condition a price came with", () => {
+    // Without it, 64,99 remembered on its own sends you back for one pack
+    // at 89,89 a week later.
+    const o = seenObservation({ amount: 64.99, shop: "Biedronka", date: "2026-09-17", note: "przy zakupie 2" });
+    assert.equal(o.n, "przy zakupie 2");
+  });
+
+  test("no condition → no field", () => {
+    const o = seenObservation({ amount: 22.99, shop: "Lidl", date: "2026-09-17", note: "  " });
+    assert.equal("n" in o, false);
+  });
 });
 
 describe("addSeenObservation", () => {
@@ -319,6 +331,26 @@ describe("addSeenObservation", () => {
 
     assert.equal(list.length, 2);
     assert.equal(list.find(o => o.s.toLowerCase() === "biedronka").a, 21.49);
+  });
+
+  test("two offers in one shop coexist when their conditions differ", () => {
+    // The case that makes the condition part of the key: Biedronka quotes
+    // 64,99 for two and 89,89 for one, and both are true at once.
+    let list = [];
+    list = addSeenObservation(list, { d: daysAgo(0), a: 89.89, s: "Biedronka" }, TODAY);
+    list = addSeenObservation(list, { d: daysAgo(0), a: 64.99, s: "Biedronka", n: "przy zakupie 2" }, TODAY);
+
+    assert.equal(list.length, 2);
+    assert.equal(cheapestSeen(list, TODAY).a, 64.99);
+  });
+
+  test("the same offer noted again still replaces itself", () => {
+    let list = [];
+    list = addSeenObservation(list, { d: daysAgo(7), a: 64.99, s: "Biedronka", n: "przy zakupie 2" }, TODAY);
+    list = addSeenObservation(list, { d: daysAgo(0), a: 61.99, s: "biedronka", n: "Przy zakupie 2" }, TODAY);
+
+    assert.equal(list.length, 1);
+    assert.equal(list[0].a, 61.99);
   });
 
   test("forgets what a shop said more than 90 days ago", () => {

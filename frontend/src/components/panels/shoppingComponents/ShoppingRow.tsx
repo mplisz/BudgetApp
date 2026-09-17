@@ -41,7 +41,7 @@ interface ShoppingRowProps {
   catalogEntry?: CatalogEntry;
   onForgetPrice: (key: string, observationId: string) => void;
   /** Note a price seen on a shelf without buying it. */
-  onSeenPrice:     (key: string, amount: number, shop: string) => void;
+  onSeenPrice:     (key: string, amount: number, shop: string, note?: string) => void;
   onForgetSeenPrice: (key: string, observationId: string) => void;
 }
 
@@ -75,6 +75,7 @@ export function ShoppingRow({
   // editor's Save.
   const [draftPrice, setDraftPrice] = useState("");
   const [draftShop,  setDraftShop]  = useState("");
+  const [draftPriceNote, setDraftPriceNote] = useState("");
   // The breakdown lives BELOW the row rather than in the meta line: that
   // line sits inside the name block, which a phone squeezes to about
   // sixty pixels between the checkbox and the buttons.
@@ -97,9 +98,10 @@ export function ShoppingRow({
 
   function noteSeenPrice() {
     if (!canNotePrice || !catalogEntry) return;
-    onSeenPrice(catalogEntry.key, priceValue, draftShop.trim());
+    onSeenPrice(catalogEntry.key, priceValue, draftShop.trim(), draftPriceNote.trim() || undefined);
     setDraftPrice("");
     setDraftShop("");
+    setDraftPriceNote("");
   }
 
   return (
@@ -275,8 +277,19 @@ export function ShoppingRow({
                 onChange={setDraftShop}
                 onEnter={noteSeenPrice}
                 placeholder="w jakim sklepie?"
-                wrapperStyle={{ flex: "1 1 150px", width: "auto" }}
+                wrapperStyle={{ flex: "1 1 130px", width: "auto" }}
                 style={{ ...s.input, fontSize: 13, padding: "8px 10px" }}
+              />
+              {/* The condition travels WITH the price: "64,99 przy zakupie
+                  2" is one fact, and splitting it from the number would
+                  leave a bargain that talks you into the wrong purchase. */}
+              <input
+                value={draftPriceNote}
+                onChange={e => setDraftPriceNote(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") noteSeenPrice(); }}
+                placeholder="warunek, np. przy zakupie 2"
+                maxLength={60}
+                style={{ ...s.input, flex: "1 1 150px", fontSize: 13, padding: "8px 10px" }}
               />
               <button
                 type="button"

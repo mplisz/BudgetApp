@@ -352,6 +352,10 @@ router.patch("/:id", async (req, res) => {
 const SeenSchema = z.object({
   amount: z.number().positive().max(100_000),
   shop:   z.string().min(1).max(150),
+  // The condition the price came with — "przy zakupie 2", "z aplikacją".
+  // Part of the identity, not a decoration: one shop can quote two true
+  // prices at once and they must not overwrite each other.
+  note:   z.string().max(60).optional(),
 });
 
 router.post("/catalog/:key/seen", async (req, res) => {
@@ -367,6 +371,7 @@ router.post("/catalog/:key/seen", async (req, res) => {
   const observation = seenObservation({
     amount: parsed.data.amount,
     shop,
+    note: parsed.data.note,
     date: new Date().toISOString().slice(0, 10),
   });
   if (!observation) return res.status(400).json({ error: "Invalid price." });

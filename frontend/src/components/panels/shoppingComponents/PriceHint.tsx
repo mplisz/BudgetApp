@@ -140,8 +140,17 @@ export function PriceChip({ price, observations, seen, open, onToggle }: PriceCh
             with a phone was for. Neutral colour, never green: it is not a
             price anyone has paid. */}
         {cheapestSeen && (
-          <span style={{ color: c.infoLight, fontWeight: 600 }}>
+          <span
+            // The star, not the condition itself: "64,99 przy zakupie 2 w
+            // Biedronce" does not fit a chip, but a bare 64,99 would be a
+            // promise the shelf does not keep.
+            title={cheapestSeen.n
+              ? `${money(cheapestSeen.a)} zł w ${cheapestSeen.s} — ${cheapestSeen.n}`
+              : `${money(cheapestSeen.a)} zł w ${cheapestSeen.s}`}
+            style={{ color: c.infoLight, fontWeight: 600 }}
+          >
             {price ? " · " : ""}widziane od {money(cheapestSeen.a)} zł
+            {cheapestSeen.n && <span style={{ color: c.warningLight }}>*</span>}
           </span>
         )}
         {/* Only next to a MEDIAN: a single last price is one purchase of one
@@ -290,11 +299,23 @@ export function PricePanel({ price, observations, onForget, seen, onForgetSeen }
                   <span style={{ color: c.text, fontWeight: 800, fontSize: 15, whiteSpace: "nowrap" }}>
                     {money(o.a)} zł
                   </span>
-                  <span style={{
-                    color: c.textBody, fontWeight: 600,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>
-                    🏪 {o.s}
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{
+                      display: "block", color: c.textBody, fontWeight: 600,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      🏪 {o.s}
+                    </span>
+                    {/* The condition, in the same cell as the shop: a
+                        promotional price without it is a trap. */}
+                    {o.n && (
+                      <span style={{
+                        display: "block", marginTop: 1, fontSize: 11, color: c.warningLight,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {o.n}
+                      </span>
+                    )}
                   </span>
                   <span style={{ color: c.textMuted, whiteSpace: "nowrap" }}>{shortDate(o.d)}</span>
                   <button

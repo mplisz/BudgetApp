@@ -67,6 +67,9 @@ export interface SeenPrice {
   d: string;
   a: number;
   s: string;
+  /** The condition the price came with — "przy zakupie 2". Part of what
+   *  makes two prices in one shop two different offers. */
+  n?: string;
 }
 
 /** Computed server-side (one implementation, the tested one). */
@@ -276,11 +279,11 @@ export function useShoppingList() {
   // shop said before, so guessing the resulting list locally would mean
   // reimplementing that rule in a second place.
 
-  const addSeenPrice = useCallback(async (key: string, amount: number, shop: string): Promise<boolean> => {
+  const addSeenPrice = useCallback(async (key: string, amount: number, shop: string, note?: string): Promise<boolean> => {
     try {
       const next = await api.post<CatalogEntry[]>(
         `/api/shopping/catalog/${encodeURIComponent(key)}/seen`,
-        { amount, shop },
+        { amount, shop, ...(note ? { note } : {}) },
         { fallback: "Nie udało się zapisać ceny." },
       );
       setCatalog(next);

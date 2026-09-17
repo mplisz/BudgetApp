@@ -202,24 +202,37 @@ function round2(n) {
 // by which one could reach the median — that figure has to keep meaning
 // "what we pay", and it is the only number here anyone trusts.
 //
-// Keyed by shop, newest wins: the question these answer is "where is it
-// cheapest right now", and two prices from the same Biedronka a week
-// apart are not two answers, they are one answer and a stale one.
+// Keyed by shop AND condition, newest wins. "Where is it cheapest right
+// now" has one answer per shop, so a second look at the same Biedronka
+// replaces the first — but a shop can genuinely quote two prices at
+// once: "mleko modyfikowane 64,99 przy zakupie dwóch, a tak 89,89".
+// Those are two answers, and the condition is what tells them apart, so
+// it is part of the key rather than a decoration.
 
-/** Max shops remembered per product — a price board, not a history. */
+/** Max entries remembered per product — a price board, not a history. */
 const MAX_SEEN = 8;
 
-/** Normalized shop name, used only to decide "same shop". */
-function shopKey(shop) {
-  return String(shop || "").trim().toLowerCase();
+/** Normalized shop + condition, used only to decide "same offer". */
+function seenKey(observation) {
+  return [
+    String(observation?.s || "").trim().toLowerCase(),
+    String(observation?.n || "").trim().toLowerCase(),
+  ].join("|");
 }
 
-/** One hand-entered observation, or null when it says nothing usable. */
-function seenObservation({ amount, shop, date }) {
+/**
+ * One hand-entered observation, or null when it says nothing usable.
+ *
+ * `note` carries the condition a price comes with — "przy zakupie 2",
+ * "z aplikacją", "ostatnia sztuka". Without it a promotional number
+ * remembered on its own talks you into the wrong purchase a week later.
+ */
+function seenObservation({ amount, shop, date, note }) {
   const a = Number(amount);
   const s = String(shop || "").trim().slice(0, 40);
   if (!Number.isFinite(a) || a <= 0 || a > 100_000 || !s) return null;
-  return { d: date, a: round2(a), s };
+  const n = String(note || "").trim().slice(0, 60);
+  return { d: date, a: round2(a), s, ...(n ? { n } : {}) };
 }
 
 /**
@@ -232,7 +245,7 @@ function addSeenObservation(list, observation, today = new Date()) {
 
   const kept = [...(list || [])]
     .filter(o => o && typeof o.a === "number" && (o.d ?? "") >= cutoff)
-    .filter(o => !observation || shopKey(o.s) !== shopKey(observation.s));
+    .filter(o => !observation || seenKey(o) !== seenKey(observation));
 
   return [...(observation ? [observation] : []), ...kept]
     .sort((x, y) => (y.d ?? "").localeCompare(x.d ?? ""))
