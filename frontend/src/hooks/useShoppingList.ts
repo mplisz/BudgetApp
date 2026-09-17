@@ -60,6 +60,15 @@ export interface PriceObservation {
   x?:  string;
 }
 
+/** A price spotted on a shelf and not paid — hand-typed while comparing
+ *  shops. One per shop, newest winning; never part of the median. */
+export interface SeenPrice {
+  i: string;
+  d: string;
+  a: number;
+  s: string;
+}
+
 /** Computed server-side (one implementation, the tested one). */
 export interface PriceSummary {
   unit:   string;
@@ -82,6 +91,7 @@ export interface CatalogEntry {
   lastUsedAt:  string;
   prices?:     PriceObservation[];
   price?:      PriceSummary | null;
+  seen?:       SeenPrice[];
 }
 
 interface PanelState {
@@ -261,9 +271,50 @@ export function useShoppingList() {
     }
   }, [api, catalog, showError]);
 
+  // ── Prices seen on a shelf ────────────────────────────────
+  // Not optimistic: the server keys these by shop and drops whatever that
+  // shop said before, so guessing the resulting list locally would mean
+  // reimplementing that rule in a second place.
+
+  const addSeenPrice = useCallback(async (key: string, amount: number, shop: string): Promise<boolean> => {
+    try {
+      const next = await api.post<CatalogEntry[]>(
+        `/api/shopping/catalog/${encodeURIComponent(key)}/seen`,
+        { amount, shop },
+        { fallback: "Nie udało się zapisać ceny." },
+      );
+      setCatalog(next);
+      showSuccess("Zanotowane 👀");
+      return true;
+    } catch (err) {
+      showError((err as Error).message);
+      return false;
+    }
+  }, [api, showError, showSuccess]);
+
+  const forgetSeenPrice = useCallback(async (key: string, observationId: string): Promise<boolean> => {
+    const before = catalog;
+    setCatalog(prev => prev.map(e => e.key === key
+      ? { ...e, seen: (e.seen ?? []).filter(p => p.i !== observationId) }
+      : e));
+    try {
+      const next = await api.del<CatalogEntry[]>(
+        `/api/shopping/catalog/${encodeURIComponent(key)}/seen/${encodeURIComponent(observationId)}`,
+        undefined,
+        { fallback: "Nie udało się usunąć ceny." },
+      );
+      setCatalog(next);
+      return true;
+    } catch (err) {
+      setCatalog(before);
+      showError((err as Error).message);
+      return false;
+    }
+  }, [api, catalog, showError]);
+
   return {
     items, catalog, isLoading, hasLoaded: loadedRef.current,
     load, addItem, patchItem, markBought, markMissed, reopenItem,
-    removeItem, forgetSuggestion, forgetPrice,
+    removeItem, forgetSuggestion, forgetPrice, addSeenPrice, forgetSeenPrice,
   };
 }

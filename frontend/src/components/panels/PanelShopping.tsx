@@ -28,7 +28,7 @@ export default function PanelShopping() {
   const {
     items, catalog, isLoading, hasLoaded,
     load, addItem, patchItem, markBought, markMissed, reopenItem, removeItem,
-    forgetSuggestion, forgetPrice,
+    forgetSuggestion, forgetPrice, addSeenPrice, forgetSeenPrice,
   } = useShoppingList();
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -105,6 +105,8 @@ export default function PanelShopping() {
       patchItem(id, details);
     },
     onForgetPrice: forgetPrice,
+    onSeenPrice: addSeenPrice,
+    onForgetSeenPrice: forgetSeenPrice,
   };
 
   // Prices live on the catalog, not on the item — the catalog is what

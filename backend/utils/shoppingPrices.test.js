@@ -13,7 +13,8 @@ const { test, describe } = require("node:test");
 const assert             = require("node:assert/strict");
 
 const {
-  MAX_OBSERVATIONS, MIN_FOR_MEDIAN,
+  MAX_OBSERVATIONS, MAX_SEEN, MIN_FOR_MEDIAN,
+  seenObservation, addSeenObservation, cheapestSeen,
   parsePackCount, parsePackageSize, parseWeightKg, observationFrom,
   median, pruneObservations, addObservation, summarize,
 } = require("./shoppingPrices");
@@ -285,6 +286,78 @@ describe("summarize", () => {
 });
 
 // ── Accumulating over time ────────────────────────────────────
+
+// ── Prices seen on a shelf ────────────────────────────────────
+
+describe("seenObservation", () => {
+  test("a price without a shop says nothing and is refused", () => {
+    // "22,99" alone answers no question; "22,99 w Biedronce" does.
+    assert.equal(seenObservation({ amount: 22.99, shop: "", date: daysAgo(0) }), null);
+    assert.equal(seenObservation({ amount: 22.99, shop: "   ", date: daysAgo(0) }), null);
+  });
+
+  test("a nonsense amount is refused", () => {
+    assert.equal(seenObservation({ amount: 0, shop: "Lidl", date: daysAgo(0) }), null);
+    assert.equal(seenObservation({ amount: -5, shop: "Lidl", date: daysAgo(0) }), null);
+    assert.equal(seenObservation({ amount: "abc", shop: "Lidl", date: daysAgo(0) }), null);
+  });
+
+  test("keeps price, shop and date", () => {
+    const o = seenObservation({ amount: 22.999, shop: "  Biedronka  ", date: "2026-09-17" });
+    assert.deepEqual(o, { d: "2026-09-17", a: 23, s: "Biedronka" });
+  });
+});
+
+describe("addSeenObservation", () => {
+  const seen = (shop, a, ago) => ({ d: daysAgo(ago), a, s: shop });
+
+  test("one price per shop — a newer look replaces the older one", () => {
+    let list = [];
+    list = addSeenObservation(list, seen("Biedronka", 22.99, 7), TODAY);
+    list = addSeenObservation(list, seen("Lidl", 24.99, 3), TODAY);
+    list = addSeenObservation(list, seen("biedronka", 21.49, 0), TODAY);   // same shop, other case
+
+    assert.equal(list.length, 2);
+    assert.equal(list.find(o => o.s.toLowerCase() === "biedronka").a, 21.49);
+  });
+
+  test("forgets what a shop said more than 90 days ago", () => {
+    const list = addSeenObservation([seen("Lidl", 24.99, 200)], null, TODAY);
+    assert.deepEqual(list, []);
+  });
+
+  test("caps the board at a sane number of shops", () => {
+    let list = [];
+    for (let i = 0; i < MAX_SEEN + 4; i++) {
+      list = addSeenObservation(list, seen(`Sklep ${i}`, 10 + i, i), TODAY);
+    }
+    assert.equal(list.length, MAX_SEEN);
+  });
+});
+
+describe("cheapestSeen", () => {
+  test("finds the lowest price still inside the window", () => {
+    const list = [
+      { d: daysAgo(1), a: 24.99, s: "Lidl" },
+      { d: daysAgo(2), a: 21.49, s: "Biedronka" },
+      { d: daysAgo(3), a: 23.00, s: "Auchan" },
+    ];
+    assert.equal(cheapestSeen(list, TODAY).s, "Biedronka");
+  });
+
+  test("an expired bargain is not the cheapest", () => {
+    const list = [
+      { d: daysAgo(1),   a: 24.99, s: "Lidl" },
+      { d: daysAgo(200), a: 9.99,  s: "Stara Promocja" },
+    ];
+    assert.equal(cheapestSeen(list, TODAY).s, "Lidl");
+  });
+
+  test("nothing seen → nothing to report", () => {
+    assert.equal(cheapestSeen([], TODAY), null);
+    assert.equal(cheapestSeen(undefined, TODAY), null);
+  });
+});
 
 describe("addObservation", () => {
   test("a new purchase lands at the front and the oldest falls off", () => {

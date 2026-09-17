@@ -22,7 +22,7 @@
 
 const { upsertSettingsDoc, readSettingsDoc } = require("./settingsDoc");
 const { foldProductName } = require("./productCatalog");
-const { addObservation } = require("./shoppingPrices");
+const { addObservation, addSeenObservation } = require("./shoppingPrices");
 
 const CATALOG_DOC = (familyId) => `shopping_catalog_${familyId}`;
 
@@ -233,9 +233,37 @@ function withId(observation) {
   return { i: Math.random().toString(36).slice(2, 8), ...observation };
 }
 
-/** Drop one recorded price the user rejected as not being this product.
- *  Returns the catalog as it now stands. */
-async function forgetPrice(settingsContainer, familyId, key, observationId) {
+/**
+ * Record a price someone SAW on a shelf without buying it — the "is it
+ * cheaper over the road" note. Kept in `seen`, never in `prices`: these
+ * are typed by hand with no receipt behind them, and the median has to
+ * keep meaning what the family actually pays.
+ *
+ * One entry per shop, newest winning — see addSeenObservation.
+ */
+async function rememberSeenPrice(settingsContainer, familyId, key, observation) {
+  if (!key || !observation) return false;
+  return upsertSettingsDoc(settingsContainer, {
+    id:     CATALOG_DOC(familyId),
+    familyId,
+    type:   "SHOPPING_CATALOG",
+    logTag: "SHOPPING_CATALOG",
+    mutate: (doc) => {
+      const items = Array.isArray(doc.items) ? doc.items : [];
+      const idx   = items.findIndex(e => e.key === key);
+      if (idx === -1) return null;   // not a product this family lists
+      const seen = addSeenObservation(items[idx].seen, withId(observation));
+      return { ...doc, items: items.map((e, i) => i === idx ? { ...e, seen } : e) };
+    },
+  });
+}
+
+/**
+ * Drop one recorded price. `field` picks which list — "prices" for a
+ * mis-matched receipt line, "seen" for a shelf price that is no longer
+ * true. Returns the catalog as it now stands.
+ */
+async function forgetPrice(settingsContainer, familyId, key, observationId, field = "prices") {
   await upsertSettingsDoc(settingsContainer, {
     id:     CATALOG_DOC(familyId),
     familyId,
@@ -245,9 +273,10 @@ async function forgetPrice(settingsContainer, familyId, key, observationId) {
       const items = Array.isArray(doc.items) ? doc.items : [];
       const idx   = items.findIndex(e => e.key === key);
       if (idx === -1) return null;
-      const prices = (items[idx].prices || []).filter(p => p.i !== observationId);
-      if (prices.length === (items[idx].prices || []).length) return null;   // nothing removed
-      return { ...doc, items: items.map((e, i) => i === idx ? { ...e, prices } : e) };
+      const before = items[idx][field] || [];
+      const after  = before.filter(p => p.i !== observationId);
+      if (after.length === before.length) return null;   // nothing removed
+      return { ...doc, items: items.map((e, i) => i === idx ? { ...e, [field]: after } : e) };
     },
   });
   return fetchCatalog(settingsContainer, familyId);
@@ -289,6 +318,7 @@ module.exports = {
   rememberShoppingItem,
   rememberShoppingSection,
   rememberPrices,
+  rememberSeenPrice,
   forgetPrice,
   withId,
   lookupSection,

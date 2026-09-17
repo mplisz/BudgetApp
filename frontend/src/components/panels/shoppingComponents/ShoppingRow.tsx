@@ -24,7 +24,8 @@ import { c, alpha } from "../../../styles/tokens";
 import { useState } from "react";
 import { theme as s } from "../../../styles/theme";
 import { SHOPPING_SECTIONS, SECTION_IDS, sectionMeta } from "../../../data/constants/shoppingSections";
-import { PriceHint } from "./PriceHint";
+import { PriceChip, PricePanel } from "./PriceHint";
+import { MerchantInput } from "../../ui/MerchantInput";
 import type { ShoppingItem, CatalogEntry } from "../../../hooks/useShoppingList";
 
 interface ShoppingRowProps {
@@ -39,6 +40,9 @@ interface ShoppingRowProps {
    *  has been matched to it. */
   catalogEntry?: CatalogEntry;
   onForgetPrice: (key: string, observationId: string) => void;
+  /** Note a price seen on a shelf without buying it. */
+  onSeenPrice:     (key: string, amount: number, shop: string) => void;
+  onForgetSeenPrice: (key: string, observationId: string) => void;
 }
 
 const iconBtn = (color: string): React.CSSProperties => ({
@@ -54,7 +58,7 @@ const iconBtn = (color: string): React.CSSProperties => ({
 
 export function ShoppingRow({
   item, onBought, onMissed, onReopen, onRemove, onQty, onDetails,
-  catalogEntry, onForgetPrice,
+  catalogEntry, onForgetPrice, onSeenPrice, onForgetSeenPrice,
 }: ShoppingRowProps) {
   const resolved = item.status !== "open";
   const missed   = !resolved && !!item.missedAt;
@@ -65,6 +69,16 @@ export function ShoppingRow({
   const [editing,     setEditing]     = useState(false);
   const [draftNote,   setDraftNote]   = useState(item.note ?? "");
   const [draftSection, setDraftSection] = useState(item.section ?? "inne");
+  // Shelf price: its own little form, saved on its own button. Writing
+  // it down happens standing in front of the shelf, at a different
+  // moment from renaming or re-filing the item, so it does not share the
+  // editor's Save.
+  const [draftPrice, setDraftPrice] = useState("");
+  const [draftShop,  setDraftShop]  = useState("");
+  // The breakdown lives BELOW the row rather than in the meta line: that
+  // line sits inside the name block, which a phone squeezes to about
+  // sixty pixels between the checkbox and the buttons.
+  const [pricesOpen, setPricesOpen] = useState(false);
 
   function openEditor() {
     if (resolved) return;            // nothing to adjust on a settled item
@@ -76,6 +90,16 @@ export function ShoppingRow({
   function save() {
     onDetails(item.id, { note: draftNote.trim(), section: draftSection });
     setEditing(false);
+  }
+
+  const priceValue = Number(draftPrice.replace(",", "."));
+  const canNotePrice = !!catalogEntry && Number.isFinite(priceValue) && priceValue > 0 && draftShop.trim().length > 0;
+
+  function noteSeenPrice() {
+    if (!canNotePrice || !catalogEntry) return;
+    onSeenPrice(catalogEntry.key, priceValue, draftShop.trim());
+    setDraftPrice("");
+    setDraftShop("");
   }
 
   return (
@@ -139,10 +163,12 @@ export function ShoppingRow({
                 to dla córki" is the whole reason the item was written
                 down that way, and it has to survive a glance in a shop. */}
             {item.note && <span style={{ color: c.infoLight, fontWeight: 600 }}>📝 {item.note}</span>}
-            <PriceHint
+            <PriceChip
               price={catalogEntry?.price}
               observations={catalogEntry?.prices ?? []}
-              onForget={id => catalogEntry && onForgetPrice(catalogEntry.key, id)}
+              seen={catalogEntry?.seen ?? []}
+              open={pricesOpen}
+              onToggle={() => setPricesOpen(o => !o)}
             />
             {missed && (
               <span style={{ color: c.warningLight }}>
@@ -190,6 +216,16 @@ export function ShoppingRow({
         )}
       </div>
 
+      {pricesOpen && (
+        <PricePanel
+          price={catalogEntry?.price}
+          observations={catalogEntry?.prices ?? []}
+          onForget={id => catalogEntry && onForgetPrice(catalogEntry.key, id)}
+          seen={catalogEntry?.seen ?? []}
+          onForgetSeen={id => catalogEntry && onForgetSeenPrice(catalogEntry.key, id)}
+        />
+      )}
+
       {editing && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${c.border}` }}>
           <input
@@ -219,6 +255,39 @@ export function ShoppingRow({
           <button type="button" onClick={() => setEditing(false)} style={{ ...s.btnSm(c.textSecondary), height: 38 }}>
             Anuluj
           </button>
+
+          {/* Shelf price. Only once the product is in the catalog — before
+              that there is nothing to hang a price on, and the catalog
+              entry appears the moment the item is added. */}
+          {catalogEntry && (
+            <div style={{ flexBasis: "100%", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
+              <span style={{ fontSize: 11, color: c.textMuted, whiteSpace: "nowrap" }}>👀 Widziana cena:</span>
+              <input
+                value={draftPrice}
+                onChange={e => setDraftPrice(e.target.value.replace(/[^\d.,]/g, ""))}
+                onKeyDown={e => { if (e.key === "Enter") noteSeenPrice(); }}
+                placeholder="22,99"
+                inputMode="decimal"
+                style={{ ...s.input, flex: "0 1 90px", fontSize: 13, padding: "8px 10px" }}
+              />
+              <MerchantInput
+                value={draftShop}
+                onChange={setDraftShop}
+                onEnter={noteSeenPrice}
+                placeholder="w jakim sklepie?"
+                wrapperStyle={{ flex: "1 1 150px", width: "auto" }}
+                style={{ ...s.input, fontSize: 13, padding: "8px 10px" }}
+              />
+              <button
+                type="button"
+                onClick={noteSeenPrice}
+                disabled={!canNotePrice}
+                style={{ ...s.btnSm(c.info), height: 38, opacity: canNotePrice ? 1 : 0.4, cursor: canNotePrice ? "pointer" : "not-allowed" }}
+              >
+                Zanotuj
+              </button>
+            </div>
+          )}
         </div>
       )}
 

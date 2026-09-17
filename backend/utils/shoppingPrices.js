@@ -194,6 +194,59 @@ function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+// ── Prices seen on a shelf but not paid ──────────────────────
+//
+// A different kind of number from everything above: typed by hand while
+// comparing shops, with no receipt behind it. Kept in its OWN list on
+// the catalog entry rather than alongside purchases, so there is no path
+// by which one could reach the median — that figure has to keep meaning
+// "what we pay", and it is the only number here anyone trusts.
+//
+// Keyed by shop, newest wins: the question these answer is "where is it
+// cheapest right now", and two prices from the same Biedronka a week
+// apart are not two answers, they are one answer and a stale one.
+
+/** Max shops remembered per product — a price board, not a history. */
+const MAX_SEEN = 8;
+
+/** Normalized shop name, used only to decide "same shop". */
+function shopKey(shop) {
+  return String(shop || "").trim().toLowerCase();
+}
+
+/** One hand-entered observation, or null when it says nothing usable. */
+function seenObservation({ amount, shop, date }) {
+  const a = Number(amount);
+  const s = String(shop || "").trim().slice(0, 40);
+  if (!Number.isFinite(a) || a <= 0 || a > 100_000 || !s) return null;
+  return { d: date, a: round2(a), s };
+}
+
+/**
+ * Adds one, replacing whatever that shop said before, and drops anything
+ * outside the window. Pure — see shoppingPrices.test.js.
+ */
+function addSeenObservation(list, observation, today = new Date()) {
+  const cutoff = new Date(today.getTime() - WINDOW_DAYS * 86_400_000)
+    .toISOString().slice(0, 10);
+
+  const kept = [...(list || [])]
+    .filter(o => o && typeof o.a === "number" && (o.d ?? "") >= cutoff)
+    .filter(o => !observation || shopKey(o.s) !== shopKey(observation.s));
+
+  return [...(observation ? [observation] : []), ...kept]
+    .sort((x, y) => (y.d ?? "").localeCompare(x.d ?? ""))
+    .slice(0, MAX_SEEN);
+}
+
+/** The cheapest price seen, for the "widziane od …" hint. null when none
+ *  survive the window. */
+function cheapestSeen(list, today = new Date()) {
+  const kept = addSeenObservation(list, null, today);
+  if (kept.length === 0) return null;
+  return kept.reduce((best, o) => (o.a < best.a ? o : best), kept[0]);
+}
+
 // ── Statistics ───────────────────────────────────────────────
 
 /** Middle value; the average of the two middles for an even count. */
@@ -251,8 +304,12 @@ function summarize(observations, today = new Date()) {
 
 module.exports = {
   MAX_OBSERVATIONS,
+  MAX_SEEN,
   WINDOW_DAYS,
   MIN_FOR_MEDIAN,
+  seenObservation,
+  addSeenObservation,
+  cheapestSeen,
   parsePackCount,
   parsePackageSize,
   parseWeightKg,

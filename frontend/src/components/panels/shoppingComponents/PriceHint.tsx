@@ -13,17 +13,44 @@
 // removes it. The panel is deliberately NOT styled like the meta line it
 // opens from: it is the one place on this screen where you read numbers
 // and decide something, so it gets real type sizes and a table's shape.
+//
+// SPLIT IN TWO on purpose. The chip belongs in the item's meta line, but
+// that line lives inside the name block, which on a phone is squeezed to
+// about sixty pixels by the checkbox and four buttons beside it. The
+// panel therefore has to be rendered BELOW the row, where the editor
+// already sits, and the row owns the open/closed state for both halves.
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { formatSize, computeUnitPrice, unitPriceLabel, type SizeUnit } from "../../../utils/productPricing";
-import type { PriceSummary, PriceObservation } from "../../../hooks/useShoppingList";
+import type { PriceSummary, PriceObservation, SeenPrice } from "../../../hooks/useShoppingList";
 
-interface PriceHintProps {
+interface PriceChipProps {
+  price:        PriceSummary | null | undefined;
+  observations: PriceObservation[];
+  seen:         SeenPrice[];
+  open:         boolean;
+  onToggle:     () => void;
+}
+
+interface PricePanelProps {
   price:        PriceSummary | null | undefined;
   observations: PriceObservation[];
   onForget:     (observationId: string) => void;
+  seen:         SeenPrice[];
+  onForgetSeen: (observationId: string) => void;
+}
+
+/** Observations that belong to the summarized unit — mixing zł/kg with
+ *  zł/szt in one list would be comparing different things. */
+function keptFor(price: PriceSummary | null | undefined, observations: PriceObservation[]) {
+  return price ? observations.filter(o => o.u === price.unit) : [];
+}
+
+/** True when there is nothing at all to show for this product. */
+export function hasPriceInfo(price: PriceSummary | null | undefined, seen: SeenPrice[]): boolean {
+  return !!price || seen.length > 0;
 }
 
 const money  = (n: number) => n.toFixed(2).replace(".", ",");
@@ -52,13 +79,17 @@ function describeSize(o: PriceObservation): string | null {
   return perUnit != null ? `${size} · ${money(perUnit)} ${unitPriceLabel(unit)}` : size;
 }
 
-export function PriceHint({ price, observations, onForget }: PriceHintProps) {
-  const [open, setOpen] = useState(false);
+// ── The chip, inside the item's meta line ────────────────────
 
-  const kept = useMemo(
-    () => (price ? observations.filter(o => o.u === price.unit) : []),
-    [price, observations],
+export function PriceChip({ price, observations, seen, open, onToggle }: PriceChipProps) {
+  // The cheapest shelf price is the whole reason someone walks round two
+  // shops writing prices down, so it gets a place on the collapsed chip.
+  const cheapestSeen = useMemo(
+    () => seen.reduce<SeenPrice | null>((best, o) => (!best || o.a < best.a ? o : best), null),
+    [seen],
   );
+
+  const kept = useMemo(() => keptFor(price, observations), [price, observations]);
 
   // What the sized purchases say about the package:
   //   one size  → name it on the chip, "zwykle 5,20 zł / 280 g"
@@ -79,12 +110,13 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
     return { common: null, mixed: distinct.size >= 2 };
   }, [kept]);
 
-  if (!price) return null;
+  // A product nobody has bought yet can still have shelf prices noted
+  // against it — that is the point of noting them.
+  if (!hasPriceInfo(price, seen)) return null;
 
   return (
-    <>
       <span
-        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        onClick={e => { e.stopPropagation(); onToggle(); }}
         title="Pokaż, z czego wyszła ta cena"
         style={{
           display: "inline-flex", alignItems: "center", gap: 4,
@@ -94,19 +126,27 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
           border: `1px solid ${open ? alpha(c.success, "55") : "transparent"}`,
         }}
       >
-        💰
-        {price.median != null
+        {price ? "💰" : "👀"}
+        {price && (price.median != null
           ? <>zwykle <strong style={{ color: c.successLight }}>{money(price.median)}{suffix(price.unit)}</strong></>
-          : <>ost. <strong style={{ color: c.successLight }}>{money(price.last)}{suffix(price.unit)}</strong></>}
-        {sizeInfo.common && <span style={{ color: c.textSecondary }}> / {sizeInfo.common}</span>}
+          : <>ost. <strong style={{ color: c.successLight }}>{money(price.last)}{suffix(price.unit)}</strong></>)}
+        {price && sizeInfo.common && <span style={{ color: c.textSecondary }}> / {sizeInfo.common}</span>}
         {/* The last price only earns its own slot when it differs from the
             typical one — otherwise it is the same number twice. */}
-        {price.median != null && price.last !== price.median && (
+        {price?.median != null && price.last !== price.median && (
           <> · ost. {money(price.last)}</>
+        )}
+        {/* The cheapest shelf price, which is what walking round two shops
+            with a phone was for. Neutral colour, never green: it is not a
+            price anyone has paid. */}
+        {cheapestSeen && (
+          <span style={{ color: c.infoLight, fontWeight: 600 }}>
+            {price ? " · " : ""}widziane od {money(cheapestSeen.a)} zł
+          </span>
         )}
         {/* Only next to a MEDIAN: a single last price is one purchase of one
             package, so there is nothing mixed about it. */}
-        {sizeInfo.mixed && price.median != null && (
+        {sizeInfo.mixed && price?.median != null && (
           <span
             title="Mediana liczona z opakowań różnej wielkości — rozwiń, żeby zobaczyć gramatury"
             style={{ color: c.warningLight, fontWeight: 600 }}
@@ -116,29 +156,39 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
         )}
         <span style={{ color: c.textMuted }}>{open ? "▴" : "▾"}</span>
       </span>
+  );
+}
 
-      {open && (
+// ── The breakdown, rendered below the row at full width ──────
+
+export function PricePanel({ price, observations, onForget, seen, onForgetSeen }: PricePanelProps) {
+  const kept = useMemo(() => keptFor(price, observations), [price, observations]);
+
+  if (!hasPriceInfo(price, seen)) return null;
+
+  return (
         <div
           onClick={e => e.stopPropagation()}
           style={{
-            flexBasis: "100%", marginTop: 8,
+            marginTop: 10,
             background: c.bgDeepest, border: `1px solid ${c.borderStrong}`,
             borderRadius: 10, overflow: "hidden",
-            // Reset the meta line's 11px — this panel is read, not glanced at.
             fontSize: 13,
           }}
         >
-          <div style={{
-            display: "flex", justifyContent: "space-between", alignItems: "baseline",
-            padding: "8px 12px", borderBottom: `1px solid ${c.border}`,
-          }}>
-            <span style={{ color: c.textSecondary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              Zakupy z ostatnich 90 dni
-            </span>
-            <span style={{ color: c.textMuted, fontSize: 11 }}>
-              {price.count} {price.count === 1 ? "zakup" : price.count < 5 ? "zakupy" : "zakupów"}
-            </span>
-          </div>
+          {price && (
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "baseline",
+              padding: "8px 12px", borderBottom: `1px solid ${c.border}`,
+            }}>
+              <span style={{ color: c.textSecondary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Zakupy z ostatnich 90 dni
+              </span>
+              <span style={{ color: c.textMuted, fontSize: 11 }}>
+                {price.count} {price.count === 1 ? "zakup" : price.count < 5 ? "zakupy" : "zakupów"}
+              </span>
+            </div>
+          )}
 
           {kept.map((o, idx) => {
             const sizeText = describeSize(o);
@@ -207,13 +257,63 @@ export function PriceHint({ price, observations, onForget }: PriceHintProps) {
             );
           })}
 
-          {price.median == null && (
+          {price && price.median == null && (
             <div style={{ padding: "8px 12px", borderTop: `1px solid ${c.border}`, color: c.textMuted, fontSize: 11 }}>
               „Zwykle" pojawi się od 3 zakupów — do tego czasu tylko ostatnia cena.
             </div>
           )}
+
+          {/* Shelf prices, kept visually apart from what was actually paid:
+              one per shop, hand-typed, and never part of any median. */}
+          {seen.length > 0 && (
+            <>
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                padding: "8px 12px", borderTop: `1px solid ${c.border}`,
+                background: alpha(c.info, "12"),
+              }}>
+                <span style={{ color: c.infoLight, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  👀 Widziane na półce
+                </span>
+                <span style={{ color: c.textMuted, fontSize: 11 }}>nie wlicza się do mediany</span>
+              </div>
+
+              {seen.map(o => (
+                <div
+                  key={o.i}
+                  style={{
+                    display: "grid", gridTemplateColumns: "auto 1fr auto auto",
+                    alignItems: "center", columnGap: 12,
+                    padding: "8px 12px", borderTop: `1px solid ${alpha(c.border, "88")}`,
+                  }}
+                >
+                  <span style={{ color: c.text, fontWeight: 800, fontSize: 15, whiteSpace: "nowrap" }}>
+                    {money(o.a)} zł
+                  </span>
+                  <span style={{
+                    color: c.textBody, fontWeight: 600,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    🏪 {o.s}
+                  </span>
+                  <span style={{ color: c.textMuted, whiteSpace: "nowrap" }}>{shortDate(o.d)}</span>
+                  <button
+                    type="button"
+                    onClick={() => onForgetSeen(o.i)}
+                    title="Usuń zanotowaną cenę"
+                    aria-label="Usuń zanotowaną cenę"
+                    style={{
+                      background: "transparent", border: `1px solid ${alpha(c.danger, "66")}`,
+                      color: c.dangerLight, borderRadius: 8, cursor: "pointer",
+                      width: 32, height: 32, fontSize: 14, lineHeight: 1,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
         </div>
-      )}
-    </>
   );
 }
