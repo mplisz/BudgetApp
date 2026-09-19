@@ -318,6 +318,22 @@ describe("seenObservation", () => {
     const o = seenObservation({ amount: 22.99, shop: "Lidl", date: "2026-09-17", note: "  " });
     assert.equal("n" in o, false);
   });
+
+  test("keeps the package size in the same shape as a receipt observation", () => {
+    const o = seenObservation({ amount: 5.49, shop: "Auchan", date: "2026-09-17", size: 250, sizeUnit: "g" });
+    assert.equal(o.z, 250);
+    assert.equal(o.zu, "g");
+  });
+
+  test("a senseless size is dropped, the price is still kept", () => {
+    // The price is what someone stood at the shelf to write down.
+    for (const bad of [{ size: 0, sizeUnit: "g" }, { size: 500, sizeUnit: "kg" }, { size: 500 }, { sizeUnit: "g" }]) {
+      const o = seenObservation({ amount: 5.49, shop: "Auchan", date: "2026-09-17", ...bad });
+      assert.equal(o.a, 5.49);
+      assert.equal("z" in o, false);
+      assert.equal("zu" in o, false);
+    }
+  });
 });
 
 describe("addSeenObservation", () => {
@@ -353,6 +369,13 @@ describe("addSeenObservation", () => {
     assert.equal(list[0].a, 61.99);
   });
 
+  test("two package sizes in one shop are two offers", () => {
+    let list = [];
+    list = addSeenObservation(list, { d: daysAgo(0), a: 4.49, s: "Lidl", z: 200, zu: "g" }, TODAY);
+    list = addSeenObservation(list, { d: daysAgo(0), a: 5.49, s: "Lidl", z: 250, zu: "g" }, TODAY);
+    assert.equal(list.length, 2);
+  });
+
   test("forgets what a shop said more than 90 days ago", () => {
     const list = addSeenObservation([seen("Lidl", 24.99, 200)], null, TODAY);
     assert.deepEqual(list, []);
@@ -383,6 +406,29 @@ describe("cheapestSeen", () => {
       { d: daysAgo(200), a: 9.99,  s: "Stara Promocja" },
     ];
     assert.equal(cheapestSeen(list, TODAY).s, "Lidl");
+  });
+
+  test("per kilogram when every offer has a size in the same unit", () => {
+    // 5,49 for 250 g is 21,96 zł/kg; 4,49 for 200 g is 22,45 zł/kg.
+    const list = [
+      { d: daysAgo(1), a: 4.49, s: "Lidl",   z: 200, zu: "g" },
+      { d: daysAgo(1), a: 5.49, s: "Auchan", z: 250, zu: "g" },
+    ];
+    assert.equal(cheapestSeen(list, TODAY).s, "Auchan");
+  });
+
+  test("by amount once one offer has no size, or the units differ", () => {
+    const unsized = [
+      { d: daysAgo(1), a: 4.49, s: "Lidl" },
+      { d: daysAgo(1), a: 5.49, s: "Auchan", z: 250, zu: "g" },
+    ];
+    assert.equal(cheapestSeen(unsized, TODAY).s, "Lidl");
+
+    const mixed = [
+      { d: daysAgo(1), a: 4.49, s: "Lidl",   z: 200, zu: "g" },
+      { d: daysAgo(1), a: 5.49, s: "Auchan", z: 2,   zu: "szt" },
+    ];
+    assert.equal(cheapestSeen(mixed, TODAY).s, "Lidl");
   });
 
   test("nothing seen → nothing to report", () => {

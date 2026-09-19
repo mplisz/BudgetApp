@@ -205,27 +205,55 @@ function round2(n) {
 // Those are two answers, and the condition is what tells them apart, so
 // it is part of the key rather than a decoration.
 
-/** Normalized shop + condition, used only to decide "same offer". */
+/** Normalized shop + comment + package size, used only to decide "same
+ *  offer". The size belongs here for the same reason as the comment:
+ *  200 g and 250 g butter on one shelf are two prices, both true. */
 function seenKey(observation) {
   return [
     String(observation?.s || "").trim().toLowerCase(),
     String(observation?.n || "").trim().toLowerCase(),
+    observation?.z && observation?.zu ? `${observation.z}${observation.zu}` : "",
   ].join("|");
 }
+
+// Base units a shelf price's package can be written in — the same ones
+// receipt observations use, so both kinds share one formatter.
+const SEEN_SIZE_UNITS = new Set(["g", "ml", "szt"]);
 
 /**
  * One hand-entered observation, or null when it says nothing usable.
  *
- * `note` carries the condition a price comes with — "przy zakupie 2",
- * "z aplikacją", "ostatnia sztuka". Without it a promotional number
- * remembered on its own talks you into the wrong purchase a week later.
+ * `note` is a free comment on the price — often the condition it comes
+ * with ("przy zakupie 2", "z aplikacją"), sometimes anything else worth
+ * remembering ("ostatnia sztuka", "inna marka"). Without it a promotional
+ * number remembered on its own talks you into the wrong purchase a week
+ * later.
+ *
+ * `size` + `sizeUnit` say what the price buys, in base units (g / ml /
+ * szt), stored as `z` / `zu` exactly like a receipt observation. Optional:
+ * without them "22,99" still compares shops for the same package, but
+ * 200 g against 250 g needs the size to be answerable at all.
  */
-function seenObservation({ amount, shop, date, note }) {
+function seenObservation({ amount, shop, date, note, size, sizeUnit }) {
   const a = Number(amount);
   const s = String(shop || "").trim().slice(0, 40);
   if (!Number.isFinite(a) || a <= 0 || a > 100_000 || !s) return null;
   const n = String(note || "").trim().slice(0, 60);
-  return { d: date, a: round2(a), s, ...(n ? { n } : {}) };
+  // A size that makes no sense is dropped rather than refusing the price:
+  // the price is what the person came to write down.
+  const z = Math.round(Number(size));
+  const sized = SEEN_SIZE_UNITS.has(sizeUnit) && Number.isFinite(z) && z > 0 && z <= 100_000;
+  return {
+    d: date, a: round2(a), s,
+    ...(n ? { n } : {}),
+    ...(sized ? { z, zu: sizeUnit } : {}),
+  };
+}
+
+/** Price per base unit (zł/g, zł/ml, zł/szt) when the offer has a size,
+ *  else null. */
+function perUnit(o) {
+  return o.z && o.zu ? o.a / o.z : null;
 }
 
 /**
@@ -245,12 +273,25 @@ function addSeenObservation(list, observation, today = new Date()) {
     .slice(0, MAX_SEEN);
 }
 
-/** The cheapest price seen, for the "widziane od …" hint. null when none
- *  survive the window. */
+/**
+ * The cheapest price seen, for the "widziane od …" hint. null when none
+ * survive the window.
+ *
+ * Per kilogram (litre, piece) when EVERY offer has a size in the same
+ * unit — 5,49 zł for 250 g beats 4,49 zł for 200 g. As soon as one offer
+ * lacks a size, or the units differ, there is no common measure and the
+ * plain amount decides, as it always did.
+ *
+ * Mirrored in frontend PriceHint (cheapestSeen) — that one is what the
+ * panel shows; keep the two in step.
+ */
 function cheapestSeen(list, today = new Date()) {
   const kept = addSeenObservation(list, null, today);
   if (kept.length === 0) return null;
-  return kept.reduce((best, o) => (o.a < best.a ? o : best), kept[0]);
+  const units = new Set(kept.map(o => (perUnit(o) != null ? o.zu : null)));
+  const byUnit = units.size === 1 && !units.has(null);
+  const cost = o => (byUnit ? perUnit(o) : o.a);
+  return kept.reduce((best, o) => (cost(o) < cost(best) ? o : best), kept[0]);
 }
 
 // ── Statistics ───────────────────────────────────────────────

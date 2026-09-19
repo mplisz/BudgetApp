@@ -107,6 +107,7 @@ export default function PanelShopping() {
     onForgetPrice: forgetPrice,
     onSeenPrice: addSeenPrice,
     onForgetSeenPrice: forgetSeenPrice,
+    sectionsShown: showSectionHeadings,
   };
 
   // Prices live on the catalog, not on the item — the catalog is what

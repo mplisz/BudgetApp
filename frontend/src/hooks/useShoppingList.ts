@@ -71,9 +71,22 @@ export interface SeenPrice {
   d: string;
   a: number;
   s: string;
-  /** The condition the price came with — "przy zakupie 2". Part of what
-   *  makes two prices in one shop two different offers. */
+  /** A comment on the price, usually its condition — "przy zakupie 2".
+   *  Part of what makes two prices in one shop two different offers. */
   n?: string;
+  /** Package size in base units (g / ml / szt), `zu` its unit — the same
+   *  shape as on a receipt observation. Absent when nobody typed it. */
+  z?:  number;
+  zu?: string;
+}
+
+/** What gets typed at the shelf. Only the amount and the shop are needed. */
+export interface SeenPriceInput {
+  amount:    number;
+  shop:      string;
+  note?:     string;
+  size?:     number;
+  sizeUnit?: "g" | "ml" | "szt";
 }
 
 /** Computed server-side (one implementation, the tested one). */
@@ -278,15 +291,16 @@ export function useShoppingList() {
   }, [api, catalog, showError]);
 
   // ── Prices seen on a shelf ────────────────────────────────
-  // Adding is not optimistic: the server keys these by shop AND
-  // condition and drops whatever that offer said before, so guessing the
+  // Adding is not optimistic: the server keys these by shop, comment and
+  // package size and drops whatever that offer said before, so guessing the
   // resulting list locally would mean reimplementing the rule twice.
 
-  const addSeenPrice = useCallback(async (id: string, amount: number, shop: string, note?: string): Promise<boolean> => {
+  const addSeenPrice = useCallback(async (id: string, input: SeenPriceInput): Promise<boolean> => {
+    const { amount, shop, note, size, sizeUnit } = input;
     try {
       const saved = await api.post<ShoppingItem>(
         `/api/shopping/${id}/seen`,
-        { amount, shop, ...(note ? { note } : {}) },
+        { amount, shop, ...(note ? { note } : {}), ...(size && sizeUnit ? { size, sizeUnit } : {}) },
         { fallback: "Nie udało się zapisać ceny." },
       );
       setItems(prev => prev.map(i => i.id === id ? saved : i));
