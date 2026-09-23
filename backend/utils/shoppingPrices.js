@@ -35,7 +35,12 @@ const {
 // x is a unit PRICE, and "Kapusta czerwona x1,300 kg", where it is a
 // weight. A decimal separator is the tell, so anything with one is not
 // a pack count.
-const PACK_SUFFIX = /x\s?(\d{1,2})(?![\d.,])/i;
+//
+// An "x" that ENDS A WORD only counts glued to its digit ("Pomidoryx3"):
+// with a space after it, it is just the word's last letter — "Pepsi Max
+// 2 l" is one two-litre bottle, not two, and "Box 6" is not six boxes.
+// A free-standing "x" ("Dzik x 2", "280 g x2") may take the space.
+const PACK_SUFFIX = /(?:(?<!\p{L})x\s?|(?<=\p{L})x)(\d{1,2})(?![\d.,])/iu;
 const PACK_PREFIX = /^(\d{1,2})\s?x(?![\d.,])/i;
 
 /** How many units one line covers. null when the text says nothing. */

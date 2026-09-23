@@ -44,6 +44,16 @@ describe("parsePackCount", () => {
     assert.equal(parsePackCount("Kapusta czerwona x1,300 kg"), null);  // weight
   });
 
+  test("a word ending in x, then a size, is not a multipack", () => {
+    // Real: one 2 l bottle for 11,49 was recorded as 5,75 — "Max 2" read as "x 2".
+    assert.equal(parsePackCount("Napój Pepsi Max 2 l"), null);
+    assert.equal(parsePackCount("Pepsi Max 0,5 l"), null);
+    assert.equal(parsePackCount("Box 6"), null);
+    // …while a real multipack of it still counts.
+    assert.equal(parsePackCount("Napój Pepsi Max 2 l x2"), 2);
+    assert.equal(parsePackCount("2x Pepsi Max 0,5 l"), 2);
+  });
+
   test("x1 and no marking both mean one", () => {
     assert.equal(parsePackCount("Czosnek młody szt. x1"), null);
     assert.equal(parsePackCount("Kiełbasa kasztelańska"), null);
