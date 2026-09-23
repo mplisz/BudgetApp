@@ -8,10 +8,15 @@
 // the bottom of the screen) and that submitting keeps the field FOCUSED:
 // adding five things in a row is the normal case, and re-tapping the
 // field between each would be the whole cost of using the list.
+//
+// 📷 attaches a photo to the item being written — the moment "ten olej"
+// is thought of is when the bottle is in hand. It is held here until the
+// item is added, then uploaded to it the same way as from the ✎ editor.
 // ============================================================
 
-import { c } from "../../../styles/tokens";
-import { useState, useRef, useCallback } from "react";
+import { c, alpha } from "../../../styles/tokens";
+import { useState, useRef, useCallback, useEffect } from "react";
+import type { ChangeEvent } from "react";
 import { theme as s } from "../../../styles/theme";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { useSuggestions } from "../../../hooks/useSuggestions";
@@ -19,10 +24,17 @@ import type { CatalogEntry } from "../../../hooks/useShoppingList";
 
 interface QuickAddBarProps {
   catalog: CatalogEntry[];
-  onAdd:   (name: string, unit: string | null, note: string) => void;
+  onAdd:   (name: string, unit: string | null, note: string, photo: File | null) => void;
 }
 
 const entryLabel = (e: CatalogEntry) => e.name;
+
+const sideBtn = (active: boolean) => ({
+  background: "transparent",
+  border: `1px solid ${active ? c.infoLight : c.borderStrong}`,
+  color: active ? c.infoLight : c.textSecondary,
+  borderRadius: 10, padding: "0 14px", fontSize: 15, cursor: "pointer",
+});
 
 export function QuickAddBar({ catalog, onAdd }: QuickAddBarProps) {
   const [value, setValue] = useState("");
@@ -31,20 +43,39 @@ export function QuickAddBar({ catalog, onAdd }: QuickAddBarProps) {
   // would tax every ordinary add to serve the rare one.
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   // On a phone the bottom navigation is fixed over the viewport edge, so
   // sticking to 0 would park this field underneath it.
   const isMobile = useIsMobile();
 
+  // A thumbnail, so it is obvious WHICH photo waits to be attached.
+  useEffect(() => {
+    if (!photo) { setPhotoPreview(null); return; }
+    const url = URL.createObjectURL(photo);
+    setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
+
+  function handlePhotoPicked(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";               // so the same file can be re-picked
+    if (file) setPhoto(file);
+    inputRef.current?.focus();         // the name is what is still missing
+  }
+
   const submit = useCallback((name: string, unit: string | null) => {
     const clean = name.trim();
     if (!clean) return;
-    onAdd(clean, unit, note.trim());
+    onAdd(clean, unit, note.trim(), photo);
     setValue("");
     setNote("");
     setNoteOpen(false);          // the next item is a different thought
+    setPhoto(null);
     inputRef.current?.focus();   // ready for the next item
-  }, [onAdd, note]);
+  }, [onAdd, note, photo]);
 
   const sug = useSuggestions<CatalogEntry>({
     options: catalog,
@@ -95,14 +126,25 @@ export function QuickAddBar({ catalog, onAdd }: QuickAddBarProps) {
           onClick={() => setNoteOpen(o => !o)}
           title={noteOpen ? "Ukryj komentarz" : "Dodaj komentarz"}
           aria-expanded={noteOpen}
-          style={{
-            background: "transparent",
-            border: `1px solid ${noteOpen || note ? c.infoLight : c.borderStrong}`,
-            color: noteOpen || note ? c.infoLight : c.textSecondary,
-            borderRadius: 10, padding: "0 14px", fontSize: 15, cursor: "pointer",
-          }}
+          style={sideBtn(noteOpen || !!note)}
         >
           📝
+        </button>
+        {/* No `capture`: phones then offer camera AND gallery in one chooser. */}
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handlePhotoPicked}
+        />
+        <button
+          type="button"
+          onClick={() => photoInputRef.current?.click()}
+          title={photo ? "Zmień zdjęcie" : "Dodaj zdjęcie"}
+          style={sideBtn(!!photo)}
+        >
+          📷
         </button>
 
         {sug.showList && (
@@ -152,6 +194,27 @@ export function QuickAddBar({ catalog, onAdd }: QuickAddBarProps) {
           maxLength={300}
           style={{ ...s.input, marginTop: 8, fontSize: 13 }}
         />
+      )}
+
+      {photo && photoPreview && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, marginTop: 8,
+          padding: "6px 8px", borderRadius: 10,
+          background: alpha(c.info, "14"), border: `1px solid ${alpha(c.info, "44")}`,
+        }}>
+          <img src={photoPreview} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: c.infoLight, fontWeight: 600 }}>
+            📷 zdjęcie dołączy się do dopisanej pozycji
+          </span>
+          <button
+            type="button"
+            onClick={() => setPhoto(null)}
+            aria-label="Usuń zdjęcie"
+            style={{ background: "transparent", border: "none", color: c.textMuted, fontSize: 16, cursor: "pointer", padding: "4px 6px" }}
+          >
+            ✕
+          </button>
+        </div>
       )}
     </div>
   );

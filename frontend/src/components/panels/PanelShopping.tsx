@@ -257,7 +257,13 @@ export default function PanelShopping() {
 
           <QuickAddBar
             catalog={catalog}
-            onAdd={(name, unit, note) => { addItem({ name, unit, note }); }}
+            // The photo goes up once the item exists — through the same
+            // endpoint as from the ✎ editor, so an add stays a small
+            // request and a failed upload never loses the item itself.
+            onAdd={async (name, unit, note, photo) => {
+              const saved = await addItem({ name, unit, note });
+              if (saved && photo) await setPhoto(saved.id, photo);
+            }}
           />
         </>
       )}
