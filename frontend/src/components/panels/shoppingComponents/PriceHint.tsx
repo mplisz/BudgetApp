@@ -97,6 +97,42 @@ export function cheapestSeen(seen: SeenPrice[]): SeenPrice | null {
   return seen.reduce((best, o) => (cost(o) < cost(best) ? o : best), seen[0]);
 }
 
+/**
+ * What the sized purchases say about the package:
+ *   one size  → `common` — the price can be quoted per kg / l / szt
+ *   several   → `mixed`, because a median over 200 g and 300 g butter
+ *               describes neither
+ *
+ * Warning rather than recomputing per kilogram was a measured choice:
+ * over the family's receipts 9 of 27 medians mix sizes, but only 3 of
+ * those have enough sized purchases for a per-kg median (sizes are
+ * known for a third of lines, and nothing raises that). Detecting the
+ * mix needs just two, so the warning reaches all nine.
+ */
+export function packageSizes(kept: PriceObservation[]): { common: { size: number; unit: SizeUnit } | null; mixed: boolean } {
+  const sized = kept.filter(o => o.z && o.zu);
+  const distinct = new Set(sized.map(o => `${o.z}|${o.zu}`));
+  if (distinct.size === 1) return { common: { size: sized[0].z!, unit: sized[0].zu as SizeUnit }, mixed: false };
+  return { common: null, mixed: distinct.size >= 2 };
+}
+
+/**
+ * A package price restated per kilogram / litre / piece — "6,99 zł for
+ * 1,75 l" is 3,99 zł/l, the figure a Polish shelf label prints next to
+ * the price and so the one that compares against it. null when there is
+ * nothing to restate: no common size, a price already per kg (weighed),
+ * or a single piece, whose price already IS the unit price.
+ */
+export function perUnitPrice(
+  amount: number,
+  priceUnit: string,
+  common: { size: number; unit: SizeUnit } | null,
+): number | null {
+  if (!common || priceUnit === "kg") return null;
+  if (common.unit === "szt" && common.size <= 1) return null;
+  return computeUnitPrice(amount, common.size, common.unit);
+}
+
 // ── The summary box, under the item's name ───────────────────
 
 export function PriceChip({ price, observations, seen, open, onToggle }: PriceChipProps) {
@@ -106,30 +142,23 @@ export function PriceChip({ price, observations, seen, open, onToggle }: PriceCh
 
   const kept = useMemo(() => keptFor(price, observations), [price, observations]);
 
-  // What the sized purchases say about the package:
-  //   one size  → name it on the chip, "zwykle 5,20 zł / 280 g"
-  //   several   → warn, because a median over 200 g and 300 g butter
-  //               describes neither
-  //
-  // Warning rather than recomputing per kilogram was a measured choice:
-  // over the family's receipts 9 of 27 medians mix sizes, but only 3 of
-  // those have enough sized purchases for a per-kg median (sizes are
-  // known for a third of lines, and nothing raises that). Detecting the
-  // mix needs just two, so the warning reaches all nine.
-  const sizeInfo = useMemo(() => {
-    const sized = kept.filter(o => o.z && o.zu);
-    const distinct = new Set(sized.map(o => `${o.z}|${o.zu}`));
-    if (distinct.size === 1) {
-      return { common: formatSize(sized[0].z!, sized[0].zu as SizeUnit), mixed: false };
-    }
-    return { common: null, mixed: distinct.size >= 2 };
-  }, [kept]);
+  const sizeInfo = useMemo(() => packageSizes(kept), [kept]);
 
   // A product nobody has bought yet can still have shelf prices noted
   // against it — that is the point of noting them.
   if (!hasPriceInfo(price, seen)) return null;
 
   const cheapestSize = cheapest ? describeSize(cheapest) : null;
+
+  // Headline per litre (kilogram, piece) when the package is known, with
+  // the package price after it — "zwykle 3,99 zł/l · 6,99 zł / 1,75 l".
+  // "ost." follows the headline's measure, so the two numbers compare.
+  const common    = sizeInfo.common;
+  const headline  = price ? (price.median ?? price.last) : null;
+  const perUnit   = price && headline != null ? perUnitPrice(headline, price.unit, common) : null;
+  const lastPer   = price && perUnit != null ? perUnitPrice(price.last, price.unit, common) : null;
+  const perLabel  = common ? ` ${unitPriceLabel(common.unit)}` : "";
+  const packText  = common ? formatSize(common.size, common.unit) : null;
   const arrow = <span style={{ color: c.textMuted, flexShrink: 0, marginLeft: 8 }}>{open ? "▴" : "▾"}</span>;
 
   return (
@@ -148,13 +177,23 @@ export function PriceChip({ price, observations, seen, open, onToggle }: PriceCh
       {price && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <span>
-            💰 {price.median != null
-              ? <>zwykle <strong style={{ color: c.successLight }}>{money(price.median)}{suffix(price.unit)}</strong></>
-              : <>ost. <strong style={{ color: c.successLight }}>{money(price.last)}{suffix(price.unit)}</strong></>}
-            {sizeInfo.common && <> / {sizeInfo.common}</>}
+            💰 {price.median != null ? "zwykle " : "ost. "}
+            {perUnit != null ? (
+              <>
+                <strong style={{ color: c.successLight }}>{money(perUnit)}{perLabel}</strong>
+                <span style={{ color: c.textMuted }}> · {money(headline!)} zł / {packText}</span>
+              </>
+            ) : (
+              <>
+                <strong style={{ color: c.successLight }}>{money(headline!)}{suffix(price.unit)}</strong>
+                {packText && <> / {packText}</>}
+              </>
+            )}
             {/* The last price only earns its own slot when it differs from
                 the typical one — otherwise it is the same number twice. */}
-            {price.median != null && price.last !== price.median && <> · ost. {money(price.last)}</>}
+            {price.median != null && price.last !== price.median && (
+              <> · ost. {lastPer != null ? `${money(lastPer)}${perLabel}` : money(price.last)}</>
+            )}
             {/* Only next to a MEDIAN: a single last price is one purchase
                 of one package, so there is nothing mixed about it. */}
             {sizeInfo.mixed && price.median != null && (
