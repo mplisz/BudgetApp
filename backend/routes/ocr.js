@@ -51,20 +51,21 @@ const {
 const crypto                  = require("crypto");
 const { requireAuth }         = require("../middleware/auth");
 const { archiveReceipt }      = require("../utils/receiptStorage");
+const { decodeImageDataUrl, MAX_IMAGE_BYTES } = require("../utils/imageInput");
 const { roundMoney }          = require("../utils/helpers");
 
 router.use(requireAuth);
 
 // ── Config ────────────────────────────────────────────────────
 
-const MAX_IMAGE_BYTES   = 5 * 1024 * 1024;       // 5 MB raw upload
-const MAX_DIMENSION_W   = 1024;                   // px after resize
+// Upload size cap and allowed formats live in utils/imageInput.js
+// (shared with shopping-list photos).
+const MAX_DIMENSION_W  = 1024;                   // px after resize
 const MAX_FULL_HEIGHT   = 8192;                   // archival copy height cap
 const SEGMENT_HEIGHT    = 1536;                   // px per vision segment
 const SEGMENT_OVERLAP   = 120;                    // px overlap between segments
 const MAX_SEGMENTS      = 6;                      // hard cap on vision images
 const JPEG_QUALITY      = 80;
-const ALLOWED_MIME      = ["image/jpeg", "image/png", "image/webp"];
 const OPENAI_TIMEOUT_MS = 60_000;
 const MAX_ITEMS         = 100;                    // sanity cap on OCR response
 const MAX_FEEDBACK_ITEMS = 60;                    // cap on a single learning batch
@@ -419,19 +420,8 @@ async function fetchCategoryTree(familyId) {
 // overlapping segments — each is sent as a separate image in ONE
 // model call, so every line is read at native resolution.
 async function preprocessImage(dataUrl) {
-  const base64  = dataUrl.substring(dataUrl.indexOf(",") + 1);
-  const rawBuf  = Buffer.from(base64, "base64");
-
-  if (rawBuf.length > MAX_IMAGE_BYTES) {
-    throw Object.assign(new Error("Image too large."), { status: 413 });
-  }
-
-  // sharp validates magic bytes — a mislabeled or corrupt file throws here.
-  const meta = await sharp(rawBuf).metadata();
-  const mime = `image/${meta.format === "jpg" ? "jpeg" : meta.format}`;
-  if (!ALLOWED_MIME.includes(mime)) {
-    throw Object.assign(new Error("Unsupported image format."), { status: 415 });
-  }
+  // Size + magic-byte validation (throws with a 413/415 status).
+  const rawBuf = await decodeImageDataUrl(dataUrl);
 
   // Normalize: EXIF rotate (phone photos!), cap width, generous height.
   // Thermal receipts are low-contrast and often crumpled — grayscale +

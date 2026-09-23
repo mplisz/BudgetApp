@@ -21,6 +21,7 @@ import { computeSuggestedPriority } from "../ui/PriorityPicker";
 import { MerchantInput } from "../ui/MerchantInput";
 import { fmt, round2,fmtAmount  }      from "../../utils/helpers";
 import { normalizeCurrency } from "../../utils/currencies";
+import { MAX_UPLOAD_BYTES, fileSizeMb, readFileAsDataUrl } from "../../utils/fileData";
 import { useCurrencyConverter } from "../../hooks/useCurrencyConverter";
 import { useCurrencyManager }   from "../../hooks/useCurrencyManager";
 import { TagMultiSelect } from "../ui/TagMultiSelect";
@@ -75,9 +76,6 @@ interface OcrMeta {
   summary: string | null;
 
 }
-
-const OCR_MAX_FILE_BYTES = 5 * 1024 * 1024;
-
 
 // ── Component ─────────────────────────────────────────────────
 
@@ -206,8 +204,8 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
     e.target.value = "";
     if (!file) return;
 
-    if (file.size > OCR_MAX_FILE_BYTES) {
-      showError(`Plik jest za duży (${(file.size / 1024 / 1024).toFixed(1)} MB, max 5 MB).`);
+    if (file.size > MAX_UPLOAD_BYTES) {
+      showError(`Plik jest za duży (${fileSizeMb(file.size)} MB, max ${fileSizeMb(MAX_UPLOAD_BYTES)} MB).`);
       return;
     }
 
@@ -217,12 +215,7 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
 
     try {
       // Read as data URL (data:image/jpeg;base64,...)
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload  = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Nie udało się odczytać pliku."));
-        reader.readAsDataURL(file);
-      });
+      const dataUrl = await readFileAsDataUrl(file);
 
       const data = await api.post<any>("/api/ocr/receipt", { image: dataUrl }, {
         fallback: "Nie udało się przeanalizować paragonu.",

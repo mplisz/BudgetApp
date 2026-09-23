@@ -103,6 +103,7 @@ app.set('trust proxy', 1);
 // STANDARD MIDDLEWARE
 // ==========================================
 app.use('/api/ocr', express.json({ limit: '8mb' })); // max 8 mb per picture
+app.use('/api/shopping/:id/photo', express.json({ limit: '8mb' })); // shopping-list item photo
 app.use(express.json());
 app.use(cookieParser());
 

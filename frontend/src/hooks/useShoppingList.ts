@@ -16,6 +16,12 @@
 import { useState, useCallback, useRef } from "react";
 import { useApi } from "./useApi";
 import { useToast } from "./useToast";
+import { MAX_UPLOAD_BYTES, fileSizeMb, readFileAsDataUrl, shrinkImage } from "../utils/fileData";
+
+// Longest side of a photo as sent — the server re-encodes to
+// PHOTO_MAX_DIMENSION (backend/utils/shoppingConfig.js) anyway, so
+// sending more only costs upload time in a shop.
+const PHOTO_UPLOAD_DIMENSION = 1280;
 
 export type ShoppingStatus = "open" | "bought" | "skipped";
 
@@ -36,6 +42,11 @@ export interface ShoppingItem {
    *  rather than the catalog so they expire with it — see the note in
    *  backend/utils/shoppingPrices.js. */
   seen?:        SeenPrice[];
+  /** A photo of the product ("ten olej") — kept in the receipts blob
+   *  container, shown through GET /api/shopping/:id/photo. `photoAt`
+   *  changes with every new photo, so it doubles as a cache buster. */
+  photoBlobPath?: string | null;
+  photoAt?:       string | null;
   sourceWishId: string | null;
   addedBy:      string | null;
   addedAt:      string;
@@ -333,9 +344,52 @@ export function useShoppingList() {
     }
   }, [api, items, showError]);
 
+  // ── Photo ─────────────────────────────────────────────────
+  // Not optimistic: there is nothing to show until the server has the
+  // file. The row shows its own "wysyłanie…" meanwhile.
+
+  const setPhoto = useCallback(async (id: string, file: File): Promise<boolean> => {
+    try {
+      const shrunk = await shrinkImage(file, PHOTO_UPLOAD_DIMENSION);
+      if (shrunk.size > MAX_UPLOAD_BYTES) {
+        showError(`Zdjęcie jest za duże (${fileSizeMb(shrunk.size)} MB, max ${fileSizeMb(MAX_UPLOAD_BYTES)} MB).`);
+        return false;
+      }
+      const saved = await api.post<ShoppingItem>(
+        `/api/shopping/${id}/photo`,
+        { image: await readFileAsDataUrl(shrunk) },
+        { fallback: "Nie udało się zapisać zdjęcia." },
+      );
+      setItems(prev => prev.map(i => i.id === id ? saved : i));
+      showSuccess("Zdjęcie dodane 📷");
+      return true;
+    } catch (err) {
+      showError((err as Error).message);
+      return false;
+    }
+  }, [api, showError, showSuccess]);
+
+  const removePhoto = useCallback(async (id: string): Promise<boolean> => {
+    const before = items.find(i => i.id === id);
+    if (!before) return false;
+    setItems(prev => prev.map(i => i.id === id ? { ...i, photoBlobPath: null, photoAt: null } : i));
+    try {
+      const saved = await api.del<ShoppingItem>(`/api/shopping/${id}/photo`, undefined, {
+        fallback: "Nie udało się usunąć zdjęcia.",
+      });
+      setItems(prev => prev.map(i => i.id === id ? saved : i));
+      return true;
+    } catch (err) {
+      setItems(prev => prev.map(i => i.id === id ? before : i));
+      showError((err as Error).message);
+      return false;
+    }
+  }, [api, items, showError]);
+
   return {
     items, catalog, isLoading, hasLoaded: loadedRef.current,
     load, addItem, patchItem, markBought, markMissed, reopenItem,
     removeItem, forgetSuggestion, forgetPrice, addSeenPrice, forgetSeenPrice,
+    setPhoto, removePhoto,
   };
 }

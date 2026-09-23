@@ -41,7 +41,7 @@ const {
   resolveAllocations, buildAllocationOps, buildRemovalOps,
   diffAllocationOps, splitVouchersAcrossTxs,
 } = require("../utils/voucherAllocations");
-const { getReceiptBlobContainer, setReceiptRetention } = require("../utils/receiptStorage");
+const { streamBlob, setReceiptRetention } = require("../utils/receiptStorage");
 router.use(requireAuth);
 const { cleanMerchant, merchantExists, rememberMerchant, rememberMerchantNip } = require("../utils/merchant");
 const { rememberProducts } = require("../utils/productCatalog");
@@ -1302,23 +1302,10 @@ router.get("/:id/receipt", async (req, res) => {
     const existing = await readItem(transactionsContainer, req.params.id, req.user.familyId);
     if (!existing)                  return res.status(404).json({ error: "Transaction not found." });
     if (!existing.receiptBlobPath) return res.status(404).json({ error: "No receipt attached." });
-    // Defense in depth: the path is client-supplied at POST time, so verify
-    // it belongs to this family before streaming.
-    if (!existing.receiptBlobPath.startsWith(`${req.user.familyId}/`)) {
-      return res.status(404).json({ error: "No receipt attached." });
-    }
-    const container = await getReceiptBlobContainer();
-    if (!container) return res.status(503).json({ error: "Receipt storage is not configured." });
-
-    const download = await container.getBlockBlobClient(existing.receiptBlobPath).download();
-    // PDF e-receipts are archived as .pdf — the frontend modal picks
-    // its viewer (img vs iframe) off this header via blob.type.
-    res.setHeader("Content-Type", download.contentType
-      || (existing.receiptBlobPath.endsWith(".pdf") ? "application/pdf" : "image/jpeg"));
-    res.setHeader("Cache-Control", "private, max-age=86400");
-    download.readableStreamBody.pipe(res);
+    // The path is client-supplied at POST time — streamBlob re-checks
+    // that it belongs to this family before streaming.
+    await streamBlob(res, existing.receiptBlobPath, req.user.familyId, "TX RECEIPT");
   } catch (err) {
-    if (err.statusCode === 404) return res.status(404).json({ error: "Receipt file not found." });
     console.error("[TX RECEIPT]", err);
     res.status(500).json({ error: "Failed to fetch receipt." });
   }

@@ -47,6 +47,10 @@ module.exports = {
    *  Long enough to undo a mis-tap and to answer "did we buy that this
    *  week", short enough that the list never becomes an archive. */
   RESOLVED_TTL_DAYS: 7,
+  /** Longest side of a stored item photo, px. A photo here answers
+   *  "which bottle" on a phone screen — it is not an archive, and it is
+   *  opened in a shop on whatever signal the building has. */
+  PHOTO_MAX_DIMENSION: 1280,
 
   // ── Matching receipt lines to products ────────────────────
   /** Shorter tokens must match exactly. "woda"/"wódka" differ exactly

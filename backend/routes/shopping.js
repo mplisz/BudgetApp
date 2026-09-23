@@ -6,6 +6,7 @@
 //   POST   /api/shopping            — put a product on the list
 //   PATCH  /api/shopping/:id        — edit fields, or change status
 //   DELETE /api/shopping/:id        — drop an item (we changed our mind)
+//   POST|GET|DELETE /api/shopping/:id/photo — the item's photo
 //   DELETE /api/shopping/catalog/:key — prune a suggestion
 //
 // WHY A DOCUMENT PER ITEM (and not one array doc like merchants):
@@ -26,6 +27,12 @@
 //   bought  — done. Kept briefly as history, then expires by itself.
 //   skipped — we gave up on it. Same retention as bought.
 //
+// PHOTO: an item may carry one photo ("ten olej", "te podpaski" — a
+// product nobody in the house but one person buys, where a picture of
+// the package says more than any note). Stored in the receipts blob
+// container and streamed through the same proxy as a receipt; its blob
+// follows the item's status — see shoppingPhotoTags.
+//
 // RETENTION: resolved items get a per-document Cosmos `ttl` instead of
 // a cleanup job — the container is created with defaultTtl -1 (TTL on,
 // nothing expires unless it says so), so an open item lives forever and
@@ -38,14 +45,19 @@ const { z }   = require("zod");
 const crypto  = require("crypto");
 const { shoppingContainer, settingsContainer } = require("../cosmos");
 const { requireAuth } = require("../middleware/auth");
-const { readItemWithEtag, IdParamSchema } = require("../utils/helpers");
+const { readItem, readItemWithEtag, IdParamSchema } = require("../utils/helpers");
 const {
   shoppingKey, cleanItemName, fetchCatalog,
   rememberShoppingItem, rememberShoppingSection, lookupSection,
   forgetShoppingItem, forgetPrice, withId,
 } = require("../utils/shoppingCatalog");
 const { summarize, seenObservation, addSeenObservation } = require("../utils/shoppingPrices");
-const { RESOLVED_TTL_DAYS } = require("../utils/shoppingConfig");
+const { RESOLVED_TTL_DAYS, PHOTO_MAX_DIMENSION } = require("../utils/shoppingConfig");
+const sharp = require("sharp");
+const { decodeImageDataUrl, IMAGE_DATA_URL } = require("../utils/imageInput");
+const {
+  archiveShoppingPhoto, shoppingPhotoTags, setBlobTags, deleteBlob, streamBlob,
+} = require("../utils/receiptStorage");
 const { cleanMerchant } = require("../utils/merchant");
 const { SECTION_IDS, DEFAULT_SECTION, guessSection } = require("../utils/shoppingSections");
 
@@ -316,6 +328,13 @@ router.patch("/:id", async (req, res) => {
       { accessCondition: { type: "IfMatch", condition: etag } },
     );
 
+    // The photo follows the item: released to the lifecycle sweep once
+    // the item is settled, pinned again if it is re-opened. Fire-and-
+    // forget, like the receipt retention tags.
+    if (existing.photoBlobPath && wasOpen !== !resolving) {
+      setBlobTags(existing.photoBlobPath, shoppingPhotoTags(!resolving));
+    }
+
     // Moving an item to a different aisle teaches the catalog, so the
     // next "bułki" lands in Pieczywo without being told again. Same
     // learn-from-corrections idea as the OCR category feedback, and just
@@ -433,6 +452,113 @@ router.delete("/:id/seen/:observationId", async (req, res) => {
   }
 });
 
+// ── POST /:id/photo ──────────────────────────────────────────
+// Attach (or replace) the item's photo. The upload is decoded and
+// validated exactly as a receipt is (utils/imageInput), then re-encoded
+// in colour — unlike a receipt, the colour of the package IS the
+// information — which also drops EXIF, GPS included.
+
+const PhotoSchema = z.object({
+  image: z.string()
+    .min(100, "Image payload too small")
+    .regex(IMAGE_DATA_URL, "Expected base64 data URL (jpeg/png/webp)"),
+});
+
+router.post("/:id/photo", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
+  const parsed = PhotoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const familyId = req.user.familyId;
+  let blobPath = null;
+
+  try {
+    const { resource: existing, etag } = await readItemWithEtag(shoppingContainer, idParsed.data, familyId);
+    if (!existing || existing.type !== "SHOPPING_ITEM") {
+      return res.status(404).json({ error: "Item not found." });
+    }
+    // A settled item's photo is already on its way out (see
+    // shoppingPhotoTags); attaching a fresh one would outlive the item.
+    if (existing.status !== "open") {
+      return res.status(409).json({ error: "Pozycja jest już odhaczona — cofnij ją, żeby dodać zdjęcie." });
+    }
+
+    const raw  = await decodeImageDataUrl(parsed.data.image);
+    const jpeg = await sharp(raw)
+      .rotate()                                            // EXIF orientation (phone photos)
+      .resize(PHOTO_MAX_DIMENSION, PHOTO_MAX_DIMENSION, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+
+    blobPath = await archiveShoppingPhoto(jpeg, familyId, req.user.id);
+    if (!blobPath) return res.status(503).json({ error: "Nie udało się zapisać zdjęcia." });
+
+    const now = new Date().toISOString();
+    const { resource } = await shoppingContainer.item(idParsed.data, familyId).replace(
+      { ...existing, photoBlobPath: blobPath, photoAt: now, updatedAt: now },
+      { accessCondition: { type: "IfMatch", condition: etag } },
+    );
+
+    // The replaced photo is referenced by nothing any more.
+    if (existing.photoBlobPath && existing.photoBlobPath !== blobPath) deleteBlob(existing.photoBlobPath);
+    res.json(resource);
+  } catch (err) {
+    // The item was not updated — the freshly uploaded blob is an orphan.
+    if (blobPath) deleteBlob(blobPath);
+    if (err.status === 413 || err.status === 415) return res.status(err.status).json({ error: err.message });
+    if (err.code === 412) return res.status(409).json({ error: "Pozycja zmieniona na innym urządzeniu — odśwież listę." });
+    console.error("[SHOPPING PHOTO POST]", err);
+    res.status(500).json({ error: "Failed to save the photo." });
+  }
+});
+
+// ── GET /:id/photo ───────────────────────────────────────────
+// Same proxy as GET /api/transactions/:id/receipt — the container is
+// private.
+
+router.get("/:id/photo", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
+  try {
+    const existing = await readItem(shoppingContainer, idParsed.data, req.user.familyId);
+    if (!existing || existing.type !== "SHOPPING_ITEM") return res.status(404).json({ error: "Item not found." });
+    if (!existing.photoBlobPath) return res.status(404).json({ error: "No photo attached." });
+    await streamBlob(res, existing.photoBlobPath, req.user.familyId, "SHOPPING PHOTO");
+  } catch (err) {
+    console.error("[SHOPPING PHOTO GET]", err);
+    res.status(500).json({ error: "Failed to fetch the photo." });
+  }
+});
+
+// ── DELETE /:id/photo ────────────────────────────────────────
+
+router.delete("/:id/photo", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+
+  try {
+    const familyId = req.user.familyId;
+    const { resource: existing, etag } = await readItemWithEtag(shoppingContainer, idParsed.data, familyId);
+    if (!existing || existing.type !== "SHOPPING_ITEM") {
+      return res.status(404).json({ error: "Item not found." });
+    }
+
+    const { resource } = await shoppingContainer.item(idParsed.data, familyId).replace(
+      { ...existing, photoBlobPath: null, photoAt: null, updatedAt: new Date().toISOString() },
+      { accessCondition: { type: "IfMatch", condition: etag } },
+    );
+    if (existing.photoBlobPath) deleteBlob(existing.photoBlobPath);
+    res.json(resource);
+  } catch (err) {
+    if (err.code === 412) return res.status(409).json({ error: "Pozycja zmieniona na innym urządzeniu — odśwież listę." });
+    console.error("[SHOPPING PHOTO DELETE]", err);
+    res.status(500).json({ error: "Failed to remove the photo." });
+  }
+});
+
 // ── DELETE /catalog/:key/prices/:observationId ───────────────
 // One recorded price the user says is not this product — a mis-matched
 // receipt line. Cheaper and more honest than trying to make the matcher
@@ -481,7 +607,11 @@ router.delete("/:id", async (req, res) => {
   if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
 
   try {
+    // Read first only to learn whether a photo goes with it — the
+    // photo, unlike the item, would not expire on its own.
+    const existing = await readItem(shoppingContainer, idParsed.data, req.user.familyId);
     await shoppingContainer.item(idParsed.data, req.user.familyId).delete();
+    if (existing?.photoBlobPath) deleteBlob(existing.photoBlobPath);
     res.json({ success: true, id: idParsed.data });
   } catch (err) {
     if (err.code === 404) return res.status(404).json({ error: "Item not found." });

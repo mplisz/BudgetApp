@@ -27,11 +27,16 @@
 // price seen on a shelf) standing in front of that shelf. They used to
 // share one form with two save buttons, and the price part hid behind a
 // tap on the aisle chip, where nobody looks for a price.
+//
+// A PHOTO is added from the ✎ editor (it belongs to writing the list —
+// "kup ten olej" typed at home) and shown via "📷 zobacz zdjęcie" in the
+// same viewer as a receipt (ui/StoredFileModal).
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import { useState, useRef } from "react";
+import { createPortal } from "react-dom";
+import type { CSSProperties, ReactNode, ChangeEvent } from "react";
 import { theme as s } from "../../../styles/theme";
 import { SHOPPING_SECTIONS, SECTION_IDS, sectionMeta } from "../../../data/constants/shoppingSections";
 import { UNIT_ENTRY_OPTIONS } from "../../../data/constants/productUnits";
@@ -39,6 +44,7 @@ import { parseSizeInput, computeUnitPrice, unitPriceLabel } from "../../../utils
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { PriceChip, PricePanel } from "./PriceHint";
 import { MerchantInput } from "../../ui/MerchantInput";
+import { StoredFileModal } from "../../ui/StoredFileModal";
 import type { ShoppingItem, CatalogEntry, SeenPriceInput } from "../../../hooks/useShoppingList";
 
 interface ShoppingRowProps {
@@ -57,6 +63,9 @@ interface ShoppingRowProps {
    *  so it expires along with it. */
   onSeenPrice:       (id: string, input: SeenPriceInput) => void;
   onForgetSeenPrice: (id: string, observationId: string) => void;
+  /** Attach / replace the product photo; resolves once it is stored. */
+  onPhoto:       (id: string, file: File) => Promise<boolean>;
+  onRemovePhoto: (id: string) => void;
   /** False when the list shows no aisle headings (everything is in one
    *  aisle) — the row then names its aisle itself. With headings the
    *  name would only repeat the one right above it. */
@@ -111,6 +120,7 @@ function FieldLabel({ children }: { children: ReactNode }) {
 export function ShoppingRow({
   item, onBought, onMissed, onReopen, onRemove, onQty, onDetails,
   catalogEntry, onForgetPrice, onSeenPrice, onForgetSeenPrice,
+  onPhoto, onRemovePhoto,
   sectionsShown = false,
 }: ShoppingRowProps) {
   const isMobile = useIsMobile();
@@ -136,6 +146,20 @@ export function ShoppingRow({
 
   // The breakdown lives BELOW the row, at full width — it is a table.
   const [pricesOpen, setPricesOpen] = useState(false);
+
+  const [photoOpen,      setPhotoOpen]      = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const hasPhoto = !!item.photoBlobPath;
+
+  async function handlePhotoPicked(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";               // so the same file can be re-picked after an error
+    if (!file) return;
+    setPhotoUploading(true);
+    await onPhoto(item.id, file);
+    setPhotoUploading(false);
+  }
 
   // iOS zooms into any field whose text is under 16px and never zooms
   // back out — on a phone that is the page lurching sideways mid-aisle.
@@ -336,6 +360,23 @@ export function ShoppingRow({
             </div>
           )}
 
+          {/* The photo says what the note cannot — "ten olej" — so it gets
+              a line of its own, right under the note. Opens the same viewer
+              as a receipt. Its own tap, not the name block's editor. */}
+          {hasPhoto && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); setPhotoOpen(true); }}
+              style={{
+                marginTop: 5, background: alpha(c.info, "18"), border: `1px solid ${alpha(c.info, "55")}`,
+                color: c.infoLight, borderRadius: 20, padding: "3px 10px",
+                fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              📷 zobacz zdjęcie
+            </button>
+          )}
+
           {hasFlags && (
             <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               {flags}
@@ -406,7 +447,51 @@ export function ShoppingRow({
               Anuluj
             </button>
           </div>
+
+          {/* The photo saves on its own, the moment it is picked — it is
+              not part of the note/aisle draft above. No `capture`: phones
+              then offer camera AND gallery in one chooser. */}
+          <div style={{ display: "flex", gap: 8, flex: "1 1 100%", alignItems: "center" }}>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handlePhotoPicked}
+            />
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoUploading}
+              style={{ ...s.btnSm(c.info), height: 40, flex: isMobile ? 1 : "0 0 auto", opacity: photoUploading ? 0.5 : 1 }}
+            >
+              {photoUploading ? "⏳ Wysyłanie…" : hasPhoto ? "📷 Zmień zdjęcie" : "📷 Dodaj zdjęcie"}
+            </button>
+            {hasPhoto && !photoUploading && (
+              <button
+                type="button"
+                onClick={() => onRemovePhoto(item.id)}
+                style={{ ...s.btnSm(c.danger), height: 40, flex: isMobile ? 1 : "0 0 auto" }}
+              >
+                Usuń zdjęcie
+              </button>
+            )}
+            {!hasPhoto && !photoUploading && (
+              <span style={{ fontSize: 11, color: c.textMuted }}>gdy opis nie wystarczy — np. „ten olej”</span>
+            )}
+          </div>
         </div>
+      )}
+
+      {photoOpen && hasPhoto && createPortal(
+        <StoredFileModal
+          // photoAt busts the browser cache — the proxy URL stays the same
+          // when a photo is replaced.
+          path={`/api/shopping/${item.id}/photo?v=${encodeURIComponent(item.photoAt ?? "")}`}
+          title={`📷 ${item.name}`}
+          onClose={() => setPhotoOpen(false)}
+        />,
+        document.body,
       )}
 
       {/* Shelf price — hangs off the item itself, so it is offered for

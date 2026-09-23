@@ -1,17 +1,11 @@
 // ============================================================
 // File: src/components/panels/transactionComponents/ReceiptModal.tsx
-// Receipt preview (photo or PDF e-receipt). The blob container is
-// PRIVATE, so the file is fetched through the authenticated backend
-// proxy (GET /api/transactions/:id/receipt) and shown via an object
-// URL, which is revoked on unmount to avoid memory leaks.
-// PDFs render in an <iframe> — <img> can't display them.
+// Receipt preview (photo or PDF e-receipt) — the shared stored-file
+// viewer pointed at the transaction's receipt proxy
+// (GET /api/transactions/:id/receipt).
 // ============================================================
 
-import { useState, useEffect } from "react";
-import { useAuth } from "../../../context/AuthContext";
-import { c } from "../../../styles/tokens";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { StoredFileModal } from "../../ui/StoredFileModal";
 
 interface ReceiptModalProps {
   txId:    string;
@@ -19,101 +13,5 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ txId, onClose }: ReceiptModalProps) {
-  const { fetchWithAuth } = useAuth();
-
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [isPdf,    setIsPdf]    = useState(false);
-  const [error,    setError]    = useState<string | null>(null);
-
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const res = await fetchWithAuth(`${API_URL}/api/transactions/${txId}/receipt`);
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error === "Receipt file not found."
-            ? "Plik paragonu nie istnieje (mógł zostać usunięty)."
-            : "Nie udało się pobrać paragonu.");
-        }
-        const blob = await res.blob();
-        objectUrl = URL.createObjectURL(blob);
-        if (!cancelled) {
-          setIsPdf(blob.type === "application/pdf");
-          setImageUrl(objectUrl);
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Błąd pobierania.");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [txId, fetchWithAuth]);
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        zIndex: 1000, padding: 20,
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: c.surface, border: `1px solid ${c.border}`, borderRadius: 14,
-          padding: 16, maxWidth: "90vw", maxHeight: "90vh",
-          display: "flex", flexDirection: "column", gap: 12,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ color: c.text, fontWeight: 700, fontSize: 14 }}>🧾 Paragon</span>
-          <button
-            onClick={onClose}
-            style={{ background: "none", border: "none", color: c.textSecondary, cursor: "pointer", fontSize: 18, padding: "0 4px" }}
-          >
-            ✕
-          </button>
-        </div>
-
-        <div style={{ overflow: "auto", display: "flex", justifyContent: "center", minHeight: 200, minWidth: 280 }}>
-          {error ? (
-            <div style={{ color: c.dangerLight, fontSize: 13, alignSelf: "center" }}>⚠️ {error}</div>
-          ) : imageUrl && isPdf ? (
-            // Mobile browsers refuse to render a PDF inside an iframe, so the
-            // escape hatch below is the only viewer there.
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-              <iframe
-                src={imageUrl}
-                title="Paragon (PDF)"
-                style={{ width: "80vw", maxWidth: 800, height: "75vh", border: "none", borderRadius: 8, background: "#fff" }}
-              />
-              <a
-                href={imageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: c.textSecondary, fontSize: 12, textDecoration: "none" }}
-              >
-                ↗ Otwórz PDF w nowej karcie
-              </a>
-            </div>
-          ) : imageUrl ? (
-            <img
-              src={imageUrl}
-              alt="Paragon"
-              style={{ maxWidth: "100%", maxHeight: "75vh", borderRadius: 8, objectFit: "contain" }}
-            />
-          ) : (
-            <div style={{ color: c.textSecondary, fontSize: 13, alignSelf: "center" }}>⏳ Ładowanie…</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return <StoredFileModal path={`/api/transactions/${txId}/receipt`} title="🧾 Paragon" onClose={onClose} />;
 }

@@ -29,6 +29,7 @@ export default function PanelShopping() {
     items, catalog, isLoading, hasLoaded,
     load, addItem, patchItem, markBought, markMissed, reopenItem, removeItem,
     forgetSuggestion, forgetPrice, addSeenPrice, forgetSeenPrice,
+    setPhoto, removePhoto,
   } = useShoppingList();
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -107,6 +108,8 @@ export default function PanelShopping() {
     onForgetPrice: forgetPrice,
     onSeenPrice: addSeenPrice,
     onForgetSeenPrice: forgetSeenPrice,
+    onPhoto: setPhoto,
+    onRemovePhoto: removePhoto,
     sectionsShown: showSectionHeadings,
   };
 
