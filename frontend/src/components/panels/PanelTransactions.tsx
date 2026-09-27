@@ -42,6 +42,9 @@ import { dateBoundsOf } from "./transactionComponents/dateBounds";
 import { TriFilterButton, matchTri, type Tri } from "../ui/TriFilterButton";
 import { trackedProductNames } from "../../utils/productPricing";
 import { detailedKindOf, type DetailedReturnBucket } from "../../utils/returnAnalytics";
+import { searchTokens, matchTxText } from "../../utils/textSearch";
+import { useTransactionSearch } from "../../hooks/useTransactionSearch";
+import type { TxLineItem } from "../../types/summary";
 
 
 const PAGE_SIZE = 25;
@@ -97,7 +100,15 @@ export default function PanelTransactions() {
     warranty:   "off" as Tri,
     hasProduct: "off" as Tri,
     unusual:    "off" as Tri,
+    // Product search: description + receipt lines (utils/textSearch).
+    text:       "",
   });
+
+  // Product search scope: the active month, or every month (backend search).
+  const [searchAll, setSearchAll] = useState(false);
+  const tokens      = useMemo(() => searchTokens(filters.text), [filters.text]);
+  const searchingAll = searchAll && tokens.length > 0;
+  const search       = useTransactionSearch(filters.text, searchingAll);
 
   // Category groups: absent key = OPEN (a group is its own heading + rows).
   const [collapsed,          setCollapsed]          = useState<Record<string, boolean>>({});
@@ -138,7 +149,10 @@ export default function PanelTransactions() {
     () => transactions.some(tx => tx.budgetMonth === activeBudgetMonth),
     [transactions, activeBudgetMonth],
   );
-  const showSkeleton = isLoadingMonth && !hasMonthData;
+  const showSkeleton = isLoadingMonth && !hasMonthData && !searchingAll;
+  // The list area also waits for an all-months search — but the filter box
+  // stays up, or the search field would unmount under the typing user.
+  const listLoading  = showSkeleton || (searchingAll && search.isLoading);
   const isMobile = useIsMobile();
 
 
@@ -161,8 +175,25 @@ export default function PanelTransactions() {
   const { multiplier, setMultiplier } = useUnusualMultiplier();
   const { unusual } = useUnusualExpenses(monthTx, activeBudgetMonth, multiplier);
 
+  // What the panel lists: the month, or — searching all months — the backend's
+  // results (already expense-side only; their "nietypowo duże" badges stay
+  // off, the norm is computed for the active month only).
+  const sourceTx = searchingAll ? search.items : monthTx;
+
+  // Product search: id → the receipt lines that matched (empty when only the
+  // description did). Null = no search, everything passes.
+  const textMatches = useMemo<Map<string, TxLineItem[]> | null>(() => {
+    if (tokens.length === 0) return null;
+    const map = new Map<string, TxLineItem[]>();
+    for (const tx of sourceTx) {
+      const m = matchTxText(tx, tokens);
+      if (m) map.set(tx.id, m.hits);
+    }
+    return map;
+  }, [sourceTx, tokens]);
+
   const enriched = useMemo<Transaction[]>(() =>
-    monthTx
+    sourceTx
       .map(tx => {
         // Net of ALL cash returns (incl. cross-month) so the header total
         // matches the category sums in PanelSummary. `sameMonthReturned` now
@@ -176,9 +207,10 @@ export default function PanelTransactions() {
           effectiveAmount:   calculateNetAmount(tx),
           sameMonthReturned: totalCashReturned,
           unusual:           unusual?.get(tx.id),
+          searchHits:        textMatches?.get(tx.id),
         };
       }),
-    [monthTx, tags, unusual]
+    [sourceTx, tags, unusual, textMatches]
   );
 
   const dateBounds  = useMemo(() => dateBoundsOf(enriched), [enriched]);
@@ -190,6 +222,7 @@ export default function PanelTransactions() {
   // active filters (dates, priority, tags, merchant, returns, …).
   const otherFiltered = useMemo<Transaction[]>(() =>
     enriched.filter(tx => {
+      if (textMatches      && !textMatches.has(tx.id))                                     return false;
       if (filters.type     && tx.type !== filters.type)                                    return false;
       if (filters.dateFrom && tx.date < toYMD(filters.dateFrom))                           return false;
       if (filters.dateTo   && tx.date > toYMD(filters.dateTo))                             return false;
@@ -383,17 +416,23 @@ export default function PanelTransactions() {
     setDeleteModal({ isOpen: false, txId: null });
     if (result?._requiresConfirmation) {
       setConfirmLinkedModal({ isOpen: true, txId: result.txId ?? deleteModal.txId });
+    } else if (result) {
+      search.remove(deleteModal.txId);
     }
   }
 
   async function handleConfirmedDeleteWithLinked() {
     if (!confirmLinkedModal.txId) return;
-    await deleteTransaction(confirmLinkedModal.txId, { forceArchiveLinked: true });
+    const result = await deleteTransaction(confirmLinkedModal.txId, { forceArchiveLinked: true });
+    if (result) search.remove(confirmLinkedModal.txId);
     setConfirmLinkedModal({ isOpen: false, txId: null });
   }
 
+  // Search results are their own copy (useTransactionSearch) — an edit has
+  // to land there too, or the all-months list would show the old row.
   function handleUpdated(updated: Transaction) {
     setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
+    search.update(updated);
   }
 
   // The same callbacks + sort in every view — bundled so each list site spells
@@ -407,7 +446,14 @@ export default function PanelTransactions() {
   };
 
   function handleReturnSaved(updated: Transaction) {
-    setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
+    handleUpdated(updated);
+  }
+
+  // Typing the first letters of a search switches to the flat list: matches
+  // spread over collapsed receipt cards would each need opening to be seen.
+  function setSearchText(text: string) {
+    if (!filters.text.trim() && text.trim()) setView("list");
+    set("text", text);
   }
 
   async function handleReturnSavedWithRefresh(updated: Transaction, sideEffects?: { transferCreated?: boolean; transferBudgetMonth?: string }) {
@@ -483,9 +529,9 @@ export default function PanelTransactions() {
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 }}>🧾 Wydatki</div>
         <div style={{ fontSize: 13, color: c.textSecondary }}>
-          {activeBudgetMonth} ·{" "}
-          {showSkeleton ? (
-            <span style={{ color: c.textMuted }}>ładowanie…</span>
+          {searchingAll ? "wszystkie miesiące" : activeBudgetMonth} ·{" "}
+          {listLoading ? (
+            <span style={{ color: c.textMuted }}>{searchingAll ? "szukanie…" : "ładowanie…"}</span>
           ) : (
             <>
               {filtered.length} transakcji · łącznie{" "}
@@ -496,8 +542,13 @@ export default function PanelTransactions() {
               {totalReturnedSum > 0 && (
                 <span style={{ marginLeft: 8, color: c.successLight }}>zwroty: -{fmt(totalReturnedSum)}</span>
               )}
-              {isActiveMonthClosed && (
+              {isActiveMonthClosed && !searchingAll && (
                 <span style={{ marginLeft: 10, ...s.badge(c.danger) }}>🔒 zamknięty</span>
+              )}
+              {searchingAll && search.total > search.items.length && (
+                <span style={{ marginLeft: 8, color: c.textMuted }}>
+                  (pokazano {search.items.length} najnowszych z {search.total})
+                </span>
               )}
             </>
           )}
@@ -528,6 +579,25 @@ export default function PanelTransactions() {
                 📁 Grupy
               </ToggleBtn>
             </div>
+          </div>
+
+          {/* Product search — outside the collapsible groups: it is the
+              quickest way in, so it is always on screen. */}
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: isMobile ? 8 : 10 }}>
+            <input
+              type="search"
+              value={filters.text}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="🔍 Szukaj produktu w opisie i na paragonach — np. guanciale"
+              aria-label="Szukaj produktu"
+              style={{ ...s.inp, flex: "1 1 240px", width: "auto", minWidth: 0 }}
+            />
+            {filters.text.trim() && (
+              <div style={{ display: "flex", gap: 6 }}>
+                <ToggleBtn active={!searchAll} onClick={() => setSearchAll(false)}>📅 Ten miesiąc</ToggleBtn>
+                <ToggleBtn active={searchAll} onClick={() => setSearchAll(true)}>🗂️ Wszystkie miesiące</ToggleBtn>
+              </div>
+            )}
           </div>
 
           <FilterGroupGrid isMobile={isMobile}>
@@ -722,25 +792,33 @@ export default function PanelTransactions() {
         </div>
       )}
 
-      {showSkeleton && (
+      {listLoading && (
         <div style={s.card}>
           <SkeletonListRow columns={6} count={8} height={48} />
         </div>
       )}
 
-      {!showSkeleton && filtered.length === 0 && (
+      {!listLoading && filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: c.borderStrong }}>
           Brak transakcji{hasActiveFilters ? " dla wybranych filtrów." : " w tym miesiącu."}
+          {/* Nothing this month — the product was probably bought another time. */}
+          {tokens.length > 0 && !searchAll && (
+            <div style={{ marginTop: 12 }}>
+              <button onClick={() => setSearchAll(true)} style={s.actionBtn(c.info)}>
+                🗂️ Szukaj „{filters.text.trim()}” we wszystkich miesiącach
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Mobile cards have no column headers — one sort bar serves every view */}
-      {!showSkeleton && isMobile && filtered.length > 0 && (
+      {!listLoading && isMobile && filtered.length > 0 && (
         <SortBar keys={TX_SORT_KEYS} sort={sort} onSort={onSort} />
       )}
 
       {/* Flat list */}
-      {!showSkeleton && view === "list" && filtered.length > 0 && (
+      {!listLoading && view === "list" && filtered.length > 0 && (
         <>
           <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {filtered.length} wyników · strona {flatPage} z {flatTotalPages}
@@ -757,7 +835,7 @@ export default function PanelTransactions() {
       )}
 
       {/* Grouped view */}
-      {!showSkeleton && view === "category" && groups.length > 0 && (
+      {!listLoading && view === "category" && groups.length > 0 && (
         <>
           <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 8, textAlign: "right" }}>
             {groups.length} grup · strona {groupPage} z {groupTotalPages}
@@ -798,7 +876,7 @@ export default function PanelTransactions() {
 
       {/* Receipt view — the pagination unit is the receipt, so every
           transaction from one scan always lands on the same page */}
-      {!showSkeleton && view === "receipt" && filtered.length > 0 && (
+      {!listLoading && view === "receipt" && filtered.length > 0 && (
         <>
           {receiptGroups.length > 0 ? (
             <>
@@ -871,7 +949,7 @@ export default function PanelTransactions() {
       )}
 
       {/* Totals row */}
-      {!showSkeleton && filtered.length > 0 && (
+      {!listLoading && filtered.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "12px 4px", gap: 24 }}>
           {totalReturnedSum > 0 && (
             <span style={{ fontSize: 12, color: c.successLight }}>

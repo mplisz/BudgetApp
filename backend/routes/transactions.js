@@ -2,6 +2,7 @@
 // File: backend/routes/transactions.js
 // GET    /api/transactions?budgetMonth=YYYY-MM
 // GET    /api/transactions/range?from=YYYY-MM&to=YYYY-MM
+// GET    /api/transactions/search?q=text     (all months; description + receipt lines)
 // POST   /api/transactions
 // PATCH  /api/transactions/:id
 // DELETE /api/transactions/:id              (soft archive)
@@ -49,6 +50,7 @@ const { syncShoppingPrices } = require("../utils/shoppingPriceSync");
 const { resolveTransferTarget, buildReturnTransferDoc } = require("../utils/transferCategory");
 const { resolveTxType, applyTxType } = require("../utils/categoryType");
 const { PRODUCT_UNIT_CODES } = require("../utils/productUnits");
+const { searchTokens, txMatchesText, MIN_SEARCH_LENGTH } = require("../utils/textSearch");
 
 
 // ── Schemas ───────────────────────────────────────────────────
@@ -331,6 +333,46 @@ router.get("/range", async (req, res) => {
   } catch (err) {
     console.error("[TX RANGE]", err);
     res.status(500).json({ error: "Failed to fetch transactions range." });
+  }
+});
+
+// ── GET /search ───────────────────────────────────────────────
+//
+// "Where did I buy guanciale?" — expenses and savings over ALL history whose
+// description or a receipt line contains every word of `q`. The matching is
+// done in Node (utils/textSearch: diacritics-insensitive, which Cosmos
+// CONTAINS cannot do); the query only narrows to the family's live
+// expense-side docs. Newest first, capped — `total` says how many matched.
+
+const SEARCH_RESULT_CAP = 300;
+
+router.get("/search", async (req, res) => {
+  const q      = typeof req.query.q === "string" ? req.query.q.slice(0, 100) : "";
+  const tokens = searchTokens(q);
+  if (tokens.length === 0) {
+    return res.status(400).json({ error: `q must have at least ${MIN_SEARCH_LENGTH} characters.` });
+  }
+
+  try {
+    const { resources } = await transactionsContainer.items
+      .query({
+        query: `SELECT * FROM c
+                WHERE c.userId = @userId
+                  AND c.type IN ('EXPENSE', 'SAVING')
+                  AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))`,
+        parameters: [{ name: "@userId", value: req.user.familyId }],
+      })
+      .fetchAll();
+
+    const matched = resources
+      .filter(tx => txMatchesText(tx, tokens))
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    console.log(`[TX SEARCH] "${q}": ${matched.length}/${resources.length} for ${req.user.familyId}`);
+    res.json({ items: matched.slice(0, SEARCH_RESULT_CAP), total: matched.length });
+  } catch (err) {
+    console.error("[TX SEARCH]", err);
+    res.status(500).json({ error: "Failed to search transactions." });
   }
 });
 

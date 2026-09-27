@@ -95,6 +95,9 @@ export interface Transaction {
   // Derived client-side (PanelTransactions useMemo), not stored server-side.
   effectiveAmount?: number;
   sameMonthReturned?: number;
+  // Receipt lines that matched the product search (utils/textSearch) — shown
+  // on the row as the reason it is in the results.
+  searchHits?: TxLineItem[];
 }
 
 

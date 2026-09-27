@@ -44,6 +44,22 @@ function UnusualBadge({ tx }: { tx: Transaction }) {
   );
 }
 
+// The receipt lines the product search matched — the reason this row is in
+// the results, visible without unfolding the whole receipt.
+function SearchHits({ tx, fontSize }: { tx: Transaction; fontSize: number }) {
+  const hits = (tx.searchHits ?? []).filter(li => li.description !== tx.description);
+  if (hits.length === 0) return null;
+  return (
+    <div style={{ marginTop: 3 }}>
+      {hits.map((li, i) => (
+        <div key={i} style={{ color: c.warning, fontSize, fontWeight: 600 }}>
+          🔍 {li.description || li.product?.name} · {fmt(li.amount)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface TransactionRowProps {
   tx:        Transaction;
   onDelete:  () => void;
@@ -112,6 +128,7 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
               🏷️ {trackedProducts.length === 1 ? trackedProducts[0] : `${trackedProducts.length} śledzone ceny`}
             </div>
           )}
+          <SearchHits tx={tx} fontSize={11} />
         </td>
 
         {/* Tags */}
@@ -348,6 +365,7 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
           🏷️ {trackedProducts.length === 1 ? trackedProducts[0] : `${trackedProducts.length} śledzone ceny`}
         </div>
       )}
+      <SearchHits tx={tx} fontSize={12} />
 
       {/* Line items toggle + breakdown */}
       {hasLineItems && (
