@@ -20,11 +20,17 @@ import type { ChangeEvent } from "react";
 import { theme as s } from "../../../styles/theme";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { useSuggestions } from "../../../hooks/useSuggestions";
-import type { CatalogEntry } from "../../../hooks/useShoppingList";
+import type { CatalogEntry, WhenPatch } from "../../../hooks/useShoppingList";
+import { SHOPPING_HORIZONS, type HorizonId } from "../../../data/constants/shoppingHorizons";
+import { dayLabel, dueChoices } from "../../../utils/shoppingDue";
+import { DueDayChips } from "./DueDayChips";
 
 interface QuickAddBarProps {
   catalog: CatalogEntry[];
-  onAdd:   (name: string, unit: string | null, note: string, photo: File | null) => void;
+  /** The open tab — what is typed lands there. */
+  horizon: HorizonId;
+  today:   string;
+  onAdd:   (name: string, unit: string | null, note: string, photo: File | null, when: WhenPatch) => void;
 }
 
 const entryLabel = (e: CatalogEntry) => e.name;
@@ -36,8 +42,16 @@ const sideBtn = (active: boolean) => ({
   borderRadius: 10, padding: "0 14px", fontSize: 15, cursor: "pointer",
 });
 
-export function QuickAddBar({ catalog, onAdd }: QuickAddBarProps) {
+export function QuickAddBar({ catalog, horizon, today, onAdd }: QuickAddBarProps) {
   const [value, setValue] = useState("");
+  // The day for "na termin" adds. Kept between adds — the dinner for
+  // Wednesday is several products in a row — and starts on the nearest
+  // day offered.
+  const [dueDay, setDueDay] = useState<string | null>(null);
+  const choices = dueChoices(today);
+  const day = dueDay && choices.includes(dueDay) ? dueDay : choices[0];
+  const when: WhenPatch = horizon === "date" ? { when: "date", needBy: day } : { when: horizon, needBy: null };
+  const placeholder = SHOPPING_HORIZONS[horizon].addPlaceholder.replace("{day}", dayLabel(day));
   // The comment is folded away by default. It matters ("bez soli, to dla
   // córki") but it is the exception, and a second always-visible field
   // would tax every ordinary add to serve the rare one.
@@ -69,13 +83,13 @@ export function QuickAddBar({ catalog, onAdd }: QuickAddBarProps) {
   const submit = useCallback((name: string, unit: string | null) => {
     const clean = name.trim();
     if (!clean) return;
-    onAdd(clean, unit, note.trim(), photo);
+    onAdd(clean, unit, note.trim(), photo, when);
     setValue("");
     setNote("");
     setNoteOpen(false);          // the next item is a different thought
     setPhoto(null);
     inputRef.current?.focus();   // ready for the next item
-  }, [onAdd, note, photo]);
+  }, [onAdd, note, photo, when]);
 
   const sug = useSuggestions<CatalogEntry>({
     options: catalog,
@@ -91,12 +105,15 @@ export function QuickAddBar({ catalog, onAdd }: QuickAddBarProps) {
       background: c.bg, borderTop: `1px solid ${c.border}`,
       padding: "10px 0 6px", marginTop: 16,
     }}>
+      {horizon === "date" && (
+        <DueDayChips today={today} value={day} onChange={setDueDay} style={{ marginBottom: 8 }} />
+      )}
       <div style={{ position: "relative", display: "flex", gap: 8 }}>
         <input
           ref={inputRef}
           type="text"
           value={value}
-          placeholder="Dopisz produkt…"
+          placeholder={placeholder}
           autoComplete="off"
           onChange={e => { setValue(e.target.value); sug.handleInput(); }}
           onFocus={sug.handleFocus}

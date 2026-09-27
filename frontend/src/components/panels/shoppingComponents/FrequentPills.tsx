@@ -27,6 +27,8 @@ import { useState } from "react";
 import { CollapsibleSection } from "../../ui";
 import { QuickPills } from "../../ui/QuickPills";
 import type { CatalogEntry } from "../../../hooks/useShoppingList";
+// Bigger than the default pill: this row is tapped one-handed, walking.
+import { THUMB_PILL } from "./layout";
 
 interface FrequentPillsProps {
   catalog:   CatalogEntry[];
@@ -45,9 +47,6 @@ const MAX_PILLS = 15;
 // Above this many items on the list, arriving at the panel almost always
 // means shopping rather than planning, so the pills start folded away.
 const SHOPPING_MODE_ITEMS = 4;
-
-// Bigger than the default pill: this row is tapped one-handed, walking.
-const THUMB_TARGET = { padding: "9px 14px", fontSize: 13, borderRadius: 20, minHeight: 38 };
 
 export function FrequentPills({ catalog, openKeys, onAdd, onForget, openCount }: FrequentPillsProps) {
   const [editing, setEditing] = useState(false);
@@ -95,14 +94,14 @@ export function FrequentPills({ catalog, openKeys, onAdd, onForget, openCount }:
                 label:   `✕ ${entry.name}`,
                 active:  false,
                 title:   `Usuń „${entry.name}" z podpowiedzi (nie rusza listy)`,
-                style:   { ...THUMB_TARGET, borderColor: alpha(c.danger, "66"), color: c.dangerLight },
+                style:   { ...THUMB_PILL, borderColor: alpha(c.danger, "66"), color: c.dangerLight },
                 onClick: () => onForget(entry.key),
               }
             : {
                 label:   `${onList ? "✓" : "+"} ${entry.name}`,
                 active:  onList,
                 title:   onList ? "Już na liście — dodaj kolejną sztukę" : `Dodaj: ${entry.name}`,
-                style:   THUMB_TARGET,
+                style:   THUMB_PILL,
                 onClick: () => onAdd(entry),
               };
         })}

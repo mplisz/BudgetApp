@@ -17,6 +17,7 @@ import { useState, useCallback, useRef } from "react";
 import { useApi } from "./useApi";
 import { useToast } from "./useToast";
 import { MAX_UPLOAD_BYTES, fileSizeMb, readFileAsDataUrl, shrinkImage } from "../utils/fileData";
+import type { HorizonId } from "../data/constants/shoppingHorizons";
 
 // Longest side of a photo as sent — the server re-encodes to
 // PHOTO_MAX_DIMENSION (backend/utils/shoppingConfig.js) anyway, so
@@ -35,6 +36,12 @@ export interface ShoppingItem {
   /** Shop section id — see data/constants/shoppingSections. Assigned by
    *  the server (remembered per product, else guessed from the name). */
   section:      string;
+  /** Which tab the item was put on — see data/constants/shoppingHorizons.
+   *  Absent on items from before tabs existed, which read as "now". The
+   *  tab it SHOWS in today is utils/shoppingDue#tabOf. */
+  when?:        HorizonId;
+  /** The day a "date" item is needed on; null for every other tab. */
+  needBy?:      string | null;
   status:       ShoppingStatus;
   missedAt:     string | null;
   missedCount:  number;
@@ -138,6 +145,15 @@ export interface AddItemPayload {
    *  overruling both the remembered section and the guesser. */
   section?:      string | null;
   sourceWishId?: string | null;
+  /** Omit for "now". */
+  when?:         HorizonId;
+  needBy?:       string | null;
+}
+
+/** Moving an item between tabs — `needBy` only for "date". */
+export interface WhenPatch {
+  when:   HorizonId;
+  needBy: string | null;
 }
 
 export function useShoppingList() {
@@ -201,7 +217,7 @@ export function useShoppingList() {
 
   const patchItem = useCallback(async (
     id: string,
-    patch: Partial<Pick<ShoppingItem, "name" | "qty" | "unit" | "note" | "section" | "status">> & { missed?: boolean },
+    patch: Partial<Pick<ShoppingItem, "name" | "qty" | "unit" | "note" | "section" | "status" | "when" | "needBy">> & { missed?: boolean },
   ): Promise<ShoppingItem | null> => {
     const before = items.find(i => i.id === id);
     if (!before) return null;
@@ -237,6 +253,8 @@ export function useShoppingList() {
   // so it stands out on the next trip.
   const markMissed  = useCallback((id: string) => patchItem(id, { status: "open", missed: true }), [patchItem]);
   const reopenItem  = useCallback((id: string) => patchItem(id, { status: "open", missed: false }), [patchItem]);
+  // Optimistic like every patch: the row jumps to its new tab at once.
+  const setWhen     = useCallback((id: string, w: WhenPatch) => patchItem(id, w), [patchItem]);
 
   // ── Delete ────────────────────────────────────────────────
 
@@ -388,7 +406,7 @@ export function useShoppingList() {
 
   return {
     items, catalog, isLoading, hasLoaded: loadedRef.current,
-    load, addItem, patchItem, markBought, markMissed, reopenItem,
+    load, addItem, patchItem, markBought, markMissed, reopenItem, setWhen,
     removeItem, forgetSuggestion, forgetPrice, addSeenPrice, forgetSeenPrice,
     setPhoto, removePhoto,
   };

@@ -19,6 +19,11 @@
 //             open BECAUSE we still want it; it just gets flagged so it
 //             stands out next time.
 //
+// HORIZON (`when` + `needBy`): which tab of the panel an open item sits
+// on — na już / na termin / rozglądam się. See utils/shoppingHorizons.
+// Moving a "date" item to "now" the day before is the PANEL's job, done
+// on read: nothing has to wake up at midnight to rewrite documents.
+//
 // An item carries NO shop. Which shop something is cheapest in has to be
 // checked at the time anyway, and on the rare trip that covers two shops
 // the note field says so in the words that actually matter. Grouping the
@@ -60,6 +65,7 @@ const {
 } = require("../utils/receiptStorage");
 const { cleanMerchant } = require("../utils/merchant");
 const { SECTION_IDS, DEFAULT_SECTION, guessSection } = require("../utils/shoppingSections");
+const { HORIZON_IDS, normalizeWhen, moreUrgent } = require("../utils/shoppingHorizons");
 
 router.use(requireAuth);
 
@@ -81,6 +87,10 @@ const PostSchema = z.object({
   // Set when the item came from the Potencjalne zakupy panel — keeps the
   // trail back to the entry that was archived in exchange.
   sourceWishId: z.string().max(200).nullable().optional(),
+  // Which tab the item goes on — see utils/shoppingHorizons. Omitted
+  // means "now"; `needBy` is required for, and only kept on, "date".
+  when:         z.enum(HORIZON_IDS).optional(),
+  needBy:       z.string().max(10).nullable().optional(),
 });
 
 const PatchSchema = z.object({
@@ -93,6 +103,10 @@ const PatchSchema = z.object({
   // "Nie było" — only meaningful together with status "open" (explicitly
   // or by omission); clearing it is what un-flags an item.
   missed:   z.boolean().optional(),
+  // Moving between tabs. Sent together — "date" means nothing without
+  // its day — and validated as a pair by normalizeWhen.
+  when:     z.enum(HORIZON_IDS).optional(),
+  needBy:   z.string().max(10).nullable().optional(),
 }).refine(d => Object.keys(d).length > 0, { message: "No fields to update." });
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -171,6 +185,8 @@ router.post("/", async (req, res) => {
   if (!key) return res.status(400).json({ error: "Invalid product name." });
 
   const { qty, unit, note, sourceWishId } = parsed.data;
+  const horizon = normalizeWhen(parsed.data.when, parsed.data.needBy);
+  if (!horizon) return res.status(400).json({ error: "Wybierz dzień dla zakupu na termin." });
   const now = new Date().toISOString();
 
   try {
@@ -210,6 +226,8 @@ router.post("/", async (req, res) => {
         // point of adding it again); an empty one leaves the first alone.
         note:      note || existing.note || "",
         section:   existing.section || section,
+        // The sooner need wins — see moreUrgent.
+        ...moreUrgent(existing, horizon),
         // Putting a product back on the list clears "nie było": you are
         // asking for it afresh, not re-reporting the empty shelf.
         status:     "open",
@@ -230,6 +248,7 @@ router.post("/", async (req, res) => {
         unit:     unit ?? null,
         note,
         section,
+        ...horizon,
         status:   "open",
         missedAt:    null,
         missedCount: 0,
@@ -274,6 +293,14 @@ router.patch("/:id", async (req, res) => {
   const d        = parsed.data;
   const now      = new Date().toISOString();
 
+  let horizon = null;
+  if (d.when !== undefined || d.needBy !== undefined) {
+    horizon = normalizeWhen(d.when, d.needBy);
+    if (!horizon || d.when === undefined) {
+      return res.status(400).json({ error: "Wybierz dzień dla zakupu na termin." });
+    }
+  }
+
   try {
     const { resource: existing, etag } = await readItemWithEtag(shoppingContainer, idParsed.data, familyId);
     if (!existing || existing.type !== "SHOPPING_ITEM") {
@@ -293,6 +320,7 @@ router.patch("/:id", async (req, res) => {
       ...(d.unit     !== undefined ? { unit: d.unit } : {}),
       ...(d.note     !== undefined ? { note: d.note } : {}),
       ...(d.section  !== undefined ? { section: d.section } : {}),
+      ...(horizon ?? {}),
       status:    nextStatus,
       updatedAt: now,
     };

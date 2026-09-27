@@ -28,6 +28,10 @@
 // share one form with two save buttons, and the price part hid behind a
 // tap on the aisle chip, where nobody looks for a price.
 //
+// ⏱ kiedy moves the item between the panel's tabs (na już / na termin /
+// rozglądam się) — in the bar with the rest, not tucked into ✎: the
+// user asked for every control to stay on the surface.
+//
 // A PHOTO is added from the ✎ editor (it belongs to writing the list —
 // "kup ten olej" typed at home) and shown via "📷 zobacz zdjęcie" in the
 // same viewer as a receipt (ui/StoredFileModal).
@@ -45,7 +49,10 @@ import { useIsMobile } from "../../../hooks/useIsMobile";
 import { PriceChip, PricePanel } from "./PriceHint";
 import { MerchantInput } from "../../ui/MerchantInput";
 import { StoredFileModal } from "../../ui/StoredFileModal";
-import type { ShoppingItem, CatalogEntry, SeenPriceInput } from "../../../hooks/useShoppingList";
+import type { ShoppingItem, CatalogEntry, SeenPriceInput, WhenPatch } from "../../../hooks/useShoppingList";
+import { dayLabel, dueLabel, isDueNow, itemHorizon } from "../../../utils/shoppingDue";
+import { SHOPPING_HORIZONS } from "../../../data/constants/shoppingHorizons";
+import { WhenPicker } from "./WhenPicker";
 
 interface ShoppingRowProps {
   item:      ShoppingItem;
@@ -70,6 +77,10 @@ interface ShoppingRowProps {
    *  aisle) — the row then names its aisle itself. With headings the
    *  name would only repeat the one right above it. */
   sectionsShown?: boolean;
+  /** "YYYY-MM-DD" — one clock for the whole panel. */
+  today: string;
+  /** Move the item to another tab (⏱ kiedy). */
+  onWhen: (id: string, w: WhenPatch) => void;
 }
 
 // The units a shelf label is written in; each maps to the base unit the
@@ -122,6 +133,7 @@ export function ShoppingRow({
   catalogEntry, onForgetPrice, onSeenPrice, onForgetSeenPrice,
   onPhoto, onRemovePhoto,
   sectionsShown = false,
+  today, onWhen,
 }: ShoppingRowProps) {
   const isMobile = useIsMobile();
   const resolved = item.status !== "open";
@@ -131,7 +143,13 @@ export function ShoppingRow({
   const checked  = item.status === "bought";
 
   // Which editor is open under the row, if any.
-  const [panel, setPanel] = useState<null | "details" | "price">(null);
+  const [panel, setPanel] = useState<null | "details" | "price" | "when">(null);
+  const toggleWhen = () => setPanel(p => (p === "when" ? null : "when"));
+
+  // A "na termin" item that has moved to "Na już" says for when; a
+  // "rozglądam się" item offers the one move it is waiting for.
+  const due     = !resolved && isDueNow(item, today) && !!item.needBy;
+  const watched = !resolved && itemHorizon(item) === "watch";
 
   const [draftNote,    setDraftNote]    = useState(item.note ?? "");
   const [draftSection, setDraftSection] = useState(item.section ?? "inne");
@@ -247,6 +265,8 @@ export function ShoppingRow({
       <button type="button" onClick={() => onRemove(item.id)} title="Usuń z listy" style={iconBtn(c.danger)}>🗑️</button>
       <button type="button" onClick={togglePrice} title="Zanotuj cenę z półki"
         aria-expanded={panel === "price"} style={iconBtn(c.infoLight, panel === "price")}>💰</button>
+      <button type="button" onClick={toggleWhen} title="Kiedy kupić — na już, na termin, rozglądam się"
+        aria-expanded={panel === "when"} style={iconBtn(c.voucherLight, panel === "when")}>⏱</button>
       <button type="button" onClick={toggleDetails} title="Komentarz i sekcja"
         aria-expanded={panel === "details"} style={iconBtn(c.textTertiary, panel === "details")}>✎</button>
     </>
@@ -273,6 +293,9 @@ export function ShoppingRow({
       <button type="button" onClick={togglePrice} aria-expanded={panel === "price"} style={barBtn(c.infoLight, panel === "price")}>
         💰<BarLabel>cena</BarLabel>
       </button>
+      <button type="button" onClick={toggleWhen} aria-expanded={panel === "when"} style={barBtn(c.voucherLight, panel === "when")}>
+        ⏱<BarLabel>kiedy</BarLabel>
+      </button>
       <button type="button" onClick={toggleDetails} aria-expanded={panel === "details"} style={barBtn(c.textTertiary, panel === "details")}>
         ✎<BarLabel>opis</BarLabel>
       </button>
@@ -295,16 +318,34 @@ export function ShoppingRow({
           {sectionMeta(item.section).icon} {sectionMeta(item.section).label} ✎
         </span>
       )}
+      {due && (
+        <span style={{ color: c.warningLight, fontWeight: 700 }}>
+          {SHOPPING_HORIZONS.date.icon} {dueLabel(item.needBy!, today)} · {dayLabel(item.needBy!)}
+        </span>
+      )}
       {missed && (
         <span style={{ color: c.warningLight, fontWeight: 600 }}>
           🚫 nie było{item.missedCount > 1 ? ` (${item.missedCount}×)` : ""}
         </span>
       )}
+      {watched && (
+        // Its own tap, not the name block's editor.
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onWhen(item.id, { when: "now", needBy: null }); }}
+          style={{
+            background: "transparent", border: `1px solid ${alpha(c.success, "66")}`, color: c.successLight,
+            borderRadius: 20, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+          }}
+        >
+          → {SHOPPING_HORIZONS.now.label.toLowerCase()}
+        </button>
+      )}
       {item.status === "bought" && item.resolvedBy && <span>kupił(a): {item.resolvedBy}</span>}
       {item.status === "skipped" && <span>odpuszczone</span>}
     </>
   );
-  const hasFlags = showSectionChip || missed || (item.status === "bought" && !!item.resolvedBy) || item.status === "skipped";
+  const hasFlags = showSectionChip || missed || due || watched ||(item.status === "bought" && !!item.resolvedBy) || item.status === "skipped";
 
   return (
     <div style={{
@@ -481,6 +522,15 @@ export function ShoppingRow({
             )}
           </div>
         </div>
+      )}
+
+      {panel === "when" && !resolved && (
+        <WhenPicker
+          item={item}
+          today={today}
+          onPick={w => { onWhen(item.id, w); setPanel(null); }}
+          onClose={() => setPanel(null)}
+        />
       )}
 
       {photoOpen && hasPhoto && createPortal(
