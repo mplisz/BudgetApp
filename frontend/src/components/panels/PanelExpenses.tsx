@@ -57,7 +57,10 @@ interface OcrLine {
   subcategoryId:      string | null;
   subcategoryName:    string | null;
   categoryConfidence: number;
-  learned?:           boolean;         // categorized from a past user correction
+  learned?:           boolean;         // pre-filled from a past user correction
+  learnedBy?:         "ean" | "name" | null;   // which store the correction came from
+  ocrDescription?:    string;          // the AI's own wording — differs from `description` when a learned one was applied
+  ean?:               string | null;   // validated barcode printed on the receipt line
   product?:           LineItemProduct | null;  // structured identity for price history
   packCount?:         number | null;   // units the amount covers (OCR rule 27)
   selected:           boolean;         // client-side only
@@ -177,6 +180,7 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
       _allCartIds:     [keepId],
       _ocrNeedsReview: undefined, // editing IS the review → clear the flag
       _ocrLearned:     undefined, // after a manual edit it's no longer the learned value
+      _ocrLearnedBy:   undefined,
     };
 
     if (insertAt >= 0) {
@@ -308,8 +312,14 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
         // description. Survives cart edits ({...editingCartItem, ...payload})
         // so on save we can diff final vs. original and learn the correction.
         _ocrOrigSubcatId: line.subcategoryId || "",
-        _ocrOrigDesc:     line.description   || undefined,
+        // The key is the AI's wording; the shown description may already be a
+        // learned one, and "changed" is judged against what was shown.
+        _ocrOrigDesc:     line.ocrDescription ?? (line.description || undefined),
+        _ocrInitDesc:     line.description   || undefined,
+        _ocrInitProduct:  line.product       ?? null,
+        _ocrEan:          line.ean           || undefined,
         _ocrLearned:      line.learned       || undefined,
+        _ocrLearnedBy:    line.learnedBy     ?? undefined,
         _product:         line.product       ?? undefined,
         _packCount:       line.packCount     ?? undefined,
       })),

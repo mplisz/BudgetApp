@@ -46,8 +46,10 @@ const { fetchTrackedProducts, resolveTrackedProduct } = require("../utils/produc
 const { cleanMerchant, cleanNip, merchantExists, rememberMerchant } = require("../utils/merchant");
 const {
   normDesc, normMerchant, fetchCorrections, rememberCorrections,
-  buildCorrectionLookup, buildLearnedSection,
+  buildCorrectionLookup, buildLearnedSection, withLearnedDescription,
 } = require("../utils/ocrLearning");
+const { cleanEan, fetchEanEntries, lookupEan, rememberEanCorrections } = require("../utils/ocrEan");
+const { PRODUCT_UNIT_CODES } = require("../utils/productUnits");
 const crypto                  = require("crypto");
 const { requireAuth }         = require("../middleware/auth");
 const { archiveReceipt }      = require("../utils/receiptStorage");
@@ -103,6 +105,9 @@ const LlmItemSchema = z.object({
   // what turns "20,97 for a three-pack" into a comparable unit price.
   // `.catch(null)` keeps a malformed value from failing the whole scan.
   packCount:          z.number().int().positive().max(99).nullable().optional().catch(null),
+  // Barcode printed next to the line (prompt rule 28). Free text here; it
+  // is only trusted after cleanEan (digits + check digit) in the mapper.
+  ean:                z.string().max(40).nullable().optional().catch(null),
   // Structured product identity for price-history analytics (shared
   // schema — see utils/productAi.js). `.catch(undefined)` makes a
   // malformed product degrade to "no structured data" instead of failing
@@ -325,6 +330,13 @@ dla towaru ważonego ("0,442 * 19,99") to jest WAGA, nie liczba sztuk → null.
 To pole jest NIEZALEŻNE od "product": wypełniasz je także dla pozycji spoza
 listy ŚLEDZONE PRODUKTY. Służy wyłącznie do policzenia ceny jednej sztuki.
 
+28. KOD EAN (pole "ean" przy KAŻDEJ pozycji): jeśli przy pozycji wydrukowany jest kod kreskowy
+(8, 12, 13 lub 14 cyfr, zwykle w tej samej linii lub tuż pod nazwą, często po znaczniku typu "X"
+albo "J"), przepisz SAME CYFRY, bez spacji. NIE myl go z ceną, ilością, krótkim kodem sklepu
+z literą (np. "298378C"), NIP-em ani numerem paragonu. Nie wpisuj go do "description". Gdy kodu
+brak lub nie da się go odczytać co do cyfry — null (nie zgaduj cyfr). Przy scalaniu identycznych
+pozycji podaj ich wspólny kod.
+
 ═══ DANE UŻYTKOWNIKA ═══
 
 KATEGORIE UŻYTKOWNIKA:
@@ -344,6 +356,7 @@ Wyłącznie poprawny JSON, bez markdown, bez komentarzy:
       "subcategory": "Napoje",
       "categoryConfidence": 0.95,
       "packCount": 2,
+      "ean": "5449000000996",
       "product": { "name": "Coca-Cola", "size": 1500, "unit": "ml", "packCount": 2 }
     }
   ],
@@ -465,7 +478,7 @@ async function preprocessImage(dataUrl) {
 // Maps LLM category NAMES to category IDs so the frontend doesn't
 // have to do fuzzy matching. Unknown names → null (user picks manually).
 
-function mapItemsToCategories(items, categoryTree, corrections = [], merchant = null, trackedProducts = []) {
+function mapItemsToCategories(items, categoryTree, corrections = [], merchant = null, trackedProducts = [], eanEntries = {}) {
   // Case-insensitive name → node lookup
   const catByName = new Map();
   for (const root of categoryTree) {
@@ -499,16 +512,32 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
       confidence = Math.min(confidence, 0.3);
     }
 
-    // Learned-correction override: an exact (desc, merchant) — or desc-only —
-    // match the user has confirmed before wins over the model's guess.
-    // Only applies when both names still resolve in the current tree (a
-    // since-deleted category falls back to the LLM suggestion).
-    const key = normDesc(item.description);
-    const hit = lookup.get(`${key}|${normMerch}`) || lookup.get(`${key}|`);
-    if (hit) {
-      const hitRoot = catByName.get((hit.categoryName || "").toLowerCase());
+    // Learned-correction override. Two stores, in priority order: the line's
+    // barcode (exact, shop-independent), then an exact (desc, merchant) — or
+    // desc-only — text match. Each source teaches optional parts (category,
+    // description, product) and each part comes from the first source that
+    // has a usable one, so a barcode that only taught a product still lets
+    // the text match supply the category.
+    // A category only applies when both names still resolve in the current
+    // tree (a since-deleted category falls back to the LLM suggestion); a
+    // product only when it is still on the tracked list.
+    const ean      = cleanEan(item.ean);
+    const key      = normDesc(item.description);
+    const nameHit  = lookup.get(`${key}|${normMerch}`) || lookup.get(`${key}|`);
+    const eanHit   = lookupEan(eanEntries, ean);
+    const sources  = [
+      eanHit  && { entry: eanHit,  by: "ean"  },
+      nameHit && { entry: nameHit, by: "name" },
+    ].filter(Boolean);
+
+    let learnedBy   = null;
+    let description = item.description;
+    let product     = undefined;   // undefined = nothing learned → resolve the model's guess below
+
+    for (const { entry, by } of sources) {
+      const hitRoot = catByName.get((entry.categoryName || "").toLowerCase());
       const hitSub  = hitRoot
-        ? hitRoot.subcategories.find(s => s.name.toLowerCase() === (hit.subcategoryName || "").toLowerCase())
+        ? hitRoot.subcategories.find(s => s.name.toLowerCase() === (entry.subcategoryName || "").toLowerCase())
         : null;
       if (hitRoot && hitSub) {
         categoryId      = hitRoot.id;
@@ -516,12 +545,44 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
         subcategoryId   = hitSub.id;
         subcategoryName = hitSub.name;
         confidence      = 0.98;
-        learned         = true;   // categorized from the user's own past correction
+        learnedBy       = learnedBy || by;   // categorized from the user's own past correction
+        break;
       }
     }
+    for (const { entry, by } of sources) {
+      if (entry.learnedDesc) {
+        description = withLearnedDescription(entry.learnedDesc, item.description);
+        learnedBy   = learnedBy || by;
+        break;
+      }
+    }
+    for (const { entry, by } of sources) {
+      if (entry.product === null) {            // the user removed the product here
+        product   = null;
+        learnedBy = learnedBy || by;
+        break;
+      }
+      if (entry.product) {
+        const resolved = resolveTrackedProduct(
+          { ...entry.product, packCount: item.packCount ?? item.product?.packCount ?? null },
+          trackedProducts, item.description,
+        );
+        if (resolved) {
+          product   = resolved;
+          learnedBy = learnedBy || by;
+          break;
+        }
+      }
+    }
+    learned = !!learnedBy;
 
     return {
-      description:        item.description,
+      description,
+      // The AI's own wording — the key a correction is stored under. It
+      // differs from `description` once a learned description was applied.
+      ocrDescription:     item.description,
+      ean,
+      learnedBy,
       amount:             roundMoney(item.amount),
       grossAmount:        item.grossAmount != null ? roundMoney(item.grossAmount) : null,
       discountAmount:     item.discountAmount != null ? roundMoney(item.discountAmount) : null,
@@ -542,7 +603,9 @@ function mapItemsToCategories(items, categoryTree, corrections = [], merchant = 
       // spelling, size/unit defaulted when unreadable, missing purchase
       // count recovered from an "xN" in the description) — see
       // productCatalog.resolveTrackedProduct.
-      product:            resolveTrackedProduct(item.product, trackedProducts, item.description),
+      product:            product !== undefined
+        ? product
+        : resolveTrackedProduct(item.product, trackedProducts, item.description),
     };
   });
 }
@@ -674,10 +737,11 @@ router.post("/receipt", async (req, res) => {
     if (categoryTree.length === 0) {
       return res.status(422).json({ error: "No expense categories defined." });
     }
-    const [{ merchants: knownMerchants, nips: knownNips }, corrections, trackedProducts] = await Promise.all([
+    const [{ merchants: knownMerchants, nips: knownNips }, corrections, trackedProducts, eanEntries] = await Promise.all([
       fetchKnownMerchants(familyId),
       fetchCorrections(settingsContainer, familyId),
       fetchTrackedProducts(productsContainer, familyId),
+      fetchEanEntries(settingsContainer, familyId),
     ]);
 
     // 3a. PREFERRED: dedicated OCR engine reads the receipt as text.
@@ -781,7 +845,7 @@ router.post("/receipt", async (req, res) => {
 
     // 6. Map category names → IDs, applying learned per-item overrides
     // (scoped to the — possibly NIP-corrected — merchant).
-    const mappedItems = mapItemsToCategories(items, categoryTree, corrections, metadata.merchant, trackedProducts);
+    const mappedItems = mapItemsToCategories(items, categoryTree, corrections, metadata.merchant, trackedProducts, eanEntries);
 
     // 7. Fingerprint + duplicate check (soft warning, never blocks).
     // duplicateWarning is a SEPARATE channel from sumWarning — a receipt
@@ -858,13 +922,29 @@ router.post("/receipt", async (req, res) => {
 // fire-and-forget from the client — a failure here is never surfaced.
 // (Merchant/NIP learning happens separately, at transaction commit.)
 
+// Every taught part is optional and only present when the user changed it:
+//   category pair   — the subcategory was changed,
+//   finalDescription — the description was retyped,
+//   product          — the tracked product was set/changed (null = removed).
+// `description` is the AI's own wording (the key); `ean` adds the barcode
+// store as a second key. At least one part is required.
 const FeedbackSchema = z.object({
   corrections: z.array(z.object({
-    description:     z.string().min(1).max(200),
-    merchant:        z.string().max(150).optional().nullable(),
-    categoryName:    z.string().min(1).max(100),
-    subcategoryName: z.string().min(1).max(100),
-  })).min(1).max(MAX_FEEDBACK_ITEMS),
+    description:      z.string().min(1).max(200),
+    merchant:         z.string().max(150).optional().nullable(),
+    ean:              z.string().max(40).optional().nullable(),
+    categoryName:     z.string().min(1).max(100).optional(),
+    subcategoryName:  z.string().min(1).max(100).optional(),
+    finalDescription: z.string().min(1).max(200).optional(),
+    product: z.object({
+      name: z.string().min(1).max(120),
+      size: z.number().positive().nullable().optional(),
+      unit: z.enum(PRODUCT_UNIT_CODES).nullable().optional(),
+    }).nullable().optional(),
+  }).refine(
+    c => (c.categoryName && c.subcategoryName) || c.finalDescription || c.product !== undefined,
+    "Correction teaches nothing",
+  )).min(1).max(MAX_FEEDBACK_ITEMS),
 });
 
 router.post("/feedback", async (req, res) => {
@@ -872,7 +952,13 @@ router.post("/feedback", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  await rememberCorrections(settingsContainer, req.user.familyId, parsed.data.corrections);
+  const { corrections } = parsed.data;
+  // Name store always; barcode store only for lines that carried a barcode
+  // (rememberEanCorrections drops the rest). Independent docs → parallel.
+  await Promise.all([
+    rememberCorrections(settingsContainer, req.user.familyId, corrections),
+    rememberEanCorrections(settingsContainer, req.user.familyId, corrections),
+  ]);
   res.status(204).end();
 });
 

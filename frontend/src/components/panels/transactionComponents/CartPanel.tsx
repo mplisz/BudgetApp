@@ -42,10 +42,14 @@ export interface CartItem extends TransactionPayload {
   _packCount?:      number | null;   // units covered by this line (OCR rule 27)
   _ocrSummary?: string;
   // ── Category-learning provenance (stripped before save) ──
-  _ocrOrigSubcatId?: string; // AI's originally suggested subcategory id
-  _ocrOrigDesc?:     string; // raw OCR description — the learning key
+  _ocrOrigSubcatId?: string; // subcategory the line was added with (AI's, or a learned one)
+  _ocrOrigDesc?:     string; // the AI's own OCR description — the learning key
+  _ocrInitDesc?:     string; // description the line was added with (a learned one, if any)
+  _ocrInitProduct?:  LineItemProduct | null; // product the line was added with
+  _ocrEan?:          string; // validated barcode printed on the receipt line
   _ocrNoLearn?:      boolean; // user opted this one-off edit out of learning
-  _ocrLearned?:      boolean; // auto-categorized from a past user correction
+  _ocrLearned?:      boolean; // pre-filled from a past user correction
+  _ocrLearnedBy?:    "ean" | "name"; // which store the correction came from
   _product?:         LineItemProduct | null;  // structured identity → saved into lineItems
 }
 
@@ -163,7 +167,8 @@ function toPayload(item: CartItem): TransactionPayload {
   const {
     _cartId, _ocrSummary ,_allCartIds, _mergedCount, _ocrGross, _ocrDiscount, _ocrMergeNote,
     _ocrReceiptPath, _ocrReceiptId, _ocrMerchant, _ocrWarranty, _ocrNeedsReview,
-    _ocrOrigSubcatId, _ocrOrigDesc, _ocrNoLearn, _ocrLearned,
+    _ocrOrigSubcatId, _ocrOrigDesc, _ocrInitDesc, _ocrInitProduct, _ocrEan,
+    _ocrNoLearn, _ocrLearned, _ocrLearnedBy,
     _lineItems, _packCount, ...payload
   } = item;
   if (_ocrReceiptPath) payload.receiptBlobPath = _ocrReceiptPath;
@@ -180,17 +185,26 @@ function toPayload(item: CartItem): TransactionPayload {
   return payload as TransactionPayload;
 }
 
-// ── Category-learning feedback ────────────────────────────────
-// A "correction" is an OCR-originated line whose final subcategory differs
-// from what the AI suggested (covers both "AI wrong → fixed" and "AI blank
-// → filled"). Computed from the RAW cart (pre-aggregate, so per-line origin
-// survives), restricted to lines that actually saved. Deduped by key.
+// ── Learning feedback ─────────────────────────────────────────
+// A "correction" is an OCR-originated line where the user changed what we
+// pre-filled: the subcategory (covers "AI wrong → fixed" and "AI blank →
+// filled"), the description, or the tracked product. Each change is sent
+// as its own optional part — an untouched part is omitted, so it never
+// overwrites what was learned before. Computed from the RAW cart
+// (pre-aggregate, so per-line origin survives), restricted to lines that
+// actually saved. Deduped by key.
 interface FeedbackCorrection {
-  description:     string;
-  merchant:        string | null;
-  categoryName:    string;
-  subcategoryName: string;
+  description:       string;                  // the AI's wording — the key
+  merchant:          string | null;
+  ean:               string | null;           // second key: the receipt barcode
+  categoryName?:     string;
+  subcategoryName?:  string;
+  finalDescription?: string;
+  product?:          { name: string; size?: number | null; unit?: string | null } | null;
 }
+
+const productSig = (p?: LineItemProduct | null) => p ? `${p.name}|${p.size ?? ""}|${p.unit ?? ""}` : "";
+
 function collectCorrections(items: CartItem[], savedIds: string[]): FeedbackCorrection[] {
   const saved = new Set(savedIds);
   const seen  = new Set<string>();
@@ -198,13 +212,25 @@ function collectCorrections(items: CartItem[], savedIds: string[]): FeedbackCorr
   for (const i of items) {
     if (!saved.has(i._cartId)) continue;
     if (i._ocrNoLearn) continue;                            // user opted this edit out of learning
-    if (!i._ocrOrigDesc || !i.subcategoryId || !i.subcategoryName || !i.categoryName) continue;
-    if (i.subcategoryId === i._ocrOrigSubcatId) continue;   // unchanged → not a correction
+    if (!i._ocrOrigDesc) continue;                          // manual line — nothing to key on
+
+    const subcatChanged  = !!i.subcategoryId && i.subcategoryId !== i._ocrOrigSubcatId
+                           && !!i.subcategoryName && !!i.categoryName;
+    const finalDesc      = (i.description || "").trim();
+    const descChanged    = !!finalDesc && finalDesc !== (i._ocrInitDesc || "").trim();
+    const productChanged = productSig(i._product) !== productSig(i._ocrInitProduct);
+    if (!subcatChanged && !descChanged && !productChanged) continue;   // unchanged → not a correction
+
     const merchant = i._ocrMerchant || i.merchant || null;
     const key = `${i._ocrOrigDesc}|${merchant || ""}`.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ description: i._ocrOrigDesc, merchant, categoryName: i.categoryName, subcategoryName: i.subcategoryName });
+
+    const c: FeedbackCorrection = { description: i._ocrOrigDesc, merchant, ean: i._ocrEan ?? null };
+    if (subcatChanged)  { c.categoryName = i.categoryName; c.subcategoryName = i.subcategoryName; }
+    if (descChanged)    c.finalDescription = finalDesc;
+    if (productChanged) c.product = i._product ? { name: i._product.name, size: i._product.size ?? null, unit: i._product.unit ?? null } : null;
+    out.push(c);
   }
   return out;
 }
@@ -457,7 +483,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
             )}
             {item._ocrLearned && status !== STATUS.DONE && (
               <div style={{ color: c.success, fontSize: 10, marginTop: 2, fontWeight: 600 }}>
-                ✓ z Twoich poprawek
+                ✓ z Twoich poprawek{item._ocrLearnedBy === "ean" ? " (po kodzie EAN)" : ""}
               </div>
             )}
           </div>

@@ -5,10 +5,18 @@
 // get categorized automatically on the next scan.
 //
 // Storage: ONE Settings doc per family, ocr_corrections_${familyId}:
-//   entries: [{ desc, merchant, categoryName, subcategoryName, count, lastAt }]
+//   entries: [{ desc, merchant, count, lastAt,
+//               categoryName?, subcategoryName?, learnedDesc?, product? }]
 // Keyed by (normalized desc, normalized merchant). Merchant scopes the
 // key because the same OCR string can mean different products across
 // shops; an empty merchant serves as a shop-agnostic fallback.
+//
+// What an entry teaches is a set of OPTIONAL parts — category pair, the
+// description the user typed instead of the AI's, and a tracked product
+// (an explicit null means "the user removed it"). A part is only stored
+// when the user actually changed it; a later correction overwrites just
+// the parts it carries. The same parts shape backs the EAN store
+// (utils/ocrEan.js), which keys on the barcode instead of the text.
 //
 // Two consumers on the scan side:
 //   - buildLearnedSection() injects the top entries into the LLM prompt
@@ -66,6 +74,62 @@ function entryKey(desc, merchant) {
   return `${desc}|${merchant}`;
 }
 
+const DESC_MAX = 200;
+const UNIT_MAX = 20;
+
+// A stored description never carries the merge-count suffix: "x2" belongs
+// to one shopping trip, not to the product (see normDesc).
+function stripCountSuffix(s) {
+  return s.replace(/\s*x\d+$/i, "").trim();
+}
+
+// Clean the learnable parts of one correction. Free-form strings come from
+// the feedback endpoint, so everything is sanitized and bounded here. Returns
+// only the parts present; `product` is undefined (not taught), null (user
+// removed it) or { name, size, unit }.
+function cleanLearnedParts(c) {
+  const parts = {};
+  const cat = sanitizeForPrompt(c.categoryName, NAME_MAX);
+  const sub = sanitizeForPrompt(c.subcategoryName, NAME_MAX);
+  if (cat && sub) { parts.categoryName = cat; parts.subcategoryName = sub; }
+
+  const desc = stripCountSuffix(sanitizeForPrompt(c.finalDescription, DESC_MAX));
+  if (desc) parts.learnedDesc = desc;
+
+  if (c.product === null) {
+    parts.product = null;
+  } else if (c.product && typeof c.product === "object") {
+    const name = sanitizeForPrompt(c.product.name, NAME_MAX);
+    if (name) {
+      const size = typeof c.product.size === "number" && c.product.size > 0 ? c.product.size : null;
+      const unit = sanitizeForPrompt(c.product.unit, UNIT_MAX) || null;
+      parts.product = { name, size, unit };
+    }
+  }
+  return parts;
+}
+
+function hasLearnedParts(parts) {
+  return !!(parts.categoryName || parts.learnedDesc || parts.product !== undefined);
+}
+
+// Fold a correction's parts into an entry, overwriting only what it carries.
+function applyLearnedParts(entry, parts) {
+  if (parts.categoryName) {
+    entry.categoryName    = parts.categoryName;
+    entry.subcategoryName = parts.subcategoryName;
+  }
+  if (parts.learnedDesc)           entry.learnedDesc = parts.learnedDesc;
+  if (parts.product !== undefined) entry.product     = parts.product;
+}
+
+// The description to show for a line the store recognized: the learned one,
+// with the quantity suffix of THIS receipt's line ("x2") carried over.
+function withLearnedDescription(learnedDesc, incoming) {
+  const suffix = /\s(x\d+)$/i.exec(String(incoming || ""));
+  return suffix ? `${learnedDesc} ${suffix[1]}` : learnedDesc;
+}
+
 // Point-read the family's corrections. Returns the entries array (or []).
 async function fetchCorrections(container, familyId) {
   const { doc } = await readSettingsDoc(container, CORRECTIONS_DOC(familyId), familyId);
@@ -73,19 +137,18 @@ async function fetchCorrections(container, familyId) {
 }
 
 // Merge a batch of corrections into the store. Dedup by (desc, merchant):
-// a repeat bumps count and refreshes the mapping (the latest correction
-// wins). Caps at MAX_ENTRIES with count-aware eviction — frequently
+// a repeat bumps count and refreshes the parts it carries (the latest
+// correction wins). Caps at MAX_ENTRIES with count-aware eviction — frequently
 // confirmed / recent entries survive, one-off OCR typos get dropped.
 // Best-effort, never throws.
 async function rememberCorrections(container, familyId, corrections) {
   const clean = (corrections || [])
     .map(c => ({
-      desc:            normDesc(c.description),
-      merchant:        normMerchant(c.merchant),
-      categoryName:    sanitizeForPrompt(c.categoryName, NAME_MAX),
-      subcategoryName: sanitizeForPrompt(c.subcategoryName, NAME_MAX),
+      desc:     normDesc(c.description),
+      merchant: normMerchant(c.merchant),
+      parts:    cleanLearnedParts(c),
     }))
-    .filter(c => c.desc && c.categoryName && c.subcategoryName);
+    .filter(c => c.desc && hasLearnedParts(c.parts));
   if (!clean.length) return;
 
   await upsertSettingsDoc(container, {
@@ -102,12 +165,13 @@ async function rememberCorrections(container, familyId, corrections) {
         const k = entryKey(c.desc, c.merchant);
         const existing = byKey.get(k);
         if (existing) {
-          existing.categoryName    = c.categoryName;
-          existing.subcategoryName = c.subcategoryName;
-          existing.count           = (existing.count || 1) + 1;
-          existing.lastAt          = now;
+          applyLearnedParts(existing, c.parts);
+          existing.count  = (existing.count || 1) + 1;
+          existing.lastAt = now;
         } else {
-          byKey.set(k, { ...c, count: 1, lastAt: now });
+          const entry = { desc: c.desc, merchant: c.merchant, count: 1, lastAt: now };
+          applyLearnedParts(entry, c.parts);
+          byKey.set(k, entry);
         }
       }
 
@@ -133,8 +197,10 @@ function buildCorrectionLookup(entries) {
 // Render the top entries as a prompt block, or "" when there are none.
 // Ordered by count desc so the model sees the user's strongest habits.
 function buildLearnedSection(entries) {
-  if (!entries || !entries.length) return "";
-  const top = [...entries]
+  // Entries that only taught a description/product carry no category.
+  const withCategory = (entries || []).filter(e => e.categoryName && e.subcategoryName);
+  if (!withCategory.length) return "";
+  const top = withCategory
     .sort((a, b) => (b.count - a.count) || (b.lastAt || "").localeCompare(a.lastAt || ""))
     .slice(0, PROMPT_LIMIT);
   const lines = top
@@ -144,6 +210,11 @@ function buildLearnedSection(entries) {
 }
 
 module.exports = {
+  sanitizeForPrompt,
+  cleanLearnedParts,
+  hasLearnedParts,
+  applyLearnedParts,
+  withLearnedDescription,
   normDesc,
   normMerchant,
   fetchCorrections,
