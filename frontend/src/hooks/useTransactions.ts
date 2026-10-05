@@ -126,6 +126,36 @@ export function useTransactions() {
     }
   }, [api, setTransactions, showSuccess, showError]);
 
+  // ── Re-tag receipt lines of a saved transaction ──────────────────────────────
+  // The backend moves the picked lines to the transaction carrying `tags`
+  // (an existing sibling, or a new one) — so the response can hold a tx the
+  // list has not seen yet. `target` is null when the whole tx was retagged.
+  const moveLines = useCallback(async (
+    id: string,
+    indices: number[],
+    tags: string[],
+  ): Promise<{ source: StoredTx; target: StoredTx | null } | null> => {
+    setIsSaving(true);
+    try {
+      const { source, target } = await api.post<{ source: StoredTx; target: StoredTx | null }>(
+        `/api/transactions/${id}/move-lines`,
+        { indices, tags },
+        { fallback: "Nie udało się zmienić tagów pozycji." },
+      );
+      setTransactions(prev => {
+        const next = prev.map(t => (t.id === source.id ? source : target && t.id === target.id ? target : t));
+        return target && !prev.some(t => t.id === target.id) ? [target, ...next] : next;
+      });
+      showSuccess("Tagi pozycji zmienione! ✅");
+      return { source, target };
+    } catch (err) {
+      showError((err as Error).message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [api, setTransactions, showSuccess, showError]);
+
   // ── Soft-delete transaction ──────────────────────────────────────────────────
   const deleteTransaction = useCallback(async (
     id: string,
@@ -159,6 +189,7 @@ export function useTransactions() {
     addTransaction,
     addTransactionBatch,
     updateTransaction,
+    moveLines,
     deleteTransaction,
   };
 }

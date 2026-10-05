@@ -51,6 +51,7 @@ const { resolveTransferTarget, buildReturnTransferDoc } = require("../utils/tran
 const { resolveTxType, applyTxType } = require("../utils/categoryType");
 const { PRODUCT_UNIT_CODES } = require("../utils/productUnits");
 const { searchTokens, txMatchesText, MIN_SEARCH_LENGTH } = require("../utils/textSearch");
+const { isMergeTarget, planLineMove } = require("../utils/lineItemMove");
 
 
 // ── Schemas ───────────────────────────────────────────────────
@@ -791,6 +792,118 @@ router.patch("/:id", async (req, res) => {
     }
     console.error("[TX PATCH]", err);
     res.status(500).json({ error: "Failed to update transaction." });
+  }
+});
+
+// ── POST /:id/move-lines ──────────────────────────────────────
+//
+// Re-tag receipt lines of a saved transaction. Tags belong to the whole
+// transaction, so the picked lines MOVE to the transaction carrying the
+// wanted tags: a sibling from the same receipt when one matches, otherwise a
+// new one cloned from this tx. Picking every line just retags the tx.
+// utils/lineItemMove.js decides the arithmetic; this route does the writes.
+// Target is written first, then the source (optimistic lock); if the source
+// write loses, the target write is undone.
+
+const MoveLinesSchema = z.object({
+  indices: z.array(z.number().int().min(0)).min(1).max(60),
+  tags:    z.array(z.string().min(1)).max(30),
+});
+
+router.post("/:id/move-lines", async (req, res) => {
+  const idParsed = IdParamSchema.safeParse(req.params.id);
+  if (!idParsed.success) return res.status(400).json({ error: idParsed.error.issues[0].message });
+  const parsed = MoveLinesSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const id       = idParsed.data;
+  const familyId = req.user.familyId;
+  const { indices, tags } = parsed.data;
+  const audit = {
+    updatedAt:   new Date().toISOString(),
+    updatedBy:   req.user.name || req.user.email,
+    updatedById: req.user.id,
+  };
+
+  try {
+    const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
+    if (!existing)           return res.status(404).json({ error: "Transaction not found." });
+    if (existing.isArchived) return res.status(409).json({ error: "Cannot edit an archived transaction." });
+
+    let sibling = null, siblingEtag = null;
+    if (existing.receiptId) {
+      const { resources } = await transactionsContainer.items.query({
+        query: `SELECT * FROM c WHERE c.userId = @userId AND c.receiptId = @receiptId
+                AND (c.isArchived = false OR NOT IS_DEFINED(c.isArchived))`,
+        parameters: [
+          { name: "@userId",    value: familyId           },
+          { name: "@receiptId", value: existing.receiptId },
+        ],
+      }).fetchAll();
+      const found = resources.find(c => isMergeTarget(c, existing, tags));
+      if (found) ({ resource: sibling, etag: siblingEtag } = await readItemWithEtag(transactionsContainer, found.id, familyId));
+    }
+
+    const plan = planLineMove(existing, indices, tags, sibling);
+    if (plan.error) return res.status(400).json({ error: plan.error });
+
+    // Every line picked → the whole tx just takes the new tags.
+    if (plan.retag) {
+      const { resource } = await transactionsContainer.items.upsert(
+        { ...existing, tags, ...audit },
+        { accessCondition: { type: "IfMatch", condition: etag } },
+      );
+      console.log(`[TX MOVE-LINES] Retagged whole tx ${id}`);
+      return res.json({ source: resource, target: null });
+    }
+
+    // ── Target: merge into the sibling, or clone a new tx ─────
+    let target, rollbackTarget;
+    if (sibling) {
+      const merged = withVoucherFields({ ...sibling, ...plan.target, ...audit }, plan.target.amount, []);
+      const { resource } = await transactionsContainer.items.upsert(merged, {
+        accessCondition: { type: "IfMatch", condition: siblingEtag },
+      });
+      target = resource;
+      rollbackTarget = () => transactionsContainer.items.upsert(sibling, {
+        accessCondition: { type: "IfMatch", condition: resource._etag },
+      }).catch(e => console.error(`[TX MOVE-LINES] Sibling restore failed ${sibling.id}:`, e));
+    } else {
+      const { date, type, budgetMonth, subcategoryId, subcategoryName, categoryId, categoryName,
+              originalCurrency, fxRate, priority, merchant, receiptBlobPath, receiptId, isWarranty } = existing;
+      const newId = `tx_${familyId}_${budgetMonth.replace("-", "")}_${Date.now()}_m`;
+      const doc = withVoucherFields(
+        scaffoldTx({
+          date, type, budgetMonth, subcategoryId, subcategoryName, categoryId, categoryName,
+          originalCurrency, fxRate, priority, merchant, receiptBlobPath, receiptId, isWarranty,
+          isRecurring: false, recurringId: null, tags, ...plan.target,
+        }, newId, familyId, req),
+        plan.target.amount, [],
+      );
+      const { resource } = await transactionsContainer.items.create(doc);
+      target = resource;
+      rollbackTarget = () => archiveForRollback(resource);
+      if (receiptId) promoteReceipt(receiptId, familyId, newId, !!isWarranty, merchant);
+    }
+
+    // ── Source: what stays ────────────────────────────────────
+    try {
+      const { resource: source } = await transactionsContainer.items.upsert(
+        withVoucherFields({ ...existing, ...plan.source, ...audit }, plan.source.amount, []),
+        { accessCondition: { type: "IfMatch", condition: etag } },
+      );
+      console.log(`[TX MOVE-LINES] ${indices.length} line(s) ${id} → ${target.id}${plan.targetIsNew ? " (new)" : ""}`);
+      return res.json({ source, target });
+    } catch (srcErr) {
+      await rollbackTarget();
+      throw srcErr;
+    }
+  } catch (err) {
+    if (err.code === 412) {
+      return res.status(409).json({ error: "Data was modified by another user. Please refresh and try again." });
+    }
+    console.error("[TX MOVE-LINES]", err);
+    res.status(500).json({ error: "Failed to move line items." });
   }
 });
 

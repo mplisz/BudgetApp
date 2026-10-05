@@ -11,7 +11,8 @@
 import { c } from "../../../styles/tokens";
 import { useState }           from "react";
 import { createPortal }       from "react-dom";
-import { fmt,fmtAmount  }                from "../../../utils/helpers";
+import { fmt }                from "../../../utils/helpers";
+import { LineItemBreakdown } from "./LineItemBreakdown";
 import { s, PrioBadge, calcReturns } from "./txStyles";
 import { EditTransactionModal }      from "./EditTransactionModal";
 import { ReceiptModal } from "./ReceiptModal";
@@ -225,16 +226,7 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
               <div style={{ color: c.textMuted, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
                 Pozycje z paragonu ({lineItems.length})
               </div>
-              {lineItems.map((li, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 12, borderBottom: i < lineItems.length - 1 ? `1px solid ${c.surfaceAlt2}` : "none" }}>
-                  <span style={{ color: c.textTertiary }}>{li.description || "—"}</span>
-                  <span style={{ color: c.textBody, fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>
-                    {li.originalCurrency && li.originalCurrency !== "PLN"
-                      ? `${fmtAmount(li.originalAmount, li.originalCurrency)} ${li.originalCurrency} (${fmt(li.amount)})`
-                      : fmt(li.amount)}
-                  </span>
-                </div>
-              ))}
+              <LineItemBreakdown tx={tx} lineItems={lineItems} onUpdated={onUpdated} />
             </div>
           </td>
         </tr>
@@ -377,17 +369,8 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
             {lineItemsOpen ? "▾" : "▸"} {lineItems.length} pozycji z paragonu
           </button>
           {lineItemsOpen && (
-            <div style={{ marginTop: 6, paddingLeft: 8 }}>
-              {lineItems.map((li, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 12, borderBottom: i < lineItems.length - 1 ? `1px solid ${c.surfaceAlt2}` : "none" }}>
-                  <span style={{ color: c.textTertiary }}>{li.description || "—"}</span>
-                  <span style={{ color: c.textBody, fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>
-                    {li.originalCurrency && li.originalCurrency !== "PLN"
-                      ? `${fmtAmount(li.originalAmount, li.originalCurrency)} ${li.originalCurrency} (${fmt(li.amount)})`
-                      : fmt(li.amount)}
-                  </span>
-                </div>
-              ))}
+            <div style={{ marginTop: 6 }}>
+              <LineItemBreakdown tx={tx} lineItems={lineItems} onUpdated={onUpdated} indent={8} />
             </div>
           )}
         </div>
