@@ -9,6 +9,13 @@ on:
       - main
   workflow_dispatch:
 
+# One deploy at a time: overlapping OneDeploy calls to the same App Service
+# fail with 409 Conflict. A running deploy is never cancelled; a newer push
+# just waits (and supersedes any older queued run).
+concurrency:
+  group: deploy-budget-api-mms
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
