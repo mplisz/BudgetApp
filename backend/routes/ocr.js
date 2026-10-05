@@ -880,7 +880,16 @@ router.post("/receipt", async (req, res) => {
 
     const { items, metadata, warning: modelWarning } = validated.data;
     let warning = modelWarning;
-    let applied = applyGroupDiscounts(items, metadata.groupDiscounts);
+    // Group discounts are applied only while items still exceed the receipt
+    // total — if the model already took the discount off, applying it again
+    // would subtract it twice. Without a known total there is no way to tell.
+    const itemsExceedTotal = () =>
+      roundMoney(items.reduce((s, i) => s + i.amount, 0) - metadata.totalSum) > 0.05;
+    const totalKnown = metadata.totalSum != null;
+    let applied = 0;
+    if (!totalKnown || itemsExceedTotal()) {
+      applied = applyGroupDiscounts(items, metadata.groupDiscounts);
+    }
     // Safety net: items still exceed the receipt total (an unassigned discount
     // the model neither distributed nor reported per group) → spread the
     // difference over all items proportionally.
