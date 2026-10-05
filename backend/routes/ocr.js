@@ -108,6 +108,9 @@ const LlmItemSchema = z.object({
   // Barcode printed next to the line (prompt rule 28). Free text here; it
   // is only trusted after cleanEan (digits + check digit) in the mapper.
   ean:                z.string().max(40).nullable().optional().catch(null),
+  // VAT letter printed next to the price ("A", "C"…) — prompt rule 8b. Only
+  // used to spread a per-VAT-group discount over the items of that group.
+  vat:                z.string().max(4).nullable().optional().catch(null),
   // Structured product identity for price-history analytics (shared
   // schema — see utils/productAi.js). `.catch(undefined)` makes a
   // malformed product degrade to "no structured data" instead of failing
@@ -125,9 +128,49 @@ const LlmResponseSchema = z.object({
     receiptNumber: z.string().max(60).optional().nullable(),  // nr wydruku/paragonu
     sellerTaxId:   z.string().max(20).optional().nullable(),  // NIP sprzedawcy (cyfry)
     summary: z.string().max(120).optional().nullable(),
+    // Discounts the receipt prints per VAT group (prompt rule 8b), as
+    // positive amounts. The server spreads them over that group's items.
+    groupDiscounts: z.array(z.object({
+      vat:    z.string().min(1).max(4),
+      amount: z.number().positive(),
+    })).max(10).optional().nullable().catch(undefined),
   }).optional().default({}),
   warning: z.string().max(500).optional().nullable(),
 });
+
+// Spreads each per-VAT-group discount over that group's items, in proportion
+// to their (already inline-discounted) amounts. Done in integer grosze; the
+// rounding remainder goes to the group's largest item so the group lands on
+// the exact figure. Mutates `items`; returns how many discounts were applied
+// (a group with no matching items is left alone and reported via the sum check).
+function applyGroupDiscounts(items, groupDiscounts) {
+  let applied = 0;
+  for (const gd of groupDiscounts || []) {
+    const letter = gd.vat.trim().toUpperCase();
+    const group = items.filter(it => (it.vat || "").trim().toUpperCase() === letter);
+    const cents = group.map(it => Math.round(it.amount * 100));
+    const groupTotal = cents.reduce((s, c) => s + c, 0);
+    const discount = Math.min(Math.round(gd.amount * 100), groupTotal);
+    if (!group.length || discount <= 0) continue;
+
+    const shares = cents.map(c => Math.floor((c * discount) / groupTotal));
+    const rest = discount - shares.reduce((s, c) => s + c, 0);
+    const largest = cents.indexOf(Math.max(...cents));
+    shares[largest] += rest;
+
+    group.forEach((it, i) => {
+      if (!shares[i]) return;
+      const share = shares[i] / 100;
+      it.grossAmount = roundMoney(it.grossAmount ?? it.amount);
+      it.discountAmount = roundMoney((it.discountAmount || 0) + share);
+      it.amount = roundMoney(it.amount - share);
+      const note = `część rabatu (${letter}) -${share.toFixed(2).replace(".", ",")}`;
+      it.mergeNote = it.mergeNote ? `${it.mergeNote}; ${note}` : note;
+    });
+    applied++;
+  }
+  return applied;
+}
 
 // ── Mistral Document AI (dedicated OCR) ──────────────────────
 // Returns the receipt as markdown text, or null when not configured.
@@ -235,8 +278,16 @@ DATA SKANOWANIA: ${scanDate} — paragon pochodzi z przeszłości, nigdy z przys
 7. Niektóre sklepy drukują rabaty w OSOBNYM BLOKU na dole paragonu (np. polskie
    "OPUST SK. NAZWA -X,XX", ale też analogiczne bloki w innych sieciach/krajach).
    Przypisz je do właściwych pozycji tak samo jak rabaty inline.
+8a. POLE "vat": przy KAŻDEJ pozycji przepisz literę stawki VAT wydrukowaną przy cenie
+   (np. "A", "B", "C"); brak litery → null.
+8b. RABAT PER STAWKA VAT — blok rabatu rozbity na stawki, np. "OPUST REDEMPTION -51,20 (A)
+   -14,05 (C)", bez wskazania konkretnych pozycji: NIE rozdzielaj go sam. Zostaw ceny pozycji
+   sprzed tego rabatu i zwróć go w "metadata.groupDiscounts" jako
+   [{"vat":"A","amount":51.20},{"vat":"C","amount":14.05}] (kwoty DODATNIE). Serwer rozdzieli
+   go proporcjonalnie na pozycje danej stawki. Rabaty przypisane do konkretnych pozycji nadal
+   scalaj z tymi pozycjami (reguły 1-2, 7). Wtedy NIE dodawaj ostrzeżenia o nierozdzieleniu.
 8. RABAT OGÓLNY — korekta, której NIE DA SIĘ przypisać do żadnej konkretnej
-   pozycji (np. rabat lojalnościowy, "rabat za aplikację", kupon od całości
+   pozycji ani do stawki VAT (np. rabat lojalnościowy, "rabat za aplikację", kupon od całości
    zakupów): rozdziel go PROPORCJONALNIE do wartości wszystkich pozycji
    (każdą pomniejsz o jej udział w rabacie), a różnicę groszy z zaokrągleń
    skoryguj na NAJWIĘKSZEJ pozycji tak, by suma "amount" zgadzała się
@@ -357,6 +408,7 @@ Wyłącznie poprawny JSON, bez markdown, bez komentarzy:
       "categoryConfidence": 0.95,
       "packCount": 2,
       "ean": "5449000000996",
+      "vat": "A",
       "product": { "name": "Coca-Cola", "size": 1500, "unit": "ml", "packCount": 2 }
     }
   ],
@@ -823,7 +875,12 @@ router.post("/receipt", async (req, res) => {
       return res.status(502).json({ error: "Failed to parse model response." });
     }
 
-    const { items, metadata, warning } = validated.data;
+    const { items, metadata, warning: modelWarning } = validated.data;
+    let warning = modelWarning;
+    if (applyGroupDiscounts(items, metadata.groupDiscounts) > 0) {
+      // The model's "could not distribute" note is stale once the server did it.
+      if (warning && /rabat|opust|upust/i.test(warning)) warning = null;
+    }
 
     // 4b. Deterministic shop override from learned NIP → name mappings.
     // Runs before fingerprint/mapping so the corrected merchant flows into
