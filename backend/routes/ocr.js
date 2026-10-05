@@ -141,13 +141,15 @@ const LlmResponseSchema = z.object({
 // Spreads each per-VAT-group discount over that group's items, in proportion
 // to their (already inline-discounted) amounts. Done in integer grosze; the
 // rounding remainder goes to the group's largest item so the group lands on
-// the exact figure. Mutates `items`; returns how many discounts were applied
-// (a group with no matching items is left alone and reported via the sum check).
+// the exact figure. When the model gave no usable VAT letters (no item matches
+// the group), the discount is spread over ALL items instead. Mutates `items`;
+// returns how many discounts were applied.
 function applyGroupDiscounts(items, groupDiscounts) {
   let applied = 0;
   for (const gd of groupDiscounts || []) {
     const letter = gd.vat.trim().toUpperCase();
-    const group = items.filter(it => (it.vat || "").trim().toUpperCase() === letter);
+    const matching = items.filter(it => (it.vat || "").trim().toUpperCase() === letter);
+    const group = matching.length ? matching : items;
     const cents = group.map(it => Math.round(it.amount * 100));
     const groupTotal = cents.reduce((s, c) => s + c, 0);
     const discount = Math.min(Math.round(gd.amount * 100), groupTotal);
@@ -164,7 +166,8 @@ function applyGroupDiscounts(items, groupDiscounts) {
       it.grossAmount = roundMoney(it.grossAmount ?? it.amount);
       it.discountAmount = roundMoney((it.discountAmount || 0) + share);
       it.amount = roundMoney(it.amount - share);
-      const note = `część rabatu (${letter}) -${share.toFixed(2).replace(".", ",")}`;
+      const label = matching.length ? ` (${letter})` : "";
+      const note = `część rabatu${label} -${share.toFixed(2).replace(".", ",")}`;
       it.mergeNote = it.mergeNote ? `${it.mergeNote}; ${note}` : note;
     });
     applied++;
@@ -877,7 +880,17 @@ router.post("/receipt", async (req, res) => {
 
     const { items, metadata, warning: modelWarning } = validated.data;
     let warning = modelWarning;
-    if (applyGroupDiscounts(items, metadata.groupDiscounts) > 0) {
+    let applied = applyGroupDiscounts(items, metadata.groupDiscounts);
+    // Safety net: items still exceed the receipt total (an unassigned discount
+    // the model neither distributed nor reported per group) → spread the
+    // difference over all items proportionally.
+    if (items.length > 0 && metadata.totalSum != null) {
+      const excess = roundMoney(items.reduce((s, i) => s + i.amount, 0) - metadata.totalSum);
+      if (excess > 0.05) {
+        applied += applyGroupDiscounts(items, [{ vat: "*", amount: excess }]);
+      }
+    }
+    if (applied > 0) {
       // The model's "could not distribute" note is stale once the server did it.
       if (warning && /rabat|opust|upust/i.test(warning)) warning = null;
     }
