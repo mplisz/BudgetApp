@@ -23,6 +23,7 @@ export const SHOPPING_SECTIONS = {
   pieczywo: { label: "Pieczywo",        icon: "🥖" },
   nabial:   { label: "Nabiał",          icon: "🧀" },
   mieso:    { label: "Mięso i wędliny", icon: "🥩" },
+  ryby:     { label: "Ryby i owoce morza", icon: "🐟" },
   gotowe:   { label: "Dania gotowe",    icon: "🍲" },
   mrozone:  { label: "Mrożonki",        icon: "🧊" },
   suche:    { label: "Sypkie i sosy",   icon: "🍝" },

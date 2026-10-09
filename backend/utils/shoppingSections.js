@@ -22,7 +22,7 @@ const { foldProductName } = require("./productCatalog");
 /** Section ids in the order a shop is usually walked. The panel renders
  *  its groups in exactly this order, so this array IS the route. */
 const SECTION_IDS = [
-  "warzywa", "pieczywo", "nabial", "mieso", "gotowe", "mrozone",
+  "warzywa", "pieczywo", "nabial", "mieso", "ryby", "gotowe", "mrozone",
   "suche", "przyprawy", "kuchnie", "slodycze", "napoje", "alkohol",
   "chemia", "higiena", "apteka", "dzieci", "ubrania", "dom", "inne",
 ];
@@ -56,8 +56,22 @@ const SECTION_KEYWORDS = {
   ],
   mieso: [
     "mielone", "kurczak", "schab", "kielbas", "szynk", "boczek", "karkow",
-    "filet", "parowk", "indyk", "wolow", "wieprz", "ryba", "losos", "pasztet",
-    "salami", "mieso", "wedlin", "zeberk", "kabanos", "tunczyk", "sledz",
+    "filet", "parowk", "indyk", "wolow", "wieprz", "pasztet",
+    "salami", "mieso", "wedlin", "zeberk", "kabanos",
+  ],
+  ryby: [
+    // " ryb" with the leading space: "ryba", "ryby", "rybne" — but not
+    // a word that merely contains the letters.
+    " ryb", "losos", "dorsz", "sledz", "tunczyk", "makrel", "pstrag",
+    "mintaj", "halibut", "sandacz", " karp ", "szprot", "sardynk", "fladr",
+    "morszczuk", "dorad", " okon", "wegorz", " sola ",
+    "krewetk", "owoce morza", "kalmar", "osmiornic", "malz", "ostryg",
+    "homar", "krab", "surimi", "kawior", "matjas",
+    // Longer than mieso's bare "filet" and slodycze's "paluszk", so the
+    // same-position tie goes to the fish.
+    "filet z dorsz", "filet z losos", "filet z mintaj", "filet z makrel",
+    "filet z sledz", "filet z pstrag", "filet ryb", "filety ryb",
+    "filety sledz", "paluszki ryb", "paluszki krab", "paluszki surimi",
   ],
   gotowe: [
     "danie gotowe", "dania gotowe", "gotowiec", "zapiekank", "sushi",

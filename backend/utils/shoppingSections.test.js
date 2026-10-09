@@ -20,6 +20,7 @@ describe("guessSection — everyday items land in the right aisle", () => {
     pieczywo: ["Bułki", "bulki", "Chleb razowy", "bagietka", "Rogaliki"],
     nabial:   ["Mleko 3,2%", "Ser żółty", "Jajka", "jogurt naturalny", "Masło extra"],
     mieso:    ["Mięso mielone", "Pierś z kurczaka", "kiełbasa śląska", "Szynka"],
+    ryby:     ["Łosoś", "Dorsz świeży", "Filet z dorsza", "Krewetki", "Śledzie w oleju", "Ryba", "Paluszki rybne", "Owoce morza", "Tuńczyk w puszce"],
     warzywa:  ["Ziemniaki", "Banany", "marchewka", "Pomidory malinowe", "sałata"],
     chemia:   ["Płyn do mycia naczyń", "Proszek do prania", "Tabletki do zmywarki", "Worki na śmieci"],
     higiena:  ["Papier toaletowy", "Pasta do zębów", "Szampon", "Ręczniki papierowe"],
