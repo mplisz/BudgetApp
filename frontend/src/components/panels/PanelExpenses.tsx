@@ -27,6 +27,9 @@ import { useCurrencyManager }   from "../../hooks/useCurrencyManager";
 import { TagMultiSelect } from "../ui/TagMultiSelect";
 import { CartItemEditorModal } from "./transactionComponents/CartItemEditorModal";
 import { useAutoTags } from "../../hooks/useAutoTags";
+import { useCreditCards } from "../../hooks/useCreditCards";
+import { CardPaymentToggle } from "../ui/CardPaymentToggle";
+import { preferredCardId, rememberCardId } from "../../utils/cardPreference";
 import type { CartEditPayload } from "./transactionComponents/CartItemEditor";
 
 // ── Cart ID generator ─────────────────────────────────────────
@@ -107,6 +110,9 @@ export default function PanelExpenses() {
   const [ocrMeta,         setOcrMeta]         = useState<OcrMeta | null>(null);
   const [ocrWarranty,     setOcrWarranty]     = useState(false);  // per-receipt warranty flag
   const [ocrTags, setOcrTags]                 = useState<string[]>([]);
+  // Per-receipt, like the warranty flag: one purchase, one way of paying.
+  const [ocrCardId, setOcrCardId]             = useState<string | null>(null);
+  const { activeCards } = useCreditCards();
   const [editingMerchant, setEditingMerchant] = useState(false);  // merchant edit mode (decoupled from value)
   const [ocrLoading,      setOcrLoading]      = useState(false);
   const [ocrMode,         setOcrMode]         = useState(false);
@@ -244,13 +250,14 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
         summary: data.metadata?.summary ?? null,
       });
       setOcrTags(autoTagIds);        // holiday mode — pre-selected, still removable
+      setOcrCardId(preferredCardId(activeCards));   // as the last purchase was paid
       if (data.warning) showWarning(data.warning);
     } catch (err) {
       showError(err instanceof Error ? err.message : "Błąd analizy paragonu.");
     } finally {
       setOcrLoading(false);
     }
-  }, [api, showError, showWarning, autoTagIds]);
+  }, [api, showError, showWarning, autoTagIds, activeCards]);
 
   // Selected OCR lines → cart items. Items WITHOUT a matched category
   // still go in — the user fixes them via the cart's ✏️ edit flow.
@@ -295,6 +302,7 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
         netAmount:        isBase ? line.amount : round2(line.amount * fx),
         isRecurring:      false,
         recurringId:      null,
+        ...(ocrCardId ? { cardId: ocrCardId } : {}),
         _cartId:          newCartId(),
         _ocrGross:        line.grossAmount    ?? undefined,
         _ocrDiscount:     line.discountAmount ?? undefined,
@@ -330,13 +338,15 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
       showWarning(`${missingCat} pozycji bez kategorii — uzupełnij je w koszyku (✏️) przed zapisem.`);
     }
 
+    if (activeCards.length > 0) rememberCardId(ocrCardId);
+
     // Reset OCR view — ready for the next receipt
     setOcrLines([]);
     setOcrMeta(null);
     setOcrWarranty(false);
     setEditingMerchant(false);
     setOcrTags(autoTagIds);          // back to the trip default, not to nothing
-  }, [ocrLines, ocrMeta, ocrWarranty, budgetMonth, categories, setCart, showWarning, activeRate, baseCurrency.code, showError, ocrTags, autoTagIds]);
+  }, [ocrLines, ocrMeta, ocrWarranty, ocrCardId, activeCards, budgetMonth, categories, setCart, showWarning, activeRate, baseCurrency.code, showError, ocrTags, autoTagIds]);
 
   // ── Form initial values ───────────────────────────────────
     // Cart-aware default date — sticky to first cart item's date.
@@ -645,6 +655,12 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
                       dłuższe przechowywanie
                     </span>
                   </label>
+                  {/* Per-receipt card flag — renders nothing without a card */}
+                  <CardPaymentToggle
+                    value={ocrCardId}
+                    onChange={setOcrCardId}
+                    style={{ padding: "8px 12px", marginBottom: 4, background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8 }}
+                  />
                   <div style={{ marginBottom: 12 }}>
                     <label style={{ display: "block", fontSize: 11, color: c.textSecondary, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, marginBottom: 6 }}>
                       🏷️ Tagi dla całego paragonu
@@ -685,6 +701,7 @@ const handleCartItemSave = useCallback(async (payload: CartEditPayload) => {
               isSaving={isSaving}
               mode="add"
               cart={cart}
+              rememberCard
             />
           )}
         </div>

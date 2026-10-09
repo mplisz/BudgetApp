@@ -23,6 +23,7 @@ import type {
   AppContextValue, AppCategory, Tag, AppSettings,
   PlannedDoc, RecurringDoc, LimitDoc, CartItem, Voucher, Transaction,
 } from "../types/appContext";
+import type { CardData } from "../types/creditCard";
 
 const AppContext = createContext<AppContextValue | null>(null);
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -66,6 +67,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Planned expenses ──────────────────────────────────────────
   const [planned, setPlanned] = useState<PlannedDoc[]>([]);
+
+  // ── Credit cards (loaded by useCreditCards, not by bootstrap) ──
+  const [cardData, setCardData] = useState<CardData | null>(null);
 
   // ── Months / closed ──────────────────────────────────────────
   const [closedMonths, setClosedMonths] = useState<Set<string>>(new Set());
@@ -176,6 +180,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     recurring,    setRecurring,
     limits,       setLimits,
     planned,      setPlanned,
+    cardData,     setCardData,
     closedMonths, setClosedMonths,
     merchants,    setMerchants,
     categories,   setCategories,

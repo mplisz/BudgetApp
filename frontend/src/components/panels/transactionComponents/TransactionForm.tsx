@@ -4,10 +4,13 @@
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useAppContext }     from "../../../context/AppContext";
 import { useToast }          from "../../../hooks/useToast";
 import { useVouchers }       from "../../../hooks/useVouchers";
+import { useCreditCards }    from "../../../hooks/useCreditCards";
+import { CardPaymentToggle } from "../../ui/CardPaymentToggle";
+import { preferredCardId, rememberCardId } from "../../../utils/cardPreference";
 import { useDiscount }       from "../../../hooks/useDiscount";
 import { AppDatePicker, todayLocal, toYMD } from "../../ui/AppDatePicker";
 import { SubcategorySelect } from "../../ui/SubcategorySelect";
@@ -62,6 +65,7 @@ export function emptyFormValues(): FormValues {
     discountAmount:  "",
     qty:             1,
     merchant:        "",
+    cardId:          null,
     lineItems:       [],
     product:         null,
   };
@@ -97,6 +101,7 @@ export function txToFormValues(tx: Record<string, unknown>): FormValues {
     discountAmount:  "",
     qty:             1,
     merchant:        (tx.merchant as string) || "",
+    cardId:          (tx.cardId as string) || null,
     // Load receipt breakdown so editing a multi-item transaction shows the editor.
     // We edit originalAmount (in the receipt currency); amount/PLN is derived.
     lineItems: Array.isArray(tx.lineItems)
@@ -127,6 +132,8 @@ export function TransactionForm({
   mode = "add",
   cart = [],
   showVouchers = true,
+  showCard = true,
+  rememberCard = false,
 }: TransactionFormProps) {
   const { transactions, limits, settings, categories } = useAppContext();
 
@@ -146,6 +153,22 @@ export function TransactionForm({
 
   function set<K extends keyof FormValues>(field: K, value: FormValues[K]) {
     setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  // ── Credit card ───────────────────────────────────────────
+  // A brand-new expense starts from how the last one was paid. The cards
+  // arrive after the form on a cold start (this panel is the landing page),
+  // hence an effect — which steps aside the moment the user picks themselves.
+  const { activeCards } = useCreditCards();
+  const cardChosen = useRef(false);
+  useEffect(() => {
+    if (rememberCard && !cardChosen.current) set("cardId", preferredCardId(activeCards));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCards]);
+
+  function chooseCard(cardId: string | null) {
+    cardChosen.current = true;
+    set("cardId", cardId);
   }
 
   // ── Line items (receipt breakdown) ────────────────────────
@@ -267,6 +290,10 @@ export function TransactionForm({
   const showVoucherSection = showVouchers && resolvedCategoryType === "EXPENSE"
     && !hasLineItems && cart.length === 0 && eligibleVouchers.length > 0;
 
+  // Only an expense can sit on a card. Before a subcategory is picked the type
+  // is unknown — the toggle shows already, so it doesn't pop in afterwards.
+  const showCardToggle = showCard && (resolvedCategoryType ?? "EXPENSE") === "EXPENSE";
+
   const handleRateReady = useCallback(({ activeRate, resolvedCurrency }: RateInfo) => {
     setRateInfo({ activeRate, resolvedCurrency });
   }, []);
@@ -350,6 +377,10 @@ export function TransactionForm({
     // type the record already had, and finally to EXPENSE for a brand-new one.
     const payloadType = resolvedCategoryType ?? form.originalType ?? "EXPENSE";
 
+    // Sent whenever the toggle was on offer — null too, so un-ticking it on
+    // an edit clears the card. Otherwise left out, and the save can't touch it.
+    const cardField = showCardToggle ? { cardId: form.cardId } : {};
+
     // ── Line-items branch ──
     // Edit originalAmount per line (receipt currency); one fxRate per transaction.
     // amount (PLN) per line = round2(orig × fx); sums keep the invariant exact.
@@ -395,6 +426,7 @@ export function TransactionForm({
         recurringId:      null,
         lineItems:        lines,
         ...(form.merchant?.trim() ? { merchant: form.merchant.trim() } : {}),
+        ...cardField,
       };
     }
 
@@ -457,11 +489,20 @@ export function TransactionForm({
       ...(productLine !== undefined ? { lineItems: productLine } : {}),
       // Merchant is optional on manual entries — only included when set.
       ...(form.merchant?.trim() ? { merchant: form.merchant.trim() } : {}),
+      ...cardField,
     };
   }
 
-  async function handleSubmit() {
+  // A valid payload is on its way out (saved or put in the cart): the next
+  // new expense starts from the same answer.
+  function buildPayloadToSend(): TransactionPayload | null {
     const payload = buildPayload();
+    if (payload && rememberCard && showCardToggle) rememberCardId(form.cardId);
+    return payload;
+  }
+
+  async function handleSubmit() {
+    const payload = buildPayloadToSend();
     if (!payload) return;
     await onSubmit(payload);
   }
@@ -778,6 +819,11 @@ export function TransactionForm({
         />
       </div>
 
+      {/* Paid with the credit card — renders nothing without a card */}
+      {showCardToggle && (
+        <CardPaymentToggle value={form.cardId} onChange={chooseCard} style={frow} />
+      )}
+
       {/* Tracked product — manual assign or correct what AI matched */}
       {!hasLineItems && resolvedCategoryType === "EXPENSE" && (
         <div style={frow}>
@@ -853,7 +899,7 @@ export function TransactionForm({
         {onAddToCart && (
           <button
             onClick={() => {
-              const p = buildPayload();
+              const p = buildPayloadToSend();
               if (!p) return;
               // Vouchers are chosen at the cart level, not per item — strip here.
               if (p.voucherAllocations && p.voucherAllocations.length > 0) {

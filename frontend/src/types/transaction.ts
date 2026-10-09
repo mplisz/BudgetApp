@@ -79,6 +79,8 @@ export interface FormValues {
   discountAmount:  string;
   qty:             number;
   merchant:        string;
+  /** Credit card the expense is paid with; null = not with a card. */
+  cardId:          string | null;
   lineItems:       FormLineItem[];
   // Manual/AI-assigned tracked-product identity for a single-amount (non-
   // breakdown) transaction. Rides into payload.lineItems[0].product — see
@@ -110,8 +112,9 @@ export interface TransactionPayload {
   recurringId:      null;
   receiptBlobPath?: string | null;
   receiptId?:       string | null;   
-  merchant?:        string | null;  
-  isWarranty?:      boolean;                                       
+  merchant?:        string | null;
+  cardId?:          string | null;   // credit card the expense was paid with
+  isWarranty?:      boolean;
   lineItems?:       Array<{
                       description:       string;
                       amount:            number;          // PLN — always
@@ -133,6 +136,13 @@ export interface TransactionFormProps {
   mode?:          "add" | "edit";
   cart?:          CartItem[];
   showVouchers?:  boolean;   // default true; cart-item edits pass false (cart-level only)
+  /** Offer "paid with the credit card" (default true). Off where the save
+   *  path doesn't carry a cardId — realizing a planned purchase. */
+  showCard?:      boolean;
+  /** A brand-new expense: start from how the last one was paid, and remember
+   *  this one's answer (utils/cardPreference). Off when the form edits values
+   *  that already decided it. */
+  rememberCard?:  boolean;
 }
 
 export interface FormLineItem {

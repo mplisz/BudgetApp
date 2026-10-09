@@ -41,11 +41,13 @@ export function CategoryMappingSection() {
   const [depositSub,  setDepositSub]  = useState("");
   const [returnSub,   setReturnSub]   = useState("");
   const [envelopeSub, setEnvelopeSub] = useState("");
+  const [interestSub, setInterestSub] = useState("");
 
   useEffect(() => {
     setDepositSub(settings?.depositSubcategoryId ?? "");
     setReturnSub(settings?.returnTransferSubcategoryId ?? "");
     setEnvelopeSub(settings?.envelopeTransferSubcategoryId ?? "");
+    setInterestSub(settings?.cardInterestSubcategoryId ?? "");
   }, [settings]);
 
   function handleSave() {
@@ -53,6 +55,7 @@ export function CategoryMappingSection() {
       depositSubcategoryId:          depositSub  || null,
       returnTransferSubcategoryId:   returnSub   || null,
       envelopeTransferSubcategoryId: envelopeSub || null,
+      cardInterestSubcategoryId:     interestSub || null,
     });
   }
 
@@ -88,6 +91,14 @@ export function CategoryMappingSection() {
             value={envelopeSub}
             onChange={setEnvelopeSub}
             types={["TRANSFER"]}
+          />
+
+          <Field
+            label="💳 Odsetki i opłaty za kartę kredytową"
+            desc="Subkategoria wydatku tworzonego, gdy przy spłacie karty podasz odsetki lub opłaty. Liczy się do wskaźnika „Zobowiązania/Raty”."
+            value={interestSub}
+            onChange={setInterestSub}
+            types={["EXPENSE"]}
           />
 
           <button

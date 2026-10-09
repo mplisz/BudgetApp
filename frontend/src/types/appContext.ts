@@ -15,6 +15,7 @@ import type { Voucher } from "./transaction";
 import type { CartItem } from "../components/panels/transactionComponents/CartPanel";
 import type { LimitDoc } from "../hooks/useLimits";
 import type { PlannedDoc } from "../hooks/usePlanned";
+import type { CardData } from "./creditCard";
 
 // Re-export the rich domain types so consumers (and AppContext itself) have
 // a single import point for everything the context exposes.
@@ -71,6 +72,8 @@ export interface AppSettings {
   depositSubcategoryId?:         string | null;
   returnTransferSubcategoryId?:  string | null;
   envelopeTransferSubcategoryId?: string | null;
+  /** EXPENSE subcategory credit-card interest and fees are booked under. */
+  cardInterestSubcategoryId?:    string | null;
   /** "Nietypowo duże" threshold (× the subcategory's median); see utils/unusualExpenses. */
   unusualExpenseMultiplier?:  number;
   safetyNet?:                unknown;
@@ -122,6 +125,11 @@ export interface AppContextValue {
 
   planned:    PlannedDoc[];
   setPlanned: Setter<PlannedDoc[]>;
+
+  /** Credit cards, repayments and card purchases; null until first loaded.
+   *  Read through useCreditCards(), which also knows how to (re)load it. */
+  cardData:    CardData | null;
+  setCardData: Setter<CardData | null>;
 
   closedMonths:    Set<string>;
   setClosedMonths: Setter<Set<string>>;

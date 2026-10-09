@@ -13,7 +13,7 @@
 // ============================================================
 
 const { z } = require("zod");
-const { BUDGET_MONTH_REGEX } = require("./helpers");
+const { BUDGET_MONTH_REGEX, IdParamSchema } = require("./helpers");
 const { PRODUCT_UNIT_CODES } = require("./productUnits");
 
 // Fields shared by POST and PATCH — validation only, no .default().
@@ -36,7 +36,10 @@ const TransactionFieldsSchema = z.object({
   voucherId:        z.string().nullable(),//fallback for old docs
   voucherAmount:    z.number().min(0),//fallback for old docs
   merchant:         z.string().max(150).optional().nullable(), // shop; drives voucher store-match
-  lineItems:        z.array(z.object({
+  // Credit card the expense was paid with; null clears it. Checked against
+  // the family's own cards before it is stored (utils/creditCards).
+  cardId:           IdParamSchema.max(100).nullable().optional(),
+  lineItems:       z.array(z.object({
                       description:      z.string().max(200),
                       amount:          z.number(),
                       originalAmount:  z.number().optional(),

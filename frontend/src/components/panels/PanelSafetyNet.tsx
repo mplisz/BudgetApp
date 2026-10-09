@@ -36,7 +36,9 @@ import { useAppContext }          from "../../context/AppContext";
 import { useTransactionsRange }   from "../../hooks/useTransactionsRange";
 import { useSettings }            from "../../hooks/useSettings";
 import { usePlanned }             from "../../hooks/usePlanned";
-import { fmt }                    from "../../utils/helpers";
+import { useCreditCards }         from "../../hooks/useCreditCards";
+import { cardsOverview }          from "../../utils/cardDebt";
+import { fmt, round2, todayYMD }  from "../../utils/helpers";
 import { theme as s }             from "../../styles/theme";
 import { Card }                   from "../ui/summaryUi";
 import { useCurrencyManager }     from "../../hooks/useCurrencyManager";
@@ -333,7 +335,16 @@ function PanelSafetyNetDesktop() {
     () => snState.assets.filter(a => !a.isArchived),
     [snState.assets],
   );
-  const assetsTotal   = useMemo(() => sumAssets(activeAssets), [activeAssets]);
+
+  // What is owed on the credit cards comes off the cushion. The bank account
+  // listed among the assets is that much too high for as long as the card
+  // isn't repaid — and losing an income doesn't cancel the bill. No toggle:
+  // unlike planned expenses, this one is not optional. An overpaid card
+  // (negative debt) adds instead; the total may go below zero.
+  const { data: cardData, reload: reloadCards } = useCreditCards();
+  useEffect(() => { reloadCards(); }, [reloadCards]);
+  const cardDebt      = useMemo(() => cardsOverview(cardData, todayYMD()).totalDebt, [cardData]);
+  const assetsTotal   = useMemo(() => round2(sumAssets(activeAssets) - cardDebt), [activeAssets, cardDebt]);
 
   // ── Upcoming planned in horizon ───────────────────────────
   const upcomingPlanned = useMemo(
@@ -407,6 +418,7 @@ function PanelSafetyNetDesktop() {
           <AssetsPortfolio
             assets={snState.assets}
             onChange={setAssets}
+            cardDebt={cardDebt}
           />
         </Card>
       </div>
@@ -593,6 +605,7 @@ function PanelSafetyNetDesktop() {
         <AssetsPortfolio
           assets={snState.assets}
           onChange={setAssets}
+          cardDebt={cardDebt}
         />
       </Card>
 

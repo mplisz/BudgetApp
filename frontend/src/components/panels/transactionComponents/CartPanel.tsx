@@ -106,6 +106,8 @@ function aggregationKey(item: CartItem): string {
     String(item.fxRate),
     String(item.useVoucher),
     item.voucherId || "",
+    // Paid with a card or not — a merged row keeps one answer for all of it.
+    item.cardId || "",
   ].join("|");
 }
 
@@ -510,6 +512,7 @@ export function CartPanel({ onLoadToForm, onSaveComplete }: CartPanelProps) {
               P{item.priority}
             </span>
             <span style={{ fontSize: 10, color: c.borderStrong }}>{item.date}</span>
+            {item.cardId && <span style={{ fontSize: 10 }} title="Karta kredytowa">💳</span>}
             {showShop && shop && (
               <span style={{ fontSize: 10, color: c.textTertiary }} title="Sklep">
                 {item._ocrReceiptId ? "🧾" : "🏬"} {shop}

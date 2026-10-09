@@ -36,11 +36,15 @@ import { PillGroup } from "./uiBits";
 interface AssetsPortfolioProps {
   assets:    AssetBucket[];
   onChange:  (assets: AssetBucket[]) => void;
+  /** Owed on the credit cards (utils/cardDebt) — comes off the cushion.
+   *  Derived from purchases and repayments, so shown read-only, never edited
+   *  here. Negative = an overpaid card, which adds instead. */
+  cardDebt?: number;
 }
 
 // ── Public component ─────────────────────────────────────────
 
-export function AssetsPortfolio({ assets, onChange }: AssetsPortfolioProps) {
+export function AssetsPortfolio({ assets, onChange, cardDebt = 0 }: AssetsPortfolioProps) {
   // Which bucket is being edited inline (null = none, "new" = add form open).
   const [editingId, setEditingId] = useState<string | null>("new");
   const [showArchive, setShowArchive] = useState(false);
@@ -148,10 +152,15 @@ export function AssetsPortfolio({ assets, onChange }: AssetsPortfolioProps) {
               <span style={{ color: c.textTertiary, fontSize: 12, fontWeight: 600 }}>
                 Aktualny stan poduszki
               </span>
-              <span style={{ fontSize: 22, fontWeight: 800, color: c.success }}>
-                {fmt(total)}
+              <span style={{ fontSize: 22, fontWeight: 800, color: total - cardDebt >= 0 ? c.success : c.danger }}>
+                {fmt(total - cardDebt)}
               </span>
             </div>
+            {cardDebt !== 0 && (
+              <div style={{ fontSize: 11, color: c.textMuted, textAlign: "right", marginTop: 2 }}>
+                aktywa {fmt(total)} {cardDebt > 0 ? "−" : "+"} karta {fmt(Math.abs(cardDebt))}
+              </div>
+            )}
           </Card>
 
           {/* Right: bucket list */}
@@ -178,6 +187,21 @@ export function AssetsPortfolio({ assets, onChange }: AssetsPortfolioProps) {
                 />
               ))}
             </div>
+            {/* Not a bucket: it can't be edited or archived, only repaid. */}
+            {cardDebt !== 0 && (
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+                marginTop: 8, paddingTop: 8, borderTop: `1px solid ${c.border}`, fontSize: 13,
+              }}>
+                <span style={{ color: c.textSecondary }}>
+                  💳 Karta kredytowa
+                  <span style={{ color: c.textMuted, fontSize: 11 }}> · {cardDebt > 0 ? "do spłaty" : "nadpłata"}</span>
+                </span>
+                <strong style={{ color: cardDebt > 0 ? c.danger : c.success, fontVariantNumeric: "tabular-nums" }}>
+                  {cardDebt > 0 ? "−" : "+"}{fmt(Math.abs(cardDebt))}
+                </strong>
+              </div>
+            )}
           </Card>
         </div>
       )}

@@ -55,6 +55,17 @@ export const API_ERRORS = {
   "Failed to update voucher.":           "Nie udało się zaktualizować vouchera.",
   "Failed to archive voucher.":          "Nie udało się zarchiwizować vouchera.",
 
+  // ── Credit cards ─────────────────────────────────────────────
+  "Credit card not found.":              "Nie znaleziono karty kredytowej (mogła zostać zarchiwizowana).",
+  "Too many credit cards.":              "Osiągnięto limit liczby kart.",
+  "Repayment not found.":                "Nie znaleziono spłaty.",
+  "Too many repayments.":                "Osiągnięto limit liczby spłat.",
+  "Interest cannot exceed the repayment amount.": "Odsetki nie mogą być większe niż kwota spłaty.",
+  "Card interest subcategory is not configured.": "Wybierz podkategorię wydatków dla odsetek karty: Ustawienia → Mapowanie kategorii.",
+  "Failed to fetch credit cards.":       "Nie udało się pobrać kart kredytowych.",
+  "Failed to save credit card.":         "Nie udało się zapisać karty.",
+  "Failed to save repayment.":           "Nie udało się zapisać spłaty.",
+
   // ── Limits ───────────────────────────────────────────────────
   "Failed to fetch limits.":             "Nie udało się pobrać limitów.",
   "Batch save failed.":                  "Nie udało się zapisać limitów.",

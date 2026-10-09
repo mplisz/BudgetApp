@@ -336,6 +336,14 @@ describe("computeLevelDeficits", () => {
     expect(noChange.coveragePercent).toBeCloseTo(50000 / 27000 * 100, 5);
   });
 
+  it("assets in the red (credit-card debt above them) last zero days, not a negative number", () => {
+    const noChange = computeLevelDeficits(layers, 4500, 6, -1200)[3];
+    expect(noChange.runwayMonths).toBe(0);
+    expect(noChange.runwayDays).toBe(0);
+    expect(noChange.coveragePercent).toBe(0);
+    expect(noChange.targetCushion).toBe(27000);   // the target itself is unchanged
+  });
+
   it("runway uses 30-day month for days conversion", () => {
     // deficit 3000, assets 9000 → 3 months → 90 days
     const deficits = computeLevelDeficits(

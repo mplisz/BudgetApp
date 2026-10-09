@@ -59,6 +59,7 @@ function cartItemToFormValues(item: CartItem): FormValues {
     discountAmount:  "",
     qty:             1,
     merchant:        item.merchant || item._ocrMerchant || "",
+    cardId:          item.cardId ?? null,
     lineItems:       [],
     product:         item._product ?? null,
   };

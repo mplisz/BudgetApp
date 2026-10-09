@@ -614,6 +614,7 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
               initialValues={plannedToFormValues(purchaseModal.doc)}
               budgetMonth={activeBudgetMonth}
               showVouchers={false}
+              showCard={false}
               isSaving={isSaving}
               onSubmit={handleRealize}
               onCancel={() => setPurchaseModal({ isOpen: false, doc: null })}

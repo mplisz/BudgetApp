@@ -10,10 +10,12 @@ import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useLimits, buildLimitMap } from "../../hooks/useLimits";
 import { monthTotals } from "../../utils/monthTotals";
-import { fmt, monthLabel }  from "../../utils/helpers";
+import { fmt, monthLabel, todayYMD }  from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
 import { Card, PanelLink }  from "../ui/summaryUi";
-import { txLink }           from "../../data/routes";
+import { txLink, PANEL_PATHS } from "../../data/routes";
+import { useCreditCards }   from "../../hooks/useCreditCards";
+import { cardsOverview, debtChangeInMonth } from "../../utils/cardDebt";
 import { CollapsibleSection } from "../ui";
 import { CategoryLimitBar } from "./summaryComponents/CategoryLimitBar";
 import { SpendingPieChart } from "./summaryComponents/SpendingPieChart";
@@ -67,6 +69,9 @@ function sumByTagIds(
     .reduce((acc, tx) => acc + tx.amount, 0);
 }
 
+
+// "2026-10-31" → "31.10" — a statement's due date on a KPI tile.
+const shortDate = (ymd: string) => `${ymd.slice(8, 10)}.${ymd.slice(5, 7)}`;
 
 // Matches SAVING transactions belonging to a specific categoryId.
 function sumByCategoryId(
@@ -143,6 +148,10 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Credit cards — refreshed on entry, the debt has to be current here.
+  const { data: cardData, reload: reloadCards } = useCreditCards();
+  useEffect(() => { reloadCards(); }, [reloadCards]);
+
   const transactions = rawTransactions ?? [];
   const categories   = rawCategories   ?? [];
   const limits       = rawLimits       ?? [];
@@ -181,6 +190,15 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
 
   // SALDO = INCOME + TRANSFER(in) - EXPENSE - SAVING - PADI VIRTUAL ENVELOPS
   const balance        = totalIncome + totalTransfers - totalExpenses - totalSavings- virtualEnvelopePaid;;
+
+  // ── Credit cards ──────────────────────────────────────────
+  // Saldo counts a card purchase as spent the month it was made; the bank
+  // account only feels it when the card is repaid. "≈ na koncie" is Saldo
+  // shifted by how far the debt moved this month — the figure to hold against
+  // the bank, while Saldo stays the one to plan with.
+  const hasCards   = cardData.cards.length > 0;
+  const cards      = useMemo(() => cardsOverview(cardData, todayYMD()), [cardData]);
+  const onAccount  = balance + debtChangeInMonth(cardData, activeBudgetMonth);
 
   const limitMap   = useMemo(() => buildLimitMap(limits, activeBudgetMonth), [limits, activeBudgetMonth]);
   // Budget % = expenses as share of real income (INCOME + TRANSFER),
@@ -257,7 +275,16 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const targets: SettingsTargets = rawSettings?.targets ?? DEFAULT_TARGETS;
 
   const insuranceSpent   = useMemo(() => sumByTagIds(monthTx, "EXPENSE", ["tag_ubezpieczenia_MMs"]), [monthTx]);
-  const obligationsSpent = useMemo(() => sumByTagIds(monthTx, "EXPENSE", ["tag_raty_MMs"]), [monthTx]);
+  // Instalments by tag — plus credit-card interest and fees by subcategory:
+  // those are booked by the repayment itself, which knows the subcategory
+  // from settings but has no business knowing a tag id. One pass, so an
+  // interest expense that is ALSO tagged counts once.
+  const cardInterestSub  = rawSettings?.cardInterestSubcategoryId ?? null;
+  const obligationsSpent = useMemo(() => monthTx
+    .filter(tx => tx.type === "EXPENSE" && (
+      tx.tags?.includes("tag_raty_MMs") || (cardInterestSub !== null && tx.subcategoryId === cardInterestSub)
+    ))
+    .reduce((acc, tx) => acc + tx.amount, 0), [monthTx, cardInterestSub]);
   const retirementSpent  = useMemo(() => sumByCategoryId(monthTx, "SAVING", ["cat_emerytura"]), [monthTx]);
 
   const hasData = monthTx.length > 0;
@@ -421,6 +448,29 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
               value={fmt(balance)}
               color={balance >= 0 ? c.success : c.danger}
             />
+            {hasCards && (
+              <>
+                <KpiPill
+                  icon="💳" label={cards.totalDebt < 0 ? "Nadpłata karty" : "Do spłaty"}
+                  value={fmt(Math.abs(cards.totalDebt))}
+                  color={cards.totalDebt > 0 ? c.warning : c.success}
+                  sub={cards.nextDue
+                    ? `wyciąg ${fmt(cards.nextDue.statementDue)} do ${shortDate(cards.nextDue.dueDate)}`
+                    : "wyciąg spłacony"}
+                  link={{ to: PANEL_PATHS.card, title: "Pokaż kartę kredytową" }}
+                />
+                <KpiPill
+                  icon="🏧" label="≈ Na koncie"
+                  value={fmt(onAccount)}
+                  color={onAccount >= 0 ? c.success : c.danger}
+                  // What is about to leave the account — a fact about today,
+                  // so it has no place on a past month's tile.
+                  sub={isCurrentMonth && cards.nextDue
+                    ? `do ${shortDate(cards.nextDue.dueDate)} zejdzie ${fmt(cards.nextDue.statementDue)}`
+                    : "saldo po uwzględnieniu karty"}
+                />
+              </>
+            )}
             {budgetPct !== null && (
               <KpiPill
                 icon="🎯" label="Wydatki / kwota dostępna"

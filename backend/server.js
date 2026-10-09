@@ -24,6 +24,7 @@ const merchants = require('./routes/merchants');
 const ocr = require('./routes/ocr');
 const productsRoutes = require('./routes/products');
 const shoppingRoutes = require('./routes/shopping');
+const cardsRoutes = require('./routes/cards');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -137,6 +138,7 @@ app.use('/api/ocr', ocr);
 app.use('/api/merchants', merchants);
 app.use('/api/products', productsRoutes);
 app.use('/api/shopping', shoppingRoutes);
+app.use('/api/cards', cardsRoutes);
 // ------------------------------------------------------------
 // GLOBAL ERROR HANDLER
 // ------------------------------------------------------------

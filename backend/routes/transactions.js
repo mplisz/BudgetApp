@@ -50,6 +50,7 @@ const { syncShoppingPrices } = require("../utils/shoppingPriceSync");
 const { resolveTransferTarget, buildReturnTransferDoc } = require("../utils/transferCategory");
 const { resolveTxType, applyTxType } = require("../utils/categoryType");
 const { isMonthClosed, findClosedMonth } = require("../utils/monthStatus");
+const { applyCardId, readCards, findActiveCard } = require("../utils/creditCards");
 const { searchTokens, txMatchesText, MIN_SEARCH_LENGTH } = require("../utils/textSearch");
 const { isMergeTarget, planLineMove } = require("../utils/lineItemMove");
 
@@ -401,7 +402,12 @@ router.post("/", async (req, res) => {
     const amount = roundMoney(data.amount);
 
     // The category owns the type — never store the client's word for it.
-    const typed = await applyTxType(categoriesContainer, familyId, data);
+    // Nor for the card: it has to be one of the family's own.
+    const carded = await applyCardId(
+      settingsContainer, familyId, await applyTxType(categoriesContainer, familyId, data),
+    );
+    if (!carded.ok) return res.status(400).json({ error: carded.error });
+    const typed = carded.data;
 
     // Resolve voucher allocations: server-trusts amounts, recomputes percent
     // vouchers against the gross amount, and enforces the store-match rule.
@@ -527,9 +533,16 @@ router.post("/batch", async (req, res) => {
     //    cache across the batch — a 40-line receipt then costs one read per
     //    DISTINCT subcategory, not one per line.
     const typeCache = new Map();
+    const cardCache = new Map();
     const typedItems = [];
     for (const data of items) {
-      typedItems.push(await applyTxType(categoriesContainer, familyId, data, typeCache));
+      const carded = await applyCardId(
+        settingsContainer, familyId,
+        await applyTxType(categoriesContainer, familyId, data, typeCache),
+        cardCache,
+      );
+      if (!carded.ok) return res.status(400).json({ error: carded.error });
+      typedItems.push(carded.data);
     }
 
     const stamp = Date.now();
@@ -655,6 +668,16 @@ router.patch("/:id", async (req, res) => {
       patchFields.type ?? existing.type ?? "EXPENSE",
     );
 
+    // Re-check the card only when it changes: a purchase made on a card that
+    // was archived since must stay editable. A tx that stopped being an
+    // expense loses its card either way.
+    const cardChanged = "cardId" in patchFields && patchFields.cardId !== (existing.cardId ?? null);
+    if (updated.cardId && (updated.type !== "EXPENSE" || cardChanged)) {
+      const carded = await applyCardId(settingsContainer, familyId, updated);
+      if (!carded.ok) return res.status(400).json({ error: carded.error });
+      updated.cardId = carded.data.cardId ?? null;
+    }
+
     // ── Voucher allocations (diff) ────────────────────────────
     const amount         = roundMoney(patchFields.amount ?? existing.amount);
     const merchant       = patchFields.merchant ?? existing.merchant;
@@ -714,6 +737,77 @@ router.patch("/:id", async (req, res) => {
     }
     console.error("[TX PATCH]", err);
     res.status(500).json({ error: "Failed to update transaction." });
+  }
+});
+
+// ── POST /card-payment ────────────────────────────────────────
+//
+// Mark many expenses as paid with a credit card (or clear the mark) in one
+// request — for catching up on purchases entered before the card existed in
+// the app. One request on purpose: a PATCH per row would spend the write
+// rate limit on a single click.
+//
+// Same rules as the single edit, applied per transaction: only a live
+// EXPENSE in an open month can change. Rows that can't are skipped and
+// counted, never failed — one stale row must not undo the other ninety.
+// Already-correct rows cost a read and no write.
+
+const CardPaymentSchema = z.object({
+  ids:    z.array(IdParamSchema.max(200)).min(1).max(200),
+  cardId: IdParamSchema.max(100).nullable(),
+});
+
+router.post("/card-payment", async (req, res) => {
+  const parsed = CardPaymentSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const familyId = req.user.familyId;
+  const { cardId } = parsed.data;
+  const ids = [...new Set(parsed.data.ids)];
+
+  try {
+    if (cardId && !findActiveCard(await readCards(settingsContainer, familyId), cardId)) {
+      return res.status(400).json({ error: "Credit card not found." });
+    }
+
+    const closedByMonth = new Map();
+    const monthClosed = async (budgetMonth) => {
+      if (!closedByMonth.has(budgetMonth)) {
+        closedByMonth.set(budgetMonth, await isMonthClosed(monthsContainer, familyId, budgetMonth));
+      }
+      return closedByMonth.get(budgetMonth);
+    };
+
+    const updated = [];
+    let skipped = 0;
+    for (const id of ids) {
+      const { resource: tx, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
+      if (!tx || tx.isArchived || tx.type !== "EXPENSE" || await monthClosed(tx.budgetMonth)) {
+        skipped++;
+        continue;
+      }
+      if ((tx.cardId ?? null) === cardId) { updated.push(tx); continue; }
+
+      try {
+        const { resource } = await transactionsContainer.items.upsert({
+          ...tx,
+          cardId,
+          updatedAt:   new Date().toISOString(),
+          updatedBy:   req.user.name || req.user.email,
+          updatedById: req.user.id,
+        }, { accessCondition: { type: "IfMatch", condition: etag } });
+        updated.push(resource);
+      } catch (err) {
+        if (err.code !== 412) throw err;
+        skipped++;   // edited by someone else in between — leave it to them
+      }
+    }
+
+    console.log(`[TX CARD-PAYMENT] ${updated.length} set to ${cardId ?? "no card"}, ${skipped} skipped for ${familyId}`);
+    res.json({ updated, skipped });
+  } catch (err) {
+    console.error("[TX CARD-PAYMENT]", err);
+    res.status(500).json({ error: "Failed to update transactions." });
   }
 });
 
@@ -807,6 +901,8 @@ router.post("/:id/move-lines", async (req, res) => {
         scaffoldTx({
           date, type, budgetMonth, subcategoryId, subcategoryName, categoryId, categoryName,
           originalCurrency, fxRate, priority, merchant, receiptBlobPath, receiptId, isWarranty,
+          // Split off the same purchase, so paid the same way.
+          ...(existing.cardId ? { cardId: existing.cardId } : {}),
           isRecurring: false, recurringId: null, tags, ...plan.target,
         }, newId, familyId, req),
         plan.target.amount, [],

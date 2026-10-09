@@ -4,15 +4,19 @@
 // ============================================================
 
 import { c, alpha } from "../../styles/tokens";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal }          from "react-dom";
+import { useAppContext }         from "../../context/AppContext";
 import { useRecurring, frequencyLabel } from "../../hooks/useRecurring";
 import { usePlanned, sumPaid }   from "../../hooks/usePlanned";
 import { useRecurringConfirm }   from "../../hooks/useRecurringConfirm";
 import { useEnvelopePay }        from "../../hooks/useEnvelopePay";
+import { useCreditCards }        from "../../hooks/useCreditCards";
+import { cardsOverview, type CardStatus } from "../../utils/cardDebt";
+import { RepaymentModal }        from "../panels/cardComponents/RepaymentModal";
 
 import { ConfirmModal }          from "../ui/ConfirmModal";
-import { fmt, todayYMD }         from "../../utils/helpers";
+import { fmt, todayYMD, plural } from "../../utils/helpers";
 import type { PlannedDoc }       from "../../hooks/usePlanned";
 import type { RecurringDoc }     from "../../types/appContext";
 
@@ -157,6 +161,46 @@ function PlannedBellItem({ doc, onPurchase, onDismissNotify }: PlannedBellItemPr
   );
 }
 
+// ── CardBellItem ──────────────────────────────────────────────
+// A closed statement that is due soon (or overdue). No dismiss: it goes away
+// when the statement is paid, and paying late costs interest.
+
+function CardBellItem({ status }: { status: CardStatus }) {
+  const [repaying, setRepaying] = useState(false);
+  const overdue = status.daysLeft < 0;
+  const [, m, d] = status.dueDate.split("-");
+
+  const dateLabel = overdue
+    ? `⚠️ Termin minął ${d}.${m}`
+    : status.daysLeft === 0
+      ? `🔴 Dziś (${d}.${m})`
+      : `📅 Do ${d}.${m} · ${status.daysLeft} ${plural(status.daysLeft, "dzień", "dni", "dni")}`;
+
+  return (
+    <>
+      <div style={{ background: c.bgDeepest, border: `1px solid ${overdue ? alpha(c.danger, "33") : c.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6 }}>
+        <div style={{ fontWeight: 700, color: c.text, fontSize: 13, marginBottom: 2 }}>
+          Spłata karty — {status.card.name}
+        </div>
+        <div style={{ fontSize: 11, color: c.textSecondary, marginBottom: 6 }}>
+          wyciąg {fmt(status.statementDue)}
+          <span style={{ marginLeft: 8, color: overdue ? c.danger : status.daysLeft === 0 ? c.warning : c.textMuted }}>
+            {dateLabel}
+          </span>
+        </div>
+        <button
+          onClick={() => setRepaying(true)}
+          style={{ width: "100%", padding: "6px 0", borderRadius: 6, border: "none", background: c.success, color: c.white, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+        >
+          💸 Spłacam {fmt(status.statementDue)}
+        </button>
+      </div>
+
+      {repaying && <RepaymentModal status={status} onClose={() => setRepaying(false)} />}
+    </>
+  );
+}
+
 // ── Main NotificationBell ─────────────────────────────────────
 
 export function NotificationBell() {
@@ -177,7 +221,21 @@ export function NotificationBell() {
   const [purchaseDoc, setPurchaseDoc] = useState<PlannedDoc | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { loadRecurring(); loadPlanned(); }, []);
+  // The bell is always mounted, so this is also what first loads the cards
+  // for the rest of the app (the expense form's 💳 toggle reads them).
+  const { settings } = useAppContext();
+  const { data: cardData, reload: loadCards } = useCreditCards();
+
+  useEffect(() => { loadRecurring(); loadPlanned(); loadCards(); }, []);
+
+  // Statements of live cards that fall inside the reminder window — the same
+  // "days before" setting the recurring reminders use.
+  const notifyDays = settings?.notifyDaysBefore ?? 3;
+  const cardsDue = useMemo(
+    () => cardsOverview(cardData, todayYMD()).cards.filter(status =>
+      !status.card.isArchived && status.statementDue > 0 && status.daysLeft <= notifyDays),
+    [cardData, notifyDays],
+  );
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -191,7 +249,7 @@ export function NotificationBell() {
   // Guard: ensure arrays are defined (may be undefined before AppContext hydrates)
   const safeRecurring = recurringPending || [];
   const safePlanned   = plannedPending   || [];
-  const count         = safeRecurring.length + safePlanned.length;
+  const count         = safeRecurring.length + safePlanned.length + cardsDue.length;
 
   // ── Handlers ────────────────────────────────────────────────
 
@@ -259,6 +317,8 @@ export function NotificationBell() {
                 Brak aktywnych przypomnień
               </div>
             )}
+
+            {cardsDue.map(status => <CardBellItem key={status.card.id} status={status} />)}
 
             {safeRecurring.map(doc => (
               <RecurringBellItem

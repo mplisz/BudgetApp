@@ -124,6 +124,17 @@ describe("aggregateCart", () => {
     expect(out).toHaveLength(2);
   });
 
+  // A merged row keeps the first item's fields, so a cash line folded into a
+  // card line would end up on the card's debt.
+  it("does not merge a card line with a cash line of the same shop", () => {
+    const out = aggregateCart([
+      item({ merchant: "Żabka", amount: 4, cardId: "card_a" }),
+      item({ merchant: "Żabka", amount: 6 }),
+      item({ merchant: "Żabka", amount: 3, cardId: "card_a" }),
+    ]);
+    expect(out.map(i => [i.cardId ?? null, i.amount])).toEqual([["card_a", 7], [null, 6]]);
+  });
+
   it("collects a breakdown line per contribution when merging", () => {
     const out = aggregateCart([
       item({ _ocrReceiptId: "rcpt_a", amount: 10, description: "Mleko" }),

@@ -20,7 +20,24 @@ import { ReturnEntriesModal } from "./ReturnEntriesModal";
 import { trackedProductNames } from "../../../utils/productPricing";
 import { formatMultiplier, unusualTitle } from "../../../utils/unusualExpenses";
 import { useAppContext } from "../../../context/AppContext";
+import { useTxSelection } from "./txSelection";
 import type { Transaction } from "../../../types/appContext";
+
+// The checkbox of selection mode — nothing where the row can't be selected,
+// so the column stays aligned.
+function SelectBox({ tx }: { tx: Transaction }) {
+  const selection = useTxSelection();
+  if (!selection || !selection.canSelect(tx)) return null;
+  return (
+    <input
+      type="checkbox"
+      checked={selection.selected.has(tx.id)}
+      onChange={() => selection.toggle(tx.id)}
+      aria-label="Zaznacz transakcję"
+      style={{ width: 16, height: 16, accentColor: c.info, cursor: "pointer", flexShrink: 0 }}
+    />
+  );
+}
 
 // "Nietypowo duże" marker under the amount — the ratio and the norm it was
 // measured against, so the reason is on the row, not behind a filter.
@@ -74,6 +91,7 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lineItemsOpen, setLineItemsOpen] = useState(false);
   const [returnsOpen, setReturnsOpen] = useState(false);
+  const selecting = useTxSelection() !== null;
   const { isFullyReturned, isPartiallyReturned, totalReturnedAmount } = calcReturns(tx);
   // Per transaction, not per active month — the all-months search lists
   // rows from closed and open months side by side.
@@ -96,6 +114,8 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
         onMouseLeave={e => e.currentTarget.style.background = "transparent"}
         style={{ transition: "background 0.1s" }}
       >
+        {selecting && <td style={{ ...s.td, width: 28 }}><SelectBox tx={tx} /></td>}
+
         {/* Date */}
         <td style={s.td}>
           <span style={{ color: c.textTertiary, fontSize: 12 }}>{tx.date}</span>
@@ -163,6 +183,7 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
             </div>
           )}
           <UnusualBadge tx={tx} />
+          {tx.cardId && <span style={s.badge(c.info)} title="Zapłacono kartą kredytową">💳 karta</span>}
           {(isFullyReturned || isPartiallyReturned) && (
             <span
               onClick={() => setReturnsOpen(true)}
@@ -231,7 +252,7 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
       {/* Line items breakdown — second <tr> (a <div> inside <tbody> is invalid DOM) */}
       {hasLineItems && lineItemsOpen && (
         <tr>
-          <td colSpan={8} style={{ padding: "0 0 8px 0", background: c.bg }}>
+          <td colSpan={selecting ? 9 : 8} style={{ padding: "0 0 8px 0", background: c.bg }}>
             <div style={{ padding: "6px 16px 8px 32px" }}>
               <div style={{ color: c.textMuted, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
                 Pozycje z paragonu ({lineItems.length})
@@ -304,6 +325,7 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <SelectBox tx={tx} />
             <PrioBadge value={tx.priority || 2} />
             <span style={{ fontWeight: 600, color: c.text, fontSize: 14 }}>{tx.categoryName}</span>
             {isRecurring && <span title="Cykliczne">🔄</span>}
@@ -345,6 +367,7 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
       {/* Meta row: date + tags + author */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
         <span style={{ color: c.textTertiary, fontSize: 12 }}>{tx.date}</span>
+        {tx.cardId && <span style={s.badge(c.info)} title="Zapłacono kartą kredytową">💳 karta</span>}
         {(tx.tagNames || []).map((name, i) => (
           <span key={i} style={s.badge(c.info)}>{name}</span>
         ))}

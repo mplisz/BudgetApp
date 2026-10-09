@@ -38,6 +38,7 @@ export const PANEL_PATHS: Record<string, string> = {
   shopping:           "/shopping",
   tags:               "/tags",
   vouchers:           "/vouchers",
+  card:               "/card",
   safetynet:          "/safetynet",
   analytics:          "/analytics",
   luxmed:             "/luxmed",

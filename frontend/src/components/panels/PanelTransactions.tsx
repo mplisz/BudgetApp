@@ -6,7 +6,9 @@
 // ============================================================
 
 import { c } from "../../styles/tokens";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useCreditCards } from "../../hooks/useCreditCards";
+import { TxSelectionContext, type TxSelection } from "./transactionComponents/txSelection";
 import { useAppContext }   from "../../context/AppContext";
 import type { Transaction } from "../../types/appContext";
 import { useTransactions } from "../../hooks/useTransactions";
@@ -80,8 +82,9 @@ interface LinkedModal { isOpen: boolean; txId: string | null; }
 
 export default function PanelTransactions() {
   const { transactions, setTransactions, tags } = useAppContext();
-  const { deleteTransaction, loadTransactions } = useTransactions();
-  const { isActiveMonthClosed, activeBudgetMonth } = useMonthStatus();
+  const { deleteTransaction, loadTransactions, setCardPayment, isSaving } = useTransactions();
+  const { isActiveMonthClosed, activeBudgetMonth, closedMonths } = useMonthStatus();
+  const { activeCards } = useCreditCards();
 
   // ── Filter state ──────────────────────────────────────────
 
@@ -100,6 +103,7 @@ export default function PanelTransactions() {
     warranty:   "off" as Tri,
     hasProduct: "off" as Tri,
     unusual:    "off" as Tri,
+    card:       "off" as Tri,
     // Product search: description + receipt lines (utils/textSearch).
     text:       "",
   });
@@ -246,6 +250,7 @@ export default function PanelTransactions() {
       if (!matchTri(filters.hasProduct, trackedProductNames(tx.lineItems).length > 0)) return false;
       if (filters.merchant && tx.merchant !== filters.merchant) return false;
       if (!matchTri(filters.unusual, !!tx.unusual))          return false;
+      if (!matchTri(filters.card,    !!tx.cardId))           return false;
       return true;
     }),
     [enriched, filters]
@@ -283,6 +288,9 @@ export default function PanelTransactions() {
     return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
   }, [otherFiltered, filters.categories]);
 
+  // The card filter is only offered where something was paid with a card.
+  const hasCardTx = useMemo(() => dateScoped.some(tx => !!tx.cardId), [dateScoped]);
+
   const monthTagIds = useMemo(() => {
     const ids = new Set(dateScoped.flatMap(tx => tx.tags || []));
     return tags.filter(t => ids.has(t.id));
@@ -319,6 +327,56 @@ export default function PanelTransactions() {
   const { sort, onSort, sorted } = useTxSort(filtered, () => {
     setFlatPage(1); setGroupPage(1); setReceiptPage(1); setLoosePage(1);
   });
+
+  // ── Bulk "paid with the credit card" ──────────────────────
+  // Selection mode: checkboxes on the rows (txSelection context) and one bar
+  // that marks, or un-marks, everything picked. For catching up on purchases
+  // entered before the card existed here. Only what is still on screen under
+  // the current filters is acted on — a row filtered away after it was ticked
+  // must not change behind the user's back.
+  const [selecting,   setSelecting]   = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCard,    setBulkCard]    = useState("");
+  const bulkCardId = activeCards.some(card => card.id === bulkCard) ? bulkCard : activeCards[0]?.id ?? null;
+
+  // Same rule the backend applies: an expense in an open month.
+  const canSelect = useCallback(
+    (tx: Transaction) => tx.type === "EXPENSE" && !closedMonths.has(tx.budgetMonth),
+    [closedMonths],
+  );
+  const selection = useMemo<TxSelection>(() => ({
+    selected: selectedIds,
+    canSelect,
+    toggle: id => setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    }),
+  }), [selectedIds, canSelect]);
+
+  const selectable = useMemo(() => filtered.filter(canSelect), [filtered, canSelect]);
+  const picked     = useMemo(() => selectable.filter(tx => selectedIds.has(tx.id)), [selectable, selectedIds]);
+  const pickedSum  = picked.reduce((acc, tx) => acc + (tx.netAmount ?? tx.amount), 0);
+  const allPicked  = selectable.length > 0 && picked.length === selectable.length;
+
+  function startSelecting() {
+    // Receipts start collapsed and groups hide rows too — the flat list is
+    // the one view where every checkbox is on screen.
+    setView("list");
+    setSelecting(true);
+  }
+
+  function stopSelecting() {
+    setSelecting(false);
+    setSelectedIds(new Set());
+  }
+
+  async function applyCardToPicked(cardId: string | null) {
+    const updated = await setCardPayment(picked.map(tx => tx.id), cardId);
+    if (!updated) return;
+    updated.forEach(tx => search.update(tx));   // the all-months results are their own copy
+    stopSelecting();
+  }
 
   // ── Grouping by category ──────────────────────────────────
 
@@ -488,9 +546,13 @@ export default function PanelTransactions() {
       clear:   () => { set("prio", []); set("unusual", "off"); },
     },
     shop: {
-      active:  (filters.merchant ? 1 : 0) + (filters.tags.length ? 1 : 0),
-      summary: joinSummary(filters.merchant, listSummary(filters.tags.map(id => tags.find(t => t.id === id)?.name ?? id))),
-      clear:   () => { set("merchant", ""); set("tags", []); },
+      active:  (filters.merchant ? 1 : 0) + (filters.tags.length ? 1 : 0) + (filters.card !== "off" ? 1 : 0),
+      summary: joinSummary(
+        filters.merchant,
+        listSummary(filters.tags.map(id => tags.find(t => t.id === id)?.name ?? id)),
+        triText(filters.card, "kartą kredytową", "bez karty"),
+      ),
+      clear:   () => { set("merchant", ""); set("tags", []); set("card", "off"); },
     },
     docs: {
       active:  [filters.hasReturn, filters.hasReceipt, filters.warranty, filters.hasProduct].filter(t => t !== "off").length,
@@ -523,6 +585,7 @@ export default function PanelTransactions() {
   // ── Render ────────────────────────────────────────────────
 
   return (
+    <TxSelectionContext.Provider value={selecting ? selection : null}>
     <div style={{ padding: "0 0 40px 0" }}>
 
       {/* Header */}
@@ -564,6 +627,12 @@ export default function PanelTransactions() {
               {hasActiveFilters && (
                 <button onClick={clearFilters} style={{ ...s.actionBtn(c.danger), fontSize: 11 }}>
                   ✕ Wyczyść wszystko
+                </button>
+              )}
+              {/* Only with a card to mark with, or a mark to take off. */}
+              {!selecting && (activeCards.length > 0 || hasCardTx) && (
+                <button onClick={startSelecting} style={{ ...s.actionBtn(c.info), fontSize: 11 }}>
+                  💳 Zaznacz wiele
                 </button>
               )}
             </div>
@@ -693,8 +762,8 @@ export default function PanelTransactions() {
 
             {/* Both option lists come from the date range — nothing to offer
                 in a range without shops or tags (unless one is still set). */}
-            {(uniqueMerchants.length > 0 || monthTagIds.length > 0 || filterGroups.shop.active > 0) && (
-              <FilterGroup icon="🏪" title="Sklep i tagi" {...groupProps("shop")}>
+            {(uniqueMerchants.length > 0 || monthTagIds.length > 0 || hasCardTx || filterGroups.shop.active > 0) && (
+              <FilterGroup icon="🏪" title="Sklep, tagi i płatność" {...groupProps("shop")}>
                 {uniqueMerchants.length > 0 && (
                   <div style={s.filterBox}>
                     <div style={s.filterLabel}>Sklep</div>
@@ -730,6 +799,13 @@ export default function PanelTransactions() {
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {(hasCardTx || filters.card !== "off") && (
+                  <div style={s.filterBox}>
+                    <div style={s.filterLabel}>Płatność</div>
+                    <TriFilterButton state={filters.card} onChange={v => set("card", v)} label="💳 Kartą kredytową" color={c.infoLight} />
                   </div>
                 )}
               </FilterGroup>
@@ -789,6 +865,64 @@ export default function PanelTransactions() {
               </div>
             </FilterGroup>
           </FilterGroupGrid>
+        </div>
+      )}
+
+      {/* Bulk bar — sticks under the app header while the list scrolls. A bar
+          fixed to the bottom would sit under the mobile nav. */}
+      {selecting && !listLoading && (
+        <div style={{
+          position: "sticky", top: isMobile ? 52 : 56, zIndex: 50,
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          background: c.surface, border: `1px solid ${c.info}`, borderRadius: 12,
+          padding: "10px 14px", marginBottom: 12,
+        }}>
+          <div style={{ fontSize: 13, color: c.text, fontWeight: 700 }}>
+            Zaznaczono {picked.length}
+            <span style={{ color: c.textSecondary, fontWeight: 400 }}> · {fmt(pickedSum)}</span>
+          </div>
+          <button
+            onClick={() => setSelectedIds(allPicked ? new Set() : new Set(selectable.map(tx => tx.id)))}
+            disabled={selectable.length === 0}
+            style={{ ...s.actionBtn(c.textTertiary), fontSize: 12 }}
+          >
+            {allPicked ? "Odznacz wszystkie" : `Zaznacz wszystkie z filtra (${selectable.length})`}
+          </button>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginLeft: "auto" }}>
+            {activeCards.length > 1 && (
+              <select
+                value={bulkCardId ?? ""}
+                onChange={e => setBulkCard(e.target.value)}
+                aria-label="Karta kredytowa"
+                style={FILTER_SELECT_STYLE}
+              >
+                {activeCards.map(card => <option key={card.id} value={card.id}>{card.name}</option>)}
+              </select>
+            )}
+            {bulkCardId && (
+              <button
+                onClick={() => applyCardToPicked(bulkCardId)}
+                disabled={picked.length === 0 || isSaving}
+                style={{ ...s.actionBtn(c.info), fontSize: 12, opacity: picked.length === 0 || isSaving ? 0.5 : 1 }}
+              >
+                💳 Oznacz kartą{activeCards.length === 1 ? ` (${activeCards[0].name})` : ""}
+              </button>
+            )}
+            <button
+              onClick={() => applyCardToPicked(null)}
+              disabled={picked.length === 0 || isSaving}
+              style={{ ...s.actionBtn(c.orange), fontSize: 12, opacity: picked.length === 0 || isSaving ? 0.5 : 1 }}
+            >
+              Zdejmij oznaczenie
+            </button>
+            <button onClick={stopSelecting} style={{ ...s.actionBtn(c.textMuted), fontSize: 12 }}>✕ Zakończ</button>
+          </div>
+          {selectable.length < filtered.length && (
+            <div style={{ flexBasis: "100%", fontSize: 11, color: c.textMuted }}>
+              Bez pola wyboru: oszczędności i transakcje z zamkniętych miesięcy.
+            </div>
+          )}
         </div>
       )}
 
@@ -990,5 +1124,6 @@ export default function PanelTransactions() {
         />
       )}
     </div>
+    </TxSelectionContext.Provider>
   );
 }

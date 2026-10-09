@@ -36,7 +36,7 @@ function confirmSentinelFrom(err: unknown): ConfirmSentinel | null {
 export function useTransactions() {
   const api                               = useApi();
   const { transactions, setTransactions } = useAppContext();
-  const { showSuccess, showError }        = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving,  setIsSaving]  = useState(false);
@@ -156,6 +156,35 @@ export function useTransactions() {
     }
   }, [api, setTransactions, showSuccess, showError]);
 
+  // ── Mark many expenses as paid with a credit card (null clears it) ───────────
+  // One request for the whole selection. The backend skips rows it may not
+  // touch (closed month, edited meanwhile) and says how many; the updated
+  // ones come back and replace their copies here. Null on failure.
+  const setCardPayment = useCallback(async (
+    ids: string[],
+    cardId: string | null,
+  ): Promise<StoredTx[] | null> => {
+    setIsSaving(true);
+    try {
+      const { updated, skipped } = await api.post<{ updated: StoredTx[]; skipped: number }>(
+        "/api/transactions/card-payment",
+        { ids, cardId },
+        { fallback: "Nie udało się zmienić transakcji." },
+      );
+      const byId = new Map(updated.map(t => [t.id, t]));
+      setTransactions(prev => prev.map(t => byId.get(t.id) ?? t));
+      const what = cardId ? "Oznaczono kartą" : "Zdjęto oznaczenie karty z";
+      if (skipped > 0) showInfo(`${what}: ${updated.length}. Pominięto ${skipped} — zamknięty miesiąc albo zmiana w międzyczasie.`);
+      else             showSuccess(`${what}: ${updated.length} ✅`);
+      return updated;
+    } catch (err) {
+      showError((err as Error).message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [api, setTransactions, showSuccess, showInfo, showError]);
+
   // ── Soft-delete transaction ──────────────────────────────────────────────────
   const deleteTransaction = useCallback(async (
     id: string,
@@ -190,6 +219,7 @@ export function useTransactions() {
     addTransactionBatch,
     updateTransaction,
     moveLines,
+    setCardPayment,
     deleteTransaction,
   };
 }

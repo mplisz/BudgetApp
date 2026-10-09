@@ -68,6 +68,7 @@ const PanelAnalytics          = lazy(() => import("./components/panels/PanelAnal
 const PanelSafetyNet          = lazy(() => import("./components/panels/PanelSafetyNet"));
 const PanelLuxmed             = lazy(() => import("./components/panels/PanelLuxmed"));
 const PanelBottleDeposits     = lazy(() => import("./components/panels/PanelBottleDeposits"));
+const PanelCard               = lazy(() => import("./components/panels/PanelCard"));
 
 // ── Which panels show the MonthNavigator in the header ──────
 const PANELS_WITH_MONTH_NAVIGATOR = new Set(MONTH_SELECTOR_PANELS);
@@ -265,6 +266,7 @@ function AppContent() {
         <Route path="shopping"  element={<PanelShopping />} />
         <Route path="tags"      element={<PanelTagAnalysis />} />
         <Route path="vouchers"  element={<PanelVouchers />} />
+        <Route path="card"      element={<PanelCard />} />
         <Route path="safetynet" element={<PanelSafetyNet />} />
         <Route path="analytics" element={<PanelAnalytics />} />
         <Route path="/luxmed" element={<PanelLuxmed />} />

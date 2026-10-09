@@ -341,10 +341,14 @@ export function computeLevelDeficits(
     const plannedTarget  = sumPlannedForLevel(upcomingPlanned, layer.level);
     const totalTarget    = baseTarget + plannedTarget;
 
-    const runwayMonths = monthlyDeficit > 0 ? assetsTotal / monthlyDeficit : Infinity;
-    const runwayDays   = monthlyDeficit > 0 ? assetsTotal / (monthlyDeficit / 30) : Infinity;
+    // Credit-card debt comes off the assets, so the total can be negative.
+    // A cushion that is in the red lasts zero days and covers nothing — not
+    // a negative number of them.
+    const usable       = Math.max(0, assetsTotal);
+    const runwayMonths = monthlyDeficit > 0 ? usable / monthlyDeficit : Infinity;
+    const runwayDays   = monthlyDeficit > 0 ? usable / (monthlyDeficit / 30) : Infinity;
     const coveragePercent = totalTarget > 0
-      ? (assetsTotal / totalTarget) * 100
+      ? (usable / totalTarget) * 100
       : 100;
 
     return {

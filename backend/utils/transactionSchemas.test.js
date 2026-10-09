@@ -132,6 +132,21 @@ describe("TransactionPatchSchema", () => {
     assert.equal(TransactionPatchSchema.safeParse({ priority: 9 }).success, false);
     assert.equal(TransactionPatchSchema.safeParse({ amount: -1 }).success, false);
   });
+
+  // The credit card follows the same rule: untouched unless sent, and null is
+  // a value — it is how un-ticking the card on an edit clears it.
+  test("cardId: omitted stays omitted, null clears, a string sets", () => {
+    const paid = { ...EXISTING, cardId: "card_1" };
+
+    assert.equal(applyPatch(paid, { returns: [RETURN_ENTRY] }).cardId, "card_1");
+    assert.equal(applyPatch(paid, { cardId: null }).cardId, null);
+    assert.equal(applyPatch(EXISTING, { cardId: "card_2" }).cardId, "card_2");
+  });
+
+  test("cardId must look like an id", () => {
+    assert.equal(TransactionPatchSchema.safeParse({ cardId: "card 1; DROP" }).success, false);
+    assert.equal(TransactionPatchSchema.safeParse({ cardId: "x".repeat(101) }).success, false);
+  });
 });
 
 describe("TransactionPostSchema", () => {

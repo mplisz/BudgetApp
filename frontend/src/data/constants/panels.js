@@ -54,6 +54,8 @@ export const PANEL_META = {
   // beside Analiza rather than under "Analiza miesiąca".
   tags:               { icon: "🏷️", label: "Analiza tagów",      section: "Narzędzia",       mobile: true },
   vouchers:           { icon: "🎫", label: "Vouchery",          section: "Narzędzia",       mobile:true },
+  // Month-independent: a debt is a running balance, not a month's figure.
+  card:               { icon: "💳", label: "Karta kredytowa",   section: "Narzędzia",       mobile: true },
   safetynet:          { icon: "🛡️", label: "Poduszka",         section: "Narzędzia",        mobile: true },
   analytics:          { icon: "📊", label: "Analiza",           section: "Narzędzia",       mobile: true},
   luxmed:             { icon: "🏥", label: "Zwroty LuxMed",     section: "Narzędzia",       mobile: true},

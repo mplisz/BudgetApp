@@ -10,6 +10,7 @@ import type { CSSProperties } from "react";
 import { s } from "./txStyles";
 import { TransactionRow, TransactionCard } from "./TransactionRow";
 import { SortableTh } from "../../ui/SortControls";
+import { useTxSelection } from "./txSelection";
 import type { TxSort, TxSortKey } from "../../../utils/txSort";
 import type { Transaction } from "../../../types/appContext";
 
@@ -32,6 +33,8 @@ interface TransactionListProps {
 export function TransactionList({
   items, isMobile, onDelete, onReturn, onUpdated, sort, onSort, mobileStyle,
 }: TransactionListProps) {
+  // Selection mode adds a leading checkbox column (see txSelection.ts).
+  const selecting = useTxSelection() !== null;
   if (isMobile) {
     return (
       <div style={mobileStyle}>
@@ -58,6 +61,7 @@ export function TransactionList({
     <table style={s.table}>
       <thead>
         <tr>
+          {selecting && <th style={{ ...s.th, width: 28 }} />}
           {th("date", "Data")}
           <th style={s.th}>Kategoria</th>
           <th style={s.th}>Opis</th>

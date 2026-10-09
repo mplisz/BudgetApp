@@ -85,6 +85,8 @@ export interface Transaction {
   // The grouping key of the "Paragony" view (see utils/receiptGroups.ts).
   receiptId?: string | null;
   merchant?: string | null;
+  // Credit card the expense was paid with (see utils/cardDebt).
+  cardId?: string | null;
   originalAmount?: number;
   originalCurrency?: string;
   fxRate?: number;
