@@ -16,12 +16,13 @@
 
 const express = require("express");
 const router  = express.Router();
-const { plannedContainer, transactionsContainer } = require("../cosmos");
+const { plannedContainer, transactionsContainer, monthsContainer } = require("../cosmos");
 const { requireAuth }        = require("../middleware/auth");
 const {
   readItemWithEtag, IdParamSchema, BUDGET_MONTH_REGEX, currentServerMonth,round2
 } = require("../utils/helpers");
 const { resolveTransferTarget } = require("../utils/transferCategory");
+const { isMonthClosed } = require("../utils/monthStatus");
 
 router.use(requireAuth);
 
@@ -518,6 +519,11 @@ router.post("/:id/purchase", async (req, res) => {
     if (!existing)            return res.status(404).json({ error: "Planned expense not found." });
     if (existing.isArchived)  return res.status(409).json({ error: "Planned expense is archived." });
     if (existing.isPurchased) return res.status(409).json({ error: "Already purchased." });
+
+    // The purchase books an EXPENSE (and a TRANSFER) in `budgetMonth`.
+    if (await isMonthClosed(monthsContainer, familyId, budgetMonth)) {
+      return res.status(403).json({ error: "Month is closed." });
+    }
 
     const collected = existing.mode === "oneoff"
       ? existing.totalAmountPLN

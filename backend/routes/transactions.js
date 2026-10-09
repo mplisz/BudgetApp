@@ -49,6 +49,7 @@ const { rememberProducts } = require("../utils/productCatalog");
 const { syncShoppingPrices } = require("../utils/shoppingPriceSync");
 const { resolveTransferTarget, buildReturnTransferDoc } = require("../utils/transferCategory");
 const { resolveTxType, applyTxType } = require("../utils/categoryType");
+const { isMonthClosed, findClosedMonth } = require("../utils/monthStatus");
 const { searchTokens, txMatchesText, MIN_SEARCH_LENGTH } = require("../utils/textSearch");
 const { isMergeTarget, planLineMove } = require("../utils/lineItemMove");
 
@@ -392,6 +393,10 @@ router.post("/", async (req, res) => {
   let voucherSnaps = [];     // for rollback if anything fails after voucher sync
 
   try {
+    if (await isMonthClosed(monthsContainer, familyId, data.budgetMonth)) {
+      return res.status(403).json({ error: "Month is closed." });
+    }
+
     const newId  = `tx_${familyId}_${data.date.replace(/-/g,"")}_${generateId(data.subcategoryName)}_${Date.now()}`;
     const amount = roundMoney(data.amount);
 
@@ -496,6 +501,10 @@ router.post("/batch", async (req, res) => {
   let voucherSnaps = [];
 
   try {
+    if (await findClosedMonth(monthsContainer, familyId, items.map(t => t.budgetMonth))) {
+      return res.status(403).json({ error: "Month is closed." });
+    }
+
     // 1. Validate selected vouchers. A store-tied voucher must match the
     //    merchant of EVERY line it would touch (rule d across the batch).
     const vouchers = [];
@@ -595,6 +604,11 @@ router.patch("/:id", async (req, res) => {
     const patchFields = Object.fromEntries(
       Object.entries(parsed.data).filter(([, v]) => v !== undefined),
     );
+
+    // Neither the month the tx sits in nor the one it is being moved to.
+    if (await findClosedMonth(monthsContainer, familyId, [existing.budgetMonth, patchFields.budgetMonth])) {
+      return res.status(403).json({ error: "Month is closed." });
+    }
 
     // Returns reference line items BY INDEX (returns[].returnedLineItems),
     // so a lineItems edit that removes/reorders lines would silently point
@@ -737,6 +751,9 @@ router.post("/:id/move-lines", async (req, res) => {
     const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
     if (!existing)           return res.status(404).json({ error: "Transaction not found." });
     if (existing.isArchived) return res.status(409).json({ error: "Cannot edit an archived transaction." });
+    if (await isMonthClosed(monthsContainer, familyId, existing.budgetMonth)) {
+      return res.status(403).json({ error: "Month is closed." });
+    }
 
     let sibling = null, siblingEtag = null;
     if (existing.receiptId) {
@@ -750,6 +767,12 @@ router.post("/:id/move-lines", async (req, res) => {
       }).fetchAll();
       const found = resources.find(c => isMergeTarget(c, existing, tags));
       if (found) ({ resource: sibling, etag: siblingEtag } = await readItemWithEtag(transactionsContainer, found.id, familyId));
+    }
+    // A sibling from the same receipt normally shares the month — but if it
+    // was moved to another one, that month must be open too.
+    if (sibling && sibling.budgetMonth !== existing.budgetMonth
+        && await isMonthClosed(monthsContainer, familyId, sibling.budgetMonth)) {
+      return res.status(403).json({ error: "Month is closed." });
     }
 
     const plan = planLineMove(existing, indices, tags, sibling);
@@ -834,6 +857,9 @@ router.delete("/:id", async (req, res) => {
     const { resource: existing, etag } = await readItemWithEtag(transactionsContainer, id, familyId);
     if (!existing)           return res.status(404).json({ error: "Transaction not found." });
     if (existing.isArchived) return res.status(409).json({ error: "Transaction is already archived." });
+    if (await isMonthClosed(monthsContainer, familyId, existing.budgetMonth)) {
+      return res.status(403).json({ error: "Month is closed." });
+    }
 
     const hasReturns = (existing.returns || []).length > 0;
     const { forceArchiveLinked } = req.body || {};
@@ -941,6 +967,11 @@ router.post("/deposit-return", async (req, res) => {
   if (returns.length === 0 && surplusAmt <= 0) return res.status(400).json({ error: "Nie ma nic do zwrócenia." });
 
   try {
+    // The returns and the consolidated transfer all land in `budgetMonth`.
+    if (await isMonthClosed(monthsContainer, familyId, budgetMonth)) {
+      return res.status(403).json({ error: "Target month is closed." });
+    }
+
     // STEP 1 — read + validate every selected deposit, compute how much feeds
     // the transfer (past-month returns + surplus). No writes yet, so we can
     // gate on config before touching anything.
@@ -1116,12 +1147,7 @@ router.post("/:id/returns", async (req, res) => {
     }
 
     // Target month closed check
-    const monthDoc = await readItem(
-      monthsContainer,
-      `month_${familyId}_${data.moneyReturnedInMonth}`,
-      familyId,
-    );
-    if (monthDoc?.isClosed) {
+    if (await isMonthClosed(monthsContainer, familyId, data.moneyReturnedInMonth)) {
       return res.status(403).json({ error: "Target month is closed." });
     }
 
@@ -1140,12 +1166,7 @@ router.post("/:id/returns", async (req, res) => {
         : data.moneyReturnedInMonth;
 
       if (transferBudgetMonth !== data.moneyReturnedInMonth) {
-        const transferMonthDoc = await readItem(
-          monthsContainer,
-          `month_${familyId}_${transferBudgetMonth}`,
-          familyId,
-        );
-        if (transferMonthDoc?.isClosed) {
+        if (await isMonthClosed(monthsContainer, familyId, transferBudgetMonth)) {
           return res.status(403).json({ error: "Target month is closed." });
         }
       }

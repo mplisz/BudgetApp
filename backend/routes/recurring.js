@@ -20,12 +20,13 @@
 const express = require("express");
 const router  = express.Router();
 const { z }   = require("zod");
-const { recurringContainer, transactionsContainer, settingsContainer } = require("../cosmos");
+const { recurringContainer, transactionsContainer, settingsContainer, monthsContainer } = require("../cosmos");
 const { requireAuth }        = require("../middleware/auth");
 const {
   readItemWithEtag, IdParamSchema, BUDGET_MONTH_REGEX, currentServerMonth,round2
 } = require("../utils/helpers");
 const { cleanMerchant, rememberMerchant } = require("../utils/merchant");
+const { isMonthClosed } = require("../utils/monthStatus");
 
 router.use(requireAuth);
 
@@ -354,6 +355,11 @@ router.post("/:id/confirm", async (req, res) => {
     const { resource: rec, etag } = await readItemWithEtag(recurringContainer, id, familyId);
     if (!rec)           return res.status(404).json({ error: "Recurring transaction not found." });
     if (rec.isArchived) return res.status(409).json({ error: "Recurring transaction is archived." });
+
+    // Confirming books the transaction in `budgetMonth`.
+    if (await isMonthClosed(monthsContainer, familyId, budgetMonth)) {
+      return res.status(403).json({ error: "Month is closed." });
+    }
 
     const activeCost = getActiveCost(rec, budgetMonth);
     if (!activeCost) return res.status(400).json({ error: "No cost entry found for this month." });

@@ -61,6 +61,7 @@ export const API_ERRORS = {
   "Historical write blocked.":           "Nie można modyfikować limitów z przeszłości.",
 
   // ── Months ───────────────────────────────────────────────────
+  "Month is closed.":                    "Miesiąc jest zamknięty. Otwórz go ponownie, aby wprowadzić zmiany.",
   "Month is already closed.":            "Miesiąc jest już zamknięty.",
   "Previous month is not closed yet.":   "Poprzedni miesiąc nie jest jeszcze zamknięty.",
   "Month not found.":                    "Nie znaleziono miesiąca.",

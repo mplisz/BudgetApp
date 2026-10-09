@@ -21,7 +21,8 @@ const router  = express.Router();
 const { z }   = require('zod');
 const { monthsContainer } = require('../cosmos');
 const { requireAuth }     = require('../middleware/auth');
-const { readItem, BudgetMonthSchema, BUDGET_MONTH_REGEX } = require('../utils/helpers');
+const { BudgetMonthSchema, BUDGET_MONTH_REGEX } = require('../utils/helpers');
+const { monthDocId, isMonthClosed } = require('../utils/monthStatus');
 
 
 router.use(requireAuth);
@@ -91,9 +92,8 @@ router.post('/', async (req, res) => {
     }
 
     // Check if already closed — uses readItem to handle emulator quirk
-    const id       = `month_${familyId}_${budgetMonth}`;
-    const existing = await readItem(monthsContainer, id, familyId);
-    if (existing) {
+    const id = monthDocId(familyId, budgetMonth);
+    if (await isMonthClosed(monthsContainer, familyId, budgetMonth)) {
       return res.status(409).json({ error: `Miesiąc ${budgetMonth} jest już zamknięty.` });
     }
 
@@ -108,9 +108,7 @@ router.post('/', async (req, res) => {
 
     if (existingClosed.length > 0) {
       const prevMonth = previousMonth(budgetMonth);
-      const prevId    = `month_${familyId}_${prevMonth}`;
-      const prevDoc   = await readItem(monthsContainer, prevId, familyId);
-      if (!prevDoc) {
+      if (!(await isMonthClosed(monthsContainer, familyId, prevMonth))) {
         return res.status(400).json({
           error: `Nie można zamknąć ${budgetMonth} — poprzedni miesiąc (${prevMonth}) jest jeszcze otwarty.`,
         });
@@ -149,11 +147,10 @@ router.delete('/:budgetMonth', async (req, res) => {
 
   try {
     const familyId = req.user.familyId;
-    const id       = `month_${familyId}_${budgetMonth}`;
+    const id       = monthDocId(familyId, budgetMonth);
 
     // Verify month is actually closed before attempting delete
-    const existing = await readItem(monthsContainer, id, familyId);
-    if (!existing) {
+    if (!(await isMonthClosed(monthsContainer, familyId, budgetMonth))) {
       return res.status(404).json({ error: `Miesiąc ${budgetMonth} nie jest zamknięty.` });
     }
 

@@ -12,6 +12,7 @@ import { createPortal }   from "react-dom";
 import { c }              from "../../../styles/tokens";
 import { fmt, fmtAmount } from "../../../utils/helpers";
 import { useTransactions } from "../../../hooks/useTransactions";
+import { useAppContext }  from "../../../context/AppContext";
 import { TagMultiSelect } from "../../ui/TagMultiSelect";
 import { s }              from "./txStyles";
 import type { Transaction } from "../../../types/appContext";
@@ -33,8 +34,10 @@ export function LineItemBreakdown({ tx, lineItems, onUpdated, indent = 0 }: Line
   const [tags, setTags]         = useState<string[]>([]);
 
   // Returns reference lines by index and vouchers are split per transaction —
-  // the backend refuses to move lines of such a tx, so don't offer it.
-  const canMove = (tx.returns ?? []).length === 0 && !tx.useVoucher;
+  // the backend refuses to move lines of such a tx, so don't offer it. Same
+  // for a tx in a closed month.
+  const { closedMonths } = useAppContext();
+  const canMove = (tx.returns ?? []).length === 0 && !tx.useVoucher && !closedMonths.has(tx.budgetMonth);
 
   function toggle(i: number) {
     setPicked(prev => {

@@ -19,6 +19,7 @@ import { ReceiptModal } from "./ReceiptModal";
 import { ReturnEntriesModal } from "./ReturnEntriesModal";
 import { trackedProductNames } from "../../../utils/productPricing";
 import { formatMultiplier, unusualTitle } from "../../../utils/unusualExpenses";
+import { useAppContext } from "../../../context/AppContext";
 import type { Transaction } from "../../../types/appContext";
 
 // "Nietypowo duże" marker under the amount — the ratio and the norm it was
@@ -74,6 +75,10 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
   const [lineItemsOpen, setLineItemsOpen] = useState(false);
   const [returnsOpen, setReturnsOpen] = useState(false);
   const { isFullyReturned, isPartiallyReturned, totalReturnedAmount } = calcReturns(tx);
+  // Per transaction, not per active month — the all-months search lists
+  // rows from closed and open months side by side.
+  const { closedMonths } = useAppContext();
+  const isLocked = closedMonths.has(tx.budgetMonth);
 
   const hasReturns  = (tx.returns || []).length > 0;
   const isRecurring = !!tx.isRecurring;
@@ -185,22 +190,24 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
               📎
             </button>
           )}
-          {/* Edit / return / archive stay available even in a closed month —
-              only adding NEW expenses is blocked (in PanelExpenses). */}
+          {/* A closed month is locked: no edit, no archive (the backend
+              refuses both). A return stays — its money lands in an open month. */}
           {/* Edit —  ⚠ indicator if has returns */}
-          <button
-            style={{ ...s.actionBtn(c.info), marginRight: 4, position: "relative" }}
-            onClick={() => setEditOpen(true)}
-            title={hasReturns ? "Edytuj — powiązane transfery i vouchery zostaną zarchiwizowane" : "Edytuj"}
-          >
-            ✏️
-            {hasReturns && (
-              <span style={{
-                position: "absolute", top: -4, right: -4,
-                fontSize: 9, color: c.warning, fontWeight: 800,
-              }}>⚠</span>
-            )}
-          </button>
+          {!isLocked && (
+            <button
+              style={{ ...s.actionBtn(c.info), marginRight: 4, position: "relative" }}
+              onClick={() => setEditOpen(true)}
+              title={hasReturns ? "Edytuj — powiązane transfery i vouchery zostaną zarchiwizowane" : "Edytuj"}
+            >
+              ✏️
+              {hasReturns && (
+                <span style={{
+                  position: "absolute", top: -4, right: -4,
+                  fontSize: 9, color: c.warning, fontWeight: 800,
+                }}>⚠</span>
+              )}
+            </button>
+          )}
 
           {/* Return — hidden for fully returned */}
           {!isFullyReturned && (
@@ -214,7 +221,10 @@ export function TransactionRow({ tx, onDelete, onReturn, onUpdated }: Transactio
           )}
 
           {/* Archive */}
-          <button style={s.actionBtn(c.danger)} onClick={onDelete} title="Archiwizuj">🗑️</button>
+          {!isLocked && (
+            <button style={s.actionBtn(c.danger)} onClick={onDelete} title="Archiwizuj">🗑️</button>
+          )}
+          {isLocked && <span title="Miesiąc zamknięty — otwórz go, aby edytować lub usunąć">🔒</span>}
         </td>
       </tr>
 
@@ -272,6 +282,8 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
   const [lineItemsOpen, setLineItemsOpen] = useState(false);
   const [returnsOpen, setReturnsOpen]     = useState(false);
   const { isFullyReturned, isPartiallyReturned, totalReturnedAmount } = calcReturns(tx);
+  const { closedMonths } = useAppContext();
+  const isLocked = closedMonths.has(tx.budgetMonth);
 
   const hasReturns   = (tx.returns || []).length > 0;
   const isRecurring  = !!tx.isRecurring;
@@ -376,8 +388,8 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
         </div>
       )}
 
-      {/* Actions — edit/return/archive stay available even in a closed month;
-          only adding NEW expenses is blocked (in PanelExpenses). */}
+      {/* Actions — a closed month is locked: no edit, no archive. A return
+          stays, its money lands in an open month. */}
       <div style={{
         display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap",
         marginTop: 12, paddingTop: 10, borderTop: `1px solid ${c.surfaceAlt}`,
@@ -387,17 +399,21 @@ export function TransactionCard({ tx, onDelete, onReturn, onUpdated }: Transacti
             📎 Paragon
           </button>
         )}
-        <button style={{ ...s.actionBtn(c.info), padding: "6px 12px" }} onClick={() => setEditOpen(true)}>
-          ✏️ Edytuj{hasReturns ? " ⚠" : ""}
-        </button>
+        {!isLocked && (
+          <button style={{ ...s.actionBtn(c.info), padding: "6px 12px" }} onClick={() => setEditOpen(true)}>
+            ✏️ Edytuj{hasReturns ? " ⚠" : ""}
+          </button>
+        )}
         {!isFullyReturned && (
           <button style={{ ...s.actionBtn(c.orange), padding: "6px 12px" }} onClick={onReturn}>
             🔙 Zwróć
           </button>
         )}
-        <button style={{ ...s.actionBtn(c.danger), padding: "6px 12px" }} onClick={onDelete}>
-          🗑️ Usuń
-        </button>
+        {!isLocked && (
+          <button style={{ ...s.actionBtn(c.danger), padding: "6px 12px" }} onClick={onDelete}>
+            🗑️ Usuń
+          </button>
+        )}
       </div>
 
       {editOpen && createPortal(
