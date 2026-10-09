@@ -15,6 +15,9 @@ import { fmt, plural } from "../../../utils/helpers";
 import { s } from "./txStyles";
 import { TransactionList } from "./TransactionList";
 import { ReceiptModal } from "./ReceiptModal";
+import { useAppContext }   from "../../../context/AppContext";
+import { useCreditCards }  from "../../../hooks/useCreditCards";
+import { useTransactions } from "../../../hooks/useTransactions";
 import type { ReceiptGroup } from "../../../utils/receiptGroups";
 import type { TxSort, TxSortKey } from "../../../utils/txSort";
 import type { Transaction } from "../../../types/appContext";
@@ -37,6 +40,21 @@ export function ReceiptGroupCard({
 }: ReceiptGroupCardProps) {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const count = group.items.length;
+
+  // ── Whole receipt paid with the credit card ───────────────
+  // One purchase is paid one way, so the receipt is the natural unit: one
+  // click marks every transaction the scan produced (the same bulk request
+  // the selection mode uses, with the same rule — expenses in open months).
+  const { closedMonths } = useAppContext();
+  const { activeCards }  = useCreditCards();
+  const { setCardPayment, isSaving } = useTransactions();
+  const markable  = group.items.filter(tx => tx.type === "EXPENSE" && !closedMonths.has(tx.budgetMonth));
+  const allOnCard = markable.length > 0 && markable.every(tx => !!tx.cardId);
+
+  async function payWithCard(cardId: string | null) {
+    const updated = await setCardPayment(markable.map(tx => tx.id), cardId);
+    updated?.forEach(onUpdated);
+  }
 
   return (
     <div style={{
@@ -69,6 +87,39 @@ export function ReceiptGroupCard({
             <span style={{ fontSize: 12, color: c.voucherLight }}>voucher: {fmt(group.voucherSum)}</span>
           )}
           <span style={{ ...s.groupSum, color: c.text }}>{fmt(group.sum)} PLN</span>
+          {/* Marked → the button takes the mark off. Not marked → one card:
+              a button; several: pick which. No card and no mark: nothing. */}
+          {allOnCard ? (
+            <button
+              style={s.actionBtn(c.info)}
+              disabled={isSaving}
+              onClick={e => { e.stopPropagation(); payWithCard(null); }}
+              title="Cały paragon jest oznaczony kartą — kliknij, aby zdjąć oznaczenie"
+            >
+              💳 ✓ Kartą
+            </button>
+          ) : markable.length > 0 && activeCards.length === 1 ? (
+            <button
+              style={s.actionBtn(c.textTertiary)}
+              disabled={isSaving}
+              onClick={e => { e.stopPropagation(); payWithCard(activeCards[0].id); }}
+              title={`Oznacz cały paragon jako zapłacony kartą ${activeCards[0].name}`}
+            >
+              💳 Cały paragon kartą
+            </button>
+          ) : markable.length > 0 && activeCards.length > 1 ? (
+            <select
+              value=""
+              disabled={isSaving}
+              onClick={e => e.stopPropagation()}
+              onChange={e => { if (e.target.value) payWithCard(e.target.value); }}
+              aria-label="Oznacz cały paragon kartą"
+              style={{ height: 28, background: c.border, color: c.textTertiary, border: "none", borderRadius: 6, padding: "0 8px", fontSize: 11, cursor: "pointer" }}
+            >
+              <option value="">💳 Cały paragon kartą…</option>
+              {activeCards.map(card => <option key={card.id} value={card.id}>{card.name}</option>)}
+            </select>
+          ) : null}
           {group.previewTxId && (
             <button
               style={s.actionBtn(c.warning)}

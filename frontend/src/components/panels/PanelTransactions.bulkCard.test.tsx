@@ -145,6 +145,30 @@ describe("Wydatki — bulk card marking", () => {
     await waitFor(() => expect(cardBadges(q)).toBe(1), WAIT);
   });
 
+  // The receipt view (the default one): a receipt is one purchase, paid one way.
+  it("marks a whole receipt from its card, and takes the mark off again", async () => {
+    const onReceipt = { receiptId: "rcpt_1", merchant: "Lidl" };
+    transactions = [
+      tx("t1", 100, onReceipt),
+      tx("t2", 250, { ...onReceipt, subcategoryId: "sub_c", subcategoryName: "Chemia" }),
+      tx("t3", 40),   // no receipt — must stay out of it
+    ];
+
+    const q = renderPanel();
+    fireEvent.click(await q.findByText(/Cały paragon kartą/, {}, WAIT));
+
+    await waitFor(() => expect(bulkCalls).toHaveLength(1), WAIT);
+    expect([...bulkCalls[0].ids].sort()).toEqual(["t1", "t2"]);
+    expect(bulkCalls[0].cardId).toBe("card_1");
+
+    // Now marked: the same spot offers to undo it.
+    fireEvent.click(await q.findByText(/✓ Kartą/, {}, WAIT));
+    await waitFor(() => expect(bulkCalls).toHaveLength(2), WAIT);
+    expect([...bulkCalls[1].ids].sort()).toEqual(["t1", "t2"]);
+    expect(bulkCalls[1].cardId).toBeNull();
+    expect(await q.findByText(/Cały paragon kartą/, {}, WAIT)).toBeTruthy();
+  });
+
   it("does nothing with an empty selection, and leaving the mode drops it", async () => {
     const q = renderPanel();
     fireEvent.click(await q.findByText(/Zaznacz wiele/, {}, WAIT));
