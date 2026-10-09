@@ -448,8 +448,9 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
               value={fmt(balance)}
               color={balance >= 0 ? c.success : c.danger}
             />
-            {hasCards && (
-              <>
+            {/* Each only when it says something: no tile for a zero debt, and
+                none for an account figure that is just Saldo again. */}
+            {hasCards && cards.totalDebt !== 0 && (
                 <KpiPill
                   icon="💳" label={cards.totalDebt < 0 ? "Nadpłata karty" : "Do spłaty"}
                   value={fmt(Math.abs(cards.totalDebt))}
@@ -459,6 +460,8 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     : "wyciąg spłacony"}
                   link={{ to: PANEL_PATHS.card, title: "Pokaż kartę kredytową" }}
                 />
+            )}
+            {hasCards && Math.abs(onAccount - balance) >= 0.005 && (
                 <KpiPill
                   icon="🏧" label="≈ Na koncie"
                   value={fmt(onAccount)}
@@ -469,7 +472,6 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                     ? `do ${shortDate(cards.nextDue.dueDate)} zejdzie ${fmt(cards.nextDue.statementDue)}`
                     : "saldo po uwzględnieniu karty"}
                 />
-              </>
             )}
             {budgetPct !== null && (
               <KpiPill

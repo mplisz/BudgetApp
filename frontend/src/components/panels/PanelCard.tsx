@@ -124,6 +124,7 @@ function CardSection({ status, data, today }: { status: CardStatus; data: CardDa
   const { isSaving, updateCard, deleteRepayment } = useCreditCards();
   const { card } = status;
 
+  const [open,      setOpen]      = useState(false);   // folded until asked for
   const [editing,   setEditing]   = useState(false);
   const [repaying,  setRepaying]  = useState(false);
   const [correcting, setCorrecting] = useState<CardRepayment | null>(null);
@@ -152,24 +153,45 @@ function CardSection({ status, data, today }: { status: CardStatus; data: CardDa
 
   return (
     <div style={{ ...st.card, opacity: card.isArchived ? 0.75 : 1 }}>
-      {/* Title */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+      {/* Title — the whole row folds the card. Folded, it still answers the
+          two questions the panel is opened for: how much, and by when. */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen(v => !v)}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(v => !v); } }}
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: open ? 14 : 0, cursor: "pointer" }}
+      >
         <div style={{ fontWeight: 800, fontSize: 16, color: c.text }}>
+          <span style={{ color: c.textSecondary, fontSize: 12, marginRight: 8 }}>{open ? "▼" : "▶"}</span>
           {card.name}
           {card.isArchived && <span style={{ marginLeft: 8, fontSize: 11, color: c.textMuted, fontWeight: 600 }}>zarchiwizowana</span>}
         </div>
-        <div style={{ display: "flex", gap: 4 }}>
-          {!card.isArchived && <button onClick={() => setEditing(v => !v)} style={st.link(c.info)}>✏️ Edytuj</button>}
-          <button
-            onClick={() => updateCard(card.id, { isArchived: !card.isArchived })}
-            disabled={isSaving}
-            style={st.link(c.textMuted)}
-          >
-            {card.isArchived ? "↩️ Przywróć" : "🗄 Archiwizuj"}
-          </button>
-        </div>
+        {open ? (
+          <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
+            {!card.isArchived && <button onClick={() => setEditing(v => !v)} style={st.link(c.info)}>✏️ Edytuj</button>}
+            <button
+              onClick={() => updateCard(card.id, { isArchived: !card.isArchived })}
+              disabled={isSaving}
+              style={st.link(c.textMuted)}
+            >
+              {card.isArchived ? "↩️ Przywróć" : "🗄 Archiwizuj"}
+            </button>
+          </div>
+        ) : (
+          <div style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: overpaid ? c.success : status.debt > 0 ? c.text : c.success }}>
+              {overpaid ? "nadpłata " : ""}{fmt(Math.abs(status.debt))}
+            </div>
+            <div style={{ fontSize: 11, color: due.color }}>
+              {status.statementDue > 0 ? `wyciąg ${fmt(status.statementDue)} · ${due.text}` : due.text}
+            </div>
+          </div>
+        )}
       </div>
 
+      {open && (<>
       {editing && (
         <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: `1px solid ${c.border}` }}>
           <CardForm
@@ -264,6 +286,8 @@ function CardSection({ status, data, today }: { status: CardStatus; data: CardDa
       <CollapsibleSection title="Uzgodnienie z bankiem" defaultOpen={false}>
         <Reconciliation status={status} purchases={purchases} today={today} />
       </CollapsibleSection>
+
+      </>)}
 
       {repaying   && <RepaymentModal status={status} onClose={() => setRepaying(false)} />}
       {correcting && <RepaymentModal status={status} repayment={correcting} onClose={() => setCorrecting(null)} />}
