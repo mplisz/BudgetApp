@@ -256,11 +256,15 @@ export default function PanelTransactions() {
     [enriched, filters]
   );
 
+  // Every option list below also keeps what is already SELECTED: setting one
+  // filter never clears another, so a selection that the other filters have
+  // narrowed away must stay visible (and un-tickable) instead of filtering
+  // from behind an option that is no longer on screen.
   const uniqueCats = useMemo(() => {
-    const map: Record<string, string> = {};
-    otherFiltered.forEach(tx => { if (tx.categoryId) map[tx.categoryId] = tx.categoryName; });
-    return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [otherFiltered]);
+    const names = new Set<string>(filters.categories);
+    otherFiltered.forEach(tx => { if (tx.categoryName) names.add(tx.categoryName); });
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [otherFiltered, filters.categories]);
 
   // Merchant/tag OPTIONS are scoped to the active date range only (not the
   // other filters — category/tags/merchant filtering their own option list
@@ -275,26 +279,28 @@ export default function PanelTransactions() {
 
   const uniqueMerchants = useMemo(() => {
     const set = new Set<string>();
+    if (filters.merchant) set.add(filters.merchant);
     dateScoped.forEach(tx => { if (tx.merchant) set.add(tx.merchant); });
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [dateScoped]);
+  }, [dateScoped, filters.merchant]);
 
   const uniqueSubs = useMemo(() => {
-    if (filters.categories.length === 0) return [];
-    const map: Record<string, string> = {};
-    otherFiltered
-      .filter(tx => filters.categories.includes(tx.categoryName))
-      .forEach(tx => { if (tx.subcategoryId) map[tx.subcategoryId] = tx.subcategoryName; });
-    return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [otherFiltered, filters.categories]);
+    const names = new Set<string>(filters.subs);
+    if (filters.categories.length > 0) {
+      otherFiltered
+        .filter(tx => filters.categories.includes(tx.categoryName))
+        .forEach(tx => { if (tx.subcategoryName) names.add(tx.subcategoryName); });
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [otherFiltered, filters.categories, filters.subs]);
 
   // The card filter is only offered where something was paid with a card.
   const hasCardTx = useMemo(() => dateScoped.some(tx => !!tx.cardId), [dateScoped]);
 
   const monthTagIds = useMemo(() => {
-    const ids = new Set(dateScoped.flatMap(tx => tx.tags || []));
+    const ids = new Set([...filters.tags, ...dateScoped.flatMap(tx => tx.tags || [])]);
     return tags.filter(t => ids.has(t.id));
-  }, [dateScoped, tags]);
+  }, [dateScoped, tags, filters.tags]);
 
   // Return-kind options scoped to kinds that actually occur in the month —
   // no point offering "🍾 Kaucja" when nothing here is a deposit refund.
@@ -460,6 +466,17 @@ export default function PanelTransactions() {
       }
       return next;
     });
+  }
+
+  // Adding a category keeps the picked subcategories. Only a REMOVED category
+  // takes its own subcategories with it — they would otherwise keep filtering
+  // for rows of a category that is no longer selected.
+  function setCategories(next: string[]) {
+    set("categories", next);
+    if (filters.categories.some(cat => !next.includes(cat))) {
+      set("subs", filters.subs.filter(sub =>
+        enriched.some(tx => next.includes(tx.categoryName) && tx.subcategoryName === sub)));
+    }
   }
 
   function togglePrio(p: number) {
@@ -676,9 +693,7 @@ export default function PanelTransactions() {
                 <div style={s.filterLabel}>Typ</div>
                 <select
                   value={filters.type}
-                  // Category options are scoped to the type (otherFiltered), so a
-                  // category picked under the old type would silently empty the list.
-                  onChange={e => { set("type", e.target.value as typeof filters.type); set("categories", []); set("subs", []); }}
+                  onChange={e => set("type", e.target.value as typeof filters.type)}
                   style={FILTER_SELECT_STYLE}
                 >
                   <option value="">Wszystkie</option>
@@ -691,20 +706,21 @@ export default function PanelTransactions() {
                 <div style={s.filterLabel}>Kategoria</div>
                 <CategoryMultiSelect
                   value={filters.categories}
-                  onChange={v => { set("categories", v); set("subs", []); }}
-                  categories={uniqueCats.map(([, name]) => ({ name }))}
+                  onChange={setCategories}
+                  categories={uniqueCats.map(name => ({ name }))}
                   placeholder="Wszystkie kategorie"
                 />
               </div>
 
-              {/* Subcategory — visible only when ≥1 category selected */}
-              {filters.categories.length > 0 && uniqueSubs.length > 0 && (
+              {/* Subcategory — visible only when ≥1 category selected (or a
+                  subcategory still is) */}
+              {uniqueSubs.length > 0 && (
                 <div style={s.filterBox}>
                   <div style={s.filterLabel}>Subkategoria</div>
                   <CategoryMultiSelect
                     value={filters.subs}
                     onChange={v => set("subs", v)}
-                    categories={uniqueSubs.map(([, name]) => ({ name }))}
+                    categories={uniqueSubs.map(name => ({ name }))}
                     placeholder="Wszystkie subkategorie"
                   />
                 </div>
@@ -716,11 +732,8 @@ export default function PanelTransactions() {
                 showToday
                 dateFrom={filters.dateFrom}
                 dateTo={filters.dateTo}
-                // Merchant/tag OPTIONS are scoped to this range (see dateScoped
-                // above) — clear both selections too, so a shop/tag that falls
-                // out of the new range doesn't keep silently filtering.
-                onFrom={d => { set("dateFrom", d); set("merchant", ""); set("tags", []); }}
-                onTo={d => { set("dateTo", d); set("merchant", ""); set("tags", []); }}
+                onFrom={d => set("dateFrom", d)}
+                onTo={d => set("dateTo", d)}
                 bounds={dateBounds}
                 disabled={noDateRange}
                 emptyMessage="Brak wydatków w tym miesiącu — filtr dat niedostępny."

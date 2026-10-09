@@ -179,20 +179,34 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
   // Category/subcategory OPTIONS come from the base-filtered view, so only
   // categories actually present under the other filters are offered;
   // subcategories additionally narrow to the selected categories.
+  // What is already selected always stays on the list: setting one filter
+  // never clears another, so a selection the other filters narrowed away must
+  // remain visible and un-tickable.
   const uniqueCats = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(filterCategories);
     baseFiltered.forEach(doc => { if (doc.targetCategoryName) set.add(doc.targetCategoryName); });
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [baseFiltered]);
+  }, [baseFiltered, filterCategories]);
 
   const uniqueSubs = useMemo(() => {
-    if (filterCategories.length === 0) return [];
-    const set = new Set<string>();
-    baseFiltered
-      .filter(doc => filterCategories.includes(doc.targetCategoryName))
-      .forEach(doc => { if (doc.targetSubcategoryName) set.add(doc.targetSubcategoryName); });
+    const set = new Set<string>(filterSubs);
+    if (filterCategories.length > 0) {
+      baseFiltered
+        .filter(doc => filterCategories.includes(doc.targetCategoryName))
+        .forEach(doc => { if (doc.targetSubcategoryName) set.add(doc.targetSubcategoryName); });
+    }
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [baseFiltered, filterCategories]);
+  }, [baseFiltered, filterCategories, filterSubs]);
+
+  // Adding a category keeps the picked subcategories; only a REMOVED category
+  // takes its own subcategories with it.
+  function changeFilterCategories(next: string[]) {
+    setFilterCategories(next);
+    if (filterCategories.some(cat => !next.includes(cat))) {
+      setFilterSubs(filterSubs.filter(sub =>
+        planned.some(doc => next.includes(doc.targetCategoryName) && doc.targetSubcategoryName === sub)));
+    }
+  }
 
   const filtered = useMemo<PlannedDoc[]>(() =>
     baseFiltered
@@ -435,11 +449,11 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
         </span>
         <CategoryMultiSelect
           value={filterCategories}
-          onChange={v => { setFilterCategories(v); setFilterSubs([]); }}
+          onChange={changeFilterCategories}
           categories={uniqueCats.map(name => ({ name }))}
           placeholder="Wszystkie kategorie"
         />
-        {filterCategories.length > 0 && uniqueSubs.length > 0 && (
+        {uniqueSubs.length > 0 && (
           <CategoryMultiSelect
             value={filterSubs}
             onChange={setFilterSubs}
