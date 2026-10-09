@@ -17,7 +17,10 @@ import { ConfirmModal }    from "../ui/ConfirmModal";
 import { CardForm }        from "./cardComponents/CardForm";
 import { RepaymentModal }  from "./cardComponents/RepaymentModal";
 import { fmt, round2, todayYMD, monthLabel, plural } from "../../utils/helpers";
-import { cardsOverview, cardCharge, addDays, type CardStatus } from "../../utils/cardDebt";
+import { ToggleBtn }       from "../ui/ToggleBtn";
+import {
+  cardsOverview, cardCharge, cardTurnover, statementPeriod, calendarMonth, addDays, type CardStatus,
+} from "../../utils/cardDebt";
 import type { CardData, CardRepayment, CardTransaction } from "../../types/creditCard";
 
 // Purchases this recent may not be posted by the bank yet — the usual reason
@@ -215,6 +218,8 @@ function CardSection({ status, data, today }: { status: CardStatus; data: CardDa
         </button>
       )}
 
+      <Turnover status={status} data={data} today={today} />
+
       {/* Purchases */}
       <CollapsibleSection title={`Zakupy kartą — bieżący okres (${current.length})`} defaultOpen={false}>
         <PurchaseList items={current} empty="Brak zakupów kartą po ostatnim wyciągu." />
@@ -275,6 +280,62 @@ function CardSection({ status, data, today }: { status: CardStatus; data: CardDa
         onConfirm={() => { if (removing) deleteRepayment(removing.id); setRemoving(null); }}
         onCancel={() => setRemoving(null)}
       />
+    </div>
+  );
+}
+
+// ── Turnover ──────────────────────────────────────────────────
+// How much was spent with the card in a calendar month or in a statement
+// period — what a "spend at least X" condition is checked against. Unlike
+// the figures above it has nothing to do with the debt: repaying the card
+// doesn't lower it.
+
+function Turnover({ status, data, today }: { status: CardStatus; data: CardData; today: string }) {
+  const [byStatement, setByStatement] = useState(false);
+  const [offset,      setOffset]      = useState(0);   // 0 = running, -1 = the one before, …
+
+  const range = byStatement ? statementPeriod(status.card, today, offset) : calendarMonth(today, offset);
+  const { amount, count } = cardTurnover(status.card.id, data, range);
+  const label = byStatement
+    ? `${dm(range.from)}–${dmy(range.to)}`
+    : monthLabel(range.from.slice(0, 7));
+
+  const step = (color: string, disabled = false): React.CSSProperties => ({
+    ...st.link(color), fontSize: 16, opacity: disabled ? 0.3 : 1, cursor: disabled ? "default" : "pointer",
+  });
+
+  return (
+    <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 12px", margin: "8px 0 6px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <span style={{ fontSize: 10, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700 }}>
+          Obrót kartą
+        </span>
+        <div style={{ display: "flex", gap: 6 }}>
+          <ToggleBtn active={!byStatement} onClick={() => { setByStatement(false); setOffset(0); }}>Miesiąc</ToggleBtn>
+          <ToggleBtn active={byStatement}  onClick={() => { setByStatement(true);  setOffset(0); }}>Okres rozliczeniowy</ToggleBtn>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <button onClick={() => setOffset(o => o - 1)} style={step(c.info)} aria-label="Poprzedni okres">‹</button>
+        <div style={{ textAlign: "center", minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: c.textSecondary }}>
+            {label}{offset === 0 && <span style={{ color: c.textMuted }}> · trwa</span>}
+          </div>
+          <div style={{ fontSize: 19, fontWeight: 800, color: c.text, fontVariantNumeric: "tabular-nums" }}>{fmt(amount)}</div>
+          <div style={{ fontSize: 11, color: c.textMuted }}>
+            {count} {plural(count, "pozycja", "pozycje", "pozycji")} · po zwrotach do sklepu
+          </div>
+        </div>
+        <button
+          onClick={() => setOffset(o => Math.min(0, o + 1))}
+          disabled={offset === 0}
+          style={step(c.info, offset === 0)}
+          aria-label="Następny okres"
+        >
+          ›
+        </button>
+      </div>
     </div>
   );
 }

@@ -77,6 +77,37 @@ export function statementWindow(
   };
 }
 
+// The close that follows `closeDate`. 31 days on always lands inside the next
+// period: no period is longer than 31 days, and two of them are at least 56.
+const nextCloseAfter = (statementDay: number, closeDate: string) =>
+  lastCloseOnOrBefore(statementDay, addDays(closeDate, 31));
+
+/** An inclusive span of days. */
+export interface DateRange { from: string; to: string }
+
+/**
+ * A statement period of the card: 0 is the one running now (it closes on
+ * `to`, still ahead), -1 the last closed one, and so on back. Cut the same
+ * way as statementWindow: a purchase on the close day belongs to the period
+ * that closes, so on that day the running period is already the next one.
+ */
+export function statementPeriod(
+  card: Pick<CreditCard, "statementDay">, today: string, offset: number,
+): DateRange {
+  let to = nextCloseAfter(card.statementDay, lastCloseOnOrBefore(card.statementDay, today));
+  for (let i = 0; i > offset; i--) to = lastCloseOnOrBefore(card.statementDay, addDays(to, -1));
+  return { from: addDays(lastCloseOnOrBefore(card.statementDay, addDays(to, -1)), 1), to };
+}
+
+/** A calendar month: 0 is the one `today` falls in, -1 the one before, … */
+export function calendarMonth(today: string, offset: number): DateRange {
+  const [y, m] = today.split("-").map(Number);
+  return {
+    from: toYMD(new Date(y, m - 1 + offset, 1)),
+    to:   toYMD(new Date(y, m + offset, 0)),
+  };
+}
+
 // ── Money ─────────────────────────────────────────────────────
 
 const sum = (values: number[]) => values.reduce((total, v) => total + v, 0);
@@ -97,6 +128,21 @@ const charged = (tx: CardTransaction) => tx.netAmount ?? tx.amount;
 /** What a purchase still weighs on its card: the charge minus shop returns. */
 export function cardCharge(tx: CardTransaction): number {
   return Math.max(0, charged(tx) - sum(returnedToCard(tx).map(r => r.cashAmount || 0)));
+}
+
+/**
+ * What was spent with a card in a span of days — the figure a bank's
+ * "spend at least X a month" condition looks at. By purchase DATE, not budget
+ * month (the bank knows nothing of those), and net of shop returns, which
+ * banks take off the turnover too. Repayments play no part: unlike the
+ * statement amount, this does not go down when the card is paid.
+ */
+export function cardTurnover(
+  cardId: string, data: Pick<CardData, "transactions">, range: DateRange,
+): { amount: number; count: number } {
+  const purchases = data.transactions.filter(tx =>
+    tx.cardId === cardId && tx.date >= range.from && tx.date <= range.to);
+  return { amount: round2(sum(purchases.map(cardCharge))), count: purchases.length };
 }
 
 /** Everything owed on one card. Negative = the card was overpaid. */

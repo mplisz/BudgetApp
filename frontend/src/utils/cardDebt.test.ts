@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  addDays, daysBetween, statementWindow,
+  addDays, daysBetween, statementWindow, statementPeriod, calendarMonth, cardTurnover,
   cardCharge, cardDebt, debtChangeInMonth, cardStatus, cardsOverview,
 } from "./cardDebt";
 import type { CardData, CardRepayment, CardTransaction, CreditCard } from "../types/creditCard";
@@ -58,6 +58,71 @@ describe("statementWindow", () => {
     const eom = card({ statementDay: 31, graceDays: 0 });
     expect(statementWindow(eom, "2026-03-15")).toMatchObject({ closeDate: "2026-02-28", previousCloseDate: "2026-01-31" });
     expect(statementWindow(eom, "2026-03-31")).toMatchObject({ closeDate: "2026-03-31", previousCloseDate: "2026-02-28" });
+  });
+});
+
+describe("statementPeriod", () => {
+  const c25 = card({ statementDay: 25 });
+
+  it("0 is the running period, negative offsets walk back through closed ones", () => {
+    expect(statementPeriod(c25, "2026-10-09", 0)).toEqual({ from: "2026-09-26", to: "2026-10-25" });
+    expect(statementPeriod(c25, "2026-10-09", -1)).toEqual({ from: "2026-08-26", to: "2026-09-25" });
+    expect(statementPeriod(c25, "2026-10-09", -2)).toEqual({ from: "2026-07-26", to: "2026-08-25" });
+  });
+
+  it("agrees with statementWindow on where the closed statement lies", () => {
+    const w = statementWindow(c25, "2026-10-09");
+    expect(statementPeriod(c25, "2026-10-09", -1)).toEqual({ from: addDays(w.previousCloseDate, 1), to: w.closeDate });
+  });
+
+  it("on the close day the running period is already the next one", () => {
+    expect(statementPeriod(c25, "2026-10-25", 0)).toEqual({ from: "2026-10-26", to: "2026-11-25" });
+    expect(statementPeriod(c25, "2026-10-25", -1)).toEqual({ from: "2026-09-26", to: "2026-10-25" });
+  });
+
+  it("crosses the year and survives short months", () => {
+    expect(statementPeriod(c25, "2027-01-03", 0)).toEqual({ from: "2026-12-26", to: "2027-01-25" });
+    const eom = card({ statementDay: 31 });
+    expect(statementPeriod(eom, "2026-02-10", 0)).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(statementPeriod(eom, "2026-03-10", 0)).toEqual({ from: "2026-03-01", to: "2026-03-31" });
+    expect(statementPeriod(eom, "2026-03-10", -1)).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(statementPeriod(eom, "2026-03-10", -2)).toEqual({ from: "2026-01-01", to: "2026-01-31" });
+  });
+});
+
+describe("calendarMonth", () => {
+  it("spans whole months, back across the year", () => {
+    expect(calendarMonth("2026-10-09", 0)).toEqual({ from: "2026-10-01", to: "2026-10-31" });
+    expect(calendarMonth("2026-03-31", -1)).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(calendarMonth("2026-01-15", -1)).toEqual({ from: "2025-12-01", to: "2025-12-31" });
+  });
+});
+
+describe("cardTurnover", () => {
+  const OCT = { from: "2026-10-01", to: "2026-10-31" };
+
+  it("adds up the card's purchases dated inside the span, both ends included", () => {
+    const d = data([
+      buy("2026-09-30", 999), buy("2026-10-01", 100), buy("2026-10-31", 50), buy("2026-11-01", 999),
+      buy("2026-10-10", 999, { cardId: "b" }),
+    ]);
+    expect(cardTurnover("a", d, OCT)).toEqual({ amount: 150, count: 2 });
+  });
+
+  it("goes by purchase date, not budget month", () => {
+    const d = data([buy("2026-09-30", 80, { budgetMonth: "2026-10" })]);
+    expect(cardTurnover("a", d, OCT)).toEqual({ amount: 0, count: 0 });
+  });
+
+  it("takes shop returns and vouchers off, but not repayments", () => {
+    const d = data(
+      [buy("2026-10-05", 300, {
+        netAmount: 280,
+        returns: [{ amount: 80, cashAmount: 80, moneyReturnedInMonth: "2026-10", kind: "store" }],
+      })],
+      [repay("2026-10-20", 200)],
+    );
+    expect(cardTurnover("a", d, OCT)).toEqual({ amount: 200, count: 1 });
   });
 });
 
