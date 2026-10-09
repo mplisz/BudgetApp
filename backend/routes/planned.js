@@ -16,7 +16,6 @@
 
 const express = require("express");
 const router  = express.Router();
-const { z }   = require("zod");
 const { plannedContainer, transactionsContainer } = require("../cosmos");
 const { requireAuth }        = require("../middleware/auth");
 const {
@@ -28,70 +27,9 @@ router.use(requireAuth);
 
 // ── Schemas ───────────────────────────────────────────────────
 
-// URL rule is shared by POST and PATCH — define it once.
-const urlSchema = z.string().max(2000).trim()
-  .refine(v => {
-    if (v === "") return true;
-    const m = v.match(/^([a-z][a-z0-9+.-]*):/i);
-    return !m || /^https?$/i.test(m[1]);   // no scheme, or http(s) only
-  }, { message: "URL has to start with http(s) or be a bare domain." })
-  .optional().default("");
-
-// Shared shape for every patchable field. `mode` lives only on POST —
-// the expense type must not change after creation.
-const PlannedBaseSchema = z.object({
-  description:          z.string().min(1).max(500).transform(v => v.trim()),
-  totalAmount:          z.number().positive(),
-  originalCurrency:     z.string().length(3).default("PLN"),
-  fxRate:               z.number().positive().default(1),
-  totalAmountPLN:       z.number().positive(),
-  targetCategoryId:     z.string().min(1),
-  targetCategoryName:   z.string().min(1),
-  targetSubcategoryId:  z.string().min(1),
-  targetSubcategoryName:z.string().min(1),
-  tags:                 z.array(z.string()).optional().default([]),
-  priority:             z.number().int().min(1).max(4).optional().default(2),
-  plannedMonth:         z.string().regex(BUDGET_MONTH_REGEX),
-  monthlySavingDay:     z.number().int().min(1).max(31).optional().default(1),
-  url:                  urlSchema,
-  virtualSavings:       z.array(z.object({
-    month:            z.string().regex(BUDGET_MONTH_REGEX),
-    amount:           z.number().min(0),    // in original currency
-    amountPLN:        z.number().min(0),
-    fxRate:           z.number().positive().default(1),
-    paidByUser:       z.boolean().default(false),
-    dismissedByUser:  z.boolean().default(false),
-  })).optional().default([]),
-});
-
-// POST: base plus the required mode. Defaults fire for omitted fields.
-const PlannedPostSchema = PlannedBaseSchema.extend({
-  mode: z.enum(["oneoff", "envelope"]),
-});
-
-// PATCH: every field optional. Omitted fields resolve to `undefined`
-// (not their default), so the route's `v !== undefined` filter skips
-// them and never clobbers existing values. At least one field required.
-const PlannedPatchSchema = PlannedBaseSchema.partial()
-  .refine(d => Object.keys(d).length > 0, { message: "No fields to update." });
-
-// A WISH ("zachcianka") is an undecided plan: no month, no committed price.
-// Deliberately its OWN schema rather than a loosened PlannedBaseSchema — the
-// month regex and the positive-amount rule are what keep real plans sane, and
-// they must not be weakened just to let an idea through. Everything here
-// beyond the description exists only to make the later promotion one click.
-const WishPostSchema = z.object({
-  description:          z.string().min(1).max(500).transform(v => v.trim()),
-  estimatedAmount:      z.number().positive().nullable().optional(),
-  originalCurrency:     z.string().length(3).default("PLN"),
-  targetCategoryId:     z.string().max(200).optional().default(""),
-  targetCategoryName:   z.string().max(200).optional().default(""),
-  targetSubcategoryId:  z.string().max(200).optional().default(""),
-  targetSubcategoryName:z.string().max(200).optional().default(""),
-  tags:                 z.array(z.string()).optional().default([]),
-  priority:             z.number().int().min(1).max(4).optional().default(2),
-  url:                  urlSchema,
-});
+// Body schemas live in utils/plannedSchemas.js — importable without Cosmos,
+// and the place that keeps create-time defaults out of PATCH.
+const { PlannedPostSchema, PlannedPatchSchema, WishPostSchema } = require("../utils/plannedSchemas");
 
 // ── Helpers ───────────────────────────────────────────────────
 
