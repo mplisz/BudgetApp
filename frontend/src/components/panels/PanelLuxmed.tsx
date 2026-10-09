@@ -15,7 +15,7 @@ import { useTransactionsRange } from "../../hooks/useTransactionsRange";
 import { useApi }               from "../../hooks/useApi";
 import { useToast }             from "../../hooks/useToast";
 import { ConfirmModal }         from "../ui/ConfirmModal";
-import { fmt, round2, currentCalendarMonth, todayYMD } from "../../utils/helpers";
+import { fmt, round2, firstOpenMonth, todayYMD } from "../../utils/helpers";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -123,15 +123,16 @@ function pillStyle(active: boolean, activeBg: string): React.CSSProperties {
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelLuxmed() {
-  const { categories, settings } = useAppContext();
+  const { categories, settings, closedMonths } = useAppContext();
   const api                      = useApi();
   const { showSuccess, showError } = useToast();
   const { transactions, isLoading, loadRange, invalidate } = useTransactionsRange();
 
   // ── Quarter ───────────────────────────────────────────────
   // Default = last COMPLETED quarter (what you claim now). Older quarters
-  // are archive-only (view). Returns always book in the current month.
-  const returnMonth = currentCalendarMonth();
+  // are archive-only (view). Returns always book in the first OPEN month —
+  // the calendar month may already be closed, and the backend refuses it.
+  const returnMonth = firstOpenMonth(closedMonths);
   const defQ  = useMemo(() => prevQuarter(currentQuarter()), []);
   const [activeQ,    setActiveQ]    = useState(defQ.q);
   const [activeYear, setActiveYear] = useState(defQ.year);
@@ -511,7 +512,7 @@ export default function PanelLuxmed() {
       <ConfirmModal
         isOpen={confirmOpen}
         title="🏥 Potwierdź zwroty LuxMed"
-        message={`Wykonać ${simRows.filter(r => r.willReturn > 0).length} zwrot${simRows.filter(r => r.willReturn > 0).length === 1 ? "" : "ów"} na łączną kwotę ${fmt(totalWillReturn)}?\n\nZaksięgowane w bieżącym miesiącu (${returnMonth}). Zwroty z wcześniejszych miesięcy trafią do JEDNEGO zbiorczego transferu.`}
+        message={`Wykonać ${simRows.filter(r => r.willReturn > 0).length} zwrot${simRows.filter(r => r.willReturn > 0).length === 1 ? "" : "ów"} na łączną kwotę ${fmt(totalWillReturn)}?\n\nZaksięgowane w otwartym miesiącu (${returnMonth}). Zwroty z wcześniejszych miesięcy trafią do JEDNEGO zbiorczego transferu.`}
         onConfirm={handleBulkReturn}
         onCancel={() => setConfirmOpen(false)}
       />

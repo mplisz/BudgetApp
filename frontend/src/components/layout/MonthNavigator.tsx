@@ -19,24 +19,7 @@ import { useAppContext }    from "../../context/AppContext";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useMonthFromUrl, addMonthsToYM } from "../../hooks/useMonthFromUrl";
 import { MONTHS }           from "../../data/constants";
-
-// Compute the first open (non-closed) budget month starting from the
-// current calendar month, walking forward. Pure — no side effects.
-// Mirrors navigateToFirstOpenMonth's logic but RETURNS the value
-// instead of navigating, so we can compare against the active month.
-function firstOpenMonth(closedMonths: Set<string>): string {
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth();
-  for (let i = 0; i < 24; i++) {
-    const bm = `${y}-${String(m + 1).padStart(2, "0")}`;
-    if (!closedMonths.has(bm)) return bm;
-    m++;
-    if (m > 11) { m = 0; y++; }
-  }
-  // Fallback: current calendar month (shouldn't happen with <24 closed)
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
+import { firstOpenMonth }   from "../../utils/helpers";
 
 export function MonthNavigator() {
   const { settings, closedMonths } = useAppContext();

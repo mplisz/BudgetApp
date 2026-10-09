@@ -14,7 +14,7 @@ import { useTransactionsRange } from "../../hooks/useTransactionsRange";
 import { useApi }               from "../../hooks/useApi";
 import { useToast }             from "../../hooks/useToast";
 import { ConfirmModal }         from "../ui/ConfirmModal";
-import { fmt, round2, currentCalendarMonth, todayYMD } from "../../utils/helpers";
+import { fmt, round2, currentCalendarMonth, firstOpenMonth, todayYMD } from "../../utils/helpers";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -53,13 +53,16 @@ const st = {
 // ── Component ─────────────────────────────────────────────────
 
 export default function PanelBottleDeposits() {
-  const { settings } = useAppContext();
+  const { settings, closedMonths } = useAppContext();
   const api = useApi();
   const { showSuccess, showError } = useToast();
   const { transactions, isLoading, loadRange, invalidate } = useTransactionsRange();
 
   const depositSubcategoryId = settings?.depositSubcategoryId ?? null;
   const cur = currentCalendarMonth();
+  // Where the return is booked: the first OPEN month — the calendar month
+  // may already be closed, and the backend refuses to write into it.
+  const returnMonth = firstOpenMonth(closedMonths);
   // The /range endpoint caps at 24 months — deposits are recent, so a 24-month
   // window is plenty. Respect appStartMonth if it falls within that window.
   const windowStart = monthsBack(cur, 23);
@@ -100,9 +103,9 @@ export default function PanelBottleDeposits() {
     }
     const totalReturn = round2(rows.reduce((s, r) => s + r.willReturn, 0));
     const surplus     = round2(Math.max(0, amount - totalReturn));
-    const pastReturn  = round2(rows.filter(r => r.tx.budgetMonth < cur).reduce((s, r) => s + r.willReturn, 0));
+    const pastReturn  = round2(rows.filter(r => r.tx.budgetMonth < returnMonth).reduce((s, r) => s + r.willReturn, 0));
     return { rows, totalReturn, surplus, pastReturn };
-  }, [amount, depositTxs, cur]);
+  }, [amount, depositTxs, returnMonth]);
 
   const rowMap = useMemo(() => {
     const m = new Map<string, number>();
@@ -122,7 +125,7 @@ export default function PanelBottleDeposits() {
       const res = await api.post<{ failed?: number }>(`/api/transactions/deposit-return`, {
         returns: sim.rows.map(r => ({ txId: r.tx.id, amount: r.willReturn })),
         surplus: sim.surplus,
-        budgetMonth: cur,
+        budgetMonth: returnMonth,
         date: todayYMD(),
         reason: "Zwrot butelek",
         kind: "deposit",   // keeps deposits out of the shop-return analytics
@@ -192,7 +195,7 @@ export default function PanelBottleDeposits() {
             {" "}({sim.rows.length} poz.)
             {(sim.pastReturn > 0 || sim.surplus > 0) && (
               <div style={{ fontSize: 12, color: c.textMuted }}>
-                + jeden transfer w {cur}:{" "}
+                + jeden transfer w {returnMonth}:{" "}
                 <strong style={{ color: c.text }}>{fmt(round2(sim.pastReturn + sim.surplus))} PLN</strong>
                 {" "}(przeszłe miesiące {fmt(sim.pastReturn)}
                 {sim.surplus > 0 && <> + nadwyżka <strong style={{ color: c.warning }}>{fmt(sim.surplus)}</strong></>})
@@ -214,7 +217,7 @@ export default function PanelBottleDeposits() {
       {/* Outstanding deposit list (oldest first) */}
       {!isLoading && depositTxs.map(tx => {
         const willReturn = rowMap.get(tx.id) || 0;
-        const isPast = tx.budgetMonth < cur;
+        const isPast = tx.budgetMonth < returnMonth;
         return (
           <div key={tx.id} style={{
             ...st.card,
@@ -254,7 +257,7 @@ export default function PanelBottleDeposits() {
         message={
           `Zwrócić ${fmt(sim.totalReturn)} PLN z ${sim.rows.length} transakcji?` +
           ((sim.pastReturn + sim.surplus) > 0
-            ? `\n\nPowstanie jeden transfer w ${cur}: ${fmt(round2(sim.pastReturn + sim.surplus))} PLN` +
+            ? `\n\nPowstanie jeden transfer w ${returnMonth}: ${fmt(round2(sim.pastReturn + sim.surplus))} PLN` +
               ` (przeszłe miesiące ${fmt(sim.pastReturn)}${sim.surplus > 0 ? ` + nadwyżka ${fmt(sim.surplus)}` : ""}).`
             : "")
         }

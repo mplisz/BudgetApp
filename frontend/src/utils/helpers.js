@@ -182,6 +182,24 @@ export function currentCalendarMonth() {
   return formatBudgetMonth(now.getMonth(), now.getFullYear());
 }
 
+// Returns "YYYY-MM" for the first OPEN budget month, walking forward from
+// the current calendar month. This — not the calendar month — is where new
+// money lands: the calendar month can be closed before it ends, and the
+// backend refuses writes to a closed month.
+export function firstOpenMonth(closedMonths) {
+  const now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth();
+  for (let i = 0; i < 24; i++) {
+    const bm = formatBudgetMonth(m, y);
+    if (!closedMonths.has(bm)) return bm;
+    m++;
+    if (m > 11) { m = 0; y++; }
+  }
+  // Fallback: current calendar month (shouldn't happen with <24 closed)
+  return currentCalendarMonth();
+}
+
 // Returns today as "YYYY-MM-DD" (local time)
 export function todayYMD() {
   const d = new Date();

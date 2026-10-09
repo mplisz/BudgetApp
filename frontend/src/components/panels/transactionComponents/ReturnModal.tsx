@@ -16,7 +16,8 @@ import { useMemo, useState } from "react";
 import { useToast }       from "../../../hooks/useToast";
 import { useApi }         from "../../../hooks/useApi";
 import { AppDatePicker, toYMD, todayLocal } from "../../ui/AppDatePicker";
-import { fmt }            from "../../../utils/helpers";
+import { useAppContext }  from "../../../context/AppContext";
+import { fmt, firstOpenMonth } from "../../../utils/helpers";
 import {
   calculateTotalReturned,
   remainingToReturn,
@@ -101,6 +102,7 @@ function MonthInput({ value, onChange, minMonth }: MonthInputProps) {
 export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
   const api                        = useApi();
   const { showError, showSuccess } = useToast();
+  const { closedMonths }           = useAppContext();
 
   const { minMonth, currentMonth } = getReturnMonthBounds();
   const remaining = Math.round(remainingToReturn(tx) * 100) / 100;
@@ -111,8 +113,9 @@ export function ReturnModal({ tx, onClose, onSaved }: ReturnModalProps) {
     voucherAmount:        0,
     cashAmount:           0,
     hasVoucher:           false,
-    // Return month always defaults to the current calendar month.
-    moneyReturnedInMonth: currentMonth,
+    // Return month defaults to the first OPEN month — normally the current
+    // calendar month, the next one when that is already closed.
+    moneyReturnedInMonth: firstOpenMonth(closedMonths),
     returnedAt:           todayLocal(),
     reason:               "",
     // Voucher creation
