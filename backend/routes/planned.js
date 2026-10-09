@@ -33,12 +33,8 @@ const { PlannedPostSchema, PlannedPatchSchema, WishPostSchema } = require("../ut
 
 // ── Helpers ───────────────────────────────────────────────────
 
-// Sum of paid savings in PLN
-function sumPaid(virtualSavings) {
-  return (virtualSavings || [])
-    .filter(v => v.paidByUser)
-    .reduce((s, v) => s + v.amountPLN, 0);
-}
+// virtualSavings[] arithmetic lives in utils/plannedSavings.js (testable).
+const { sumPaid, generateSavingsMonths, rebuildSavingsForMonth } = require("../utils/plannedSavings");
 
 // Compute suggestion for a given month
 function computeSuggestion(doc, currentMonth) {
@@ -59,28 +55,6 @@ function isReadyToPurchase(doc) {
   // this guard every wish would report itself as ready to buy.
   if (doc.isWish || doc.totalAmountPLN == null) return false;
   return sumPaid(doc.virtualSavings) >= doc.totalAmountPLN;
-}
-
-// Generate virtualSavings months from startMonth to plannedMonth
-function generateSavingsMonths(startMonth, plannedMonth, suggestion, currency, fxRate) {
-  const months = [];
-  let [y, m] = startMonth.split("-").map(Number);
-  const [ey, em] = plannedMonth.split("-").map(Number);
-
-  while (y < ey || (y === ey && m <= em)) {
-    const monthStr = `${y}-${String(m).padStart(2, "0")}`;
-    months.push({
-      month:           monthStr,
-      amount:          suggestion,   // in original currency
-      amountPLN:       0,
-      fxRate:          fxRate || 1,
-      paidByUser:      false,
-      dismissedByUser: false,
-    });
-    m++;
-    if (m > 12) { m = 1; y++; }
-  }
-  return months;
 }
 
 // ── GET /api/planned ──────────────────────────────────────────
@@ -379,53 +353,15 @@ router.patch("/:id", async (req, res) => {
 
     // Handle plannedMonth change — rebuild virtualSavings
     if (patch.plannedMonth && existing.mode === "envelope") {
-      const newPlannedMonth = patch.plannedMonth;
-      const totalAmountPLN  = patch.totalAmountPLN ?? existing.totalAmountPLN;
-      const currency        = patch.originalCurrency ?? existing.originalCurrency;
-      const fxRate          = patch.fxRate ?? existing.fxRate;
-
-      // Keep paid entries regardless of month change
-      const paidEntries = existing.virtualSavings.filter(v => v.paidByUser);
-
-      // Remove future unpaid entries after new plannedMonth
-      const keptUnpaid = existing.virtualSavings.filter(v =>
-        !v.paidByUser && v.month <= newPlannedMonth
-      );
-
-      // Find highest existing month to continue from
-      const allKept      = [...paidEntries, ...keptUnpaid];
-      const existingMonths = new Set(allKept.map(v => v.month));
-      const lastKeptMonth = allKept.length
-        ? allKept.sort((a, b) => b.month.localeCompare(a.month))[0].month
-        : null;
-
-      // Add missing months between last kept and new plannedMonth
-      const startFill = lastKeptMonth
-        ? (() => {
-            const [y, m] = lastKeptMonth.split("-").map(Number);
-            const nm = m === 12 ? 1 : m + 1;
-            const ny = m === 12 ? y + 1 : y;
-            return `${ny}-${String(nm).padStart(2, "0")}`;
-          })()
-        : currentServerMonth();
-
-      // Compute new suggestion for remaining months
-      const paidPLN    = sumPaid(paidEntries);
-      const remaining  = totalAmountPLN - paidPLN;
-      const futureCount = (() => {
-        const [sy, sm] = startFill.split("-").map(Number);
-        const [ey, em] = newPlannedMonth.split("-").map(Number);
-        return Math.max(1, (ey - sy) * 12 + (em - sm) + 1);
-      })();
-      const suggestion = Math.max(0, Math.round((remaining / futureCount) * 100) / 100);
-      const newMonths  = generateSavingsMonths(startFill, newPlannedMonth, suggestion, currency, fxRate)
-        .filter(v => !existingMonths.has(v.month));
-
-      // Update amount in ALL unpaid kept entries to new suggestion
-      const keptUnpaidUpdated = keptUnpaid.map(v => ({ ...v, amount: suggestion }));
-
-      patch.virtualSavings = [...paidEntries, ...keptUnpaidUpdated, ...newMonths]
-        .sort((a, b) => a.month.localeCompare(b.month));
+      // Paid months stay, months past the new date go, missing ones are
+      // added — and the rest is split over every open month.
+      patch.virtualSavings = rebuildSavingsForMonth(existing.virtualSavings, {
+        plannedMonth:   patch.plannedMonth,
+        totalAmountPLN: patch.totalAmountPLN ?? existing.totalAmountPLN,
+        currency:       patch.originalCurrency ?? existing.originalCurrency,
+        fxRate:         patch.fxRate ?? existing.fxRate,
+        currentMonth:   currentServerMonth(),
+      });
     }
 
     const updated = {
