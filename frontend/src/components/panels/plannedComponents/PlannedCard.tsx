@@ -35,11 +35,14 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase, actualSpent }:
     ? (doc.virtualSavings || []).find(v => v.month === currentMonth)
     : null;
 
-  // Confirmation is a current-month action: a one-off can be realized only in
-  // its planned month; other months are edit/delete only. Confirmed items
+  // A one-off can be confirmed in ANY month, not just its planned one: plans
+  // move — the cardiologist calls with an earlier slot, or last month's
+  // purchase only gets ticked off now. The expense is booked in the active
+  // budget month either way (the form below says so). Confirmed items
   // (purchased, or this month's paid rate) render read-only, not as buttons.
   const isPurchased          = !!doc.isPurchased;
-  const isOneoffDueThisMonth = doc.mode === "oneoff" && !isPurchased && doc.plannedMonth === currentMonth;
+  const canConfirmOneoff     = doc.mode === "oneoff" && !isPurchased;
+  const isEarly              = canConfirmOneoff && doc.plannedMonth > currentMonth;
   const ratePaidThisMonth    = !!thisMonthEntry?.paidByUser;
 
   //safe url - make sure only https/http links are actually rendered
@@ -187,10 +190,11 @@ export function PlannedCard({ doc, onEdit, onArchive, onPurchase, actualSpent }:
                 ✕ Pomiń ratę
               </button>
             )}
-            {isOneoffDueThisMonth && (
+            {canConfirmOneoff && (
               <button onClick={() => onPurchase(doc)}
+                title={isEarly ? `Plan: ${doc.plannedMonth} → wydatek zaksięgowany w budżecie: ${currentMonth}` : undefined}
                 style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: c.warning, color: "#000", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
-                💳 Potwierdź zakup
+                💳 {isEarly ? "Potwierdź wcześniej" : "Potwierdź zakup"}
               </button>
             )}
             {ready && (

@@ -622,6 +622,13 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
               {purchaseModal.doc.mode === "envelope" && (
                 <> · zebrano {fmt(sumPaid(purchaseModal.doc.virtualSavings))} PLN (zostanie odblokowane)</>
               )}
+              {/* Confirmed outside its planned month (moved earlier, or
+                  ticked off late) — the expense lands in the active month. */}
+              {purchaseModal.doc.plannedMonth && purchaseModal.doc.plannedMonth !== activeBudgetMonth && (
+                <div style={{ marginTop: 6, color: c.warning }}>
+                  📅 Plan: {monthLabel(purchaseModal.doc.plannedMonth)} → wydatek zaksięgowany w budżecie: {monthLabel(activeBudgetMonth)}
+                </div>
+              )}
             </div>
             <TransactionForm
               key={purchaseModal.doc.id}
