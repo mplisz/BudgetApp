@@ -115,6 +115,10 @@ export interface PriceSummary {
   lastAt: string;
   /** null until there are enough purchases for "usually" to mean anything. */
   median: number | null;
+  /** What one purchase typically cost as paid — for weighed goods price ×
+   *  weight, not the per-kilo figure. Feeds the list's estimated total.
+   *  null when the weight is unknown; absent from older responses. */
+  perPurchase?: number | null;
 }
 
 export interface CatalogEntry {

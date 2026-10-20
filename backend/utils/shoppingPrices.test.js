@@ -163,6 +163,7 @@ describe("observationFrom", () => {
     const o = observationFrom({ description: "Cebula 0,262 kg", amount: 1.81 }, "2026-09-01");
     assert.equal(o.u, "kg");
     assert.equal(o.a, 6.91);
+    assert.equal(o.w, 0.262);   // what one purchase weighed, for the list total
   });
 
   test("the AI's pack count outranks anything parsed from the text", () => {
@@ -287,6 +288,34 @@ describe("summarize", () => {
     assert.equal(s.unit, "kg");
     assert.equal(s.count, 3);
     assert.equal(s.median, 7.0);
+  });
+
+  test("a piece costs per purchase what it costs", () => {
+    const s = summarize(obs(6.99, 12.99, 12.99, 13.49), TODAY);
+    assert.equal(s.perPurchase, 12.99);
+  });
+
+  test("weighed goods: priced per kilo, but a purchase costs what the bag cost", () => {
+    // Spinach at ~35 zł/kg comes in 200 g bags — the list total must add
+    // ~7 zł, not 35.
+    const spinach = [
+      { d: daysAgo(1),  a: 34.95, u: "kg", w: 0.2 },
+      { d: daysAgo(8),  a: 37.45, u: "kg", w: 0.2 },
+      { d: daysAgo(15), a: 34.95, u: "kg", w: 0.2 },
+    ];
+    const s = summarize(spinach, TODAY);
+    assert.equal(s.median, 34.95);      // the per-kilo figure stays as it was
+    assert.equal(s.perPurchase, 6.99);
+  });
+
+  test("older weighed observations get their weight back from the receipt line", () => {
+    const s = summarize([{ d: daysAgo(1), a: 6.91, u: "kg", t: "Cebula 0,262 kg" }], TODAY);
+    assert.equal(s.perPurchase, 1.81);
+  });
+
+  test("a weighed purchase with no known weight has no per-purchase cost", () => {
+    const s = summarize([{ d: daysAgo(1), a: 6.91, u: "kg" }], TODAY);
+    assert.equal(s.perPurchase, null);
   });
 
   test("nothing recorded yet → nothing shown", () => {

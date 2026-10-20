@@ -161,8 +161,11 @@ function observationFrom(line, date, shop = null, txId = null) {
     ...(txId ? { x: String(txId) }             : {}),
   };
 
+  // `w` keeps the weight itself: zł/kg says whether the price was fair,
+  // but only the weight says what one purchase actually cost — 35 zł/kg
+  // spinach comes in 200 g bags, not by the kilo.
   const kg = parseWeightKg(line.description);
-  if (kg) return { d: date, a: round2(amount / kg), u: "kg", ...where };
+  if (kg) return { d: date, a: round2(amount / kg), u: "kg", w: kg, ...where };
 
   // In order of how much the source knows:
   //   1. the line's own packCount — OCR rule 27, filled for EVERY line
@@ -328,12 +331,32 @@ function addObservation(observations, observation, today = new Date()) {
 }
 
 /**
+ * What one purchase cost, as paid: the price itself for a piece, price ×
+ * weight for something weighed. null when the weight is unknown.
+ *
+ * Weighed observations recorded before `w` was stored still carry the
+ * receipt line, and the weight is in it — that is how they were
+ * recognized as weighed in the first place.
+ */
+function paidPerPurchase(o) {
+  if (o.u !== "kg") return o.a;
+  const kg = o.w ?? parseWeightKg(o.t);
+  return kg ? round2(o.a * kg) : null;
+}
+
+/**
  * What the panel shows for a product: the typical price, the last one,
  * and what they are measured in. Returns null when there is nothing
  * worth showing.
  *
  * Only the DOMINANT unit is summarized. A product bought loose one week
  * and packaged the next would otherwise average kilograms with pieces.
+ *
+ * `perPurchase` is a different question from `median`: not "is this a
+ * fair price" (asked per kg, to compare with the shelf label) but "what
+ * will this cost me", which is what the list's estimated total adds up.
+ * For a piece the two coincide; for weighed goods only this one does
+ * — nobody buys a kilo of spinach.
  */
 function summarize(observations, today = new Date()) {
   const kept = pruneObservations(observations, today);
@@ -342,6 +365,7 @@ function summarize(observations, today = new Date()) {
   const counts = kept.reduce((acc, o) => ({ ...acc, [o.u]: (acc[o.u] || 0) + 1 }), {});
   const unit = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
   const group = kept.filter(o => o.u === unit);
+  const paid = group.map(paidPerPurchase).filter(p => p != null);
 
   return {
     unit,
@@ -351,6 +375,9 @@ function summarize(observations, today = new Date()) {
     // Below the threshold "usually" would be a claim the data cannot
     // support, so the panel shows only the last price.
     median: group.length >= MIN_FOR_MEDIAN ? median(group.map(o => o.a)) : null,
+    // Same rule: typical once there are enough purchases, else the
+    // newest (the group is newest first).
+    perPurchase: paid.length >= MIN_FOR_MEDIAN ? median(paid) : (paid[0] ?? null),
   };
 }
 

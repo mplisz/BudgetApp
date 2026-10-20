@@ -64,17 +64,17 @@ const byAisle    = (a: ShoppingItem, b: ShoppingItem) => sectionOrder(sectionOf(
 // which is the one thing the rest of this app, all of it built around
 // what already happened, cannot do.
 //
-// Only per-item prices are summed. A product bought by weight has a
-// price per kilo, and multiplying that by "2" (two onions) would be
-// arithmetic with no meaning, so those are left out and counted as
-// unpriced. `median ?? last` because one recorded purchase is still a
-// better guess than pretending we know nothing.
+// Sums what a purchase of each item has typically COST, as paid — not
+// the per-kilo price the row shows. Spinach at 35 zł/kg is a 7 zł bag,
+// and "×2" means two bags. The server works this out (`perPurchase`,
+// backend/utils/shoppingPrices#summarize); a weighed product whose
+// weight is unknown stays unpriced rather than guessed.
 function estimate(items: ShoppingItem[], catalogByKey: Map<string, CatalogEntry>) {
   let total = 0, priced = 0;
   for (const item of items) {
-    const price = catalogByKey.get(item.key)?.price;
-    if (!price || price.unit !== "szt") continue;
-    total += (price.median ?? price.last) * item.qty;
+    const each = catalogByKey.get(item.key)?.price?.perPurchase;
+    if (each == null) continue;
+    total += each * item.qty;
     priced++;
   }
   return { total, priced };
