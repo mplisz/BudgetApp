@@ -1,9 +1,9 @@
 // ============================================================
 // File: src/components/panels/budgetComponents/CardDueStrip.tsx
 //
-// "💳 Do spłaty w listopadzie: 2 340 zł do 20.11" — the credit-card statement
-// the budget month repays, one line per card, above the expense section of
-// Baza budżetu.
+// "💳 Spłata karty · Listopad 2026 — 2 340 zł do 20.11, za październik" —
+// what the budget month repays on each card (the whole previous budget
+// month, by the bank's due date), above the expense section of Baza budżetu.
 //
 // Information only: the repayment is NOT an expense of this month. What it
 // pays for was already counted in the month of each purchase, so adding it
@@ -13,7 +13,7 @@
 // ============================================================
 
 import { c, alpha } from "../../../styles/tokens";
-import { fmt, monthLabel, shortDate } from "../../../utils/helpers";
+import { fmt, monthLabel, monthName, shortDate } from "../../../utils/helpers";
 import { PanelLink } from "../../ui/summaryUi";
 import { PANEL_PATHS } from "../../../data/routes";
 import type { MonthStatement } from "../../../utils/cardDebt";
@@ -24,13 +24,14 @@ interface Props {
 }
 
 function StatementLine({ s }: { s: MonthStatement }) {
-  const period = `${shortDate(s.period.from)}–${shortDate(s.period.to)}`;
-  const [amount, color, note] = !s.isClosed
-    ? [`na razie ${fmt(s.toPay)}`, c.textBody,
-       `wyciąg zamyka się ${shortDate(s.period.to)}, termin ${shortDate(s.dueDate)}`]
-    : s.toPay > 0
-      ? [`${fmt(s.toPay)} do ${shortDate(s.dueDate)}`, c.warning, `zakupy ${period}`]
-      : ["✓ spłacone", c.success, `wyciąg ${period}, termin ${shortDate(s.dueDate)}`];
+  const months = s.months.from === s.months.to
+    ? monthName(s.months.to)
+    : `${monthName(s.months.from)}–${monthName(s.months.to)}`;
+  const [amount, color, note] = s.toPay <= 0
+    ? ["✓ spłacone", c.success, `za ${months}, termin ${shortDate(s.dueDate)}`]
+    : s.isClosed
+      ? [`${fmt(s.toPay)} do ${shortDate(s.dueDate)}`, c.warning, `za ${months}`]
+      : [`na razie ${fmt(s.toPay)}`, c.warning, `za ${months} (miesiąc jeszcze trwa), termin ${shortDate(s.dueDate)}`];
 
   return (
     <div style={{

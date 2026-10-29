@@ -34,6 +34,12 @@ export function plural(n, one, few, many) {
   return (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) ? few : many;
 }
 
+// "2026-10" → "październik" — inside a sentence ("za październik").
+export function monthName(ym) {
+  const name = MONTHS[Number(String(ym || "").split("-")[1]) - 1];
+  return name ? name.toLowerCase() : String(ym ?? "");
+}
+
 // "2026-08" → "Sie" — a month where space is short (pills, tooltips).
 export function monthShort(ym) {
   const name = MONTHS[Number(String(ym || "").split("-")[1]) - 1];

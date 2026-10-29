@@ -16,7 +16,7 @@ import { cardsOverview, type CardStatus } from "../../utils/cardDebt";
 import { RepaymentModal }        from "../panels/cardComponents/RepaymentModal";
 
 import { ConfirmModal }          from "../ui/ConfirmModal";
-import { fmt, todayYMD, plural } from "../../utils/helpers";
+import { fmt, todayYMD, plural, monthName } from "../../utils/helpers";
 import type { PlannedDoc }       from "../../hooks/usePlanned";
 import type { RecurringDoc }     from "../../types/appContext";
 
@@ -162,8 +162,9 @@ function PlannedBellItem({ doc, onPurchase, onDismissNotify }: PlannedBellItemPr
 }
 
 // ── CardBellItem ──────────────────────────────────────────────
-// A closed statement that is due soon (or overdue). No dismiss: it goes away
-// when the statement is paid, and paying late costs interest.
+// A repayment due soon (or overdue) — the whole previous budget month, by
+// the bank's due date. No dismiss: it goes away when it is paid, and paying
+// late costs interest.
 
 function CardBellItem({ status }: { status: CardStatus }) {
   const [repaying, setRepaying] = useState(false);
@@ -183,7 +184,7 @@ function CardBellItem({ status }: { status: CardStatus }) {
           Spłata karty — {status.card.name}
         </div>
         <div style={{ fontSize: 11, color: c.textSecondary, marginBottom: 6 }}>
-          wyciąg {fmt(status.statementDue)}
+          za {monthName(status.monthDueFor)} {fmt(status.monthDue)}
           <span style={{ marginLeft: 8, color: overdue ? c.danger : status.daysLeft === 0 ? c.warning : c.textMuted }}>
             {dateLabel}
           </span>
@@ -192,7 +193,7 @@ function CardBellItem({ status }: { status: CardStatus }) {
           onClick={() => setRepaying(true)}
           style={{ width: "100%", padding: "6px 0", borderRadius: 6, border: "none", background: c.success, color: c.white, fontWeight: 700, fontSize: 12, cursor: "pointer" }}
         >
-          💸 Spłacam {fmt(status.statementDue)}
+          💸 Spłacam {fmt(status.monthDue)}
         </button>
       </div>
 
@@ -228,12 +229,12 @@ export function NotificationBell() {
 
   useEffect(() => { loadRecurring(); loadPlanned(); loadCards(); }, []);
 
-  // Statements of live cards that fall inside the reminder window — the same
+  // Repayments of live cards that fall inside the reminder window — the same
   // "days before" setting the recurring reminders use.
   const notifyDays = settings?.notifyDaysBefore ?? 3;
   const cardsDue = useMemo(
     () => cardsOverview(cardData, todayYMD()).cards.filter(status =>
-      !status.card.isArchived && status.statementDue > 0 && status.daysLeft <= notifyDays),
+      !status.card.isArchived && status.monthDue > 0 && status.daysLeft <= notifyDays),
     [cardData, notifyDays],
   );
 

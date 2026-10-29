@@ -11,7 +11,7 @@ import { useTransactions }  from "../../hooks/useTransactions";
 import { useLimits, buildLimitMap } from "../../hooks/useLimits";
 import { monthTotals, monthBalance } from "../../utils/monthTotals";
 import { envelopePaidInMonth } from "../../hooks/usePlanned";
-import { fmt, monthLabel, todayYMD, shortDate } from "../../utils/helpers";
+import { fmt, monthLabel, monthName, todayYMD, shortDate } from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
 import { Card, PanelLink }  from "../ui/summaryUi";
 import { txLink, PANEL_PATHS } from "../../data/routes";
@@ -448,8 +448,8 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                   value={fmt(Math.abs(cards.totalDebt))}
                   color={cards.totalDebt > 0 ? c.warning : c.success}
                   sub={cards.nextDue
-                    ? `wyciąg ${fmt(cards.nextDue.statementDue)} do ${shortDate(cards.nextDue.dueDate)}`
-                    : "wyciąg spłacony"}
+                    ? `za ${monthName(cards.nextDue.monthDueFor)} ${fmt(cards.nextDue.monthDue)} do ${shortDate(cards.nextDue.dueDate)}`
+                    : "spłacone na bieżąco"}
                   link={{ to: PANEL_PATHS.card, title: "Pokaż kartę kredytową" }}
                 />
             )}
@@ -461,7 +461,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                   // What is about to leave the account — a fact about today,
                   // so it has no place on a past month's tile.
                   sub={isCurrentMonth && cards.nextDue
-                    ? `do ${shortDate(cards.nextDue.dueDate)} zejdzie ${fmt(cards.nextDue.statementDue)}`
+                    ? `do ${shortDate(cards.nextDue.dueDate)} zejdzie ${fmt(cards.nextDue.monthDue)}`
                     : "saldo po uwzględnieniu karty"}
                 />
             )}

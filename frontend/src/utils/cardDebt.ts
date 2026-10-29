@@ -11,15 +11,20 @@
 //
 //   debt = opening balance + purchases − shop returns − repayments
 //
-// and it is derived every time, never stored. Two figures come out of it:
+// and it is derived every time, never stored. Three figures come out of it:
 //   - the DEBT: everything owed right now;
 //   - the STATEMENT amount: the part of it the bank already asked for — the
-//     debt minus what was bought after the last statement closed.
+//     debt minus what was bought after the last statement closed;
+//   - the MONTH amount: what the family repays by the due date — whole
+//     budget months, because salaries are monthly. This is the figure the
+//     budget panels, the bell and the repayment suggestion use; the
+//     statement stays on the card panel as what the bank itself asks for.
 //
 // Everything here is a pure function — see cardDebt.test.ts.
 // ============================================================
 
 import { round2 } from "./helpers";
+import { shiftMonth } from "./seasonality";
 import type { CardData, CardTransaction, CreditCard } from "../types/creditCard";
 
 // ── Dates ("YYYY-MM-DD", local, no timezone maths) ────────────
@@ -179,17 +184,26 @@ export function debtChangeInMonth(data: CardData, month: string): number {
 }
 
 /**
- * What is still unpaid of everything bought up to `closeDate` (and of the
- * opening balance). Repayments pay the oldest debt first, as the bank does,
- * so ANY repayment counts here, whenever it was made.
+ * What is still unpaid of the opening balance and the purchases `counts`
+ * picks. Repayments pay the oldest debt first, as the bank does, so ANY
+ * repayment counts here, whenever it was made.
  */
-function unpaidThrough(card: CreditCard, data: CardData, closeDate: string): number {
+function unpaidOf(card: CreditCard, data: CardData, counts: (tx: CardTransaction) => boolean): number {
   const purchases  = sum(data.transactions
-    .filter(tx => tx.cardId === card.id && tx.date <= closeDate)
+    .filter(tx => tx.cardId === card.id && counts(tx))
     .map(cardCharge));
   const repayments = sum(data.repayments.filter(r => r.cardId === card.id).map(r => r.amount));
   return round2(Math.max(0, card.openingBalance + purchases - repayments));
 }
+
+/** Unpaid of what was bought up to `closeDate` — the bank's statement view. */
+const unpaidThrough = (card: CreditCard, data: CardData, closeDate: string) =>
+  unpaidOf(card, data, tx => tx.date <= closeDate);
+
+/** Unpaid of what was booked in budget months before `month` — the family's
+ *  view: salaries come monthly, so a whole budget month is repaid at once. */
+const unpaidBefore = (card: CreditCard, data: CardData, month: string) =>
+  unpaidOf(card, data, tx => tx.budgetMonth < month);
 
 // ── Status ────────────────────────────────────────────────────
 
@@ -204,8 +218,14 @@ export interface CardStatus extends StatementWindow {
    *  does. The bank closes on the posting date, we on the purchase date, so
    *  a purchase from the last days of a period may sit one statement off. */
   statementDue: number;
-  /** Owed, but not asked for yet: the debt beyond the statement. Equals
-   *  sinceClose until a repayment reaches past the statement into it. */
+  /** What the FAMILY repays by dueDate: every budget month before the one
+   *  the due date falls in, whole — salaries come monthly, so October is
+   *  repaid in November in full, even the purchases the bank will only put
+   *  on the next statement. Never below zero. */
+  monthDue:     number;
+  /** The last budget month monthDue repays ("YYYY-MM"). */
+  monthDueFor:  string;
+  /** Owed, but not repaid by dueDate: the debt beyond monthDue. */
   notYetDue:    number;
   /** Days until dueDate; negative once it has passed. */
   daysLeft:     number;
@@ -219,15 +239,18 @@ export function cardStatus(card: CreditCard, data: CardData, today: string): Car
       .filter(tx => tx.cardId === card.id && tx.date > window.closeDate)
       .map(cardCharge),
   ));
-  const statementDue = unpaidThrough(card, data, window.closeDate);
+  const dueMonth = window.dueDate.slice(0, 7);
+  const monthDue = unpaidBefore(card, data, dueMonth);
   return {
     ...window,
     card,
     debt,
     sinceClose,
-    statementDue,
-    notYetDue: round2(Math.max(0, debt) - statementDue),
-    daysLeft:  daysBetween(today, window.dueDate),
+    statementDue: unpaidThrough(card, data, window.closeDate),
+    monthDue,
+    monthDueFor:  shiftMonth(dueMonth, -1),
+    notYetDue:    round2(Math.max(0, debt) - monthDue),
+    daysLeft:     daysBetween(today, window.dueDate),
   };
 }
 
@@ -236,14 +259,14 @@ export interface CardsOverview {
   /** Owed on every card together, archived ones included — closing a card
    *  doesn't clear what was spent on it. */
   totalDebt: number;
-  /** The statement that has to be paid first, if any is outstanding. */
+  /** The repayment that comes first, if any is outstanding. */
   nextDue:   CardStatus | null;
 }
 
 export function cardsOverview(data: CardData, today: string): CardsOverview {
   const cards = data.cards.map(card => cardStatus(card, data, today));
   const due   = cards
-    .filter(status => status.statementDue > 0)
+    .filter(status => status.monthDue > 0)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   return {
     cards,
@@ -256,28 +279,30 @@ export function cardsOverview(data: CardData, today: string): CardsOverview {
 
 export interface MonthStatement {
   card:     CreditCard;
-  /** The purchases the statement covers, by date. */
-  period:   DateRange;
+  /** The budget months repaid, "YYYY-MM" — usually one, the previous month. */
+  months:   { from: string; to: string };
+  /** The bank's due date that falls in the month. */
   dueDate:  string;
-  /** The statement has closed — false while it is still running. */
+  /** The months repaid are over — false while the last of them still runs. */
   isClosed: boolean;
-  /** Still to pay of it. For a statement still running: owed so far. */
+  /** Still to pay of them. While they still run: owed so far. */
   toPay:    number;
 }
 
 /**
- * The statement each card wants paid in budget month `month` — the one whose
- * due date falls in it: with a statement closing on the 25th and 26 days of
- * grace, November repays what was bought from 26.09 to 25.10.
+ * What each card has to be repaid in budget month `month`: the whole of the
+ * previous budget month (see CardStatus.monthDue), by the bank's due date
+ * that falls in `month` — with a statement closing on the 25th and 26 days
+ * of grace, November repays all of October by 20.11.
  *
- * Arrears (an older statement left unpaid) belong to the running month — the
- * bank asks for them now. A month ahead counts only its own statement, so
- * the same money is never shown as due in two months. A month already past
- * has nothing left to plan and returns [].
+ * Arrears (an older month left unpaid) belong to the running month. A month
+ * ahead counts only its own budget months, so the same money is never shown
+ * as due in two months. A month already past has nothing left to plan and
+ * returns [].
  *
- * A card with no statement due that month (a short-grace card whose two due
- * dates straddle it) is left out; an archived card only while it still has
- * something to pay.
+ * A card with no due date in that month (a short-grace card whose two due
+ * dates straddle it) is left out — the next month repays both; an archived
+ * card only while it still has something to pay.
  */
 export function cardsDueInMonth(data: CardData, month: string, today: string): MonthStatement[] {
   const running = today.slice(0, 7);
@@ -297,16 +322,20 @@ export function cardsDueInMonth(data: CardData, month: string, today: string): M
     }
     if (!firstClose || !lastClose) continue;
 
-    const previousClose = lastCloseOnOrBefore(card.statementDay, addDays(firstClose, -1));
-    const toPay = round2(unpaidThrough(card, data, lastClose)
-      - (month > running ? unpaidThrough(card, data, previousClose) : 0));
+    // The month the previous due date fell in: what it repaid ends before it.
+    const previousDueMonth = addDays(
+      lastCloseOnOrBefore(card.statementDay, addDays(firstClose, -1)), card.graceDays,
+    ).slice(0, 7);
+    const toPay = round2(unpaidBefore(card, data, month)
+      - (month > running ? unpaidBefore(card, data, previousDueMonth) : 0));
     if (card.isArchived && toPay <= 0) continue;
 
+    const lastRepaid = shiftMonth(month, -1);
     out.push({
       card,
-      period:   { from: addDays(previousClose, 1), to: lastClose },
+      months:   { from: previousDueMonth, to: lastRepaid },
       dueDate:  addDays(lastClose, card.graceDays),
-      isClosed: lastClose <= today,
+      isClosed: lastRepaid < running,
       toPay:    Math.max(0, toPay),
     });
   }

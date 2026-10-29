@@ -16,7 +16,8 @@ import { CollapsibleSection } from "../ui";
 import { ConfirmModal }    from "../ui/ConfirmModal";
 import { CardForm }        from "./cardComponents/CardForm";
 import { RepaymentModal }  from "./cardComponents/RepaymentModal";
-import { fmt, round2, todayYMD, monthLabel, plural } from "../../utils/helpers";
+import { fmt, round2, todayYMD, monthLabel, monthName, plural } from "../../utils/helpers";
+import { shiftMonth } from "../../utils/seasonality";
 import { ToggleBtn }       from "../ui/ToggleBtn";
 import {
   cardsOverview, cardCharge, cardTurnover, statementPeriod, calendarMonth, addDays, type CardStatus,
@@ -33,7 +34,7 @@ const dmy = (iso: string) => { const [y, m, d] = iso.split("-"); return `${d}.${
 const dm  = (iso: string) => dmy(iso).slice(0, 5);
 
 function dueLabel(status: CardStatus): { text: string; color: string } {
-  if (status.statementDue <= 0) return { text: "wyciąg spłacony", color: c.success };
+  if (status.monthDue <= 0) return { text: `${monthName(status.monthDueFor)} spłacony ✓`, color: c.success };
   if (status.daysLeft < 0)  return { text: `termin minął ${dmy(status.dueDate)}`, color: c.danger };
   if (status.daysLeft === 0) return { text: "termin dziś", color: c.warning };
   return {
@@ -185,7 +186,7 @@ function CardSection({ status, data, today }: { status: CardStatus; data: CardDa
               {overpaid ? "nadpłata " : ""}{fmt(Math.abs(status.debt))}
             </div>
             <div style={{ fontSize: 11, color: due.color }}>
-              {status.statementDue > 0 ? `wyciąg ${fmt(status.statementDue)} · ${due.text}` : due.text}
+              {status.monthDue > 0 ? `za ${monthName(status.monthDueFor)} ${fmt(status.monthDue)} · ${due.text}` : due.text}
             </div>
           </div>
         )}
@@ -211,16 +212,16 @@ function CardSection({ status, data, today }: { status: CardStatus; data: CardDa
           color={overpaid ? c.success : status.debt > 0 ? c.text : c.success}
         />
         <Figure
-          label={`Z wyciągu ${dm(status.closeDate)}`}
-          value={fmt(status.statementDue)}
-          color={status.statementDue > 0 ? c.warning : c.success}
-          sub={due.text} subColor={due.color}
+          label={`Za ${monthName(status.monthDueFor)}`}
+          value={fmt(status.monthDue)}
+          color={status.monthDue > 0 ? c.warning : c.success}
+          sub={`${due.text} · wyciąg banku z ${dm(status.closeDate)}: ${fmt(status.statementDue)}`} subColor={due.color}
         />
         <Figure
-          label={`Bieżący okres (od ${dm(addDays(status.closeDate, 1))})`}
+          label="Później"
           value={fmt(status.notYetDue)}
           color={c.textSecondary}
-          sub="jeszcze niewymagane"
+          sub={`zakupy od ${monthName(shiftMonth(status.monthDueFor, 1))}`}
         />
       </div>
 

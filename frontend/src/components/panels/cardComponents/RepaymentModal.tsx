@@ -21,7 +21,7 @@ import { createPortal } from "react-dom";
 import { useCreditCards } from "../../../hooks/useCreditCards";
 import { useMonthStatus } from "../../../hooks/useMonthStatus";
 import { AppDatePicker, todayLocal, toYMD, fromYMD } from "../../ui/AppDatePicker";
-import { fmt, round2, monthLabel, firstOpenMonth } from "../../../utils/helpers";
+import { fmt, round2, monthLabel, monthName, firstOpenMonth } from "../../../utils/helpers";
 import type { CardStatus } from "../../../utils/cardDebt";
 import type { CardRepayment } from "../../../types/creditCard";
 
@@ -58,7 +58,9 @@ export function RepaymentModal({ status, repayment, onClose }: RepaymentModalPro
   const budgetMonth = repayment?.budgetMonth ?? firstOpenMonth(closedMonths);
   const monthClosed = isClosedMonth(budgetMonth);
 
-  const suggested = status.statementDue > 0 ? status.statementDue : Math.max(0, status.debt);
+  // Whole budget months are repaid (salaries are monthly); the bank's
+  // statement and the full debt are a click away.
+  const suggested = status.monthDue > 0 ? status.monthDue : Math.max(0, status.debt);
 
   const [amountText,   setAmountText]   = useState(String(repayment?.amount ?? (suggested || "")));
   const [interestText, setInterestText] = useState("");
@@ -106,12 +108,17 @@ export function RepaymentModal({ status, repayment, onClose }: RepaymentModalPro
           />
           {!isEdit && (
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-              {status.statementDue > 0 && (
-                <button onClick={() => setAmountText(String(status.statementDue))} style={quick(c.success)}>
+              {status.monthDue > 0 && (
+                <button onClick={() => setAmountText(String(status.monthDue))} style={quick(c.success)}>
+                  Za {monthName(status.monthDueFor)} {fmt(status.monthDue)}
+                </button>
+              )}
+              {status.statementDue > 0 && Math.abs(status.statementDue - status.monthDue) >= 0.005 && (
+                <button onClick={() => setAmountText(String(status.statementDue))} style={quick(c.textSecondary)}>
                   Wyciąg {fmt(status.statementDue)}
                 </button>
               )}
-              {status.debt > status.statementDue && (
+              {status.debt > Math.max(status.monthDue, status.statementDue) && (
                 <button onClick={() => setAmountText(String(status.debt))} style={quick(c.info)}>
                   Całość {fmt(status.debt)}
                 </button>
