@@ -25,6 +25,8 @@
 import { c, alpha } from "../../../styles/tokens";
 import { useMemo } from "react";
 import { formatSize, computeUnitPrice, unitPriceLabel, type SizeUnit } from "../../../utils/productPricing";
+// "12.09" — day and month is all the context a price needs here.
+import { shortDate } from "../../../utils/helpers";
 import type { PriceSummary, PriceObservation, SeenPrice } from "../../../hooks/useShoppingList";
 
 interface PriceChipProps {
@@ -56,12 +58,6 @@ export function hasPriceInfo(price: PriceSummary | null | undefined, seen: SeenP
 
 const money  = (n: number) => n.toFixed(2).replace(".", ",");
 const suffix = (unit: string) => (unit === "kg" ? " zł/kg" : " zł");
-
-/** "12.09" — day and month is all the context a price needs here. */
-function shortDate(iso: string): string {
-  const [, m, d] = (iso || "").split("-");
-  return m && d ? `${d}.${m}` : iso;
-}
 
 /**
  * "280 g · 13,89 zł/kg" — what the price bought, and that price made

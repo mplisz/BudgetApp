@@ -178,6 +178,19 @@ export function debtChangeInMonth(data: CardData, month: string): number {
   return round2(change);
 }
 
+/**
+ * What is still unpaid of everything bought up to `closeDate` (and of the
+ * opening balance). Repayments pay the oldest debt first, as the bank does,
+ * so ANY repayment counts here, whenever it was made.
+ */
+function unpaidThrough(card: CreditCard, data: CardData, closeDate: string): number {
+  const purchases  = sum(data.transactions
+    .filter(tx => tx.cardId === card.id && tx.date <= closeDate)
+    .map(cardCharge));
+  const repayments = sum(data.repayments.filter(r => r.cardId === card.id).map(r => r.amount));
+  return round2(Math.max(0, card.openingBalance + purchases - repayments));
+}
+
 // ── Status ────────────────────────────────────────────────────
 
 export interface CardStatus extends StatementWindow {
@@ -206,7 +219,7 @@ export function cardStatus(card: CreditCard, data: CardData, today: string): Car
       .filter(tx => tx.cardId === card.id && tx.date > window.closeDate)
       .map(cardCharge),
   ));
-  const statementDue = round2(Math.max(0, debt - sinceClose));
+  const statementDue = unpaidThrough(card, data, window.closeDate);
   return {
     ...window,
     card,
@@ -237,4 +250,77 @@ export function cardsOverview(data: CardData, today: string): CardsOverview {
     totalDebt: round2(sum(cards.map(status => status.debt))),
     nextDue:   due[0] ?? null,
   };
+}
+
+// ── What a budget month repays ────────────────────────────────
+
+export interface MonthStatement {
+  card:     CreditCard;
+  /** The purchases the statement covers, by date. */
+  period:   DateRange;
+  dueDate:  string;
+  /** The statement has closed — false while it is still running. */
+  isClosed: boolean;
+  /** Still to pay of it. For a statement still running: owed so far. */
+  toPay:    number;
+}
+
+/**
+ * The statement each card wants paid in budget month `month` — the one whose
+ * due date falls in it: with a statement closing on the 25th and 26 days of
+ * grace, November repays what was bought from 26.09 to 25.10.
+ *
+ * Arrears (an older statement left unpaid) belong to the running month — the
+ * bank asks for them now. A month ahead counts only its own statement, so
+ * the same money is never shown as due in two months. A month already past
+ * has nothing left to plan and returns [].
+ *
+ * A card with no statement due that month (a short-grace card whose two due
+ * dates straddle it) is left out; an archived card only while it still has
+ * something to pay.
+ */
+export function cardsDueInMonth(data: CardData, month: string, today: string): MonthStatement[] {
+  const running = today.slice(0, 7);
+  if (month < running) return [];
+  const monthEnd = `${month}-31`;   // string bound: every real day sorts before it
+
+  const out: MonthStatement[] = [];
+  for (const card of data.cards) {
+    // Walk the closes from far enough back that every due date in `month` is met.
+    let close = lastCloseOnOrBefore(card.statementDay, addDays(`${month}-01`, -(card.graceDays + 31)));
+    let firstClose: string | null = null;
+    let lastClose:  string | null = null;
+    for (; addDays(close, card.graceDays) <= monthEnd; close = nextCloseAfter(card.statementDay, close)) {
+      if (addDays(close, card.graceDays).slice(0, 7) !== month) continue;
+      firstClose ??= close;
+      lastClose = close;
+    }
+    if (!firstClose || !lastClose) continue;
+
+    const previousClose = lastCloseOnOrBefore(card.statementDay, addDays(firstClose, -1));
+    const toPay = round2(unpaidThrough(card, data, lastClose)
+      - (month > running ? unpaidThrough(card, data, previousClose) : 0));
+    if (card.isArchived && toPay <= 0) continue;
+
+    out.push({
+      card,
+      period:   { from: addDays(previousClose, 1), to: lastClose },
+      dueDate:  addDays(lastClose, card.graceDays),
+      isClosed: lastClose <= today,
+      toPay:    Math.max(0, toPay),
+    });
+  }
+  return out;
+}
+
+/**
+ * Where the bank account lands after a month planned at `budgetResult`
+ * (income − what the budget spends). The same shift Podsumowanie's
+ * "≈ Na koncie" makes — debtChangeInMonth — plus what is still to be repaid
+ * in the month, which is not in it until the repayment is recorded.
+ */
+export function accountAfterMonth(
+  budgetResult: number, data: CardData, statements: MonthStatement[], month: string,
+): number {
+  return round2(budgetResult + debtChangeInMonth(data, month) - sum(statements.map(s => s.toPay)));
 }

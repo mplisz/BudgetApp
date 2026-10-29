@@ -28,13 +28,16 @@ import { useRecurring, isActiveInMonth, getActiveCost } from "../../hooks/useRec
 import { usePlanned }     from "../../hooks/usePlanned";
 import { LockBanner }     from "../ui/LockBanner";
 import { BudgetInput }    from "../ui/BudgetInput";
-import { fmt }            from "../../utils/helpers";
+import { fmt, todayYMD }  from "../../utils/helpers";
 import { theme as s }     from "../../styles/theme";
 import type { Transaction } from "../../types/summary";
 import { useTransactions } from "../../hooks/useTransactions";
 import { EnvelopeBreakdown } from "../ui/EnvelopeBreakdown";
 import type { EnvelopeBreakdownItem } from "../ui/EnvelopeBreakdown";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { useCreditCards } from "../../hooks/useCreditCards";
+import { cardsDueInMonth, accountAfterMonth } from "../../utils/cardDebt";
+import { CardDueStrip } from "./budgetComponents/CardDueStrip";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -531,6 +534,40 @@ function TotalsRow({ activeLimit, spent, recurring, planned, showExtra = true, i
   );
 }
 
+// ── ResultBox — Nadwyżka / Niedobór and ≈ Na koncie under Razem budżet ──
+
+function ResultBox({ label, value, title, large }: {
+  label:  string;
+  value:  number;
+  title?: string;
+  /** Mobile: a full-width row instead of a compact box. */
+  large?: boolean;
+}) {
+  const good = value >= 0;
+  return (
+    <div title={title} style={{
+      ...(large
+        ? { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8 }
+        : { textAlign: "right", padding: "8px 12px", borderRadius: 6 }),
+      background: alpha(good ? c.success : c.danger, "11"),
+      border: `1px solid ${alpha(good ? c.success : c.danger, "33")}`,
+    }}>
+      <div style={large
+        ? { fontSize: 12, color: c.textMuted, fontWeight: 700 }
+        : { fontSize: 10, color: c.textMuted, marginBottom: 2 }}>
+        {label}
+      </div>
+      <div style={{ fontWeight: 800, fontSize: large ? 16 : 15, color: good ? c.success : c.danger }}>
+        {good ? "+" : ""}{fmt(value)}
+      </div>
+    </div>
+  );
+}
+
+const ON_ACCOUNT_HINT =
+  "Nadwyżka − spłata karty w tym miesiącu + zakupy kartą z tego miesiąca (zejdą z konta dopiero przy następnej spłacie). " +
+  "Ten sam rachunek co „≈ Na koncie” w Podsumowaniu.";
+
 // ── SectionHeader ─────────────────────────────────────────────
 
 function SectionHeader({ title, activeBudgetMonth, showExtra = true, isMobile }: {
@@ -653,6 +690,15 @@ export default function PanelBaseBudget() {
   const { planned, loadAll: loadPlanned } = usePlanned();
 
   const { loadTransactions } = useTransactions();
+
+  // Credit cards — refreshed on entry, what is due has to be current here.
+  const { data: cardData, reload: reloadCards } = useCreditCards();
+  useEffect(() => { reloadCards(); }, [reloadCards]);
+  const cardStatements = useMemo(
+    () => cardsDueInMonth(cardData, activeBudgetMonth, todayYMD()),
+    [cardData, activeBudgetMonth],
+  );
+  const cardRepayment = cardStatements.reduce((sum, st) => sum + st.toPay, 0);
 
   const [baseEdits,     setBaseEdits]     = useState<Record<string, number | "">>({});
   const [overrideEdits, setOverrideEdits] = useState<Record<string, number | "">>({});
@@ -894,6 +940,8 @@ export default function PanelBaseBudget() {
 
       {!isLoading && (
         <>
+          <CardDueStrip statements={cardStatements} month={activeBudgetMonth} />
+
           {/* ── EXPENSE ── */}
           <SectionHeader title="💸 Wydatki" activeBudgetMonth={activeBudgetMonth} isMobile={isMobile} />
           {expenseCategories.map(renderExpenseRow)}
@@ -924,6 +972,10 @@ export default function PanelBaseBudget() {
             const totalOutflow = expenseTotals.activeLimit + savingTotals.activeLimit + envelopeTotal;
             const surplus      = monthlyIncome - totalOutflow;
             const hasSurplus   = monthlyIncome > 0;
+            // Where the bank account lands once the card is reckoned in —
+            // only for a month that repays a statement and only when it differs.
+            const onAccount    = accountAfterMonth(surplus, cardData, cardStatements, activeBudgetMonth);
+            const showAccount  = cardStatements.length > 0 && Math.abs(onAccount - surplus) >= 0.005;
 
             // Mobile: compact card — estimate vs available vs surplus/deficit.
             if (isMobile) {
@@ -945,20 +997,17 @@ export default function PanelBaseBudget() {
                     <span style={{ fontSize: 12, color: c.textTertiary }}>📥 Kwota dostępna</span>
                     <span style={{ fontWeight: 700, color: c.success, fontSize: 14 }}>{fmt(monthlyIncome)}</span>
                   </div>
-                  {monthlyIncome > 0 && (
-                    <div style={{
-                      display: "flex", justifyContent: "space-between", alignItems: "center",
-                      padding: "10px 12px", borderRadius: 8,
-                      background: surplus >= 0 ? alpha(c.success, "11") : alpha(c.danger, "11"),
-                      border: `1px solid ${surplus >= 0 ? alpha(c.success, "33") : alpha(c.danger, "33")}`,
-                    }}>
-                      <span style={{ fontSize: 12, color: c.textMuted, fontWeight: 700 }}>
-                        {surplus >= 0 ? "Nadwyżka" : "Niedobór"}
-                      </span>
-                      <span style={{ fontWeight: 800, fontSize: 16, color: surplus >= 0 ? c.success : c.danger }}>
-                        {surplus >= 0 ? "+" : ""}{fmt(surplus)}
-                      </span>
-                    </div>
+                  {hasSurplus && (
+                    <ResultBox large label={surplus >= 0 ? "Nadwyżka" : "Niedobór"} value={surplus} />
+                  )}
+                  {hasSurplus && showAccount && (
+                    <>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "12px 0 8px" }}>
+                        <span style={{ fontSize: 12, color: c.textTertiary }}>💳 Spłata karty</span>
+                        <span style={{ fontWeight: 700, color: c.warning, fontSize: 14 }}>−{fmt(cardRepayment)}</span>
+                      </div>
+                      <ResultBox large label="≈ Na koncie" value={onAccount} title={ON_ACCOUNT_HINT} />
+                    </>
                   )}
                 </div>
               );
@@ -1044,30 +1093,20 @@ export default function PanelBaseBudget() {
                         <span style={{ fontWeight: 700, color: c.success }}>
                           {fmt(monthlyIncome)}
                         </span>
-                        {monthlyIncome === 0 && (
-                          <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>
-                            (brak zaksięgowanych wpływów / transferów)
-                          </span>
-                        )}
                       </div>
+                      {showAccount && (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: c.textTertiary }}>
+                          <span>💳 Spłata karty w tym miesiącu:</span>
+                          <span style={{ fontWeight: 700, color: c.warning }}>−{fmt(cardRepayment)}</span>
+                          <span style={{ fontSize: 10, color: c.textMuted }}>(koszty już policzone w poprzednim miesiącu)</span>
+                        </div>
+                      )}
                     </div>
 
-                    {monthlyIncome > 0 && (
-                      <div style={{
-                        textAlign: "right",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        background: surplus >= 0 ? alpha(c.success, "11") : alpha(c.danger, "11"),
-                        border: `1px solid ${surplus >= 0 ? alpha(c.success, "33") : alpha(c.danger, "33")}`,
-                      }}>
-                        <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 2 }}>
-                          {surplus >= 0 ? "Nadwyżka" : "Niedobór"}
-                        </div>
-                        <div style={{ fontWeight: 800, fontSize: 15, color: surplus >= 0 ? c.success : c.danger }}>
-                          {surplus >= 0 ? "+" : ""}{fmt(surplus)}
-                        </div>
-                      </div>
-                    )}
+                    <ResultBox label={surplus >= 0 ? "Nadwyżka" : "Niedobór"} value={surplus} />
+                    {showAccount
+                      ? <ResultBox label="≈ Na koncie" value={onAccount} title={ON_ACCOUNT_HINT} />
+                      : <div />}
                   </div>
                 )}
               </div>

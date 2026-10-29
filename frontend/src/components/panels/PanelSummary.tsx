@@ -10,7 +10,7 @@ import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useLimits, buildLimitMap } from "../../hooks/useLimits";
 import { monthTotals } from "../../utils/monthTotals";
-import { fmt, monthLabel, todayYMD }  from "../../utils/helpers";
+import { fmt, monthLabel, todayYMD, shortDate } from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
 import { Card, PanelLink }  from "../ui/summaryUi";
 import { txLink, PANEL_PATHS } from "../../data/routes";
@@ -69,9 +69,6 @@ function sumByTagIds(
     .reduce((acc, tx) => acc + tx.amount, 0);
 }
 
-
-// "2026-10-31" → "31.10" — a statement's due date on a KPI tile.
-const shortDate = (ymd: string) => `${ymd.slice(8, 10)}.${ymd.slice(5, 7)}`;
 
 // Matches SAVING transactions belonging to a specific categoryId.
 function sumByCategoryId(

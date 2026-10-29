@@ -206,6 +206,12 @@ export function todayYMD() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
  
+// "2026-11-20" → "20.11"; anything unparsable is returned as it came.
+export function shortDate(iso) {
+  const [, m, d] = (iso || "").split("-");
+  return m && d ? `${d}.${m}` : iso;
+}
+
 // Returns true if budgetMonth a is strictly after b ("YYYY-MM" strings)
 export function budgetMonthAfter(a, b) {
   return a > b;

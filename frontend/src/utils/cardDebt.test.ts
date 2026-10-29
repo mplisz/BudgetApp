@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   addDays, daysBetween, statementWindow, statementPeriod, calendarMonth, cardTurnover,
   cardCharge, cardDebt, debtChangeInMonth, cardStatus, cardsOverview,
+  cardsDueInMonth, accountAfterMonth,
 } from "./cardDebt";
 import type { CardData, CardRepayment, CardTransaction, CreditCard } from "../types/creditCard";
 
@@ -279,5 +280,74 @@ describe("cardsOverview", () => {
 
   it("is empty without cards", () => {
     expect(cardsOverview(data([], [], []), TODAY)).toEqual({ cards: [], totalDebt: 0, nextDue: null });
+  });
+});
+
+// ── What a budget month repays ────────────────────────────────
+
+describe("cardsDueInMonth", () => {
+  const TODAY = "2026-10-29";
+  const c25   = card({ statementDay: 25 });   // closes 25th, due 26 days later
+  const buys  = [buy("2026-09-20", 500), buy("2026-10-10", 2000), buy("2026-10-27", 300)];
+  const due   = (transactions: CardTransaction[], repayments: CardRepayment[], month: string, cards = [c25]) =>
+    cardsDueInMonth(data(transactions, repayments, cards), month, TODAY);
+
+  it("a month repays the statement that falls due in it", () => {
+    expect(due(buys, [repay("2026-10-21", 500)], "2026-11")).toEqual([{
+      card: c25, period: { from: "2026-09-26", to: "2026-10-25" },
+      dueDate: "2026-11-20", isClosed: true, toPay: 2000,
+    }]);
+  });
+
+  it("shows a paid statement as nothing left to pay", () => {
+    expect(due(buys, [repay("2026-10-21", 500)], "2026-10")[0]).toMatchObject({ dueDate: "2026-10-21", toPay: 0 });
+  });
+
+  it("a statement still running shows what was bought so far", () => {
+    expect(due(buys, [repay("2026-10-21", 500)], "2026-12")[0])
+      .toMatchObject({ period: { from: "2026-10-26", to: "2026-11-25" }, isClosed: false, toPay: 300 });
+  });
+
+  it("puts arrears in the running month and never counts them twice", () => {
+    expect(due(buys, [], "2026-10")[0].toPay).toBe(500);
+    expect(due(buys, [], "2026-11")[0].toPay).toBe(2000);
+  });
+
+  it("a partial repayment pays the oldest statement first", () => {
+    expect(due(buys, [repay("2026-10-21", 1200)], "2026-10")[0].toPay).toBe(0);
+    expect(due(buys, [repay("2026-10-21", 1200)], "2026-11")[0].toPay).toBe(1300);
+  });
+
+  it("has nothing to plan in a month already past", () => {
+    expect(due(buys, [], "2026-09")).toEqual([]);
+  });
+
+  it("skips a month no due date falls in, and joins two that fall in one", () => {
+    const c30 = card({ statementDay: 30, graceDays: 1 });   // 28.02 → 01.03, 30.03 → 31.03
+    expect(due([], [], "2027-02", [c30])).toEqual([]);
+    expect(due([], [], "2027-03", [c30])[0])
+      .toMatchObject({ period: { from: "2027-01-31", to: "2027-03-30" }, dueDate: "2027-03-31" });
+  });
+
+  it("leaves out an archived card once it is paid off, keeps it while it isn't", () => {
+    const old = card({ statementDay: 25, isArchived: true });
+    expect(due([], [], "2026-11", [old])).toEqual([]);
+    expect(due([buy("2026-10-10", 80)], [], "2026-11", [old])[0].toPay).toBe(80);
+  });
+});
+
+describe("accountAfterMonth", () => {
+  const c25 = card({ statementDay: 25 });
+
+  it("takes the repayment off the budget's result and gives back what goes on the card", () => {
+    const d = data([buy("2026-10-10", 2000), buy("2026-11-03", 400)], [], [c25]);
+    const statements = cardsDueInMonth(d, "2026-11", "2026-11-05");
+    expect(accountAfterMonth(1000, d, statements, "2026-11")).toBe(-600);
+  });
+
+  it("lands on the same figure once the repayment is recorded", () => {
+    const d = data([buy("2026-10-10", 2000), buy("2026-11-03", 400)], [repay("2026-11-20", 2000)], [c25]);
+    const statements = cardsDueInMonth(d, "2026-11", "2026-11-21");
+    expect(accountAfterMonth(1000, d, statements, "2026-11")).toBe(-600);
   });
 });
