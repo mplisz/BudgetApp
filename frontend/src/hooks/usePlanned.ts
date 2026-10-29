@@ -119,6 +119,19 @@ export function sumPaid(virtualSavings: VirtualSaving[] | undefined): number {
     .reduce((s, v) => s + v.amountPLN, 0);
 }
 
+/**
+ * Money set aside into virtual envelopes in `month` — rates the user marked
+ * paid. Purchased envelopes count too: their rates locked money in the month
+ * they were set aside, so a past month's balance stays put after the purchase.
+ * Part of Saldo (see utils/monthTotals monthBalance).
+ */
+export function envelopePaidInMonth(planned: PlannedDoc[], month: string): number {
+  return planned
+    .filter(p => p.mode === "envelope" && !p.isArchived)
+    .reduce((sum, p) => sum + ((p.virtualSavings || [])
+      .find(v => v.month === month && v.paidByUser)?.amountPLN || 0), 0);
+}
+
 export function computeSuggestion(doc: PlannedDoc, currentMonth: string): number | null {
   if (doc.mode !== "envelope") return null;
   const paid      = sumPaid(doc.virtualSavings);

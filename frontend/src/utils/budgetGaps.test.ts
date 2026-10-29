@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { budgetGap, isHardGap } from "./budgetGaps";
+import { budgetGap, isHardGap, projectedCost } from "./budgetGaps";
 
 const gap = (limit: number | null, spent = 0, plannedOpen = 0, recurringOpen = 0, average?: number) =>
   budgetGap({ limit, spent, plannedOpen, recurringOpen, average });
@@ -34,6 +34,13 @@ describe("budgetGap", () => {
 
   it("a hard gap wins over a soft one", () => {
     expect(gap(100, 500, 0, 0, 2600)?.kind).toBe("short");
+  });
+
+  it("projectedCost is the limit until the commitments outgrow it", () => {
+    expect(projectedCost(2500, { spent: 640, plannedOpen: 0, recurringOpen: 0 })).toBe(2500);
+    expect(projectedCost(300, { spent: 120, plannedOpen: 1200, recurringOpen: 0 })).toBe(1320);
+    expect(projectedCost(null, { spent: 0, plannedOpen: 500, recurringOpen: 0 })).toBe(500);
+    expect(projectedCost(null, { spent: 0, plannedOpen: 0, recurringOpen: 0 })).toBe(0);
   });
 
   it("isHardGap tells red from amber", () => {

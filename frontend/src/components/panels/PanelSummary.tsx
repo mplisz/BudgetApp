@@ -9,7 +9,8 @@ import { useAppContext }    from "../../context/AppContext";
 import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useLimits, buildLimitMap } from "../../hooks/useLimits";
-import { monthTotals } from "../../utils/monthTotals";
+import { monthTotals, monthBalance } from "../../utils/monthTotals";
+import { envelopePaidInMonth } from "../../hooks/usePlanned";
 import { fmt, monthLabel, todayYMD, shortDate } from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
 import { Card, PanelLink }  from "../ui/summaryUi";
@@ -171,22 +172,13 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   // The previous months, for the KPI tiles' and the category rows' average /
   // median pills: one load shared by both.
   const averages = useMonthlyAverages(activeBudgetMonth);
-  const virtualEnvelopePaid = useMemo(() => {
-    // Include purchased envelopes: their paid rates locked money in the month
-    // they were set aside, so past-month balance stays stable after purchase
-    // (matches PanelAnalytics). Only paidByUser entries count.
-    return (planned as any[])
-      .filter(p => p.mode === "envelope" && !p.isArchived)
-      .reduce((sum, p) => {
-        const entry = (p.virtualSavings || []).find(
-          (v: any) => v.month === activeBudgetMonth && v.paidByUser,
-        );
-        return sum + (entry?.amountPLN || 0);
-      }, 0);
-  }, [planned, activeBudgetMonth]);
+  const virtualEnvelopePaid = useMemo(
+    () => envelopePaidInMonth(planned, activeBudgetMonth),
+    [planned, activeBudgetMonth],
+  );
 
-  // SALDO = INCOME + TRANSFER(in) - EXPENSE - SAVING - PADI VIRTUAL ENVELOPS
-  const balance        = totalIncome + totalTransfers - totalExpenses - totalSavings- virtualEnvelopePaid;;
+  // SALDO = INCOME + TRANSFER(in) - EXPENSE - SAVING - PAID VIRTUAL ENVELOPES
+  const balance        = monthBalance(totals, virtualEnvelopePaid);
 
   // ── Credit cards ──────────────────────────────────────────
   // Saldo counts a card purchase as spent the month it was made; the bank

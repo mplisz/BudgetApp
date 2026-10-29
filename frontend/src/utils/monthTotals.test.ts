@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { monthTotals, averageOf, monthlyAverages, categoryReferences, type TotalsTx } from "./monthTotals";
+import { monthTotals, monthBalance, averageOf, monthlyAverages, categoryReferences, type TotalsTx } from "./monthTotals";
 
 let seq = 0;
 const tx = (month: string, type: string, amount: number, extra: Partial<TotalsTx> = {}): TotalsTx =>
@@ -32,6 +32,16 @@ describe("monthTotals", () => {
     const t = monthTotals([tx("2026-09", "SAVING", 800, { categoryId: "poduszka", subcategoryId: "konto" })], "2026-09");
     expect(t.categories.get("poduszka")).toBe(800);
     expect(t.subcategories.get("konto")).toBe(800);
+  });
+});
+
+describe("monthBalance", () => {
+  it("is income + transfers − expenses − savings − paid envelopes", () => {
+    const t = monthTotals([
+      tx("2026-09", "INCOME", 9000), tx("2026-09", "TRANSFER", 21000),
+      tx("2026-09", "EXPENSE", 25000), tx("2026-09", "SAVING", 4000),
+    ], "2026-09");
+    expect(monthBalance(t, 800)).toBe(200);
   });
 });
 

@@ -42,8 +42,22 @@ export type BudgetGap =
   | { kind: "noBase";       committed: number; shortBy: number }
   | { kind: "belowAverage"; average:   number; shortBy: number };
 
+type Commitments = Pick<BudgetGapInput, "spent" | "plannedOpen" | "recurringOpen">;
+
+/** What the month has already committed in a category. */
+export const committedCost = ({ spent, plannedOpen, recurringOpen }: Commitments): number =>
+  round2(spent + plannedOpen + recurringOpen);
+
+/**
+ * What a category is expected to cost this month: its limit, or more once
+ * the commitments outgrow it — money already spent doesn't un-spend because
+ * the limit was lower. Feeds Estymata under Razem budżet.
+ */
+export const projectedCost = (limit: number | null, commitments: Commitments): number =>
+  Math.max(limit ?? 0, committedCost(commitments));
+
 export function budgetGap({ limit, spent, plannedOpen, recurringOpen, average }: BudgetGapInput): BudgetGap | null {
-  const committed = round2(spent + plannedOpen + recurringOpen);
+  const committed = committedCost({ spent, plannedOpen, recurringOpen });
 
   if (limit === null) {
     return committed > 0.005 ? { kind: "noBase", committed, shortBy: committed } : null;

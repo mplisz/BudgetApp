@@ -71,6 +71,17 @@ export function monthTotals(txs: TotalsTx[], month: string): MonthTotals {
   return { types, categories, subcategories };
 }
 
+/**
+ * Saldo — what the month actually came to: everything that came in (income
+ * and transfers) minus what went out (expenses, savings) and minus the money
+ * locked in virtual envelopes, which never becomes a transaction. The one
+ * definition Podsumowanie and Baza budżetu both show.
+ */
+export function monthBalance(totals: MonthTotals, envelopePaid: number): number {
+  const t = totals.types;
+  return t.INCOME + t.TRANSFER - t.EXPENSE - t.SAVING - envelopePaid;
+}
+
 // ── Averages ──────────────────────────────────────────────────
 
 export interface AverageStat {

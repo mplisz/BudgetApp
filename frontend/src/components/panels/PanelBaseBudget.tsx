@@ -25,7 +25,7 @@ import { usePanelLock }   from "../../hooks/usePanelLock";
 import { useLimits, getActiveLimit } from "../../hooks/useLimits";
 import type { BatchLimitChange, LimitDoc, LimitEntry, ActiveLimit } from "../../hooks/useLimits";
 import { useRecurring, isActiveInMonth, isConfirmedInMonth, getActiveCost } from "../../hooks/useRecurring";
-import { usePlanned }     from "../../hooks/usePlanned";
+import { usePlanned, envelopePaidInMonth, type PlannedDoc } from "../../hooks/usePlanned";
 import { LockBanner }     from "../ui/LockBanner";
 import { BudgetInput }    from "../ui/BudgetInput";
 import { fmt, todayYMD }  from "../../utils/helpers";
@@ -39,8 +39,8 @@ import { useCreditCards } from "../../hooks/useCreditCards";
 import { cardsDueInMonth, accountAfterMonth } from "../../utils/cardDebt";
 import { CardDueStrip } from "./budgetComponents/CardDueStrip";
 import { useCategoryReferences } from "../../hooks/useMonthlyAverages";
-import type { AverageStat } from "../../utils/monthTotals";
-import { budgetGap, type BudgetGap } from "../../utils/budgetGaps";
+import { monthTotals, monthBalance, type AverageStat } from "../../utils/monthTotals";
+import { budgetGap, projectedCost, type BudgetGap } from "../../utils/budgetGaps";
 import { ReferenceLine, GapBadge, GapBanner, budgetRowId, gapRowStyle } from "./budgetComponents/BudgetHints";
 
 // ── Types ─────────────────────────────────────────────────────
@@ -590,6 +590,13 @@ function ResultBox({ label, value, title, large }: {
   );
 }
 
+const FORECAST_HINT =
+  "Kwota dostępna − Estymata. Estymata liczy każdą kategorię wg bazy, a tam, gdzie już wydano lub zaplanowano więcej — " +
+  "wg tego, co wydane i zaplanowane.";
+
+const ACTUAL_HINT =
+  "Kwota dostępna − faktycznie wydane i odłożone − opłacone koperty. To samo co Saldo w Podsumowaniu.";
+
 const ON_ACCOUNT_HINT =
   "Nadwyżka − spłata karty w tym miesiącu + zakupy kartą z tego miesiąca (zejdą z konta dopiero przy następnej spłacie). " +
   "Ten sam rachunek co „≈ Na koncie” w Podsumowaniu.";
@@ -782,17 +789,15 @@ export default function PanelBaseBudget() {
     [envelopeBreakdown],
   );
 
-  // ── Monthly available funds (income + transfers) ─────────
+  // ── The month as Podsumowanie counts it ──────────────────
+  // Available funds (income + transfers) and the actual result (Saldo) come
+  // from utils/monthTotals, so they are the same figures Podsumowanie shows.
 
-  const monthlyIncome = useMemo(() =>
-    transactions
-      .filter(t =>
-        t.budgetMonth === activeBudgetMonth &&
-        (t.type === "INCOME" || t.type === "TRANSFER") &&
-        !t.isArchived
-      )
-      .reduce((sum, t) => sum + t.amount, 0),
-    [transactions, activeBudgetMonth],
+  const cashTotals    = useMemo(() => monthTotals(transactions, activeBudgetMonth), [transactions, activeBudgetMonth]);
+  const monthlyIncome = cashTotals.types.INCOME + cashTotals.types.TRANSFER;
+  const actualResult  = useMemo(
+    () => monthBalance(cashTotals, envelopePaidInMonth(planned as PlannedDoc[], activeBudgetMonth)),
+    [cashTotals, planned, activeBudgetMonth],
   );
 
   // ── Init edit state (EXPENSE + SAVING combined) ───────────
@@ -876,35 +881,53 @@ export default function PanelBaseBudget() {
     return { expense, saving };
   }, [transactions, activeBudgetMonth]);
 
+  // What an expense category has committed this month: spent so far, planned
+  // and not bought yet, recurring and not confirmed yet. Read by both the
+  // too-low warnings and Estymata.
+  const commitmentsOf = (catId: string) => ({
+    spent:         sumSpentForCategory(transactions, catId, activeBudgetMonth),
+    plannedOpen:   plannedItemsForCategory(planned, catId, activeBudgetMonth).reduce((s, p) => s + p.amount, 0),
+    recurringOpen: sumRecurringForCategory(recurring, catId, activeBudgetMonth, true),
+  });
+
+  // `projected` — what the section is expected to cost: per category its
+  // limit, or what was already committed once that is more, plus spend with
+  // no row. A limit can't make money already spent smaller.
   const expenseTotals = useMemo(() => {
-    let activeLimit = 0, listedSpent = 0, recurringSum = 0, plannedSum = 0;
+    let activeLimit = 0, listedSpent = 0, recurringSum = 0, plannedSum = 0, projected = 0;
     for (const cat of expenseCategories) {
       const doc    = limits.find((l: LimitDoc) => l.categoryId === cat.id) ?? null;
       const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
+      const commitments = commitmentsOf(cat.id);
       if (active) activeLimit += active.amount;
-      listedSpent  += sumSpentForCategory(transactions, cat.id, activeBudgetMonth);
+      listedSpent  += commitments.spent;
       recurringSum += sumRecurringForCategory(recurring, cat.id, activeBudgetMonth);
-      plannedSum   += plannedItemsForCategory(planned, cat.id, activeBudgetMonth)
-        .reduce((s, p) => s + p.amount, 0);
+      plannedSum   += commitments.plannedOpen;
+      projected    += projectedCost(active?.amount ?? null, commitments);
     }
+    const unlisted = spentByType.expense - listedSpent;
     return {
       activeLimit, spent: spentByType.expense,
       recurring: recurringSum, planned: plannedSum,
-      unlisted: spentByType.expense - listedSpent,
+      unlisted, projected: projected + Math.max(0, unlisted),
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expenseCategories, limits, transactions, recurring, planned, activeBudgetMonth, spentByType]);
 
   const savingTotals = useMemo(() => {
-    let activeLimit = 0, listedSpent = 0;
+    let activeLimit = 0, listedSpent = 0, projected = 0;
     for (const cat of savingCategories) {
       const doc    = limits.find((l: LimitDoc) => l.categoryId === cat.id) ?? null;
       const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
+      const spent  = sumSpentForCategory(transactions, cat.id, activeBudgetMonth, "SAVING");
       if (active) activeLimit += active.amount;
-      listedSpent += sumSpentForCategory(transactions, cat.id, activeBudgetMonth, "SAVING");
+      listedSpent += spent;
+      projected   += projectedCost(active?.amount ?? null, { spent, plannedOpen: 0, recurringOpen: 0 });
     }
+    const unlisted = spentByType.saving - listedSpent;
     return {
       activeLimit, spent: spentByType.saving, recurring: 0, planned: 0,
-      unlisted: spentByType.saving - listedSpent,
+      unlisted, projected: projected + Math.max(0, unlisted),
     };
   }, [savingCategories, limits, transactions, activeBudgetMonth, spentByType]);
 
@@ -925,15 +948,14 @@ export default function PanelBaseBudget() {
       if (cat._readOnly) continue;
       const ovr = overrideEdits[cat.id], base = baseEdits[cat.id];
       const gap = budgetGap({
-        limit:         typeof ovr === "number" ? ovr : typeof base === "number" ? base : null,
-        spent:         sumSpentForCategory(transactions, cat.id, activeBudgetMonth),
-        plannedOpen:   plannedItemsForCategory(planned, cat.id, activeBudgetMonth).reduce((s, p) => s + p.amount, 0),
-        recurringOpen: sumRecurringForCategory(recurring, cat.id, activeBudgetMonth, true),
-        average:       references?.yearly.get(cat.id)?.mean,
+        limit:   typeof ovr === "number" ? ovr : typeof base === "number" ? base : null,
+        ...commitmentsOf(cat.id),
+        average: references?.yearly.get(cat.id)?.mean,
       });
       if (gap) out.set(cat.id, gap);
     }
     return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expenseCategories, overrideEdits, baseEdits, transactions, planned, recurring, references, activeBudgetMonth, isHistoricalLock]);
 
   // ── Row renderers ─────────────────────────────────────────
@@ -1027,45 +1049,63 @@ export default function PanelBaseBudget() {
 
           {/* ── GRAND TOTAL ── */}
           {(expenseTotals.activeLimit + savingTotals.activeLimit) > 0 && (() => {
-            const totalOutflow = expenseTotals.activeLimit + savingTotals.activeLimit + envelopeTotal;
+            const baseOutflow  = expenseTotals.activeLimit + savingTotals.activeLimit + envelopeTotal;
+            const totalOutflow = expenseTotals.projected + savingTotals.projected + envelopeTotal;
+            const overBase     = totalOutflow - baseOutflow;
             const surplus      = monthlyIncome - totalOutflow;
             const hasSurplus   = monthlyIncome > 0;
+            // Once anything is spent, what the month actually came to so far.
+            const showActual   = expenseTotals.spent + savingTotals.spent > 0;
             // Where the bank account lands once the card is reckoned in —
             // only for a month that repays a statement and only when it differs.
             const onAccount    = accountAfterMonth(surplus, cardData, cardStatements, activeBudgetMonth);
             const showAccount  = cardStatements.length > 0 && Math.abs(onAccount - surplus) >= 0.005;
 
-            // Mobile: compact card — estimate vs available vs surplus/deficit.
+            const results = [
+              { label: `${surplus >= 0 ? "Nadwyżka" : "Niedobór"} · prognoza`, value: surplus, title: FORECAST_HINT },
+              ...(showActual  ? [{ label: "Wynik faktyczny", value: actualResult, title: ACTUAL_HINT }] : []),
+              ...(showAccount ? [{ label: "≈ Na koncie", value: onAccount, title: ON_ACCOUNT_HINT }] : []),
+            ];
+            const outflowNotes = (
+              <>
+                {overBase > 0.005 && (
+                  <span style={{ fontSize: 10, color: c.danger }}>w tym {fmt(overBase)} ponad bazę</span>
+                )}
+                {envelopeTotal > 0 && (
+                  <span style={{ fontSize: 10, color: c.voucher }}>w tym 🪙 {fmt(envelopeTotal)} koperty</span>
+                )}
+              </>
+            );
+
+            // Mobile: compact card — estimate vs available, then the results stacked.
             if (isMobile) {
+              const line: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "baseline" };
               return (
                 <div style={{
                   marginTop: 8, border: `1px solid ${alpha(c.success, "44")}`, borderRadius: 12,
                   background: c.surface, padding: "14px 16px",
                 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: envelopeTotal > 0 ? 2 : 10 }}>
+                  <div style={line}>
                     <span style={{ fontSize: 12, color: c.textTertiary }}>📤 Estymata wydatków</span>
                     <span style={{ fontWeight: 700, color: c.text, fontSize: 14 }}>{fmt(totalOutflow)}</span>
                   </div>
-                  {envelopeTotal > 0 && (
-                    <div style={{ fontSize: 10, color: c.voucher, textAlign: "right", marginBottom: 10 }}>
-                      w tym 🪙 {fmt(envelopeTotal)} koperty
-                    </div>
-                  )}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, marginBottom: 10 }}>
+                    {outflowNotes}
+                  </div>
+                  <div style={{ ...line, marginBottom: showAccount ? 8 : 12 }}>
                     <span style={{ fontSize: 12, color: c.textTertiary }}>📥 Kwota dostępna</span>
                     <span style={{ fontWeight: 700, color: c.success, fontSize: 14 }}>{fmt(monthlyIncome)}</span>
                   </div>
-                  {hasSurplus && (
-                    <ResultBox large label={surplus >= 0 ? "Nadwyżka" : "Niedobór"} value={surplus} />
-                  )}
                   {hasSurplus && showAccount && (
-                    <>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "12px 0 8px" }}>
-                        <span style={{ fontSize: 12, color: c.textTertiary }}>💳 Spłata karty</span>
-                        <span style={{ fontWeight: 700, color: c.warning, fontSize: 14 }}>−{fmt(cardRepayment)}</span>
-                      </div>
-                      <ResultBox large label="≈ Na koncie" value={onAccount} title={ON_ACCOUNT_HINT} />
-                    </>
+                    <div style={{ ...line, marginBottom: 12 }}>
+                      <span style={{ fontSize: 12, color: c.textTertiary }}>💳 Spłata karty</span>
+                      <span style={{ fontWeight: 700, color: c.warning, fontSize: 14 }}>−{fmt(cardRepayment)}</span>
+                    </div>
+                  )}
+                  {hasSurplus && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {results.map(r => <ResultBox key={r.label} large {...r} />)}
+                    </div>
                   )}
                 </div>
               );
@@ -1124,27 +1164,23 @@ export default function PanelBaseBudget() {
                   </div>
                 </div>
 
-                {/* Row 2 — estimate vs available funds */}
+                {/* Row 2 — estimate vs available funds, then the results */}
                 {hasSurplus && (
                   <div style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr auto auto",
+                    gridTemplateColumns: "1fr auto",
                     gap: 16,
                     alignItems: "center",
                     padding: "10px 12px",
                     background: c.surface,
                   }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: c.textTertiary }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12, color: c.textTertiary }}>
                         <span>📤 Estymata wydatków:</span>
                         <span style={{ fontWeight: 700, color: c.text }}>
                           {fmt(totalOutflow)}
                         </span>
-                        {envelopeTotal > 0 && (
-                          <span style={{ fontSize: 10, color: c.voucher }}>
-                            (w tym 🪙 {fmt(envelopeTotal)} koperty)
-                          </span>
-                        )}
+                        {outflowNotes}
                       </div>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: c.textTertiary }}>
                         <span>📥 Kwota dostępna w miesiącu:</span>
@@ -1161,10 +1197,9 @@ export default function PanelBaseBudget() {
                       )}
                     </div>
 
-                    <ResultBox label={surplus >= 0 ? "Nadwyżka" : "Niedobór"} value={surplus} />
-                    {showAccount
-                      ? <ResultBox label="≈ Na koncie" value={onAccount} title={ON_ACCOUNT_HINT} />
-                      : <div />}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {results.map(r => <ResultBox key={r.label} {...r} />)}
+                    </div>
                   </div>
                 )}
               </div>
