@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { monthTotals, averageOf, monthlyAverages, type TotalsTx } from "./monthTotals";
+import { monthTotals, averageOf, monthlyAverages, categoryReferences, type TotalsTx } from "./monthTotals";
 
 let seq = 0;
 const tx = (month: string, type: string, amount: number, extra: Partial<TotalsTx> = {}): TotalsTx =>
@@ -26,6 +26,37 @@ describe("monthTotals", () => {
     expect(t.types.EXPENSE).toBe(200);
     expect(t.categories.get("cat")).toBe(150);
     expect(t.subcategories.get("sub")).toBe(150);
+  });
+
+  it("gives savings categories their cost too", () => {
+    const t = monthTotals([tx("2026-09", "SAVING", 800, { categoryId: "poduszka", subcategoryId: "konto" })], "2026-09");
+    expect(t.categories.get("poduszka")).toBe(800);
+    expect(t.subcategories.get("konto")).toBe(800);
+  });
+});
+
+describe("categoryReferences", () => {
+  // Nov 2024 .. Oct 2026, a family that started using the app in Jan 2025.
+  const months: string[] = [];
+  for (let y = 2024, m = 11; months.length < 24; m === 12 ? (y++, m = 1) : m++) months.push(`${y}-${String(m).padStart(2, "0")}`);
+  const history = months
+    .filter(m => m >= "2025-01")
+    .map(m => tx(m, "EXPENSE", m.endsWith("-11") ? 900 : 300, { categoryId: "food" }));
+
+  it("averages the last 12 months", () => {
+    const ref = categoryReferences(history, months, "2026-11");
+    // Nov 2025 → Oct 2026: one November at 900, eleven months at 300.
+    expect(ref.yearly.get("food")).toMatchObject({ mean: 350, months: 12 });
+  });
+
+  it("averages the same month of earlier years, leaving out a year with no data", () => {
+    const ref = categoryReferences(history, months, "2026-11");
+    expect(ref.sameMonth.get("food")).toMatchObject({ mean: 900, months: 1 });
+    expect(ref.sameMonth.get("food")?.series).toEqual([{ month: "2025-11", value: 900 }]);
+  });
+
+  it("has nothing for a category never used", () => {
+    expect(categoryReferences(history, months, "2026-11").yearly.get("kino")).toBeUndefined();
   });
 });
 

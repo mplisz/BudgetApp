@@ -34,9 +34,10 @@ export interface TotalsTx {
 
 export interface MonthTotals {
   types:         Record<TotalsType, number>;
-  /** EXPENSE cost per categoryId (net of all cash returns). */
+  /** EXPENSE and SAVING cost per categoryId (net of all cash returns). A
+   *  category has one type, so the two never share a key. */
   categories:    Map<string, number>;
-  /** EXPENSE cost per subcategoryId (net of all cash returns). */
+  /** EXPENSE and SAVING cost per subcategoryId (net of all cash returns). */
   subcategories: Map<string, number>;
 }
 
@@ -58,10 +59,8 @@ export function monthTotals(txs: TotalsTx[], month: string): MonthTotals {
         types[tx.type] += tx.amount;
         break;
       case "SAVING":
-        types.SAVING += calculateEffectiveAmount(tx, month);
-        break;
       case "EXPENSE": {
-        types.EXPENSE += calculateEffectiveAmount(tx, month);
+        types[tx.type] += calculateEffectiveAmount(tx, month);
         const cost = calculateNetAmount(tx);
         add(categories, tx.categoryId, cost);
         add(subcategories, tx.subcategoryId, cost);
@@ -128,5 +127,33 @@ export function monthlyAverages(txs: TotalsTx[], months: string[]): MonthlyAvera
     types,
     categories:    perKey(t => t.categories),
     subcategories: perKey(t => t.subcategories),
+  };
+}
+
+// ── Reference figures for planning a category ─────────────────
+
+/** How much history a reference average reads: the 12 months behind the
+ *  yearly average, and the same month a year and two years back. */
+export const REFERENCE_MONTHS = 24;
+
+export interface CategoryReferences {
+  /** Per categoryId: the last 12 months. */
+  yearly:    Map<string, AverageStat>;
+  /** Per categoryId: the same calendar month in earlier years (series = one per year). */
+  sameMonth: Map<string, AverageStat>;
+}
+
+/**
+ * What a category usually costs, as a point of reference when its budget is
+ * set for `month`: the average of the last 12 of `months` (the months before
+ * `month`, oldest first), and of the same calendar month in the years before.
+ * Both go through monthlyAverages, so a month before the family used the app
+ * is left out rather than counted as zero.
+ */
+export function categoryReferences(txs: TotalsTx[], months: string[], month: string): CategoryReferences {
+  const calendarMonth = month.slice(5, 7);
+  return {
+    yearly:    monthlyAverages(txs, months.slice(-12)).categories,
+    sameMonth: monthlyAverages(txs, months.filter(m => m.slice(5, 7) === calendarMonth)).categories,
   };
 }

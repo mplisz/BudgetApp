@@ -24,7 +24,7 @@ import { useMonthStatus } from "../../hooks/useMonthStatus";
 import { usePanelLock }   from "../../hooks/usePanelLock";
 import { useLimits, getActiveLimit } from "../../hooks/useLimits";
 import type { BatchLimitChange, LimitDoc, LimitEntry, ActiveLimit } from "../../hooks/useLimits";
-import { useRecurring, isActiveInMonth, getActiveCost } from "../../hooks/useRecurring";
+import { useRecurring, isActiveInMonth, isConfirmedInMonth, getActiveCost } from "../../hooks/useRecurring";
 import { usePlanned }     from "../../hooks/usePlanned";
 import { LockBanner }     from "../ui/LockBanner";
 import { BudgetInput }    from "../ui/BudgetInput";
@@ -38,6 +38,10 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 import { useCreditCards } from "../../hooks/useCreditCards";
 import { cardsDueInMonth, accountAfterMonth } from "../../utils/cardDebt";
 import { CardDueStrip } from "./budgetComponents/CardDueStrip";
+import { useCategoryReferences } from "../../hooks/useMonthlyAverages";
+import type { AverageStat } from "../../utils/monthTotals";
+import { budgetGap, type BudgetGap } from "../../utils/budgetGaps";
+import { ReferenceLine, GapBadge, GapBanner, budgetRowId, gapRowStyle } from "./budgetComponents/BudgetHints";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -70,13 +74,17 @@ const SEPARATOR: React.CSSProperties = {
 
 // ── Pure helpers ──────────────────────────────────────────────
 
+// `openOnly`: leave out the ones already confirmed this month — their
+// expense is in "Wydano" by then.
 function sumRecurringForCategory(
   recurring: unknown[],
   categoryId: string,
   month: string,
+  openOnly = false,
 ): number {
   return (recurring as any[])
-    .filter(r => r.categoryId === categoryId && isActiveInMonth(r, month))
+    .filter(r => r.categoryId === categoryId && isActiveInMonth(r, month)
+      && !(openOnly && isConfirmedInMonth(r, month)))
     .reduce((sum: number, r: any) => {
       const cost = getActiveCost(r, month);
       return sum + (cost?.amountPLN ?? cost?.amount ?? 0);
@@ -198,14 +206,24 @@ interface LimitRowProps {
   plannedItems: PlannedItem[];
   showExtra?: boolean | "spent-only";
   isMobile: boolean;
+  /** What the category usually costs — the line under Baza. */
+  reference?: { yearly?: AverageStat; sameMonth?: AverageStat };
+  /** Limit set too low for the month (EXPENSE only). */
+  gap?: BudgetGap | null;
 }
 
 function LimitRow({
   cat, activeBudgetMonth, getLimitDoc,
   baseEdits, overrideEdits, setBase, setOverride,
   isReadOnly, spentAmount, recurringAmount, plannedItems,
-  showExtra = true, isMobile,
+  showExtra = true, isMobile, reference, gap,
 }: LimitRowProps) {
+  const referenceLine = (
+    <ReferenceLine yearly={reference?.yearly} sameMonth={reference?.sameMonth} month={activeBudgetMonth} gap={gap} />
+  );
+  const gapBadge = (
+    <GapBadge gap={gap} month={activeBudgetMonth} onFill={isReadOnly ? undefined : (v) => setOverride(cat.id, v)} />
+  );
   const doc    = getLimitDoc(cat.id);
   const active = getActiveLimit(doc, activeBudgetMonth) as ActiveLimit | null;
 
@@ -233,17 +251,21 @@ function LimitRow({
   if (isMobile) {
     const plannedTotal = plannedItems.reduce((sum, p) => sum + p.amount, 0);
     return (
-      <div style={{
+      <div id={budgetRowId(cat.id)} style={{
         background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12,
         padding: "12px 14px", marginBottom: 8, opacity: cat._readOnly ? 0.5 : 1,
+        ...gapRowStyle(gap),
       }}>
         {/* Category */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 16 }}>{cat.icon}</span>
-          <span style={{ fontWeight: 700, color: c.text, fontSize: 14 }}>{cat.name}</span>
-          {cat._readOnly && (
-            <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 400 }}>(zarchiwizowana)</span>
-          )}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 16 }}>{cat.icon}</span>
+            <span style={{ fontWeight: 700, color: c.text, fontSize: 14 }}>{cat.name}</span>
+            {cat._readOnly && (
+              <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 400 }}>(zarchiwizowana)</span>
+            )}
+          </div>
+          {gapBadge}
         </div>
 
         {/* Editable: Baza + Nadpisanie */}
@@ -264,6 +286,7 @@ function LimitRow({
                 placeholder={activeBase ? String(activeBase.amount) : "brak"}
               />
             )}
+            {referenceLine}
           </div>
           <div>
             <label style={{ display: "block", fontSize: 11, color: hasOverride ? c.warning : c.textSecondary, textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700, marginBottom: 5 }}>
@@ -318,7 +341,7 @@ function LimitRow({
   }
 
   return (
-    <div style={{
+    <div id={budgetRowId(cat.id)} style={{
       display: "grid",
       gridTemplateColumns: GRID,
       gap: 8,
@@ -326,9 +349,10 @@ function LimitRow({
       padding: "10px 0",
       borderBottom: `1px solid ${c.border}`,
       opacity: cat._readOnly ? 0.5 : 1,
+      ...gapRowStyle(gap),
     }}>
-      {/* Category name */}
-      <div style={{ paddingTop: 2 }}>
+      {/* Category name — indented past the warning bar when there is one */}
+      <div style={{ paddingTop: 2, paddingLeft: gap ? 10 : 0 }}>
         <div style={{ fontWeight: 700, color: c.text, fontSize: 13 }}>
           {cat.icon} {cat.name}
           {cat._readOnly && (
@@ -342,6 +366,7 @@ function LimitRow({
             📝 {baseHistory.length} wersji bazy
           </div>
         )}
+        {gapBadge}
       </div>
 
       {/* Base limit input — always shows underlying base even when override is active */}
@@ -363,6 +388,7 @@ function LimitRow({
             od {activeBase.date}
           </div>
         )}
+        {referenceLine}
       </div>
 
       {/* Override input — single-month override */}
@@ -882,6 +908,34 @@ export default function PanelBaseBudget() {
     };
   }, [savingCategories, limits, transactions, activeBudgetMonth, spentByType]);
 
+  // ── Reference averages and too-low limits ─────────────────
+
+  // What each category usually costs (12 months + this month in earlier years).
+  const references = useCategoryReferences(activeBudgetMonth);
+  const referenceOf = (catId: string) => references
+    ? { yearly: references.yearly.get(catId), sameMonth: references.sameMonth.get(catId) }
+    : undefined;
+
+  // Judged against the limit as it stands in the form, so a fix shows the
+  // moment it is typed — before it is saved.
+  const gaps = useMemo(() => {
+    const out = new Map<string, BudgetGap>();
+    if (isHistoricalLock) return out;   // a closed month has nothing left to fix
+    for (const cat of expenseCategories) {
+      if (cat._readOnly) continue;
+      const ovr = overrideEdits[cat.id], base = baseEdits[cat.id];
+      const gap = budgetGap({
+        limit:         typeof ovr === "number" ? ovr : typeof base === "number" ? base : null,
+        spent:         sumSpentForCategory(transactions, cat.id, activeBudgetMonth),
+        plannedOpen:   plannedItemsForCategory(planned, cat.id, activeBudgetMonth).reduce((s, p) => s + p.amount, 0),
+        recurringOpen: sumRecurringForCategory(recurring, cat.id, activeBudgetMonth, true),
+        average:       references?.yearly.get(cat.id)?.mean,
+      });
+      if (gap) out.set(cat.id, gap);
+    }
+    return out;
+  }, [expenseCategories, overrideEdits, baseEdits, transactions, planned, recurring, references, activeBudgetMonth, isHistoricalLock]);
+
   // ── Row renderers ─────────────────────────────────────────
 
   const renderExpenseRow = (cat: AppCategory) => (
@@ -899,6 +953,8 @@ export default function PanelBaseBudget() {
       recurringAmount={sumRecurringForCategory(recurring, cat.id, activeBudgetMonth)}
       plannedItems={plannedItemsForCategory(planned, cat.id, activeBudgetMonth)}
       isMobile={isMobile}
+      reference={referenceOf(cat.id)}
+      gap={gaps.get(cat.id)}
     />
   );
 
@@ -918,6 +974,7 @@ export default function PanelBaseBudget() {
       plannedItems={[]}
       showExtra="spent-only"
       isMobile={isMobile}
+      reference={referenceOf(cat.id)}
     />
   );
 
@@ -941,6 +998,7 @@ export default function PanelBaseBudget() {
       {!isLoading && (
         <>
           <CardDueStrip statements={cardStatements} month={activeBudgetMonth} />
+          <GapBanner gaps={gaps} order={expenseCategories.map(cat => cat.id)} />
 
           {/* ── EXPENSE ── */}
           <SectionHeader title="💸 Wydatki" activeBudgetMonth={activeBudgetMonth} isMobile={isMobile} />
@@ -1145,6 +1203,8 @@ export default function PanelBaseBudget() {
             <div style={{ color: c.textMuted, fontWeight: 700, marginBottom: 2 }}>Plan</div>
             <div>🟢 <strong style={{ color: c.textMuted }}>Baza</strong> — limit obowiązujący od podanego miesiąca wzwyż.</div>
             <div>🟡 <strong style={{ color: c.textMuted }}>Nadpisanie</strong> — jednorazowa korekta tylko dla {activeBudgetMonth}.</div>
+            <div>📊 <strong style={{ color: c.textMuted }}>śr. / miesiąc</strong> pod bazą — średni koszt z ostatnich 12 mies. i z tego miesiąca w poprzednich latach (szczegóły po najechaniu).</div>
+            <div>🔴 <strong style={{ color: c.textMuted }}>Za nisko</strong> — baza nie pokrywa tego, co już wydane, zaplanowane i cykliczne jeszcze niepotwierdzone. 🟠 wyraźnie poniżej średniej.</div>
             <div style={{ marginTop: 8, color: c.textMuted, fontWeight: 700, marginBottom: 2 }}>Faktycznie wydano</div>
             <div>⚪ <strong style={{ color: c.textMuted }}>Faktycznie wydano</strong> — rzeczywiste transakcje z tego miesiąca (czerwone = przekroczony limit).</div>
             <div style={{ marginTop: 8, color: c.textMuted, fontWeight: 700, marginBottom: 2 }}>Estymata</div>

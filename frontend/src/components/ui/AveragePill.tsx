@@ -21,16 +21,14 @@
 // ============================================================
 
 import { c, alpha } from "../../styles/tokens";
-import { MONTH_NAMES } from "../../hooks/useRecurring";
+import { fmtWhole, monthShort } from "../../utils/helpers";
 import type { AverageStat } from "../../utils/monthTotals";
 
 export type GoodDirection = "up" | "down" | null;
 
 const NEUTRAL_PCT = 3;
 
-const zl = new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN", maximumFractionDigits: 0 });
 const pct1 = (v: number) => v.toFixed(1).replace(".", ",");
-const monthShort = (ym: string) => MONTH_NAMES[Number(ym.slice(5, 7)) - 1] ?? ym;
 
 /** "▲ +8,6%" coloured by whether that is good; null when there is no base. */
 function change(current: number, base: number, good: GoodDirection): { text: string; color: string } | null {
@@ -69,7 +67,7 @@ export function AveragePill({ current, stat, good, inProgress, size = "md", with
   // The pill already shows the mean and median — the tooltip only adds the
   // range, which isn't on screen anywhere else.
   const title = lowest && highest && series.length > 1
-    ? `Najwięcej: ${zl.format(highest.value)} (${monthShort(highest.month)})\nNajmniej: ${zl.format(lowest.value)} (${monthShort(lowest.month)})`
+    ? `Najwięcej: ${fmtWhole(highest.value)} (${monthShort(highest.month)})\nNajmniej: ${fmtWhole(lowest.value)} (${monthShort(lowest.month)})`
     : undefined;
 
   const sm = size === "sm";
@@ -94,14 +92,14 @@ export function AveragePill({ current, stat, good, inProgress, size = "md", with
           padding: sm ? "1px 7px" : "3px 9px",
         }}
       >
-        <span style={piece}>{zl.format(stat.mean)} <span style={unit}>śr.</span></span>
-        <span style={piece}>{zl.format(stat.median)} <span style={unit}>med.</span></span>
+        <span style={piece}>{fmtWhole(stat.mean)} <span style={unit}>śr.</span></span>
+        <span style={piece}>{fmtWhole(stat.median)} <span style={unit}>med.</span></span>
         <span style={{ ...piece, color: delta.color, fontWeight: 700 }}>{delta.text}</span>
       </span>
       {withPrevious && previous && (
-        <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap" }} title={prevChange ? `${monthShort(previous.month)}: ${zl.format(previous.value)}` : undefined}>
+        <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap" }} title={prevChange ? `${monthShort(previous.month)}: ${fmtWhole(previous.value)}` : undefined}>
           {inProgress || !prevChange
-            ? <>{monthShort(previous.month)}: {zl.format(previous.value)}</>
+            ? <>{monthShort(previous.month)}: {fmtWhole(previous.value)}</>
             : <>vs {monthShort(previous.month)} <span style={{ color: prevChange.color, fontWeight: 700 }}>{prevChange.text}</span></>}
         </span>
       )}

@@ -34,9 +34,19 @@ export function plural(n, one, few, many) {
   return (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) ? few : many;
 }
 
+// "2026-08" → "Sie" — a month where space is short (pills, tooltips).
+export function monthShort(ym) {
+  const name = MONTHS[Number(String(ym || "").split("-")[1]) - 1];
+  return name ? name.slice(0, 3) : String(ym ?? "");
+}
+
 // Format a number as PLN currency string
 export const fmt = (n) =>
   new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN" }).format(n || 0);
+
+// Whole złote — for averages and other reference figures, where grosze are noise.
+const wholeZl = new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN", maximumFractionDigits: 0 });
+export const fmtWhole = (n) => wholeZl.format(n || 0);
 
 // Parse a decimal string that may use comma or dot as separator
 export const parseDecimal = (v) => {
