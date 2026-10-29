@@ -291,7 +291,10 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   // The running calendar month: no forecast for others, and averages compare
   // it by progress ("27% średniej") rather than as a finished month.
   const isCurrentMonth = activeBudgetMonth === new Date().toISOString().slice(0, 7);
- 
+  // What is owed on the card is today's figure — it carries into the running
+  // month and the ones ahead, but says nothing about a month already closed.
+  const isPastMonth = activeBudgetMonth < todayYMD().slice(0, 7);
+
   //Envelope breakdown
   const envelopeBreakdown = useMemo<EnvelopeBreakdownItem[]>(() => {
     const items: EnvelopeBreakdownItem[] = [];
@@ -450,7 +453,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
             />
             {/* Each only when it says something: no tile for a zero debt, and
                 none for an account figure that is just Saldo again. */}
-            {hasCards && cards.totalDebt !== 0 && (
+            {hasCards && !isPastMonth && cards.totalDebt !== 0 && (
                 <KpiPill
                   icon="💳" label={cards.totalDebt < 0 ? "Nadpłata karty" : "Do spłaty"}
                   value={fmt(Math.abs(cards.totalDebt))}
