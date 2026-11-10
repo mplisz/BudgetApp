@@ -595,7 +595,7 @@ const FORECAST_HINT =
   "wg tego, co wydane i zaplanowane.";
 
 const ACTUAL_HINT =
-  "Kwota dostępna − faktycznie wydane i odłożone − opłacone koperty. To samo co Saldo w Podsumowaniu.";
+  "Kwota dostępna − faktycznie wydane i odłożone − opłacone koperty. To samo co Wynik miesiąca w Podsumowaniu.";
 
 const ON_ACCOUNT_HINT =
   "Nadwyżka − spłata karty w tym miesiącu + zakupy kartą z tego miesiąca (zejdą z konta dopiero przy następnej spłacie). " +

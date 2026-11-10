@@ -16,7 +16,7 @@ import { theme as s }       from "../../styles/theme";
 import { Card, PanelLink }  from "../ui/summaryUi";
 import { txLink, PANEL_PATHS } from "../../data/routes";
 import { useCreditCards }   from "../../hooks/useCreditCards";
-import { cardsOverview, debtChangeInMonth } from "../../utils/cardDebt";
+import { cardsOverview, cardFlowInMonth } from "../../utils/cardDebt";
 import { CollapsibleSection } from "../ui";
 import { CategoryLimitBar } from "./summaryComponents/CategoryLimitBar";
 import { SpendingPieChart } from "./summaryComponents/SpendingPieChart";
@@ -49,9 +49,9 @@ interface KpiPillProps {
   label: string;
   value: string;
   color?: string;
-  sub?: string;
+  sub?: ReactNode;
   /** Deep link to the panel listing this number's transactions. Only tiles
-   *  that HAVE such a panel get one — Saldo, Koperty and the % tile don't. */
+   *  that HAVE such a panel get one — Wynik miesiąca, Koperty and the % tile don't. */
   link?: { to: string; title: string };
   /** Average / median of the previous months (AveragePill). */
   average?: ReactNode;
@@ -181,13 +181,21 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const balance        = monthBalance(totals, virtualEnvelopePaid);
 
   // ── Credit cards ──────────────────────────────────────────
-  // Saldo counts a card purchase as spent the month it was made; the bank
-  // account only feels it when the card is repaid. "≈ na koncie" is Saldo
+  // Wynik miesiąca (the old "Saldo" — renamed because it read like an account
+  // balance) counts a card purchase as spent the month it was made; the bank
+  // account only feels it when the card is repaid. "≈ na koncie" is Wynik
   // shifted by how far the debt moved this month — the figure to hold against
-  // the bank, while Saldo stays the one to plan with.
+  // the bank, while Wynik stays the one to plan with. The tile spells the
+  // shift out part by part, so the gap between the two needs no explaining.
   const hasCards   = cardData.cards.length > 0;
   const cards      = useMemo(() => cardsOverview(cardData, todayYMD()), [cardData]);
-  const onAccount  = balance + debtChangeInMonth(cardData, activeBudgetMonth);
+  const cardFlow   = useMemo(() => cardFlowInMonth(cardData, activeBudgetMonth), [cardData, activeBudgetMonth]);
+  const onAccount  = balance + cardFlow.purchases - cardFlow.returns - cardFlow.repayments;
+  const onAccountParts = [
+    { sign: "+", amount: cardFlow.purchases,  label: "zakupy kartą" },
+    { sign: "−", amount: cardFlow.returns,    label: "zwroty na kartę" },
+    { sign: "−", amount: cardFlow.repayments, label: "spłata karty" },
+  ].filter(p => p.amount >= 0.005);
 
   const limitMap   = useMemo(() => buildLimitMap(limits, activeBudgetMonth), [limits, activeBudgetMonth]);
   // Budget % = expenses as share of real income (INCOME + TRANSFER),
@@ -436,12 +444,13 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
             />
             )}
             <KpiPill
-              icon="⚖️" label="Saldo"
+              icon="⚖️" label="Wynik miesiąca"
               value={fmt(balance)}
               color={balance >= 0 ? c.success : c.danger}
+              sub={hasCards ? "wpływy − wydatki, także kartą" : "wpływy − wydatki"}
             />
             {/* Each only when it says something: no tile for a zero debt, and
-                none for an account figure that is just Saldo again. */}
+                none for an account figure that is just Wynik miesiąca again. */}
             {hasCards && !isPastMonth && cards.totalDebt !== 0 && (
                 <KpiPill
                   icon="💳" label={cards.totalDebt < 0 ? "Nadpłata karty" : "Do spłaty"}
@@ -458,11 +467,16 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                   icon="🏧" label="≈ Na koncie"
                   value={fmt(onAccount)}
                   color={onAccount >= 0 ? c.success : c.danger}
-                  // What is about to leave the account — a fact about today,
-                  // so it has no place on a past month's tile.
-                  sub={isCurrentMonth && cards.nextDue
-                    ? `do ${shortDate(cards.nextDue.dueDate)} zejdzie ${fmt(cards.nextDue.monthDue)}`
-                    : "saldo po uwzględnieniu karty"}
+                  // Wynik miesiąca and the card's moves that take it to the
+                  // account; what is still to be repaid sits on Do spłaty.
+                  sub={<>
+                    <div style={{ whiteSpace: "nowrap" }}>{fmt(balance)} wynik miesiąca</div>
+                    {onAccountParts.map(p => (
+                      <div key={p.label} style={{ whiteSpace: "nowrap" }}>
+                        {p.sign} {fmt(p.amount)} {p.label}
+                      </div>
+                    ))}
+                  </>}
                 />
             )}
             {budgetPct !== null && (
@@ -643,7 +657,7 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
                   <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
                     W tym <strong style={{ color: c.text }}>{fmt(returnsInfo.crossMonth)} PLN</strong>{" "}
                     odebrane w innym miesiącu → utworzono TRANSFER. Dlatego sumy kategorii są o tę
-                    kwotę niższe niż nagłówkowe „Wydatki" (Saldo tego miesiąca bez zmian).
+                    kwotę niższe niż nagłówkowe „Wydatki" (Wynik miesiąca bez zmian).
                   </div>
                 )}
                 {returnsInfo.voucher > 0 && (

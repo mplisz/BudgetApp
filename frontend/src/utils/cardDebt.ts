@@ -157,30 +157,49 @@ export function cardDebt(card: CreditCard, data: CardData): number {
   return round2(card.openingBalance + purchases - repayments);
 }
 
+/** What moved on ALL cards in a budget month, each part as a positive sum. */
+export interface CardFlow {
+  /** Bought with a card — charged after vouchers. */
+  purchases:  number;
+  /** Shop returns that came back onto a card. */
+  returns:    number;
+  /** Card repayments — what left the bank account for the card. */
+  repayments: number;
+}
+
 /**
- * How far the debt on ALL cards moved in a budget month. Saldo counts a card
- * purchase as spent the month it was made; the bank account only feels it
- * when the card is repaid — so
- *
- *   ≈ na koncie = Saldo + debtChangeInMonth
+ * The parts of debtChangeInMonth, so Podsumowanie can spell out how
+ * "≈ Na koncie" comes from Wynik miesiąca.
  *
  * A shop return is taken in the month the money came back, the same month
- * Saldo sees it (as a smaller expense, or as the TRANSFER of a cross-month
- * return): the two cancel, because that money went to the card, not the
- * account.
+ * Wynik miesiąca sees it (as a smaller expense, or as the TRANSFER of a
+ * cross-month return): the two cancel, because that money went to the card,
+ * not the account.
  */
-export function debtChangeInMonth(data: CardData, month: string): number {
-  let change = 0;
+export function cardFlowInMonth(data: CardData, month: string): CardFlow {
+  let purchases = 0, returns = 0, repayments = 0;
   for (const tx of data.transactions) {
-    if (tx.budgetMonth === month) change += charged(tx);
+    if (tx.budgetMonth === month) purchases += charged(tx);
     for (const r of returnedToCard(tx)) {
-      if (r.moneyReturnedInMonth === month) change -= r.cashAmount || 0;
+      if (r.moneyReturnedInMonth === month) returns += r.cashAmount || 0;
     }
   }
   for (const r of data.repayments) {
-    if (r.budgetMonth === month) change -= r.amount;
+    if (r.budgetMonth === month) repayments += r.amount;
   }
-  return round2(change);
+  return { purchases: round2(purchases), returns: round2(returns), repayments: round2(repayments) };
+}
+
+/**
+ * How far the debt on ALL cards moved in a budget month. Wynik miesiąca
+ * (monthBalance) counts a card purchase as spent the month it was made; the
+ * bank account only feels it when the card is repaid — so
+ *
+ *   ≈ na koncie = Wynik miesiąca + debtChangeInMonth
+ */
+export function debtChangeInMonth(data: CardData, month: string): number {
+  const flow = cardFlowInMonth(data, month);
+  return round2(flow.purchases - flow.returns - flow.repayments);
 }
 
 /**
