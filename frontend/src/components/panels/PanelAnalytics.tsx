@@ -31,7 +31,7 @@ import { useNavigate }                from "react-router-dom";
 import { PANEL_PATHS }                from "../../data/routes";
 import { useTransactionsRange } from "../../hooks/useTransactionsRange";
 import { useLimits, getActiveLimit } from "../../hooks/useLimits";
-import { usePlanned } from "../../hooks/usePlanned";
+import { usePlanned, keepsEnvelopeHistory } from "../../hooks/usePlanned";
 import { calculateEffectiveAmount, calculateNetAmount } from "../../utils/returnUtils";
 import { RangePicker, resolveRange, type DateRange } from "../ui/RangePicker";
 import { Card } from "../ui/summaryUi";
@@ -100,7 +100,7 @@ export default function PanelAnalytics() {
 
   const { transactions, isLoading, loadRange } = useTransactionsRange();
   const { limits, loadLimits } = useLimits();
-  const { planned, loadAll: loadPlanned } = usePlanned();
+  const { envelopeHistory, loadAll: loadPlanned } = usePlanned();
 
   const [range, setRange] = useState<DateRange>({ months: 6, from: null, to: null });
 
@@ -154,15 +154,16 @@ export default function PanelAnalytics() {
   // up as available balance.
   const envelopeByMonth = useMemo<Record<string, number>>(() => {
     const acc: Record<string, number> = {};
-    for (const doc of (planned || [])) {
-      if (doc.mode !== "envelope") continue;
+    // envelopeHistory: dropped/bought envelopes' rates still lock their months.
+    for (const doc of (envelopeHistory || [])) {
+      if (!keepsEnvelopeHistory(doc)) continue;
       for (const v of (doc.virtualSavings || [])) {
         if (!v.paidByUser) continue;
         acc[v.month] = (acc[v.month] ?? 0) + v.amountPLN;
       }
     }
     return acc;
-  }, [planned]);
+  }, [envelopeHistory]);
 
   // Months in range (oldest -> newest) — uses the CLAMPED from
   const monthsInRange = useMemo(

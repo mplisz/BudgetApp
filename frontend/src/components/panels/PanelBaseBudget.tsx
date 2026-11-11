@@ -25,7 +25,7 @@ import { usePanelLock }   from "../../hooks/usePanelLock";
 import { useLimits, getActiveLimit } from "../../hooks/useLimits";
 import type { BatchLimitChange, LimitDoc, LimitEntry, ActiveLimit } from "../../hooks/useLimits";
 import { useRecurring, isActiveInMonth, isConfirmedInMonth, getActiveCost } from "../../hooks/useRecurring";
-import { usePlanned, envelopePaidInMonth, type PlannedDoc } from "../../hooks/usePlanned";
+import { usePlanned, envelopePaidInMonth } from "../../hooks/usePlanned";
 import { LockBanner }     from "../ui/LockBanner";
 import { BudgetInput }    from "../ui/BudgetInput";
 import { fmt, todayYMD }  from "../../utils/helpers";
@@ -720,7 +720,7 @@ export default function PanelBaseBudget() {
   } = useLimits();
 
   const { recurring, loadAll: loadRecurring } = useRecurring();
-  const { planned, loadAll: loadPlanned } = usePlanned();
+  const { planned, envelopeHistory, loadAll: loadPlanned } = usePlanned();
 
   const { loadTransactions } = useTransactions();
 
@@ -796,8 +796,8 @@ export default function PanelBaseBudget() {
   const cashTotals    = useMemo(() => monthTotals(transactions, activeBudgetMonth), [transactions, activeBudgetMonth]);
   const monthlyIncome = cashTotals.types.INCOME + cashTotals.types.TRANSFER;
   const actualResult  = useMemo(
-    () => monthBalance(cashTotals, envelopePaidInMonth(planned as PlannedDoc[], activeBudgetMonth)),
-    [cashTotals, planned, activeBudgetMonth],
+    () => monthBalance(cashTotals, envelopePaidInMonth(envelopeHistory, activeBudgetMonth)),
+    [cashTotals, envelopeHistory, activeBudgetMonth],
   );
 
   // ── Init edit state (EXPENSE + SAVING combined) ───────────

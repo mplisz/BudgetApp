@@ -10,7 +10,7 @@ import { useMonthStatus }   from "../../hooks/useMonthStatus";
 import { useTransactions }  from "../../hooks/useTransactions";
 import { useLimits, buildLimitMap } from "../../hooks/useLimits";
 import { monthTotals, monthBalance } from "../../utils/monthTotals";
-import { envelopePaidInMonth } from "../../hooks/usePlanned";
+import { envelopePaidInMonth, keepsEnvelopeHistory } from "../../hooks/usePlanned";
 import { fmt, monthLabel, monthName, todayYMD, shortDate } from "../../utils/helpers";
 import { theme as s }       from "../../styles/theme";
 import { Card, PanelLink }  from "../ui/summaryUi";
@@ -124,7 +124,8 @@ export default function PanelSummary() {
     transactions: rawTransactions,
     categories: rawCategories,
     settings: rawSettings,
-    planned: rawPlanned 
+    planned: rawPlanned,
+    archivedEnvelopes,
   } = useAppContext();
 
   const { activeBudgetMonth }             = useMonthStatus();
@@ -154,6 +155,12 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   const categories   = rawCategories   ?? [];
   const limits       = rawLimits       ?? [];
   const planned      = rawPlanned      ?? [];
+  // Active plans + archived envelopes whose rates still lock their months —
+  // what Saldo and the envelope list sum over.
+  const envelopeHistory = useMemo(
+    () => [...planned, ...(archivedEnvelopes ?? [])],
+    [planned, archivedEnvelopes],
+  );
 
   // ── Filtered transactions ─────────────────────────────────
   const monthTx = useMemo<Transaction[]>(() =>
@@ -173,8 +180,8 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   // median pills: one load shared by both.
   const averages = useMonthlyAverages(activeBudgetMonth);
   const virtualEnvelopePaid = useMemo(
-    () => envelopePaidInMonth(planned, activeBudgetMonth),
-    [planned, activeBudgetMonth],
+    () => envelopePaidInMonth(envelopeHistory, activeBudgetMonth),
+    [envelopeHistory, activeBudgetMonth],
   );
 
   // SALDO = INCOME + TRANSFER(in) - EXPENSE - SAVING - PAID VIRTUAL ENVELOPES
@@ -295,14 +302,15 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
   //Envelope breakdown
   const envelopeBreakdown = useMemo<EnvelopeBreakdownItem[]>(() => {
     const items: EnvelopeBreakdownItem[] = [];
-    for (const p of (planned as any[])) {
-      if (p.isArchived || p.mode !== "envelope") continue;
+    for (const p of envelopeHistory) {
+      if (!keepsEnvelopeHistory(p)) continue;
       const entry = (p.virtualSavings || []).find(
-        (v: any) => v.month === activeBudgetMonth && !v.dismissedByUser,
+        v => v.month === activeBudgetMonth && !v.dismissedByUser,
       );
       if (!entry) continue;
-      // A purchased envelope only shows historically paid rates — no "○ not yet".
-      if (p.isPurchased && !entry.paidByUser) continue;
+      // A purchased or dropped envelope only shows historically paid rates —
+      // no "○ not yet".
+      if ((p.isPurchased || p.isArchived) && !entry.paidByUser) continue;
       items.push({
         categoryName: p.targetCategoryName,
         description:  p.description,
@@ -311,8 +319,8 @@ const isFirstLoad = loadedMonth !== activeBudgetMonth;
       });
     }
     return items;
-  }, [planned, activeBudgetMonth]);
- 
+  }, [envelopeHistory, activeBudgetMonth]);
+
   const envelopeTotal = useMemo(
     () => envelopeBreakdown.reduce((s, i) => s + i.amount, 0),
     [envelopeBreakdown],

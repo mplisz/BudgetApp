@@ -67,6 +67,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Planned expenses ──────────────────────────────────────────
   const [planned, setPlanned] = useState<PlannedDoc[]>([]);
+  // Archived envelopes whose paid rates still lock past months (dropped or
+  // bought). Kept apart so `planned` stays active-only for every other consumer.
+  const [archivedEnvelopes, setArchivedEnvelopes] = useState<PlannedDoc[]>([]);
 
   // ── Credit cards (loaded by useCreditCards, not by bootstrap) ──
   const [cardData, setCardData] = useState<CardData | null>(null);
@@ -180,6 +183,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     recurring,    setRecurring,
     limits,       setLimits,
     planned,      setPlanned,
+    archivedEnvelopes, setArchivedEnvelopes,
     cardData,     setCardData,
     closedMonths, setClosedMonths,
     merchants,    setMerchants,

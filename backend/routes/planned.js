@@ -9,7 +9,7 @@
 // GET    /api/planned?month=YYYY-MM — active for given month
 // POST   /api/planned              — create
 // PATCH  /api/planned/:id          — update (amount/month/savings)
-// DELETE /api/planned/:id          — soft archive
+// DELETE /api/planned/:id          — soft archive (envelope: releases savings)
 // POST   /api/planned/:id/pay      — mark saving month as paid/dismissed
 // POST   /api/planned/:id/purchase — finalize purchase → EXPENSE + TRANSFER
 // ============================================================
@@ -35,7 +35,7 @@ const { PlannedPostSchema, PlannedPatchSchema, WishPostSchema } = require("../ut
 // ── Helpers ───────────────────────────────────────────────────
 
 // virtualSavings[] arithmetic lives in utils/plannedSavings.js (testable).
-const { sumPaid, generateSavingsMonths, rebuildSavingsForMonth } = require("../utils/plannedSavings");
+const { sumPaid, generateSavingsMonths, rebuildSavingsForMonth, releaseSavings } = require("../utils/plannedSavings");
 
 // Compute suggestion for a given month
 function computeSuggestion(doc, currentMonth) {
@@ -405,20 +405,103 @@ router.delete("/:id", async (req, res) => {
       ? req.body.reason.trim().slice(0, 300)
       : "";
 
-    const { resource } = await plannedContainer.items.upsert(
-      {
-        ...existing,
-        isArchived:     true,
-        archivedAt:     new Date().toISOString(),
-        archivedBy:     req.user.name || req.user.email,
-        archivedById:   req.user.id,
-        archivedReason: reason || null,
-      },
-      { accessCondition: { type: "IfMatch", condition: etag } }
-    );
+    // Dropping an envelope that already holds money (and was not bought —
+    // a purchase released it already). Rates from earlier months keep locking
+    // their own months, so closed results don't move; the money comes back as
+    // one TRANSFER in the active budget month. The active month's own rate is
+    // just unlocked. See releaseSavings.
+    let release   = null;
+    let transfer  = null;
+    if (existing.mode === "envelope" && !existing.isPurchased && !existing.isArchived
+        && sumPaid(existing.virtualSavings) > 0) {
+      const budgetMonth = req.body?.budgetMonth;
+      if (!budgetMonth || !BUDGET_MONTH_REGEX.test(budgetMonth)) {
+        return res.status(400).json({ error: "Brak miesiąca budżetu — nie wiadomo, gdzie oddać odłożone środki." });
+      }
+      const date = typeof req.body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.body.date)
+        ? req.body.date
+        : new Date().toISOString().slice(0, 10);
 
-    console.log(`[PLANNED DELETE] Archived: ${resource.id}`);
-    res.json({ success: true, id: resource.id });
+      if (await isMonthClosed(monthsContainer, familyId, budgetMonth)) {
+        return res.status(403).json({ error: `Miesiąc ${budgetMonth} jest zamknięty — przejdź do otwartego miesiąca, żeby zrezygnować z koperty.` });
+      }
+
+      release =releaseSavings(existing.virtualSavings, budgetMonth);
+
+      if (release.releasedPLN > 0) {
+        const t = await resolveTransferTarget(familyId, "envelopeTransferSubcategoryId");
+        if (!t.ok) return res.status(400).json({ error: "Wybierz kategorię transferu dla kopert w Ustawieniach → Mapowanie kategorii." });
+        const ts = Date.now();
+        transfer = {
+          id:               `tx_${familyId}_${date.replace(/-/g, "")}_planned_rel_${ts}`,
+          userId:           familyId,
+          type:             "TRANSFER",
+          categoryId:       t.target.categoryId,
+          categoryName:     t.target.categoryName,
+          subcategoryId:    t.target.subcategoryId,
+          subcategoryName:  t.target.subcategoryName,
+          amount:           release.releasedPLN,
+          originalAmount:   release.releasedPLN,
+          originalCurrency: "PLN",
+          fxRate:           1,
+          date,
+          budgetMonth,
+          description:      `Odblokowanie środków (rezygnacja): ${existing.description}`,
+          tags:             [],
+          priority:         3,
+          isRecurring:      false,
+          recurringId:      null,
+          plannedExpenseId: existing.id,
+          useVoucher:       false,
+          voucherId:        null,
+          voucherAmount:    0,
+          netAmount:        release.releasedPLN,
+          returns:          [],
+          author:           req.user.name || req.user.email,
+          authorId:         req.user.id,
+          isArchived:       false,
+          archivedAt:       null,
+          archivedBy:       null,
+          archivedById:     null,
+          createdAt:        new Date().toISOString(),
+        };
+        ({ resource: transfer } = await transactionsContainer.items.create(transfer));
+      }
+    }
+
+    let resource;
+    try {
+      ({ resource } = await plannedContainer.items.upsert(
+        {
+          ...existing,
+          ...(release && {
+            virtualSavings:    release.virtualSavings,
+            // Marks the envelope whose earlier rates still lock their months —
+            // the balance keeps counting them although the plan is archived.
+            releasedInMonth:   req.body.budgetMonth,
+            releasedAmountPLN: release.releasedPLN,
+            unlockedAmountPLN: release.unlockedPLN,
+            releaseTransferId: transfer?.id ?? null,
+          }),
+          isArchived:     true,
+          archivedAt:     new Date().toISOString(),
+          archivedBy:     req.user.name || req.user.email,
+          archivedById:   req.user.id,
+          archivedReason: reason || null,
+        },
+        { accessCondition: { type: "IfMatch", condition: etag } }
+      ));
+    } catch (err) {
+      // The plan didn't archive — take the transfer back so the money isn't released twice.
+      if (transfer) {
+        await transactionsContainer.item(transfer.id, familyId).delete().catch(e =>
+          console.error("[PLANNED DELETE] Orphan transfer left behind:", transfer.id, e));
+      }
+      throw err;
+    }
+
+    console.log(`[PLANNED DELETE] Archived: ${resource.id}${transfer ? `, released ${transfer.amount} PLN (${transfer.id})` : ""}`);
+    res.json({ success: true, id: resource.id, planned: resource, transfer });
   } catch (err) {
     if (err.code === 412) return res.status(409).json({ error: "Data was modified by another user. Please refresh and try again." });
     console.error("[PLANNED DELETE]", err);

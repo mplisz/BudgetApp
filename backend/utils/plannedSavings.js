@@ -72,4 +72,26 @@ function rebuildSavingsForMonth(virtualSavings, { plannedMonth, totalAmountPLN, 
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 
-module.exports = { sumPaid, generateSavingsMonths, rebuildSavingsForMonth };
+// Drop an envelope without buying it. Rates set aside in months BEFORE
+// `budgetMonth` stay paid: they locked money in their own months and those
+// months' results must not move after the fact — the money comes back as one
+// TRANSFER in `budgetMonth` (releasedPLN). A rate paid in `budgetMonth` (or
+// later) simply stops being paid: that month's lock is lifted, no transfer.
+//   Sep 200 + Oct 200 paid, active Nov, Nov 200 paid
+//     → releasedPLN 400 (transfer in Nov), Nov rate unpaid (unlockedPLN 200).
+function releaseSavings(virtualSavings, budgetMonth) {
+  let releasedPLN = 0;
+  let unlockedPLN = 0;
+  const savings = (virtualSavings || []).map(v => {
+    if (!v.paidByUser) return v;
+    if (v.month < budgetMonth) {
+      releasedPLN += v.amountPLN || 0;
+      return v;
+    }
+    unlockedPLN += v.amountPLN || 0;
+    return { ...v, paidByUser: false, amountPLN: 0 };
+  });
+  return { virtualSavings: savings, releasedPLN: round2(releasedPLN), unlockedPLN: round2(unlockedPLN) };
+}
+
+module.exports = { sumPaid, generateSavingsMonths, rebuildSavingsForMonth, releaseSavings };

@@ -125,6 +125,10 @@ export interface AppContextValue {
 
   planned:    PlannedDoc[];
   setPlanned: Setter<PlannedDoc[]>;
+  /** Archived envelopes whose paid rates still lock past months — summed
+   *  into Saldo via usePlanned's envelopeHistory, never shown as plans. */
+  archivedEnvelopes:    PlannedDoc[];
+  setArchivedEnvelopes: Setter<PlannedDoc[]>;
 
   /** Credit cards, repayments and card purchases; null until first loaded.
    *  Read through useCreditCards(), which also knows how to (re)load it. */

@@ -12,7 +12,7 @@
 const { test, describe } = require("node:test");
 const assert             = require("node:assert/strict");
 
-const { rebuildSavingsForMonth, sumPaid } = require("./plannedSavings");
+const { rebuildSavingsForMonth, releaseSavings, sumPaid } = require("./plannedSavings");
 
 const paid      = (month, amountPLN) => ({ month, amount: amountPLN, amountPLN, fxRate: 1, paidByUser: true,  dismissedByUser: false });
 const open      = (month, amount)    => ({ month, amount, amountPLN: 0, fxRate: 1, paidByUser: false, dismissedByUser: false });
@@ -82,5 +82,57 @@ describe("rebuildSavingsForMonth", () => {
     const out = rebuildSavingsForMonth([paid("2026-10", 7000), open("2026-11", 1)], { ...OPTS, plannedMonth: "2026-12" });
     assert.equal(out[1].amount, 0);
     assert.equal(out[2].amount, 0);
+  });
+});
+
+describe("releaseSavings", () => {
+  // 800 zł for December, 200 a month from September; dropped in November
+  // after November's rate was already set aside.
+  const ENVELOPE = [
+    paid("2026-09", 200), paid("2026-10", 200), paid("2026-11", 200), open("2026-12", 200),
+  ];
+
+  test("earlier months go back as a transfer, this month's rate is just unlocked", () => {
+    const { virtualSavings, releasedPLN, unlockedPLN } = releaseSavings(ENVELOPE, "2026-11");
+
+    assert.equal(releasedPLN, 400);
+    assert.equal(unlockedPLN, 200);
+    // September and October keep locking their own months.
+    assert.deepEqual(virtualSavings[0], ENVELOPE[0]);
+    assert.deepEqual(virtualSavings[1], ENVELOPE[1]);
+    // November no longer counts as set aside.
+    assert.equal(virtualSavings[2].paidByUser, false);
+    assert.equal(virtualSavings[2].amountPLN, 0);
+    assert.deepEqual(virtualSavings[3], ENVELOPE[3]);
+    assert.equal(sumPaid(virtualSavings), 400);
+  });
+
+  test("nothing paid this month: everything paid goes to the transfer", () => {
+    const { releasedPLN, unlockedPLN } = releaseSavings(
+      [paid("2026-09", 200), paid("2026-10", 200), open("2026-11", 200)], "2026-11",
+    );
+    assert.equal(releasedPLN, 400);
+    assert.equal(unlockedPLN, 0);
+  });
+
+  test("only this month paid: no transfer, the lock is simply lifted", () => {
+    const { virtualSavings, releasedPLN, unlockedPLN } = releaseSavings(
+      [paid("2026-11", 300), open("2026-12", 300)], "2026-11",
+    );
+    assert.equal(releasedPLN, 0);
+    assert.equal(unlockedPLN, 300);
+    assert.equal(sumPaid(virtualSavings), 0);
+  });
+
+  test("dismissed and open months are left alone", () => {
+    const savings = [dismissed("2026-09"), open("2026-10", 875)];
+    const { virtualSavings, releasedPLN } = releaseSavings(savings, "2026-11");
+    assert.deepEqual(virtualSavings, savings);
+    assert.equal(releasedPLN, 0);
+  });
+
+  test("the released sum is rounded to grosze", () => {
+    const { releasedPLN } = releaseSavings([paid("2026-09", 0.1), paid("2026-10", 0.2)], "2026-11");
+    assert.equal(releasedPLN, 0.3);
   });
 });

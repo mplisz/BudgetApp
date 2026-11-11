@@ -8,6 +8,7 @@ import { useAppContext } from "../context/AppContext";
 import { useToast }      from "./useToast";
 import { useApi }        from "./useApi";
 import { useMonthFromUrl } from "./useMonthFromUrl";
+import { fmt }           from "../utils/helpers";
 import type { Transaction } from "../types/appContext";
 
 // ── Domain types ──────────────────────────────────────────────
@@ -52,6 +53,15 @@ export interface PlannedDoc {
   archivedAt?:          string | null;
   archivedBy?:          string | null;
   archivedReason?:      string | null;   // optional "why we dropped this" note
+  /** Envelope dropped with money in it: the budget month the earlier rates
+   *  came back in (as one TRANSFER). Its presence means those earlier rates
+   *  still lock their own months — see keepsEnvelopeHistory. */
+  releasedInMonth?:     string | null;
+  /** Rates from months before releasedInMonth, returned by the transfer. */
+  releasedAmountPLN?:   number | null;
+  /** The releasedInMonth rate that was simply unlocked (no transfer). */
+  unlockedAmountPLN?:   number | null;
+  releaseTransferId?:   string | null;
   notifiedAt?:          string | null;   // bell reminder dismissed at (ISO)
   createdAt?:           string;
   updatedAt?:           string;
@@ -120,14 +130,27 @@ export function sumPaid(virtualSavings: VirtualSaving[] | undefined): number {
 }
 
 /**
+ * Whether an envelope's paid rates still lock money in the months they were
+ * set aside. Active ones do; so do purchased ones and ones dropped after this
+ * rule existed (releasedInMonth) — their money came back as a TRANSFER in a
+ * later month, so the earlier months' results must stay put. Envelopes
+ * archived before that left no transfer, so their rates no longer count.
+ */
+export function keepsEnvelopeHistory(p: PlannedDoc): boolean {
+  if (p.mode !== "envelope") return false;
+  return !p.isArchived || !!p.isPurchased || !!p.releasedInMonth;
+}
+
+/**
  * Money set aside into virtual envelopes in `month` — rates the user marked
- * paid. Purchased envelopes count too: their rates locked money in the month
- * they were set aside, so a past month's balance stays put after the purchase.
- * Part of Saldo (see utils/monthTotals monthBalance).
+ * paid. Purchased and released envelopes count too: their rates locked money
+ * in the month they were set aside, so a past month's balance stays put after
+ * the purchase or the drop. Part of Saldo (see utils/monthTotals monthBalance).
+ * Pass `envelopeHistory` from usePlanned, not just the active list.
  */
 export function envelopePaidInMonth(planned: PlannedDoc[], month: string): number {
   return planned
-    .filter(p => p.mode === "envelope" && !p.isArchived)
+    .filter(keepsEnvelopeHistory)
     .reduce((sum, p) => sum + ((p.virtualSavings || [])
       .find(v => v.month === month && v.paidByUser)?.amountPLN || 0), 0);
 }
@@ -243,6 +266,10 @@ export interface PurchaseOverride {
 
 interface UsePlannedResult {
   planned:         PlannedDoc[];
+  /** Active plans plus the archived envelopes whose rates still lock their
+   *  months. Feed THIS (not `planned`) to anything that sums envelope rates
+   *  per month — envelopePaidInMonth, the analytics balance. */
+  envelopeHistory: PlannedDoc[];
   isLoading:       boolean;
   isSaving:        boolean;
   pendingNotifications: PlannedDoc[];
@@ -256,7 +283,9 @@ interface UsePlannedResult {
   promoteWish:     (id: string, payload: PlannedPostPayload) => Promise<PlannedDoc | null>;
   createPlanned:   (payload: PlannedPostPayload) => Promise<PlannedDoc | null>;
   updatePlanned:   (id: string, patch: PlannedPatchPayload) => Promise<PlannedDoc | null>;
-  archivePlanned:  (id: string, reason?: string) => Promise<boolean>;
+  /** `month` — the budget month an envelope's savings come back in
+   *  (defaults to the month in the URL). */
+  archivePlanned:  (id: string, reason?: string, month?: string) => Promise<boolean>;
   purchasePlanned: (id: string, date: string, budgetMonth: string, override?: PurchaseOverride) => Promise<PlannedDoc | null>;
   payMonth:        (id: string, month: string, amountPLN: number, amount: number, fxRate: number) => Promise<PlannedDoc | null>;
   dismissMonth:    (id: string, month: string) => Promise<PlannedDoc | null>;
@@ -265,7 +294,9 @@ interface UsePlannedResult {
 
 export function usePlanned(): UsePlannedResult {
   const api                                      = useApi();
-  const { planned, setPlanned, setTransactions, settings } = useAppContext();
+  const {
+    planned, setPlanned, archivedEnvelopes, setArchivedEnvelopes, setTransactions, settings,
+  } = useAppContext();
   const { showSuccess, showError } = useToast();
   // Reminders follow the active budget month, same as the payment itself
   // (useMonthFromUrl directly — useMonthStatus would be a needless round trip).
@@ -283,14 +314,17 @@ export function usePlanned(): UsePlannedResult {
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await api.get<PlannedDoc[]>("/api/planned", { fallback: "Nie udało się pobrać planów." });
+      // Archived docs come along so the envelopes whose rates still lock past
+      // months can be split off — they never join `planned`.
+      const data = await api.get<PlannedDoc[]>("/api/planned?includeArchived=true", { fallback: "Nie udało się pobrać planów." });
       setPlanned(data.filter(d => !d.isArchived));
+      setArchivedEnvelopes(data.filter(d => d.isArchived && keepsEnvelopeHistory(d)));
     } catch (err) {
       showError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [api, setPlanned, showError]);
+  }, [api, setPlanned, setArchivedEnvelopes, showError]);
 
   // ── Load archived (on demand) ─────────────────────────────
   // Kept OUT of AppContext on purpose: every other consumer (forecast,
@@ -394,17 +428,33 @@ export function usePlanned(): UsePlannedResult {
 
   // ── Archive ────────────────────────────────────────────────
 
-  const archivePlanned = useCallback(async (id: string, reason?: string): Promise<boolean> => {
+  // An envelope with money in it gives the earlier months' rates back as one
+  // TRANSFER in `month` and unlocks `month`'s own rate (backend releaseSavings).
+  const archivePlanned = useCallback(async (id: string, reason?: string, month?: string): Promise<boolean> => {
     setIsSaving(true);
     try {
       const trimmed = reason?.trim();
-      await api.del(
+      const data = await api.del<{ planned?: PlannedDoc; transfer?: Transaction | null }>(
         `/api/planned/${id}`,
-        trimmed ? { reason: trimmed } : undefined,
+        {
+          ...(trimmed ? { reason: trimmed } : {}),
+          budgetMonth: month ?? budgetMonth,
+          date:        new Date().toISOString().slice(0, 10),
+        },
         { fallback: "Nie udało się zarchiwizować planu." },
       );
       setPlanned(prev => prev.filter(p => p.id !== id));
-      showSuccess("Plan zarchiwizowany.");
+      if (data?.planned && keepsEnvelopeHistory(data.planned)) {
+        const doc = data.planned;
+        setArchivedEnvelopes(prev => [...prev.filter(p => p.id !== doc.id), doc]);
+      }
+      if (data?.transfer) {
+        const tx = data.transfer;
+        setTransactions(prev => [tx, ...prev]);
+      }
+      showSuccess(data?.transfer
+        ? `Plan zarchiwizowany. Odblokowano ${fmt(data.transfer.amount)}.`
+        : "Plan zarchiwizowany.");
       return true;
     } catch (err) {
       showError((err as Error).message);
@@ -412,7 +462,7 @@ export function usePlanned(): UsePlannedResult {
     } finally {
       setIsSaving(false);
     }
-  }, [api, setPlanned, showSuccess, showError]);
+  }, [api, budgetMonth, setPlanned, setArchivedEnvelopes, setTransactions, showSuccess, showError]);
 
   // ── Purchase ───────────────────────────────────────────────
 
@@ -501,8 +551,13 @@ export function usePlanned(): UsePlannedResult {
     [planned, today, budgetMonth, daysBefore]
   );
 
+  const envelopeHistory = useMemo(
+    () => [...(planned || []), ...(archivedEnvelopes || [])],
+    [planned, archivedEnvelopes],
+  );
+
   return {
-    planned, isLoading, isSaving,
+    planned, envelopeHistory, isLoading, isSaving,
     pendingNotifications,
     loadAll, loadArchived, loadWishes, createWish, promoteWish,
     createPlanned, updatePlanned,

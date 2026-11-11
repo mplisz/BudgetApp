@@ -58,6 +58,28 @@ interface ArchiveModalState {
   paidSoFar:  number;
 }
 
+// What dropping the plan does to the money already set aside — mirrors the
+// backend's releaseSavings: earlier months' rates come back as one transfer
+// in `month`, `month`'s own rate is just unlocked.
+function archiveMessage(m: ArchiveModalState, month: string): string {
+  const doc = m.doc;
+  if (!doc || m.paidSoFar <= 0) return `"${m.name}" zostanie zarchiwizowany.`;
+  if (doc.mode !== "envelope" || doc.isPurchased) {
+    return `"${m.name}" zostanie zarchiwizowany.`;
+  }
+  const paid     = (doc.virtualSavings || []).filter(v => v.paidByUser);
+  const earlier  = paid.filter(v => v.month <  month).reduce((s, v) => s + v.amountPLN, 0);
+  const thisOne  = paid.filter(v => v.month >= month).reduce((s, v) => s + v.amountPLN, 0);
+  const lines = [`"${m.name}" ma już odłożone ${fmt(m.paidSoFar)}.`, ""];
+  if (earlier > 0) {
+    lines.push(`• ${fmt(earlier)} z wcześniejszych miesięcy wróci do budżetu jako transfer „Odblokowanie środków” w ${month}. Wyniki tamtych miesięcy się nie zmienią.`);
+  }
+  if (thisOne > 0) {
+    lines.push(`• Rata z ${month} (${fmt(thisOne)}) po prostu przestanie blokować saldo tego miesiąca.`);
+  }
+  return lines.join("\n");
+}
+
 interface PurchaseModalState {
   isOpen: boolean;
   doc:    PlannedDoc | null;
@@ -298,7 +320,7 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
 
   async function handleArchive() {
     if (!archiveModal.id) return;
-    await archivePlanned(archiveModal.id, archiveReason);
+    await archivePlanned(archiveModal.id, archiveReason, cur);
     setArchiveModal({ isOpen: false, id: null, name: "", doc: null, paidSoFar: 0 });
     setArchiveReason("");
     setArchived(null);   // invalidate — refetches on next toggle/render
@@ -561,6 +583,14 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
               <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>
                 Zarchiwizowano {doc.archivedAt?.slice(0, 10)}{doc.archivedBy ? ` przez ${doc.archivedBy}` : ""}
               </div>
+              {doc.releasedInMonth && ((doc.releasedAmountPLN ?? 0) > 0 || (doc.unlockedAmountPLN ?? 0) > 0) && (
+                <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>
+                  🔓 {[
+                    (doc.releasedAmountPLN ?? 0) > 0 && `${fmt(doc.releasedAmountPLN ?? 0)} wróciło transferem w ${doc.releasedInMonth}`,
+                    (doc.unlockedAmountPLN ?? 0) > 0 && `rata ${fmt(doc.unlockedAmountPLN ?? 0)} z ${doc.releasedInMonth} odblokowana`,
+                  ].filter(Boolean).join(" · ")}
+                </div>
+              )}
               {doc.archivedReason && (
                 <div style={{ fontSize: 12, color: c.textTertiary, marginTop: 6, fontStyle: "italic" }}>
                   💬 {doc.archivedReason}
@@ -578,11 +608,7 @@ const baseFiltered = useMemo<PlannedDoc[]>(() => {
       <ConfirmModal
         isOpen={archiveModal.isOpen}
         title="Archiwizuj planowany wydatek"
-        message={
-          archiveModal.paidSoFar > 0
-            ? `"${archiveModal.name}" ma już odłożone ${fmt(archiveModal.paidSoFar)} PLN.\n\nArchiwizacja usunie plan — fizycznie odłożone środki pozostają na Twoim koncie.`
-            : `"${archiveModal.name}" zostanie zarchiwizowany.`
-        }
+        message={archiveMessage(archiveModal, cur)}
         onConfirm={handleArchive}
         onCancel={() => {
           setArchiveModal({ isOpen: false, id: null, name: "", doc: null, paidSoFar: 0 });
